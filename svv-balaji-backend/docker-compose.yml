@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: svv-balaji-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: svv_admin
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: svv_balaji
+    ports:
+      - "5432:5432"
+    volumes:
+      - svv_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U svv_admin -d svv_balaji"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: svv-balaji-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - svv_redis_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: svv-balaji-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+    command: sh -c "npx prisma migrate deploy && npm run start:dev"
+
+volumes:
+  svv_postgres_data:
+  svv_redis_data:
