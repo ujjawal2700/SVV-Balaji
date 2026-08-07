@@ -1,0 +1,725 @@
+// SVV Balaji - Farm-to-Customer Supply Chain Management
+// Phase 0 Foundation Schema
+// Covers: Auth/RBAC, Branch Master, and the Farmer/Product/Warehouse master
+// stubs needed before Phase 1 (Farm Sourcing & Planning) work begins.
+//
+// NOTE: This is a Phase 0 foundation only. Batch genealogy models
+// (RawMaterialBatch, ProductionBatch, FinishedGoodsBatch, Order, etc.)
+// get added in Phase 2-4 per the module roadmap - they are intentionally
+// NOT included here so the schema doesn't get ahead of the build plan.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  SUPER_ADMIN
+  BRANCH_MANAGER
+  PROCUREMENT_MANAGER
+  AGRICULTURE_EXPERT
+  PRODUCTION_MANAGER
+  QA_MANAGER
+  WAREHOUSE_MANAGER
+  SALES_TEAM
+  LOGISTICS_TEAM
+  // CUSTOMER intentionally excluded from this internal-staff enum -
+  // customers are modeled separately (Customer table, Phase 4+) once
+  // the D2C app scope is confirmed with the client.
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum FarmerStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
+  SUSPENDED
+}
+
+enum FarmerVerificationAction {
+  APPROVED
+  REJECTED
+  DOCUMENTS_REQUESTED
+}
+
+enum AgreementStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// --- Phase 2: Procurement & Raw Material Control -------------------------
+
+enum ProcurementPlanStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// FRD 13.4 - outcome of the pre-harvest quality inspection.
+enum InspectionResult {
+  APPROVED
+  REJECTED
+  HOLD_FOR_REINSPECTION
+}
+
+/// FRD 15.4 - where a raw material batch sits in its lifecycle.
+/// Extends through production/dispatch in later phases.
+enum BatchStatus {
+  COLLECTED
+  STORED
+  UNDER_PRODUCTION
+  PACKAGED
+  DISPATCHED
+  DELIVERED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+/// FRD 17.3 - every inventory change is one of these.
+enum StockMovementType {
+  STOCK_IN
+  STOCK_OUT
+  TRANSFER
+  ADJUSTMENT
+}
+
+// ---------------------------------------------------------------------------
+// Auth / Users
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  refreshTokenHash String?
+
+  // Phase 1 back-relations
+  farmerVerificationLogs FarmerVerificationLog[]
+  seedDistributionsGiven SeedDistribution[]
+  trainingSessionsConducted TrainingSession[]
+  fieldVisitsAsExpert FieldVisit[]
+
+  // Phase 2 back-relations
+  procurementPlansCreated ProcurementPlan[]       @relation("ProcurementPlansCreated")
+  harvestInspections      HarvestInspection[]     @relation("HarvestInspections")
+  rawMaterialCollections  RawMaterialCollection[] @relation("RawMaterialCollections")
+  stockMovements          StockMovement[]         @relation("StockMovements")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([branchId])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Branch Management (FRD Section 6)
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id          String  @id @default(uuid())
+  name        String
+  location    String
+  address     String
+  contactName String?
+  contactPhone String?
+  isActive    Boolean @default(true)
+
+  users      User[]
+  farmers    Farmer[]
+  warehouses Warehouse[]
+  trainingSessions TrainingSession[]
+  fieldVisits      FieldVisit[]
+
+  // Phase 2
+  procurementPlans       ProcurementPlan[]
+  rawMaterialCollections RawMaterialCollection[]
+  rawMaterialBatches     RawMaterialBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("branches")
+}
+
+// ---------------------------------------------------------------------------
+// Farmer Management + Farmer ID & Traceability (FRD Sections 7-8, Phase 1)
+// farmerCode is nullable until approval - per FRD 8.1 the unique ID is
+// generated for "every approved farmer", not at registration time.
+// ---------------------------------------------------------------------------
+
+model Farmer {
+  id          String       @id @default(uuid())
+  farmerCode  String?      @unique // e.g. SVV-2026-000123 - assigned on approval, the traceability anchor
+  fullName    String
+  mobile      String
+  aadhaarNumber String?
+  panNumber     String?
+
+  village     String
+  district    String
+  state       String
+  address     String?
+  gpsLocation String?
+
+  farmSizeAcres   Decimal? @db.Decimal(10, 2)
+  landType        String?
+  irrigationType  String?
+  cropDetails     String?
+
+  bankAccountName String?
+  bankName        String?
+  bankAccountNo   String?
+  ifscCode        String?
+
+  status FarmerStatus @default(PENDING_VERIFICATION)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  verificationLogs   FarmerVerificationLog[]
+  agreements         Agreement[]
+  seedDistributions  SeedDistribution[]
+  trainingAttendances TrainingAttendance[]
+  fieldVisits        FieldVisit[]
+
+  // Phase 2 - the traceability chain from this farmer forward
+  harvestInspections     HarvestInspection[]
+  rawMaterialCollections RawMaterialCollection[]
+  rawMaterialBatches     RawMaterialBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([branchId])
+  @@map("farmers")
+}
+
+// ---------------------------------------------------------------------------
+// Farmer code sequence - backs the SVV-YYYY-NNNNNN traceability ID.
+// Single row per year, incremented atomically (see FarmersService) so
+// concurrent approvals never collide on the same code.
+// ---------------------------------------------------------------------------
+
+model FarmerCodeCounter {
+  year       Int @id
+  lastNumber Int @default(0)
+
+  @@map("farmer_code_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Farmer Verification Audit Trail (FRD 7.2)
+// ---------------------------------------------------------------------------
+
+model FarmerVerificationLog {
+  id       String @id @default(uuid())
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  action  FarmerVerificationAction
+  remarks String?
+
+  verifiedById String
+  verifiedBy   User   @relation(fields: [verifiedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([farmerId])
+  @@map("farmer_verification_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Agreement Management (FRD Section 9)
+// ---------------------------------------------------------------------------
+
+model Agreement {
+  id       String @id @default(uuid())
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  cropName         String
+  variety          String?
+  expectedQuantity Decimal @db.Decimal(12, 2)
+  purchaseRate     Decimal @db.Decimal(12, 2)
+  agreementDate    DateTime
+  harvestDate      DateTime?
+  qualityStandards String?
+
+  status AgreementStatus @default(PENDING)
+
+  harvestInspections HarvestInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@index([status])
+  @@map("agreements")
+}
+
+// ---------------------------------------------------------------------------
+// Seed & Input Distribution (FRD Section 10)
+// ---------------------------------------------------------------------------
+
+model SeedDistribution {
+  id       String @id @default(uuid())
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  seedName         String
+  seedVariety      String?
+  quantity         Decimal  @db.Decimal(12, 2)
+  unit             String   @default("KG")
+  batchNumber      String?
+  distributionDate DateTime
+
+  distributedById String
+  distributedBy   User   @relation(fields: [distributedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([farmerId])
+  @@map("seed_distributions")
+}
+
+// ---------------------------------------------------------------------------
+// Training Management (FRD Section 11)
+// ---------------------------------------------------------------------------
+
+model TrainingSession {
+  id            String   @id @default(uuid())
+  title         String
+  description   String?
+  scheduledDate DateTime
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  conductedById String
+  conductedBy   User   @relation(fields: [conductedById], references: [id])
+
+  attendances TrainingAttendance[]
+  materials   TrainingMaterial[]
+
+  createdAt DateTime @default(now())
+
+  @@index([branchId])
+  @@map("training_sessions")
+}
+
+model TrainingAttendance {
+  id String @id @default(uuid())
+
+  sessionId String
+  session   TrainingSession @relation(fields: [sessionId], references: [id])
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  attended Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, farmerId])
+  @@map("training_attendances")
+}
+
+model TrainingMaterial {
+  id String @id @default(uuid())
+
+  sessionId String
+  session   TrainingSession @relation(fields: [sessionId], references: [id])
+
+  fileUrl  String
+  fileType String // pdf, image, presentation, video
+
+  createdAt DateTime @default(now())
+
+  @@map("training_materials")
+}
+
+// ---------------------------------------------------------------------------
+// Field Monitoring (FRD Section 12)
+// ---------------------------------------------------------------------------
+
+model FieldVisit {
+  id String @id @default(uuid())
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  expertId String
+  expert   User   @relation(fields: [expertId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  visitDate DateTime
+  cropName  String?
+
+  cropGrowthStage    String?
+  cropHealth         String?
+  pestStatus         String?
+  diseaseObservation String?
+
+  fertilizerAdvice       String?
+  irrigationAdvice       String?
+  pestControlSuggestions String?
+  harvestPreparation     String?
+
+  yieldPredictionQty Decimal? @db.Decimal(12, 2)
+
+  documents FieldVisitDocument[]
+
+  createdAt DateTime @default(now())
+
+  @@index([farmerId])
+  @@index([expertId])
+  @@map("field_visits")
+}
+
+model FieldVisitDocument {
+  id String @id @default(uuid())
+
+  fieldVisitId String
+  fieldVisit   FieldVisit @relation(fields: [fieldVisitId], references: [id])
+
+  fileUrl  String
+  fileType String // photo, pdf report, inspection doc
+
+  createdAt DateTime @default(now())
+
+  @@map("field_visit_documents")
+}
+
+// ===========================================================================
+// PHASE 2 - Procurement & Raw Material Control (FRD Sections 13-17)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Procurement Planning (FRD 13.1)
+// ---------------------------------------------------------------------------
+
+model ProcurementPlan {
+  id       String @id @default(uuid())
+  cropName String
+
+  plannedQuantity Decimal @db.Decimal(12, 2)
+  unit            String  @default("KG")
+
+  scheduledFrom DateTime
+  scheduledTo   DateTime
+
+  status ProcurementPlanStatus @default(DRAFT)
+  notes  String?
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("ProcurementPlansCreated", fields: [createdById], references: [id])
+
+  inspections HarvestInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([status])
+  @@map("procurement_plans")
+}
+
+// ---------------------------------------------------------------------------
+// Harvest Inspection (FRD 13.2 - 13.5)
+// Gate before collection: only APPROVED inspections may proceed.
+// ---------------------------------------------------------------------------
+
+model HarvestInspection {
+  id String @id @default(uuid())
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  /// Optional - inspections can happen against an agreement or ad hoc.
+  agreementId String?
+  agreement   Agreement? @relation(fields: [agreementId], references: [id])
+
+  procurementPlanId String?
+  procurementPlan   ProcurementPlan? @relation(fields: [procurementPlanId], references: [id])
+
+  cropName       String
+  inspectionDate DateTime
+
+  // FRD 13.2 inspection checklist
+  moistureLevel  Decimal? @db.Decimal(5, 2)
+  foreignMatter  Decimal? @db.Decimal(5, 2)
+  grainSize      String?
+  grainColor     String?
+  smell          String?
+  physicalDamage String?
+
+  result  InspectionResult
+  remarks String?
+
+  inspectedById String
+  inspectedBy   User   @relation("HarvestInspections", fields: [inspectedById], references: [id])
+
+  documents  HarvestInspectionDocument[]
+  collection RawMaterialCollection?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@index([result])
+  @@map("harvest_inspections")
+}
+
+model HarvestInspectionDocument {
+  id String @id @default(uuid())
+
+  inspectionId String
+  inspection   HarvestInspection @relation(fields: [inspectionId], references: [id])
+
+  fileUrl  String
+  fileType String // crop_image | inspection_photo | pdf | quality_certificate
+
+  createdAt DateTime @default(now())
+
+  @@map("harvest_inspection_documents")
+}
+
+// ---------------------------------------------------------------------------
+// Raw Material Collection (FRD Section 14)
+// One collection per approved inspection - this is the farmer -> batch link.
+// ---------------------------------------------------------------------------
+
+model RawMaterialCollection {
+  id String @id @default(uuid())
+
+  /// Enforced 1:1 - a harvest is collected once.
+  inspectionId String            @unique
+  inspection   HarvestInspection @relation(fields: [inspectionId], references: [id])
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  cropName           String
+  collectionDate     DateTime
+  collectionLocation String?
+
+  // FRD 14.2 weight measurement
+  grossWeight Decimal @db.Decimal(12, 2)
+  netWeight   Decimal @db.Decimal(12, 2)
+  unit        String  @default("KG")
+
+  // FRD 14.3 purchase details
+  purchaseRate  Decimal       @db.Decimal(12, 2)
+  totalAmount   Decimal       @db.Decimal(14, 2)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  /// FRD 14.4 - receipt issued to farmer and company.
+  receiptNumber String @unique
+
+  collectedById String
+  collectedBy   User   @relation("RawMaterialCollections", fields: [collectedById], references: [id])
+
+  batch RawMaterialBatch?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@index([branchId])
+  @@map("raw_material_collections")
+}
+
+// ---------------------------------------------------------------------------
+// Batch Management (FRD Section 15)
+// The traceability spine: Farmer -> Collection -> RawMaterialBatch -> (Phase 3
+// production) -> (Phase 4 order/delivery).
+// ---------------------------------------------------------------------------
+
+model RawMaterialBatch {
+  id String @id @default(uuid())
+
+  /// FRD 15.1 format: RM-YYYYMMDD-NNN
+  batchNumber String @unique
+
+  collectionId String                @unique
+  collection   RawMaterialCollection @relation(fields: [collectionId], references: [id])
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  cropName String
+  quantity Decimal @db.Decimal(12, 2)
+  unit     String  @default("KG")
+
+  status BatchStatus @default(COLLECTED)
+
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  stock          WarehouseStock[]
+  stockMovements StockMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@index([status])
+  @@index([warehouseId])
+  @@map("raw_material_batches")
+}
+
+/// Per-day sequence backing RM-YYYYMMDD-NNN. Same atomic-increment pattern as
+/// FarmerCodeCounter so concurrent collections never collide on a batch number.
+model BatchNumberCounter {
+  /// YYYYMMDD as an integer, e.g. 20260807
+  dateKey    Int @id
+  lastNumber Int @default(0)
+
+  @@map("batch_number_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Warehouse Stock + Inventory Ledger (FRD Sections 16-17)
+// ---------------------------------------------------------------------------
+
+/// Current on-hand quantity per (warehouse, batch). Mutated only alongside a
+/// StockMovement row so the ledger and the balance can never drift apart.
+model WarehouseStock {
+  id String @id @default(uuid())
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  batchId String
+  batch   RawMaterialBatch @relation(fields: [batchId], references: [id])
+
+  quantity         Decimal @db.Decimal(12, 2)
+  reservedQuantity Decimal @default(0) @db.Decimal(12, 2)
+  unit             String  @default("KG")
+
+  storageLocation String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, batchId])
+  @@index([warehouseId])
+  @@map("warehouse_stock")
+}
+
+/// FRD 17.3/17.5 - append-only audit trail of every inventory change.
+model StockMovement {
+  id String @id @default(uuid())
+
+  batchId String
+  batch   RawMaterialBatch @relation(fields: [batchId], references: [id])
+
+  fromWarehouseId String?
+  fromWarehouse   Warehouse? @relation("StockMovementFrom", fields: [fromWarehouseId], references: [id])
+
+  toWarehouseId String?
+  toWarehouse   Warehouse? @relation("StockMovementTo", fields: [toWarehouseId], references: [id])
+
+  movementType StockMovementType
+  quantity     Decimal           @db.Decimal(12, 2)
+  unit         String            @default("KG")
+  reason       String?
+
+  performedById String
+  performedBy   User   @relation("StockMovements", fields: [performedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([movementType])
+  @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Product Master (stub - full Recipe/BOM model added in Phase 3)
+// ---------------------------------------------------------------------------
+
+model Product {
+  id       String  @id @default(uuid())
+  name     String
+  sku      String  @unique
+  category String?
+  unit     String // e.g. KG, LITRE, PACK
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Warehouse Master (stub - stock/batch relations added in Phase 2-3)
+// ---------------------------------------------------------------------------
+
+model Warehouse {
+  id       String  @id @default(uuid())
+  name     String
+  location String
+  capacity Decimal? @db.Decimal(12, 2)
+  isActive Boolean  @default(true)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  // Phase 2
+  batches            RawMaterialBatch[]
+  stock              WarehouseStock[]
+  movementsOutgoing  StockMovement[]    @relation("StockMovementFrom")
+  movementsIncoming  StockMovement[]    @relation("StockMovementTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("warehouses")
+}
