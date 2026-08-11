@@ -106,6 +106,47 @@ enum StockMovementType {
   ADJUSTMENT
 }
 
+// --- Phase 3: Processing, QA & Packaging ---------------------------------
+
+/// FRD 19.4 - only APPROVED recipes may be used in production.
+enum RecipeStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  INACTIVE
+}
+
+/// FRD 20.3 / 20.4 - single raw material vs blended.
+/// MULTI_GRAIN execution (weigh-per-ratio, blending, homogeneity) is modelled
+/// here but gated in the service until the client confirms it is in scope.
+enum ProductionType {
+  SINGLE_GRAIN
+  MULTI_GRAIN
+}
+
+/// FRD 20.7
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+/// FRD 21 - quality is checked at three points in the lifecycle.
+enum InspectionStage {
+  RAW_MATERIAL
+  IN_PROCESS
+  FINISHED_GOODS
+}
+
+/// FRD 21.4
+enum QualityResult {
+  PASS
+  FAIL
+  REWORK_REQUIRED
+}
+
 // ---------------------------------------------------------------------------
 // Auth / Users
 // ---------------------------------------------------------------------------
@@ -135,6 +176,20 @@ model User {
   harvestInspections      HarvestInspection[]     @relation("HarvestInspections")
   rawMaterialCollections  RawMaterialCollection[] @relation("RawMaterialCollections")
   stockMovements          StockMovement[]         @relation("StockMovements")
+
+  // Phase 3 back-relations
+  cleaningGradingRecords  CleaningGradingRecord[] @relation("CleaningGradingOperator")
+  recipesCreated          Recipe[]                @relation("RecipesCreated")
+  recipesApproved         Recipe[]                @relation("RecipesApproved")
+  productionBatchesCreated ProductionBatch[]      @relation("ProductionBatchesCreated")
+  qualityInspections      QualityInspection[]     @relation("QualityInspections")
+  finishedGoodsPacked     FinishedGoodsBatch[]    @relation("FinishedGoodsPacked")
+
+  // Phase 4 back-relations
+  customersAssigned  Customer[]        @relation("CustomerAssignedTo")
+  priceListsCreated  PriceList[]       @relation("PriceListsCreated")
+  ordersPlaced       Order[]           @relation("OrdersPlaced")
+  orderAllocations   OrderAllocation[] @relation("OrderAllocations")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -167,6 +222,13 @@ model Branch {
   procurementPlans       ProcurementPlan[]
   rawMaterialCollections RawMaterialCollection[]
   rawMaterialBatches     RawMaterialBatch[]
+
+  // Phase 3
+  productionBatches ProductionBatch[]
+
+  // Phase 4
+  customers Customer[]
+  orders    Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -604,6 +666,11 @@ model RawMaterialBatch {
   stock          WarehouseStock[]
   stockMovements StockMovement[]
 
+  // Phase 3 - consumed into production, and inspected along the way
+  cleaningGradingRecords CleaningGradingRecord[]
+  consumptions           ProductionConsumption[]
+  qualityInspections     QualityInspection[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -680,8 +747,344 @@ model StockMovement {
   @@map("stock_movements")
 }
 
+// ===========================================================================
+// PHASE 3 - Processing, QA & Packaging (FRD Sections 18-23)
+// ===========================================================================
+
 // ---------------------------------------------------------------------------
-// Product Master (stub - full Recipe/BOM model added in Phase 3)
+// Cleaning & Grading (FRD Section 18)
+// Happens to a raw material batch before it can enter production.
+// ---------------------------------------------------------------------------
+
+model CleaningGradingRecord {
+  id String @id @default(uuid())
+
+  rawMaterialBatchId String
+  rawMaterialBatch   RawMaterialBatch @relation(fields: [rawMaterialBatchId], references: [id])
+
+  // FRD 18.1 cleaning activities
+  dustRemoved            Boolean @default(false)
+  stonesRemoved          Boolean @default(false)
+  foreignMaterialRemoved Boolean @default(false)
+  impuritiesSeparated    Boolean @default(false)
+
+  // FRD 18.2 grading parameters
+  grainSize     String?
+  color         String?
+  texture       String?
+  moistureLevel Decimal? @db.Decimal(5, 2)
+  purity        Decimal? @db.Decimal(5, 2)
+
+  /// Weight lost to cleaning - matters for yield reconciliation.
+  wastageQuantity Decimal? @db.Decimal(12, 2)
+
+  /// FRD 18.3 - QA sign-off before the batch is production-ready.
+  qaVerified Boolean @default(false)
+  remarks    String?
+
+  operatorId String
+  operator   User   @relation("CleaningGradingOperator", fields: [operatorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([rawMaterialBatchId])
+  @@map("cleaning_grading_records")
+}
+
+// ---------------------------------------------------------------------------
+// Recipe / Formula Management (FRD Section 19)
+// Created by Super Admin only, versioned, and approved before use.
+// ---------------------------------------------------------------------------
+
+model Recipe {
+  id String @id @default(uuid())
+
+  recipeCode String
+  version    Int    @default(1)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  name        String
+  category    String?
+  description String?
+
+  productionType ProductionType @default(SINGLE_GRAIN)
+
+  // FRD 19.3 production formula
+  mixingRatio           String?
+  processingSequence    String?
+  grindingInstructions  String?
+  roastingInstructions  String?
+  oilExtractionProcess  String?
+  packagingInstructions String?
+
+  /// Expected output for one full batch, used to scale ingredient quantities.
+  batchYieldQuantity Decimal? @db.Decimal(12, 2)
+  unit               String   @default("KG")
+
+  status RecipeStatus @default(DRAFT)
+
+  createdById String
+  createdBy   User   @relation("RecipesCreated", fields: [createdById], references: [id])
+
+  approvedById String?
+  approvedBy   User?   @relation("RecipesApproved", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  ingredients      RecipeIngredient[]
+  productionBatches ProductionBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Same code may exist at multiple versions, but only once per version.
+  @@unique([recipeCode, version])
+  @@index([status])
+  @@map("recipes")
+}
+
+/// FRD 19.2 - one row per raw material in the formula.
+/// For SINGLE_GRAIN recipes there is exactly one; MULTI_GRAIN has several
+/// whose percentages should total 100.
+model RecipeIngredient {
+  id String @id @default(uuid())
+
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  /// Matches RawMaterialBatch.cropName - what to pull from stock.
+  cropName String
+
+  quantity   Decimal @db.Decimal(12, 3)
+  unit       String  @default("KG")
+  /// Share of the finished blend, 0-100.
+  percentage Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([recipeId])
+  @@map("recipe_ingredients")
+}
+
+// ---------------------------------------------------------------------------
+// Production Management (FRD Section 20)
+// ---------------------------------------------------------------------------
+
+model ProductionBatch {
+  id String @id @default(uuid())
+
+  /// Format: PB-YYYYMMDD-NNN
+  productionBatchNumber String @unique
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  recipeId      String
+  recipe        Recipe @relation(fields: [recipeId], references: [id])
+  /// Pinned at creation - recipes are versioned and may change afterwards.
+  recipeVersion Int
+
+  productionType ProductionType
+
+  plannedQuantity Decimal  @db.Decimal(12, 2)
+  actualQuantity  Decimal? @db.Decimal(12, 2)
+  /// FRD 20.5 - planned minus actual, i.e. process loss.
+  productionLoss  Decimal? @db.Decimal(12, 2)
+  unit            String   @default("KG")
+
+  productionDate DateTime
+  status         ProductionStatus @default(PLANNED)
+
+  // FRD 20.6 machine allocation
+  machineName    String?
+  machineNumber  String?
+  operatorName   String?
+  productionLine String?
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("ProductionBatchesCreated", fields: [createdById], references: [id])
+
+  consumptions        ProductionConsumption[]
+  qualityInspections  QualityInspection[]
+  finishedGoodsBatches FinishedGoodsBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([branchId])
+  @@map("production_batches")
+}
+
+/// FRD 20.5 - the traceability link across the processing step.
+/// Every raw material batch consumed by a production run is recorded here,
+/// which is what lets a finished pack resolve back to specific farmers.
+model ProductionConsumption {
+  id String @id @default(uuid())
+
+  productionBatchId String
+  productionBatch   ProductionBatch @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
+
+  rawMaterialBatchId String
+  rawMaterialBatch   RawMaterialBatch @relation(fields: [rawMaterialBatchId], references: [id])
+
+  quantityUsed Decimal @db.Decimal(12, 2)
+  unit         String  @default("KG")
+
+  createdAt DateTime @default(now())
+
+  @@unique([productionBatchId, rawMaterialBatchId])
+  @@index([rawMaterialBatchId])
+  @@map("production_consumptions")
+}
+
+// ---------------------------------------------------------------------------
+// Quality Management (FRD Section 21)
+// ---------------------------------------------------------------------------
+
+model QualityInspection {
+  id String @id @default(uuid())
+
+  stage InspectionStage
+
+  /// Exactly one of these is set, depending on stage.
+  rawMaterialBatchId String?
+  rawMaterialBatch   RawMaterialBatch? @relation(fields: [rawMaterialBatchId], references: [id])
+
+  productionBatchId String?
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id])
+
+  finishedGoodsBatchId String?
+  finishedGoodsBatch   FinishedGoodsBatch? @relation(fields: [finishedGoodsBatchId], references: [id])
+
+  // FRD 21.1 raw material parameters
+  moisture     Decimal? @db.Decimal(5, 2)
+  purity       Decimal? @db.Decimal(5, 2)
+  grainSize    String?
+  color        String?
+  foreignMatter Decimal? @db.Decimal(5, 2)
+  odor         String?
+
+  // FRD 21.2 in-process parameters
+  ingredientRatio    String?
+  mixingAccuracy     String?
+  grindingQuality    String?
+  temperature        Decimal? @db.Decimal(6, 2)
+  productConsistency String?
+
+  // FRD 21.3 finished goods parameters
+  productAppearance String?
+  productWeight     Decimal? @db.Decimal(12, 3)
+  packagingQuality  String?
+  labelAccuracy     String?
+  shelfLifeVerified Boolean?
+
+  result  QualityResult
+  remarks String?
+
+  inspectedById String
+  inspectedBy   User   @relation("QualityInspections", fields: [inspectedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([stage])
+  @@index([result])
+  @@map("quality_inspections")
+}
+
+// ---------------------------------------------------------------------------
+// Packaging + Finished Goods (FRD Sections 22-23)
+// ---------------------------------------------------------------------------
+
+model FinishedGoodsBatch {
+  id String @id @default(uuid())
+
+  /// Format: FG-YYYYMMDD-NNN. This is what the consumer QR resolves to.
+  fgBatchNumber String @unique
+
+  productionBatchId String
+  productionBatch   ProductionBatch @relation(fields: [productionBatchId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  // FRD 22.2 label information
+  packagingType String // pouch | box | bottle | jar | sack
+  netWeight     Decimal  @db.Decimal(12, 3)
+  weightUnit    String   @default("KG")
+  mrp           Decimal? @db.Decimal(12, 2)
+  packagingDate DateTime
+  manufacturingDate DateTime
+  expiryDate    DateTime?
+  shelfLifeDays Int?
+
+  /// Number of packs produced at this net weight.
+  packCount Int
+
+  /// Public traceability URL encoded in the QR (FRD 22.3). Stored so the
+  /// printed code and the record can never disagree.
+  qrPayload String?
+
+  /// FRD 21.5 - only QA-released batches may be stocked or dispatched.
+  qaReleased Boolean @default(false)
+
+  packedById String
+  packedBy   User   @relation("FinishedGoodsPacked", fields: [packedById], references: [id])
+
+  qualityInspections QualityInspection[]
+  stock              FinishedGoodsStock[]
+
+  // Phase 4 - every allocation is a traceability link from an order line to a
+  // specific pack batch, and through it back to the farmer.
+  allocations OrderAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productionBatchId])
+  @@index([qaReleased])
+  @@map("finished_goods_batches")
+}
+
+/// FRD Section 23 - packaged stock awaiting dispatch.
+model FinishedGoodsStock {
+  id String @id @default(uuid())
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  fgBatchId String
+  fgBatch   FinishedGoodsBatch @relation(fields: [fgBatchId], references: [id])
+
+  quantity         Int
+  reservedQuantity Int @default(0)
+
+  storageLocation String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, fgBatchId])
+  @@index([warehouseId])
+  @@map("finished_goods_stock")
+}
+
+/// Shared per-day sequence for PB- and FG- numbers, keyed by prefix+date so
+/// the two series increment independently.
+model SequenceCounter {
+  /// e.g. "PB-20260807" or "FG-20260807"
+  key        String @id
+  lastNumber Int    @default(0)
+
+  @@map("sequence_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Product Master
 // ---------------------------------------------------------------------------
 
 model Product {
@@ -691,6 +1094,14 @@ model Product {
   category String?
   unit     String // e.g. KG, LITRE, PACK
   isActive Boolean @default(true)
+
+  recipes              Recipe[]
+  productionBatches    ProductionBatch[]
+  finishedGoodsBatches FinishedGoodsBatch[]
+
+  // Phase 4
+  priceLists PriceList[]
+  orderItems OrderItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -718,8 +1129,289 @@ model Warehouse {
   movementsOutgoing  StockMovement[]    @relation("StockMovementFrom")
   movementsIncoming  StockMovement[]    @relation("StockMovementTo")
 
+  // Phase 3
+  finishedGoodsStock FinishedGoodsStock[]
+
+  // Phase 4
+  orders           Order[]
+  orderAllocations OrderAllocation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("warehouses")
+}
+
+
+// ===========================================================================
+// PHASE 4 - SALES, ORDER FULFILMENT & DELIVERY (FRD Sections 24-28)
+//
+// Client decision, 11-Aug-2026: the system sells through BOTH channels, B2B
+// (distributors and retailers, taken by a sales executive) and B2C (consumers
+// buying directly), at DIFFERENT PRICES.
+//
+// Two consequences are baked into the model rather than bolted on later:
+//
+//   1. `channel` is a first-class column on Customer and Order. Nothing in the
+//      order path is allowed to assume a single channel.
+//   2. Price is not a column on Product. It lives in a dated PriceList keyed on
+//      (product, channel, customerType), so the two channels can never collide
+//      and an invoice raised last quarter still reprints at last quarter's rate.
+// ===========================================================================
+
+enum SalesChannel {
+  B2B
+  B2C
+}
+
+enum CustomerType {
+  DISTRIBUTOR
+  RETAILER
+  INSTITUTIONAL
+  CONSUMER
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
+}
+
+/// Credit is a B2B concept. Consumers pay up front, always.
+enum PaymentTerms {
+  PREPAID
+  CREDIT_7
+  CREDIT_15
+  CREDIT_30
+  CREDIT_45
+}
+
+enum OrderStatus {
+  DRAFT
+  PLACED
+  CONFIRMED
+  ALLOCATED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+model Customer {
+  id String @id @default(uuid())
+
+  /// Format: CUST-B2B-000001 / CUST-B2C-000001. Channel is visible in the code
+  /// itself because operations staff read these aloud on the phone.
+  customerCode String @unique
+
+  channel SalesChannel
+  type    CustomerType
+
+  name        String
+  contactName String?
+  phone       String
+  email       String?
+
+  /// Required for B2B (needed on the tax invoice), never required for B2C.
+  /// Enforced in CustomersService, not by the database, so the rule is testable.
+  gstin String?
+
+  billingAddress  String
+  shippingAddress String?
+  city            String?
+  district        String?
+  state           String?
+  pincode         String?
+
+  creditLimit  Decimal?     @db.Decimal(14, 2)
+  paymentTerms PaymentTerms @default(PREPAID)
+
+  status CustomerStatus @default(ACTIVE)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  /// Sales executive who owns the relationship. B2C customers have none.
+  assignedToId String?
+  assignedTo   User?   @relation("CustomerAssignedTo", fields: [assignedToId], references: [id])
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channel])
+  @@index([status])
+  @@index([branchId])
+  @@map("customers")
+}
+
+/// A dated price for one product in one channel.
+///
+/// Rows are never edited once orders reference them - supersede by closing
+/// `effectiveTo` and inserting a new row. That is what keeps historical
+/// invoices reproducible.
+model PriceList {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  channel SalesChannel
+
+  /// Optional refinement within a channel - e.g. distributors get a keener
+  /// rate than retailers. Null means "any customer type in this channel".
+  customerType CustomerType?
+
+  unitPrice Decimal @db.Decimal(12, 2)
+  currency  String  @default("INR")
+
+  /// Held per price row because GST rate is a property of what is being sold
+  /// and can change by notification.
+  gstRatePercent Decimal @default(5) @db.Decimal(5, 2)
+
+  /// Quantity break. A row with minQuantity 50 beats one with minQuantity 1
+  /// when the line qualifies.
+  minQuantity Int @default(1)
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  isActive Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("PriceListsCreated", fields: [createdById], references: [id])
+
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, channel, effectiveFrom])
+  @@index([channel])
+  @@map("price_lists")
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  /// Format: SO-YYYYMMDD-NNN
+  orderNumber String @unique
+
+  /// Denormalised from the customer deliberately: the channel an order was
+  /// taken through is a fact about the order, and must not change if the
+  /// customer record is later edited.
+  channel SalesChannel
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  status OrderStatus @default(DRAFT)
+
+  orderDate      DateTime
+  requiredByDate DateTime?
+
+  /// Warehouse the order is fulfilled from - allocation only draws stock here.
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  subtotal Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @default(0) @db.Decimal(14, 2)
+
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentTerms  PaymentTerms  @default(PREPAID)
+
+  /// Sales executive who captured the order. Null for a B2C order the consumer
+  /// placed themselves.
+  placedById String?
+  placedBy   User?   @relation("OrdersPlaced", fields: [placedById], references: [id])
+
+  notes           String?
+  cancelledReason String?
+  cancelledAt     DateTime?
+
+  items       OrderItem[]
+  allocations OrderAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channel])
+  @@index([status])
+  @@index([customerId])
+  @@index([orderDate])
+  @@map("orders")
+}
+
+model OrderItem {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  /// Packs ordered.
+  quantity Int
+
+  /// Resolved from the price list at placement and then frozen. A later price
+  /// change must never silently restate an order that is already out.
+  unitPrice Decimal @db.Decimal(12, 2)
+
+  /// Which price rule was applied. Kept so a disputed invoice can be answered
+  /// with "this row, effective this date" rather than an opinion.
+  priceListId String?
+  priceList   PriceList? @relation(fields: [priceListId], references: [id])
+
+  gstRatePercent Decimal @db.Decimal(5, 2)
+
+  lineSubtotal Decimal @db.Decimal(14, 2)
+  lineTax      Decimal @db.Decimal(14, 2)
+  lineTotal    Decimal @db.Decimal(14, 2)
+
+  allocations OrderAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, productId])
+  @@index([orderId])
+  @@map("order_items")
+}
+
+/// Which physical pack batches satisfy an order line.
+///
+/// This is the row that keeps the traceability promise alive through the sales
+/// half of the system: order -> allocation -> FG batch -> production run ->
+/// raw material batch -> farmer. Without it, a delivered order is anonymous.
+model OrderAllocation {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  fgBatchId String
+  fgBatch   FinishedGoodsBatch @relation(fields: [fgBatchId], references: [id])
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  quantity Int
+
+  allocatedById String
+  allocatedBy   User   @relation("OrderAllocations", fields: [allocatedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([fgBatchId])
+  @@map("order_allocations")
 }

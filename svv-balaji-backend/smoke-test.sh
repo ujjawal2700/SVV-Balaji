@@ -611,6 +611,295 @@ else
   fail "Batch trace failed (HTTP $RESP_CODE)"
 fi
 
+# ===========================================================================
+# PHASE 3 - Processing, QA & Packaging (FRD Sections 18-23)
+# ===========================================================================
+
+step "19. Product + recipe with approval gate (FRD Section 19)"
+
+api_call POST /products "$ADMIN_TOKEN" \
+  "{\"name\":\"Whole Wheat Atta\",\"sku\":\"ATTA-$STAMP\",\"unit\":\"KG\",\"category\":\"Flour\"}"
+PRODUCT_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+[ -n "$PRODUCT_ID" ] && pass "Product created" || fail "Product failed (HTTP $RESP_CODE)"
+
+# Multigrain percentages that don't total 100 must be refused
+api_call POST /recipes "$ADMIN_TOKEN" \
+  "{\"recipeCode\":\"MG-$STAMP\",\"productId\":\"$PRODUCT_ID\",\"name\":\"Bad Blend\",\"productionType\":\"MULTI_GRAIN\",\"ingredients\":[{\"cropName\":\"Wheat\",\"quantity\":60,\"percentage\":60},{\"cropName\":\"Barley\",\"quantity\":25,\"percentage\":25}]}"
+[ "$RESP_CODE" = "400" ] \
+  && pass "Multigrain recipe not totalling 100% refused (400)" \
+  || fail "Expected 400 for bad blend percentages, got $RESP_CODE"
+
+api_call POST /recipes "$ADMIN_TOKEN" \
+  "{\"recipeCode\":\"WF-$STAMP\",\"productId\":\"$PRODUCT_ID\",\"name\":\"Wheat Flour\",\"productionType\":\"SINGLE_GRAIN\",\"batchYieldQuantity\":900,\"ingredients\":[{\"cropName\":\"Wheat\",\"quantity\":1000,\"unit\":\"KG\"}]}"
+RECIPE_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+RECIPE_STATUS=$(printf '%s' "$RESP_BODY" | json_field status)
+[ -n "$RECIPE_ID" ] && pass "Single-grain recipe created" || fail "Recipe failed (HTTP $RESP_CODE)"
+[ "$RECIPE_STATUS" = "DRAFT" ] && pass "Recipe starts as DRAFT" \
+                              || fail "Expected DRAFT, got '$RECIPE_STATUS'"
+
+step "20. Production gated on recipe approval (FRD 19.4)"
+
+api_call POST /production-batches "$ADMIN_TOKEN" \
+  "{\"recipeId\":\"$RECIPE_ID\",\"branchId\":\"$BRANCH_ID\",\"warehouseId\":\"$WAREHOUSE_ID\",\"productionDate\":\"$TODAY\",\"plannedQuantity\":500,\"consumptions\":[{\"rawMaterialBatchId\":\"$BATCH_ID\",\"quantityUsed\":500}]}"
+[ "$RESP_CODE" = "400" ] \
+  && pass "Production refused with an unapproved recipe (400)" \
+  || fail "Expected 400 using DRAFT recipe, got $RESP_CODE"
+
+api_call PATCH "/recipes/$RECIPE_ID/approve" "$ADMIN_TOKEN" "{}"
+APPROVED_STATUS=$(printf '%s' "$RESP_BODY" | json_field status)
+[ "$APPROVED_STATUS" = "APPROVED" ] && pass "Recipe approved" \
+                                    || fail "Approval failed (HTTP $RESP_CODE)"
+
+step "21. Production batch consuming raw material (FRD Section 20)"
+
+api_call POST /production-batches "$ADMIN_TOKEN" \
+  "{\"recipeId\":\"$RECIPE_ID\",\"branchId\":\"$BRANCH_ID\",\"warehouseId\":\"$WAREHOUSE_ID\",\"productionDate\":\"$TODAY\",\"plannedQuantity\":400,\"operatorName\":\"Test Operator\",\"consumptions\":[{\"rawMaterialBatchId\":\"$BATCH_ID\",\"quantityUsed\":400}]}"
+PRODUCTION_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+PB_NO=$(printf '%s' "$RESP_BODY" | json_field productionBatchNumber)
+
+[ -n "$PRODUCTION_ID" ] && pass "Production batch created ($PB_NO)" \
+                       || { fail "Production failed (HTTP $RESP_CODE)"; info "$RESP_BODY"; }
+
+printf '%s' "$PB_NO" | grep -qE "^PB-[0-9]{8}-[0-9]{3}$" \
+  && pass "Production batch number format correct" \
+  || fail "Expected PB-YYYYMMDD-NNN, got '$PB_NO'"
+
+api_call PATCH "/production-batches/$PRODUCTION_ID/complete" "$ADMIN_TOKEN" \
+  "{\"actualQuantity\":380}"
+LOSS=$(printf '%s' "$RESP_BODY" | json_field productionLoss)
+[ "$RESP_CODE" = "200" ] && pass "Production completed, loss recorded: $LOSS" \
+                         || fail "Complete failed (HTTP $RESP_CODE)"
+
+step "22. Packaging + finished goods (FRD Section 22)"
+
+# Cannot pack more than was produced
+api_call POST /finished-goods "$ADMIN_TOKEN" \
+  "{\"productionBatchId\":\"$PRODUCTION_ID\",\"packagingType\":\"pouch\",\"netWeight\":1,\"packCount\":9999,\"packagingDate\":\"$TODAY\",\"manufacturingDate\":\"$TODAY\",\"shelfLifeDays\":180}"
+[ "$RESP_CODE" = "400" ] \
+  && pass "Over-packing beyond production output refused (400)" \
+  || fail "Expected 400 over-packing, got $RESP_CODE"
+
+api_call POST /finished-goods "$ADMIN_TOKEN" \
+  "{\"productionBatchId\":\"$PRODUCTION_ID\",\"packagingType\":\"pouch\",\"netWeight\":5,\"packCount\":70,\"mrp\":250,\"packagingDate\":\"$TODAY\",\"manufacturingDate\":\"$TODAY\",\"shelfLifeDays\":180}"
+FG_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+FG_NO=$(printf '%s' "$RESP_BODY" | json_field fgBatchNumber)
+
+[ -n "$FG_ID" ] && pass "Finished goods batch created ($FG_NO)" \
+               || { fail "Packaging failed (HTTP $RESP_CODE)"; info "$RESP_BODY"; }
+
+printf '%s' "$FG_NO" | grep -qE "^FG-[0-9]{8}-[0-9]{3}$" \
+  && pass "FG batch number format correct" \
+  || fail "Expected FG-YYYYMMDD-NNN, got '$FG_NO'"
+
+api_call GET "/finished-goods/$FG_ID/label" "$ADMIN_TOKEN"
+if [ "$RESP_CODE" = "200" ]; then
+  pass "Label data generated"
+  printf '%s' "$RESP_BODY" | grep -q "qrSvg" && pass "Label includes QR" || fail "Label missing QR"
+  printf '%s' "$RESP_BODY" | grep -q "expiryDate" && pass "Label includes expiry (derived from shelf life)" \
+                                                 || fail "Label missing expiry"
+else
+  fail "Label failed (HTTP $RESP_CODE)"
+fi
+
+step "23. QA release gate (FRD 21.5)"
+
+api_call POST "/finished-goods/$FG_ID/stock" "$ADMIN_TOKEN" \
+  "{\"warehouseId\":\"$WAREHOUSE_ID\",\"quantity\":70}"
+[ "$RESP_CODE" = "400" ] \
+  && pass "Unreleased batch cannot enter finished goods stock (400)" \
+  || fail "Expected 400 stocking unreleased batch, got $RESP_CODE"
+
+api_call POST /quality-inspections "$ADMIN_TOKEN" \
+  "{\"stage\":\"FINISHED_GOODS\",\"finishedGoodsBatchId\":\"$FG_ID\",\"productAppearance\":\"Good\",\"productWeight\":5,\"result\":\"PASS\"}"
+[ "$RESP_CODE" = "201" ] && pass "Finished goods QA inspection recorded" \
+                         || fail "QA inspection failed (HTTP $RESP_CODE)"
+
+api_call PATCH "/quality-inspections/release/$FG_ID" "$ADMIN_TOKEN" "{}"
+[ "$RESP_CODE" = "200" ] && pass "Batch QA-released after PASS" \
+                         || fail "Release failed (HTTP $RESP_CODE)"
+
+api_call POST "/finished-goods/$FG_ID/stock" "$ADMIN_TOKEN" \
+  "{\"warehouseId\":\"$WAREHOUSE_ID\",\"quantity\":70}"
+[ "$RESP_CODE" = "201" ] || [ "$RESP_CODE" = "200" ] \
+  && pass "Released batch enters finished goods stock" \
+  || fail "Stocking released batch failed (HTTP $RESP_CODE)"
+
+step "24. FULL FARM-TO-FORK TRACE - finished pack back to the farmer"
+
+api_call GET "/trace/$FG_NO" "$ADMIN_TOKEN"
+if [ "$RESP_CODE" = "200" ]; then
+  pass "Full trace resolves for $FG_NO"
+  printf '%s' "$RESP_BODY" | grep -q "$FARMER_CODE" \
+    && pass "  -> reaches the originating farmer ($FARMER_CODE)" \
+    || fail "  -> farmer code missing from trace"
+  printf '%s' "$RESP_BODY" | grep -q "Testpur" \
+    && pass "  -> includes farm village" || fail "  -> farm location missing"
+  printf '%s' "$RESP_BODY" | grep -q "$BATCH_NO" \
+    && pass "  -> includes the raw material batch consumed" || fail "  -> raw batch missing"
+  printf '%s' "$RESP_BODY" | grep -q "$PB_NO" \
+    && pass "  -> includes the production run" || fail "  -> production batch missing"
+  printf '%s' "$RESP_BODY" | grep -q "recipeVersionUsed" \
+    && pass "  -> pins the recipe version used" || fail "  -> recipe version missing"
+else
+  fail "Full trace failed (HTTP $RESP_CODE)"
+fi
+
+step "25. Customers in both channels (Phase 4, FRD Section 24)"
+
+api_call POST /customers "$ADMIN_TOKEN" \
+  "{\"channel\":\"B2B\",\"type\":\"DISTRIBUTOR\",\"name\":\"Smoke Distributors $STAMP\",\"phone\":\"9876500001\",\"gstin\":\"29ABCDE1234F1Z5\",\"billingAddress\":\"12 Market Road\",\"branchId\":\"$BRANCH_ID\",\"paymentTerms\":\"CREDIT_30\",\"creditLimit\":500000}"
+B2B_CUST_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+B2B_CUST_CODE=$(printf '%s' "$RESP_BODY" | json_field customerCode)
+[ -n "$B2B_CUST_ID" ] && pass "B2B distributor registered ($B2B_CUST_CODE)" \
+                      || fail "B2B customer failed (HTTP $RESP_CODE)"
+
+api_call POST /customers "$ADMIN_TOKEN" \
+  "{\"channel\":\"B2B\",\"type\":\"RETAILER\",\"name\":\"No GST Traders\",\"phone\":\"9876500002\",\"billingAddress\":\"9 Bazaar St\"}"
+[ "$RESP_CODE" = "400" ] && pass "B2B customer without a GSTIN is refused" \
+                         || fail "Missing GSTIN was accepted (HTTP $RESP_CODE)"
+
+api_call POST /customers "$ADMIN_TOKEN" \
+  "{\"channel\":\"B2C\",\"type\":\"CONSUMER\",\"name\":\"Smoke Consumer $STAMP\",\"phone\":\"9812300001\",\"billingAddress\":\"4 Lake View\"}"
+B2C_CUST_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+B2C_CUST_CODE=$(printf '%s' "$RESP_BODY" | json_field customerCode)
+[ -n "$B2C_CUST_ID" ] && pass "B2C consumer registered ($B2C_CUST_CODE)" \
+                      || fail "B2C customer failed (HTTP $RESP_CODE)"
+
+api_call POST /customers "$ADMIN_TOKEN" \
+  "{\"channel\":\"B2C\",\"type\":\"CONSUMER\",\"name\":\"Credit Consumer\",\"phone\":\"9812300002\",\"billingAddress\":\"5 Lake View\",\"paymentTerms\":\"CREDIT_30\"}"
+[ "$RESP_CODE" = "400" ] && pass "Consumer on credit terms is refused" \
+                         || fail "B2C credit terms were accepted (HTTP $RESP_CODE)"
+
+step "26. Channel pricing - same pack, two prices (Phase 4, WS1.6)"
+
+api_call POST /price-lists "$ADMIN_TOKEN" \
+  "{\"productId\":\"$PRODUCT_ID\",\"channel\":\"B2B\",\"customerType\":\"DISTRIBUTOR\",\"unitPrice\":180,\"gstRatePercent\":5,\"effectiveFrom\":\"$TODAY\"}"
+[ "$RESP_CODE" = "201" ] && pass "B2B distributor price defined (180)" \
+                        || fail "B2B price failed (HTTP $RESP_CODE)"
+
+api_call POST /price-lists "$ADMIN_TOKEN" \
+  "{\"productId\":\"$PRODUCT_ID\",\"channel\":\"B2C\",\"customerType\":\"CONSUMER\",\"unitPrice\":250,\"gstRatePercent\":5,\"effectiveFrom\":\"$TODAY\"}"
+[ "$RESP_CODE" = "201" ] && pass "B2C consumer price defined (250)" \
+                        || fail "B2C price failed (HTTP $RESP_CODE)"
+
+api_call GET "/price-lists/resolve?productId=$PRODUCT_ID&channel=B2B&customerType=DISTRIBUTOR&quantity=10" "$ADMIN_TOKEN"
+RESOLVED_B2B=$(printf '%s' "$RESP_BODY" | json_field unitPrice)
+[ "$RESOLVED_B2B" = "180" ] && pass "B2B order resolves to the distributor rate" \
+                            || fail "B2B resolved to $RESOLVED_B2B, expected 180"
+
+api_call GET "/price-lists/resolve?productId=$PRODUCT_ID&channel=B2C&customerType=CONSUMER&quantity=1" "$ADMIN_TOKEN"
+RESOLVED_B2C=$(printf '%s' "$RESP_BODY" | json_field unitPrice)
+[ "$RESOLVED_B2C" = "250" ] && pass "B2C order resolves to the consumer rate - no channel leak" \
+                            || fail "B2C resolved to $RESOLVED_B2C, expected 250"
+
+step "27. Orders in both channels (Phase 4, FRD Section 24)"
+
+api_call POST /orders "$ADMIN_TOKEN" \
+  "{\"customerId\":\"$B2B_CUST_ID\",\"warehouseId\":\"$WAREHOUSE_ID\",\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":10}]}"
+B2B_ORDER_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+B2B_ORDER_NO=$(printf '%s' "$RESP_BODY" | json_field orderNumber)
+B2B_TOTAL=$(printf '%s' "$RESP_BODY" | json_field total)
+[ -n "$B2B_ORDER_ID" ] && pass "B2B order placed ($B2B_ORDER_NO, total $B2B_TOTAL)" \
+                       || fail "B2B order failed (HTTP $RESP_CODE)"
+[ "$B2B_TOTAL" = "1890" ] && pass "  -> priced at the B2B rate with GST (1800 + 90)" \
+                          || fail "  -> total was $B2B_TOTAL, expected 1890"
+
+api_call POST /orders "$ADMIN_TOKEN" \
+  "{\"customerId\":\"$B2C_CUST_ID\",\"warehouseId\":\"$WAREHOUSE_ID\",\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":10}]}"
+B2C_ORDER_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+B2C_TOTAL=$(printf '%s' "$RESP_BODY" | json_field total)
+[ "$B2C_TOTAL" = "2625" ] && pass "Same 10 packs cost a consumer 2625 - the two channels are priced apart" \
+                          || fail "B2C total was $B2C_TOTAL, expected 2625"
+
+step "28. Batch-wise picking, QA-gated (Phase 4, FRD Section 25)"
+
+api_call PATCH "/orders/$B2B_ORDER_ID/confirm" "$ADMIN_TOKEN" "{}"
+[ "$RESP_CODE" = "200" ] && pass "Order confirmed" || fail "Confirm failed (HTTP $RESP_CODE)"
+
+api_call POST "/orders/$B2B_ORDER_ID/allocate" "$ADMIN_TOKEN" "{}"
+if [ "$RESP_CODE" = "201" ] || [ "$RESP_CODE" = "200" ]; then
+  pass "Order allocated against finished goods batches"
+  printf '%s' "$RESP_BODY" | grep -q "$FG_NO" \
+    && pass "  -> drew the QA-released batch $FG_NO" \
+    || fail "  -> expected batch $FG_NO in the allocation"
+else
+  fail "Allocation failed (HTTP $RESP_CODE)"
+fi
+
+api_call POST "/orders/$B2C_ORDER_ID/allocate" "$ADMIN_TOKEN" "{}"
+[ "$RESP_CODE" = "400" ] && pass "An unconfirmed order cannot be allocated" \
+                         || fail "Allocation skipped the lifecycle (HTTP $RESP_CODE)"
+
+step "29. Dispatch moves stock, not just status (Phase 4, FRD Section 27)"
+
+api_call PATCH "/orders/$B2B_ORDER_ID/pack" "$ADMIN_TOKEN" "{}"
+[ "$RESP_CODE" = "200" ] && pass "Order packed" || fail "Pack failed (HTTP $RESP_CODE)"
+
+api_call GET "/finished-goods-stock?warehouseId=$WAREHOUSE_ID" "$ADMIN_TOKEN"
+STOCK_BEFORE=$(printf '%s' "$RESP_BODY" | python3 -c "
+import sys, json
+try:
+    print(sum(r.get('quantity', 0) for r in json.load(sys.stdin)))
+except Exception:
+    print('')
+")
+
+api_call PATCH "/orders/$B2B_ORDER_ID/dispatch" "$ADMIN_TOKEN" "{}"
+[ "$RESP_CODE" = "200" ] && pass "Order dispatched" || fail "Dispatch failed (HTTP $RESP_CODE)"
+
+api_call GET "/finished-goods-stock?warehouseId=$WAREHOUSE_ID" "$ADMIN_TOKEN"
+STOCK_AFTER=$(printf '%s' "$RESP_BODY" | python3 -c "
+import sys, json
+try:
+    print(sum(r.get('quantity', 0) for r in json.load(sys.stdin)))
+except Exception:
+    print('')
+")
+if [ -n "$STOCK_BEFORE" ] && [ -n "$STOCK_AFTER" ]; then
+  [ "$((STOCK_BEFORE - STOCK_AFTER))" = "10" ] \
+    && pass "  -> on-hand stock fell by the 10 packs dispatched ($STOCK_BEFORE -> $STOCK_AFTER)" \
+    || fail "  -> stock went $STOCK_BEFORE -> $STOCK_AFTER, expected a fall of 10"
+else
+  fail "  -> could not read finished goods stock"
+fi
+
+step "30. ORDER-LEVEL FARM-TO-FORK TRACE - a shipped order back to the farmer"
+
+api_call GET "/orders/number/$B2B_ORDER_NO/traceability" "$ADMIN_TOKEN"
+if [ "$RESP_CODE" = "200" ]; then
+  pass "Order trace resolves for $B2B_ORDER_NO"
+  printf '%s' "$RESP_BODY" | grep -q "$FARMER_CODE" \
+    && pass "  -> reaches the originating farmer ($FARMER_CODE)" \
+    || fail "  -> farmer code missing from order trace"
+  printf '%s' "$RESP_BODY" | grep -q "$FG_NO" \
+    && pass "  -> names the exact pack batch shipped" || fail "  -> FG batch missing"
+  printf '%s' "$RESP_BODY" | grep -q "$PB_NO" \
+    && pass "  -> includes the production run" || fail "  -> production batch missing"
+  printf '%s' "$RESP_BODY" | grep -q "$BATCH_NO" \
+    && pass "  -> includes the raw material batch" || fail "  -> raw batch missing"
+  printf '%s' "$RESP_BODY" | grep -q '"fullyTraceable": *true' \
+    && pass "  -> reports the order as fully traceable" || fail "  -> not marked fully traceable"
+else
+  fail "Order trace failed (HTTP $RESP_CODE)"
+fi
+
+step "31. Cancelling releases reserved stock"
+
+api_call POST /orders "$ADMIN_TOKEN" \
+  "{\"customerId\":\"$B2B_CUST_ID\",\"warehouseId\":\"$WAREHOUSE_ID\",\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":5}]}"
+CANCEL_ORDER_ID=$(printf '%s' "$RESP_BODY" | json_field id)
+api_call PATCH "/orders/$CANCEL_ORDER_ID/confirm" "$ADMIN_TOKEN" "{}"
+api_call POST "/orders/$CANCEL_ORDER_ID/allocate" "$ADMIN_TOKEN" "{}"
+
+api_call PATCH "/orders/$CANCEL_ORDER_ID/cancel" "$ADMIN_TOKEN" \
+  "{\"reason\":\"Smoke test - customer withdrew\"}"
+[ "$RESP_CODE" = "200" ] && pass "Allocated order cancelled" || fail "Cancel failed (HTTP $RESP_CODE)"
+
+api_call GET "/orders/$CANCEL_ORDER_ID" "$ADMIN_TOKEN"
+printf '%s' "$RESP_BODY" | grep -q '"allocations": *\[\]' \
+  && pass "  -> reservations released, stock back on the shelf" \
+  || fail "  -> allocations survived the cancellation"
+
 # ---------------------------------------------------------------------------
 echo ""
 echo "${BLUE}=============================================${RESET}"
@@ -618,7 +907,8 @@ echo "  ${GREEN}Passed: $PASS${RESET}    ${RED}Failed: $FAIL${RESET}"
 echo "${BLUE}=============================================${RESET}"
 
 if [ "$FAIL" -eq 0 ]; then
-  echo "${GREEN}All checks passed - Phases 0, 1 and 2 are working end to end.${RESET}"
+  echo "${GREEN}All checks passed - Phases 0 to 4 are working end to end,${RESET}"
+  echo "${GREEN}including both sales channels and order-level traceability.${RESET}"
   exit 0
 else
   echo "${RED}$FAIL check(s) failed - see output above.${RESET}"
