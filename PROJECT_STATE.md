@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 11 August 2026 (afternoon) · **Updated by:** Ujjawal
+**Last updated:** 11 August 2026 (evening) · **Updated by:** Raunak
 **Programme week:** 2 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -93,7 +93,7 @@ Consequences for the build, so nobody designs the wrong thing:
 
 | 4 | Sales *(in progress)* | customers (both channels), pricing (dated per-channel price lists), sales (orders, batch-wise allocation, fulfilment lifecycle) |
 
-36 Prisma models. **113 unit tests passing**, build and lint clean. Quality gates are *enforcing*,
+36 Prisma models. **128 unit tests passing**, build and lint clean. Quality gates are *enforcing*,
 not advisory — a failed raw-material inspection blocks production; a failed FG inspection blocks
 dispatch; and allocation refuses to pick anything that is not QA-released.
 
@@ -121,8 +121,24 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
             └─ SVV-2026-000001   farmer — name, village, district, GPS
 ```
 
-**Not started — 45% of total effort:** the admin web panel and all four mobile apps. State this
-plainly to the client; "Phase 3 complete" must not be read as "nearly ready".
+### Admin panel — started 11 Aug (evening)
+
+`svv-balaji-admin/` — Vite + React + TypeScript + Ant Design. **WS2.1 is in: authentication,
+boot-time session restore, single-flight token refresh, sign-out, role-filtered navigation across
+all 22 screens, and route-level role guards, all working against the live API.** The screens
+themselves are placeholders that state what each will do and which routes it drives, so the shell
+is demonstrable to the client today.
+
+Navigation and routing are both generated from `src/layout/navigation.tsx` — one entry per screen,
+with the roles that may see it. A screen cannot appear in the menu and be missing from the router.
+
+This unblocked a backend gap first: `/auth/refresh`, `/auth/logout` and `/auth/me` did not exist,
+so no client could hold a session past 15 minutes. Those are now built with rotating refresh
+tokens and replay detection (see `DEV_LOG.md` for the contract).
+
+**Still not started — the four mobile apps.** Together with the remaining panel screens that is
+still the bulk of the front-end effort. State this plainly to the client; "Phase 4 in progress"
+must not be read as "nearly ready".
 
 ---
 
@@ -145,10 +161,14 @@ plainly to the client; "Phase 3 complete" must not be read as "nearly ready".
 
 ### Raunak — admin panel & mobile
 
-1. **WS2.1 Panel scaffolding, auth, role-based navigation** — start now, nothing blocks it. The
-   auth and RBAC endpoints are live; read the contract at `/api/docs`.
-2. **WS2.2 Master data & farmer management screens** — follows immediately. All farmer,
-   agreement, seed-distribution and training endpoints exist and are documented.
+1. ~~**WS2.1 Panel scaffolding, auth, role-based navigation**~~ — ✅ **done 11 Aug (evening).**
+   Also added the missing `/auth/refresh`, `/auth/logout` and `/auth/me` to the backend, without
+   which no client could hold a session.
+2. **WS2.2 Master data & farmer management screens — next.** Farmers first (list, register,
+   verification workflow, traceability codes), then agreements, seed distribution and training.
+   **Blocked on one thing:** a pagination convention. Every list endpoint returns an unbounded
+   array; agreeing a `page`/`limit` + `{ data, total }` shape with Ujjawal now means ~20 list
+   screens get built once instead of reworked later.
 3. When you reach the training screens, remember: **executive-entered, no farmer login.** Design
    for a staff member typing up a visit, not a farmer self-reporting.
 4. **Product screens now carry two prices.** `GET /price-lists/product/:id/comparison` returns both
@@ -181,6 +201,8 @@ plainly to the client; "Phase 3 complete" must not be read as "nearly ready".
 | A-09 | Staging environment for client access | Appzeto | 21 Aug | Open |
 | **A-10** | **Agree cost & timeline for added B2C scope, in writing** | Ravi / SVV Balaji | **18 Aug** | **Open — Critical** |
 | **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
+| **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open** — blocks WS2.2 list screens being built once |
+| A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Ujjawal / Raunak | 15 Aug | Open — shapes WS2.5 screens |
 
 ---
 
