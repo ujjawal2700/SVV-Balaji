@@ -29,6 +29,18 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
+      rollupOptions: {
+        output: {
+          // Split the two big, rarely-changing dependency groups into their own
+          // chunks. They then stay cached across deploys instead of being
+          // invalidated every time a screen changes. Screen-level splitting is
+          // handled by React.lazy in App.tsx.
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-router-dom'],
+            antd: ['antd', '@ant-design/icons'],
+          },
+        },
+      },
     },
   };
 });
