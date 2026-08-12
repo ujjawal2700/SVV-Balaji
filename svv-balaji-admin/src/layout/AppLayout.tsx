@@ -1,6 +1,6 @@
 import { LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
-import { App as AntApp, Avatar, Button, Dropdown, Layout, Menu, Tag, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { App as AntApp, Avatar, Button, Dropdown, Layout, Menu, Spin, Tag, Typography } from 'antd';
+import { Suspense, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { hasRole, ROLE_LABELS } from '../auth/types';
 import { useAuth } from '../auth/useAuth';
@@ -125,7 +125,18 @@ export function AppLayout() {
         </Header>
 
         <Content style={{ margin: 16 }}>
-          <Outlet />
+          {/* Screens are code-split (see App.tsx). The boundary sits here rather
+              than around the whole app so the sider and header stay on screen
+              while a chunk loads — the page swaps, the shell does not blink. */}
+          <Suspense
+            fallback={
+              <div style={{ display: 'grid', placeItems: 'center', padding: 64 }}>
+                <Spin size="large" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </Content>
       </Layout>
     </Layout>
