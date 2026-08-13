@@ -2,6 +2,7 @@ import { Select } from 'antd';
 import type { CSSProperties } from 'react';
 import { useBranches } from '../hooks/useBranches';
 import { useFarmers } from '../hooks/useFarmers';
+import { useWarehouses } from '../hooks/useWarehouses';
 
 interface PickerProps {
   value?: string;
@@ -19,7 +20,9 @@ interface PickerProps {
  * the same component then works both inside a form and as a standalone filter.
  */
 export function BranchSelect({ placeholder = 'Select a branch', ...props }: PickerProps) {
-  const branches = useBranches();
+  // Active branches only - a deactivated branch must not be selectable on a new
+  // record. The branch master screen is the one place that lists all of them.
+  const branches = useBranches(true);
 
   return (
     <Select
@@ -64,6 +67,13 @@ export function FarmerSelect({
 }: FarmerSelectProps) {
   const farmers = useFarmers(approvedOnly ? { status: 'ACTIVE' } : {});
 
+  // An approved farmer always holds a code, but filter on it explicitly rather
+  // than trusting status alone - the code is what the traceability chain
+  // actually hangs on, and the server checks both.
+  const rows = (farmers.data?.data ?? []).filter(
+    (farmer) => !approvedOnly || Boolean(farmer.farmerCode),
+  );
+
   return (
     <Select
       {...props}
@@ -71,9 +81,34 @@ export function FarmerSelect({
       optionFilterProp="label"
       placeholder={farmers.isLoading ? 'Loading…' : placeholder}
       loading={farmers.isLoading}
-      options={(farmers.data?.data ?? []).map((farmer) => ({
+      notFoundContent={
+        approvedOnly && !farmers.isLoading && rows.length === 0
+          ? 'No approved farmers yet — approve one first'
+          : undefined
+      }
+      options={rows.map((farmer) => ({
         value: farmer.id,
         label: `${farmer.fullName} — ${farmer.farmerCode ?? 'pending approval'} · ${farmer.village}`,
+      }))}
+      style={{ width: '100%', ...props.style }}
+    />
+  );
+}
+
+/** Warehouse picker. Only active warehouses are returned by the API. */
+export function WarehouseSelect({ placeholder = 'Select a warehouse', ...props }: PickerProps) {
+  const warehouses = useWarehouses();
+
+  return (
+    <Select
+      {...props}
+      showSearch
+      optionFilterProp="label"
+      placeholder={warehouses.isLoading ? 'Loading…' : placeholder}
+      loading={warehouses.isLoading}
+      options={(warehouses.data?.data ?? []).map((warehouse) => ({
+        value: warehouse.id,
+        label: `${warehouse.name} — ${warehouse.location}`,
       }))}
       style={{ width: '100%', ...props.style }}
     />

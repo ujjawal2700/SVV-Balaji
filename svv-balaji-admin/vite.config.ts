@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
       // is what production looks like behind Nginx - fewer surprises later.
       proxy: {
         '/api': {
-          target: env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3000',
           changeOrigin: true,
         },
       },

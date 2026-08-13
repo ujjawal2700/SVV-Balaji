@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { ProductionStatus, UserRole } from '@prisma/client';
 import { IsEnum } from 'class-validator';
@@ -8,6 +8,7 @@ import {
   CreateCleaningGradingDto,
   CreateProductionBatchDto,
 } from './dto/production.dto';
+import { UpdateProductionBatchDto } from './dto/update-production-batch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -67,6 +68,18 @@ export class ProductionController {
   @Get('production-batches/:id')
   findOne(@Param('id') id: string) {
     return this.productionService.findOne(id);
+  }
+
+  @Patch('production-batches/:id')
+  @Roles(UserRole.SUPER_ADMIN)
+  updateProductionBatch(@Param('id') id: string, @Body() dto: UpdateProductionBatchDto) {
+    return this.productionService.updateProductionBatch(id, dto);
+  }
+
+  @Delete('production-batches/:id')
+  @Roles(UserRole.SUPER_ADMIN)
+  deleteProductionBatch(@Param('id') id: string) {
+    return this.productionService.deleteProductionBatch(id);
   }
 
   @Patch('production-batches/:id/complete')

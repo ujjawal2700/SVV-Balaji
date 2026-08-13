@@ -1,57 +1,124 @@
-import { App as AntApp, Col, Divider, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
+import {
+  Alert,
+  App as AntApp,
+  Col,
+  Divider,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
+} from 'antd';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
-import type { CreateFarmerInput } from '../../api/types';
-import { useCreateFarmer } from '../../hooks/useFarmers';
+import type { CreateFarmerInput, Farmer } from '../../api/types';
+import { useCreateFarmer, useUpdateFarmer } from '../../hooks/useFarmers';
 import { useBranches } from '../../hooks/useBranches';
 import { fieldRules, maxLength, required } from '../../validation/rules';
 
 interface FarmerFormModalProps {
   open: boolean;
+  /** Present means edit; absent means register. */
+  farmer?: Farmer | null;
   onClose: () => void;
 }
 
 /**
- * Farmer registration (FRD 7.1).
+ * Farmer registration and correction (FRD 7.1).
  *
- * Deliberately does NOT offer a status or farmer-code field. A new farmer
- * always enters as PENDING_VERIFICATION and the traceability code is minted on
- * approval, by the server. Exposing either here would invite someone to try to
- * set them.
+ * Deliberately does NOT offer a status or farmer-code field, in either mode. A
+ * new farmer always enters as PENDING_VERIFICATION; the traceability code is
+ * minted on approval by the server and never changes afterwards. Status moves
+ * through the Verify action and the status column, both of which write the
+ * verification log - editing it here would change the status without the record
+ * of who changed it or why.
  */
-export function FarmerFormModal({ open, onClose }: FarmerFormModalProps) {
+export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps) {
   const [form] = Form.useForm<CreateFarmerInput>();
   const { message } = AntApp.useApp();
-  const branches = useBranches();
+  const branches = useBranches(true);
   const createFarmer = useCreateFarmer();
+  const updateFarmer = useUpdateFarmer();
+
+  const isEdit = Boolean(farmer);
+
+  const initialValues = farmer
+    ? {
+        fullName: farmer.fullName,
+        mobile: farmer.mobile,
+        aadhaarNumber: farmer.aadhaarNumber ?? undefined,
+        panNumber: farmer.panNumber ?? undefined,
+        village: farmer.village,
+        district: farmer.district,
+        state: farmer.state,
+        address: farmer.address ?? undefined,
+        gpsLocation: farmer.gpsLocation ?? undefined,
+        // Decimals arrive as strings from Prisma; the number input needs a
+        // number, and Number(null) would silently become 0.
+        farmSizeAcres: farmer.farmSizeAcres === null ? undefined : Number(farmer.farmSizeAcres),
+        landType: farmer.landType ?? undefined,
+        irrigationType: farmer.irrigationType ?? undefined,
+        cropDetails: farmer.cropDetails ?? undefined,
+        bankAccountName: farmer.bankAccountName ?? undefined,
+        bankName: farmer.bankName ?? undefined,
+        bankAccountNo: farmer.bankAccountNo ?? undefined,
+        ifscCode: farmer.ifscCode ?? undefined,
+        branchId: farmer.branchId,
+      }
+    : undefined;
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (open && !farmer) {
+      form.resetFields();
+    }
+  }, [open, farmer, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
     try {
-      const farmer = await createFarmer.mutateAsync(values);
-      message.success(`${farmer.fullName} registered — awaiting approval`);
+      if (farmer) {
+        const updated = await updateFarmer.mutateAsync({ id: farmer.id, input: values });
+        message.success(`${updated.fullName} updated`);
+      } else {
+        const created = await createFarmer.mutateAsync(values);
+        message.success(`${created.fullName} registered — awaiting approval`);
+      }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, 'Could not register the farmer'));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'register'} the farmer`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title="Register farmer"
-      okText="Register"
+      title={
+        isEdit
+          ? `Edit ${farmer?.fullName}${farmer?.farmerCode ? ` — ${farmer.farmerCode}` : ''}`
+          : 'Register farmer'
+      }
+      okText={isEdit ? 'Save changes' : 'Register'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createFarmer.isPending}
+      confirmLoading={createFarmer.isPending || updateFarmer.isPending}
       width={760}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" requiredMark preserve={false}>
+      <Form form={form} layout="vertical" requiredMark preserve={false} initialValues={initialValues}>
+        {isEdit && farmer?.farmerCode ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={`Traceability code ${farmer.farmerCode} is fixed`}
+            description="It is printed on agreements and carried into every batch this farmer supplies. Correcting the details below does not change it."
+          />
+        ) : null}
+
         <Divider orientation="left" plain>
           Identity
         </Divider>

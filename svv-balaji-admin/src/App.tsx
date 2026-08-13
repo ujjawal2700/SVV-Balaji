@@ -51,6 +51,58 @@ const TrainingPage = lazy(() =>
 const FieldVisitsPage = lazy(() =>
   import('./pages/field-visits/FieldVisitsPage').then((m) => ({ default: m.FieldVisitsPage })),
 );
+const TracePage = lazy(() =>
+  import('./pages/trace/TracePage').then((m) => ({ default: m.TracePage })),
+);
+const ProcurementPlansPage = lazy(() =>
+  import('./pages/procurement/ProcurementPlansPage').then((m) => ({
+    default: m.ProcurementPlansPage,
+  })),
+);
+const HarvestInspectionsPage = lazy(() =>
+  import('./pages/procurement/HarvestInspectionsPage').then((m) => ({
+    default: m.HarvestInspectionsPage,
+  })),
+);
+const CollectionsPage = lazy(() =>
+  import('./pages/collections/CollectionsPage').then((m) => ({ default: m.CollectionsPage })),
+);
+const BatchesPage = lazy(() =>
+  import('./pages/batches/BatchesPage').then((m) => ({ default: m.BatchesPage })),
+);
+const WarehousesPage = lazy(() =>
+  import('./pages/warehouse/WarehousesPage').then((m) => ({ default: m.WarehousesPage })),
+);
+const WarehouseStockPage = lazy(() =>
+  import('./pages/warehouse/WarehouseStockPage').then((m) => ({ default: m.WarehouseStockPage })),
+);
+const StockMovementsPage = lazy(() =>
+  import('./pages/warehouse/StockMovementsPage').then((m) => ({ default: m.StockMovementsPage })),
+);
+const ProductsPage = lazy(() =>
+  import('./pages/products/ProductsPage').then((m) => ({ default: m.ProductsPage })),
+);
+const RecipesPage = lazy(() =>
+  import('./pages/recipes/RecipesPage').then((m) => ({ default: m.RecipesPage })),
+);
+const CleaningGradingPage = lazy(() =>
+  import('./pages/production/CleaningGradingPage').then((m) => ({
+    default: m.CleaningGradingPage,
+  })),
+);
+const ProductionBatchesPage = lazy(() =>
+  import('./pages/production/ProductionBatchesPage').then((m) => ({
+    default: m.ProductionBatchesPage,
+  })),
+);
+const QualityInspectionsPage = lazy(() =>
+  import('./pages/quality/QualityInspectionsPage').then((m) => ({
+    default: m.QualityInspectionsPage,
+  })),
+);
+const FinishedGoodsPage = lazy(() =>
+  import('./pages/packaging/FinishedGoodsPage').then((m) => ({ default: m.FinishedGoodsPage })),
+);
 
 /**
  * Routes are generated from NAV_ITEMS rather than listed by hand, so the menu
@@ -70,6 +122,23 @@ const SCREENS: Record<string, ReactElement> = {
   '/seed-distribution': <SeedDistributionPage />,
   '/training': <TrainingPage />,
   '/field-visits': <FieldVisitsPage />,
+  // Zone 2 — Procurement & Raw Material Control (FRD Sections 13-17)
+  '/procurement-plans': <ProcurementPlansPage />,
+  '/harvest-inspections': <HarvestInspectionsPage />,
+  '/collections': <CollectionsPage />,
+  '/batches': <BatchesPage />,
+  '/warehouses': <WarehousesPage />,
+  '/warehouse-stock': <WarehouseStockPage />,
+  '/stock-movements': <StockMovementsPage />,
+  // Zone 3 — Processing, QA & Packaging (FRD Sections 18-23)
+  '/products': <ProductsPage />,
+  '/recipes': <RecipesPage />,
+  '/cleaning-grading': <CleaningGradingPage />,
+  '/production-batches': <ProductionBatchesPage />,
+  '/quality-inspections': <QualityInspectionsPage />,
+  '/finished-goods': <FinishedGoodsPage />,
+  // Farm-to-fork trace (FRD Section 30)
+  '/trace': <TracePage />,
 };
 
 export function App() {

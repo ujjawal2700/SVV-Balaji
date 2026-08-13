@@ -1,45 +1,76 @@
 import { App as AntApp, Form, Input, Modal } from 'antd';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
-import type { CreateBranchInput } from '../../api/types';
-import { useCreateBranch } from '../../hooks/useBranches';
+import type { Branch, CreateBranchInput } from '../../api/types';
+import { useCreateBranch, useUpdateBranch } from '../../hooks/useBranches';
 import { fieldRules, maxLength, required } from '../../validation/rules';
 
 interface BranchFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
+  branch?: Branch | null;
   onClose: () => void;
 }
 
-export function BranchFormModal({ open, onClose }: BranchFormModalProps) {
+/**
+ * One modal for both create and edit.
+ *
+ * Keeping them together is deliberate: a separate edit form is how the two
+ * quietly drift apart, and then a field validated on create is accepted on
+ * edit. The only differences are the title, the button and whether the fields
+ * start populated.
+ */
+export function BranchFormModal({ open, branch, onClose }: BranchFormModalProps) {
   const [form] = Form.useForm<CreateBranchInput>();
   const { message } = AntApp.useApp();
   const createBranch = useCreateBranch();
+  const updateBranch = useUpdateBranch();
+
+  const isEdit = Boolean(branch);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (branch) {
+      form.setFieldsValue({
+        name: branch.name,
+        location: branch.location,
+        address: branch.address,
+        contactName: branch.contactName ?? undefined,
+        contactPhone: branch.contactPhone ?? undefined,
+      });
+    }
+  }, [open, branch, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
     try {
-      const branch = await createBranch.mutateAsync(values);
-      message.success(`Branch ${branch.name} created`);
+      if (branch) {
+        const updated = await updateBranch.mutateAsync({ id: branch.id, input: values });
+        message.success(`${updated.name} updated`);
+      } else {
+        const created = await createBranch.mutateAsync(values);
+        message.success(`Branch ${created.name} created`);
+      }
       onClose();
     } catch (error) {
       // Show the server's own wording - it is more specific than anything
       // generic we could substitute.
-      message.error(apiErrorMessage(error, 'Could not create the branch'));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'create'} the branch`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title="New branch"
-      okText="Create branch"
+      title={isEdit ? `Edit ${branch?.name}` : 'New branch'}
+      okText={isEdit ? 'Save changes' : 'Create branch'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createBranch.isPending}
+      confirmLoading={createBranch.isPending || updateBranch.isPending}
       destroyOnClose
     >
       <Form form={form} layout="vertical" requiredMark preserve={false}>

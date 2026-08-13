@@ -40,6 +40,15 @@ export interface Branch {
   updatedAt: string;
 }
 
+/**
+ * Update inputs are `Partial<Create…>` because every one of these endpoints is
+ * a PATCH: the server applies only the keys present, and `pruneEmpty` strips
+ * the empties before they are sent. Declaring them explicitly rather than
+ * inlining `Partial<>` at each call site keeps the api layer readable and gives
+ * one place to record where a field is deliberately NOT editable.
+ */
+export type UpdateBranchInput = Partial<CreateBranchInput>;
+
 export interface CreateBranchInput {
   name: string;
   location: string;
@@ -61,9 +70,14 @@ export interface StaffUser {
   role: UserRole;
   status: UserStatus;
   branchId: string | null;
+  /** GET /users now includes this - previously the list showed a raw uuid. */
+  branch?: BranchRef;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Password is excluded on purpose - it moves through `usersApi.resetPassword`. */
+export type UpdateUserInput = Partial<Omit<CreateUserInput, 'password'>>;
 
 export interface CreateUserInput {
   email: string;
@@ -176,6 +190,13 @@ export interface FarmerDetail extends Farmer {
   seedDistributions: FarmerSeedDistributionSummary[];
   fieldVisits: FarmerFieldVisitSummary[];
 }
+
+/**
+ * `farmerCode` is absent from CreateFarmerInput and so cannot appear here
+ * either. The code is issued once on approval and is the traceability anchor;
+ * the server refuses to change it and the panel must not offer to.
+ */
+export type UpdateFarmerInput = Partial<CreateFarmerInput>;
 
 export interface CreateFarmerInput {
   fullName: string;
@@ -404,4 +425,749 @@ export interface CreateFieldVisitInput {
 export interface AddFieldVisitDocumentInput {
   fileUrl: string;
   fileType: string;
+}
+
+// ===========================================================================
+// ZONE 2 — Procurement & Raw Material Control (FRD Sections 13-17)
+// ===========================================================================
+
+export interface WarehouseRef {
+  id: string;
+  name: string;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  location: string;
+  capacity: string | null;
+  isActive: boolean;
+  branchId: string;
+  branch?: BranchRef;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Procurement planning (FRD 13.1) ----------------------------------------
+
+export const PROCUREMENT_PLAN_STATUSES = [
+  'DRAFT',
+  'SCHEDULED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+] as const;
+
+export type ProcurementPlanStatus = (typeof PROCUREMENT_PLAN_STATUSES)[number];
+
+export interface ProcurementPlan {
+  id: string;
+  cropName: string;
+  plannedQuantity: string;
+  unit: string;
+  scheduledFrom: string;
+  scheduledTo: string;
+  status: ProcurementPlanStatus;
+  notes: string | null;
+  branchId: string;
+  branch?: BranchRef;
+  createdById: string;
+  createdBy?: UserRef;
+  _count?: { inspections: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProcurementPlanInput {
+  cropName: string;
+  plannedQuantity: number;
+  unit?: string;
+  scheduledFrom: string;
+  scheduledTo: string;
+  branchId: string;
+  notes?: string;
+}
+
+// --- Harvest inspection (FRD 13.2 - 13.5) -----------------------------------
+
+export const INSPECTION_RESULTS = ['APPROVED', 'REJECTED', 'HOLD_FOR_REINSPECTION'] as const;
+export type InspectionResult = (typeof INSPECTION_RESULTS)[number];
+
+export interface HarvestInspectionDocument {
+  id: string;
+  inspectionId: string;
+  fileUrl: string;
+  /** crop_image | inspection_photo | pdf | quality_certificate */
+  fileType: string;
+  createdAt: string;
+}
+
+export interface HarvestInspection {
+  id: string;
+  farmerId: string;
+  farmer?: FarmerRef;
+  agreementId: string | null;
+  agreement?: Agreement | null;
+  procurementPlanId: string | null;
+
+  cropName: string;
+  inspectionDate: string;
+
+  // FRD 13.2 checklist
+  moistureLevel: string | null;
+  foreignMatter: string | null;
+  grainSize: string | null;
+  grainColor: string | null;
+  smell: string | null;
+  physicalDamage: string | null;
+
+  result: InspectionResult;
+  remarks: string | null;
+
+  inspectedById: string;
+  inspectedBy?: UserRef;
+
+  /** Present when this harvest has already been collected — a harvest is collected once. */
+  collection?: { id: string; receiptNumber: string } | null;
+  documents?: HarvestInspectionDocument[];
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateHarvestInspectionInput {
+  farmerId: string;
+  agreementId?: string;
+  procurementPlanId?: string;
+  cropName: string;
+  inspectionDate: string;
+  moistureLevel?: number;
+  foreignMatter?: number;
+  grainSize?: string;
+  grainColor?: string;
+  smell?: string;
+  physicalDamage?: string;
+  result: InspectionResult;
+  remarks?: string;
+}
+
+export interface AddDocumentInput {
+  fileUrl: string;
+  fileType: string;
+}
+
+// --- Raw material collection (FRD Section 14) -------------------------------
+
+export const PAYMENT_STATUSES = ['PENDING', 'PARTIAL', 'PAID'] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export interface RawMaterialCollection {
+  id: string;
+  inspectionId: string;
+  inspection?: HarvestInspection;
+
+  farmerId: string;
+  farmer?: FarmerRef & { village?: string };
+  branchId: string;
+  branch?: BranchRef;
+
+  cropName: string;
+  collectionDate: string;
+  collectionLocation: string | null;
+
+  grossWeight: string;
+  netWeight: string;
+  unit: string;
+
+  purchaseRate: string;
+  totalAmount: string;
+  paymentStatus: PaymentStatus;
+
+  /** FRD 14.4 — RC-YYYYMMDD-NNN, issued to the farmer and the company. */
+  receiptNumber: string;
+
+  collectedById: string;
+  collectedBy?: UserRef;
+
+  /** Minted in the same transaction as the collection itself. */
+  batch?: { id: string; batchNumber: string; status: BatchStatus } | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCollectionInput {
+  inspectionId: string;
+  branchId: string;
+  collectionDate: string;
+  collectionLocation?: string;
+  grossWeight: number;
+  netWeight: number;
+  unit?: string;
+  /** Falls back to the pre-season agreement rate when omitted. */
+  purchaseRate?: number;
+  /** Books the batch straight into stock on receipt when supplied. */
+  warehouseId?: string;
+}
+
+// --- Batches (FRD Section 15) -----------------------------------------------
+
+export const BATCH_STATUSES = [
+  'COLLECTED',
+  'STORED',
+  'UNDER_PRODUCTION',
+  'PACKAGED',
+  'DISPATCHED',
+  'DELIVERED',
+  'REJECTED',
+] as const;
+
+export type BatchStatus = (typeof BATCH_STATUSES)[number];
+
+export interface RawMaterialBatch {
+  id: string;
+  /** FRD 15.1 — RM-YYYYMMDD-NNN */
+  batchNumber: string;
+  collectionId: string;
+  farmerId: string;
+  farmer?: FarmerRef;
+  branchId: string;
+  cropName: string;
+  quantity: string;
+  unit: string;
+  status: BatchStatus;
+  warehouseId: string | null;
+  warehouse?: WarehouseRef | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const MOVEMENT_TYPES = ['STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT'] as const;
+export type StockMovementType = (typeof MOVEMENT_TYPES)[number];
+
+export interface StockMovement {
+  id: string;
+  batchId: string;
+  batch?: { id: string; batchNumber: string };
+  fromWarehouseId: string | null;
+  toWarehouseId: string | null;
+  movementType: StockMovementType;
+  quantity: string;
+  unit: string;
+  reason: string | null;
+  performedById: string;
+  performedBy?: UserRef;
+  createdAt: string;
+}
+
+// --- Warehouse stock (FRD Sections 16-17) -----------------------------------
+
+export interface WarehouseStock {
+  id: string;
+  warehouseId: string;
+  warehouse?: WarehouseRef;
+  batchId: string;
+  batch?: {
+    id: string;
+    batchNumber: string;
+    cropName: string;
+    status: BatchStatus;
+    farmer?: FarmerRef;
+  };
+  quantity: string;
+  /** Counts as unavailable — a withdrawal may not dip into it. */
+  reservedQuantity: string;
+  unit: string;
+  storageLocation: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * GET /warehouses/:id/status.
+ *
+ * Caveat worth knowing: `occupied` sums quantity across batches WITHOUT
+ * regard to unit, so if a warehouse ever holds both KG and QUINTAL the figure
+ * — and `utilisationPercent` with it — is meaningless. The occupancy view
+ * computes its own per-unit breakdown rather than trusting this single number.
+ */
+export interface WarehouseStatus {
+  warehouseId: string;
+  name: string;
+  capacity: number | null;
+  occupied: number;
+  available: number | null;
+  utilisationPercent: number | null;
+  distinctBatches: number;
+}
+
+export interface LowStockResult {
+  threshold: number;
+  count: number;
+  items: WarehouseStock[];
+}
+
+export type UpdateWarehouseInput = Partial<CreateWarehouseInput>;
+
+export interface CreateWarehouseInput {
+  name: string;
+  location: string;
+  branchId: string;
+  capacity?: number;
+}
+
+export interface StockInInput {
+  batchId: string;
+  quantity: number;
+  storageLocation?: string;
+  reason?: string;
+}
+
+export interface StockOutInput {
+  batchId: string;
+  quantity: number;
+  reason?: string;
+}
+
+export interface TransferStockInput {
+  batchId: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  quantity: number;
+  reason?: string;
+}
+
+export interface AdjustStockInput {
+  batchId: string;
+  /** The new absolute on-hand figure after a physical count, not a delta. */
+  newQuantity: number;
+  /** Mandatory server-side — adjustments are the movement most likely to hide a problem. */
+  reason: string;
+}
+
+/** GET /batches/:batchNumber/trace — the upstream half of the chain. */
+export interface BatchTrace extends RawMaterialBatch {
+  farmer: FarmerRef & {
+    village: string;
+    district: string;
+    state: string;
+    gpsLocation: string | null;
+  };
+  branch?: BranchRef;
+  collection?: RawMaterialCollection & { inspection?: HarvestInspection };
+  stockMovements: StockMovement[];
+}
+
+// --- Farm-to-fork trace (FRD Section 30) ------------------------------------
+
+export interface TraceFarmer {
+  farmerCode: string | null;
+  farmerName: string;
+  village: string;
+  district: string;
+  state: string;
+  gpsLocation: string | null;
+  crop: string;
+  rawBatchNumber: string;
+  quantityUsed: string;
+  procuredOn: string | null;
+}
+
+// ===========================================================================
+// ZONE 3 — Processing, QA & Packaging (FRD Sections 18-23)
+// ===========================================================================
+
+// --- Product master ---------------------------------------------------------
+
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  category: string | null;
+  unit: string;
+  isActive: boolean;
+  /** Present on GET /products/:id. */
+  recipes?: Array<{ id: string; recipeCode: string; version: number; status: RecipeStatus }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type UpdateProductInput = Partial<CreateProductInput>;
+
+export interface CreateProductInput {
+  name: string;
+  sku: string;
+  unit: string;
+  category?: string;
+}
+
+// --- Recipes (FRD Section 19) -----------------------------------------------
+
+export const RECIPE_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'INACTIVE'] as const;
+export type RecipeStatus = (typeof RECIPE_STATUSES)[number];
+
+export const PRODUCTION_TYPES = ['SINGLE_GRAIN', 'MULTI_GRAIN'] as const;
+export type ProductionType = (typeof PRODUCTION_TYPES)[number];
+
+export interface RecipeIngredient {
+  id: string;
+  recipeId: string;
+  /** Must match cropName on raw material batches — that is how consumption is validated. */
+  cropName: string;
+  quantity: string;
+  unit: string;
+  percentage: string | null;
+  createdAt: string;
+}
+
+export interface Recipe {
+  id: string;
+  recipeCode: string;
+  version: number;
+  productId: string;
+  product?: { id: string; name: string; sku: string };
+  name: string;
+  category: string | null;
+  description: string | null;
+  productionType: ProductionType;
+
+  mixingRatio: string | null;
+  processingSequence: string | null;
+  grindingInstructions: string | null;
+  roastingInstructions: string | null;
+  oilExtractionProcess: string | null;
+  packagingInstructions: string | null;
+
+  batchYieldQuantity: string | null;
+  unit: string;
+  status: RecipeStatus;
+
+  createdById: string;
+  createdBy?: UserRef;
+  approvedById: string | null;
+  approvedBy?: UserRef | null;
+  approvedAt: string | null;
+
+  ingredients?: RecipeIngredient[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRecipeInput {
+  recipeCode: string;
+  productId: string;
+  name: string;
+  category?: string;
+  description?: string;
+  productionType: ProductionType;
+  ingredients: Array<{
+    cropName: string;
+    quantity: number;
+    unit?: string;
+    percentage?: number;
+  }>;
+  mixingRatio?: string;
+  processingSequence?: string;
+  grindingInstructions?: string;
+  roastingInstructions?: string;
+  oilExtractionProcess?: string;
+  packagingInstructions?: string;
+  batchYieldQuantity?: number;
+  unit?: string;
+}
+
+// --- Cleaning & grading (FRD Section 18) ------------------------------------
+
+export interface CleaningGradingRecord {
+  id: string;
+  rawMaterialBatchId: string;
+  rawMaterialBatch?: { id: string; batchNumber: string; cropName: string };
+  dustRemoved: boolean;
+  stonesRemoved: boolean;
+  foreignMaterialRemoved: boolean;
+  impuritiesSeparated: boolean;
+  grainSize: string | null;
+  color: string | null;
+  texture: string | null;
+  moistureLevel: string | null;
+  purity: string | null;
+  wastageQuantity: string | null;
+  qaVerified: boolean;
+  remarks: string | null;
+  operatorId: string;
+  operator?: UserRef;
+  createdAt: string;
+}
+
+export interface CreateCleaningGradingInput {
+  rawMaterialBatchId: string;
+  dustRemoved?: boolean;
+  stonesRemoved?: boolean;
+  foreignMaterialRemoved?: boolean;
+  impuritiesSeparated?: boolean;
+  grainSize?: string;
+  color?: string;
+  texture?: string;
+  moistureLevel?: number;
+  purity?: number;
+  wastageQuantity?: number;
+  qaVerified?: boolean;
+  remarks?: string;
+}
+
+// --- Production (FRD Section 20) --------------------------------------------
+
+export const PRODUCTION_STATUSES = [
+  'PLANNED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'PAUSED',
+  'CANCELLED',
+] as const;
+
+export type ProductionStatus = (typeof PRODUCTION_STATUSES)[number];
+
+export interface ProductionConsumption {
+  id: string;
+  productionBatchId: string;
+  rawMaterialBatchId: string;
+  rawMaterialBatch?: {
+    id?: string;
+    batchNumber: string;
+    cropName: string;
+    farmer?: FarmerRef;
+  };
+  quantityUsed: string;
+  unit: string;
+  createdAt: string;
+}
+
+export interface ProductionBatch {
+  id: string;
+  /** FRD 20.2 — PB-YYYYMMDD-NNN */
+  productionBatchNumber: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string };
+  recipeId: string;
+  recipe?: { recipeCode: string; version: number; name?: string; ingredients?: RecipeIngredient[] };
+  /** Pinned at creation — recipes are versioned and may change afterwards. */
+  recipeVersion: number;
+  productionType: ProductionType;
+
+  plannedQuantity: string;
+  actualQuantity: string | null;
+  productionLoss: string | null;
+  unit: string;
+
+  productionDate: string;
+  status: ProductionStatus;
+
+  machineName: string | null;
+  machineNumber: string | null;
+  operatorName: string | null;
+  productionLine: string | null;
+
+  branchId: string;
+  branch?: BranchRef;
+  createdById: string;
+  createdBy?: UserRef;
+
+  consumptions?: ProductionConsumption[];
+  qualityInspections?: QualityInspection[];
+  finishedGoodsBatches?: Array<{ id: string; fgBatchNumber: string; qaReleased: boolean }>;
+  _count?: { consumptions: number; finishedGoodsBatches: number };
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProductionBatchInput {
+  recipeId: string;
+  branchId: string;
+  /** Where the raw material is drawn from — consumption decrements this warehouse. */
+  warehouseId: string;
+  productionDate: string;
+  plannedQuantity: number;
+  consumptions: Array<{ rawMaterialBatchId: string; quantityUsed: number }>;
+  machineName?: string;
+  machineNumber?: string;
+  operatorName?: string;
+  productionLine?: string;
+}
+
+// --- Quality (FRD Section 21) -----------------------------------------------
+
+export const INSPECTION_STAGES = ['RAW_MATERIAL', 'IN_PROCESS', 'FINISHED_GOODS'] as const;
+export type InspectionStage = (typeof INSPECTION_STAGES)[number];
+
+export const QUALITY_RESULTS = ['PASS', 'FAIL', 'REWORK_REQUIRED'] as const;
+export type QualityResult = (typeof QUALITY_RESULTS)[number];
+
+export interface QualityInspection {
+  id: string;
+  stage: InspectionStage;
+  rawMaterialBatchId: string | null;
+  rawMaterialBatch?: { id: string; batchNumber: string } | null;
+  productionBatchId: string | null;
+  productionBatch?: { id: string; productionBatchNumber: string } | null;
+  finishedGoodsBatchId: string | null;
+  finishedGoodsBatch?: { id: string; fgBatchNumber: string } | null;
+
+  moisture: string | null;
+  purity: string | null;
+  grainSize: string | null;
+  color: string | null;
+  foreignMatter: string | null;
+  odor: string | null;
+
+  ingredientRatio: string | null;
+  mixingAccuracy: string | null;
+  grindingQuality: string | null;
+  temperature: string | null;
+  productConsistency: string | null;
+
+  productAppearance: string | null;
+  productWeight: string | null;
+  packagingQuality: string | null;
+  labelAccuracy: string | null;
+  shelfLifeVerified: boolean | null;
+
+  result: QualityResult;
+  remarks: string | null;
+  inspectedById: string;
+  inspectedBy?: UserRef;
+  createdAt: string;
+}
+
+export interface CreateQualityInspectionInput {
+  stage: InspectionStage;
+  rawMaterialBatchId?: string;
+  productionBatchId?: string;
+  finishedGoodsBatchId?: string;
+  moisture?: number;
+  purity?: number;
+  grainSize?: string;
+  color?: string;
+  foreignMatter?: number;
+  odor?: string;
+  ingredientRatio?: string;
+  mixingAccuracy?: string;
+  grindingQuality?: string;
+  temperature?: number;
+  productConsistency?: string;
+  productAppearance?: string;
+  productWeight?: number;
+  packagingQuality?: string;
+  labelAccuracy?: string;
+  shelfLifeVerified?: boolean;
+  result: QualityResult;
+  remarks?: string;
+}
+
+// --- Packaging & finished goods (FRD Sections 22-23) ------------------------
+
+export interface FinishedGoodsBatch {
+  id: string;
+  /** FRD 22.1 — FG-YYYYMMDD-NNN. This is what the consumer QR resolves to. */
+  fgBatchNumber: string;
+  productionBatchId: string;
+  productionBatch?: { id: string; productionBatchNumber: string };
+  productId: string;
+  product?: { id: string; name: string; sku: string };
+
+  packagingType: string;
+  netWeight: string;
+  weightUnit: string;
+  mrp: string | null;
+  packagingDate: string;
+  manufacturingDate: string;
+  expiryDate: string | null;
+  shelfLifeDays: number | null;
+  packCount: number;
+
+  qrPayload: string | null;
+  /** FRD 21.5 — only a released batch may be stocked or dispatched. */
+  qaReleased: boolean;
+
+  packedById: string;
+  packedBy?: UserRef;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinishedGoodsStockRow {
+  id: string;
+  warehouseId: string;
+  warehouse?: WarehouseRef;
+  fgBatchId: string;
+  fgBatch?: {
+    id: string;
+    fgBatchNumber: string;
+    netWeight: string;
+    expiryDate: string | null;
+    product?: { name: string; sku: string };
+  };
+  quantity: number;
+  reservedQuantity: number;
+  storageLocation: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /finished-goods/:id/label — everything needed to print the pack label. */
+export interface ProductLabel {
+  productName: string;
+  batchNumber: string;
+  manufacturingDate: string;
+  expiryDate: string | null;
+  netWeight: string;
+  mrp: string | null;
+  packagingDate: string;
+  shelfLifeDays: number | null;
+  traceabilityUrl: string;
+  qrSvg: string;
+  barcodeSvg: string;
+}
+
+export interface CreateFinishedGoodsBatchInput {
+  productionBatchId: string;
+  packagingType: string;
+  netWeight: number;
+  weightUnit?: string;
+  packCount: number;
+  mrp?: number;
+  packagingDate: string;
+  manufacturingDate: string;
+  expiryDate?: string;
+  shelfLifeDays?: number;
+}
+
+export interface StockFinishedGoodsInput {
+  warehouseId: string;
+  quantity: number;
+  storageLocation?: string;
+}
+
+/** GET /trace/:fgBatchNumber — what a consumer QR scan resolves to. */
+export interface FinishedGoodsTrace {
+  product: { id: string; name: string; sku: string; category: string | null };
+  finishedBatch: {
+    fgBatchNumber: string;
+    manufacturingDate: string;
+    expiryDate: string | null;
+    packagingDate: string;
+    packagingType: string;
+    netWeight: string;
+    qaReleased: boolean;
+  };
+  production: {
+    productionBatchNumber: string;
+    productionDate: string;
+    recipe: { recipeCode: string; version: number; name: string } | null;
+    recipeVersionUsed: number;
+    branch: BranchRef | null;
+  };
+  quality: Array<{ stage: string; result: string; createdAt: string }>;
+  farmers: TraceFarmer[];
+  traceabilityUrl: string | null;
 }

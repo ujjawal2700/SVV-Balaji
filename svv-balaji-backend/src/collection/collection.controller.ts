@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BatchStatus, UserRole } from '@prisma/client';
 import { CollectionService } from './collection.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
+import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -40,6 +41,18 @@ export class CollectionController {
   @Get('collections/:id')
   findOne(@Param('id') id: string) {
     return this.collectionService.findOne(id);
+  }
+
+  @Patch('collections/:id')
+  @Roles(UserRole.SUPER_ADMIN)
+  updateCollection(@Param('id') id: string, @Body() dto: UpdateCollectionDto) {
+    return this.collectionService.updateCollection(id, dto);
+  }
+
+  @Delete('collections/:id')
+  @Roles(UserRole.SUPER_ADMIN)
+  deleteCollection(@Param('id') id: string) {
+    return this.collectionService.deleteCollection(id);
   }
 
   @Patch('collections/:id/payment-status')
