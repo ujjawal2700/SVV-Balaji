@@ -272,9 +272,21 @@ export interface Agreement {
   harvestDate: string | null;
   qualityStandards: string | null;
   status: AgreementStatus;
+  /**
+   * GET /agreements now includes this. Non-zero means the terms are fixed -
+   * the screen can say so on the disabled Edit rather than waiting for the
+   * server to refuse.
+   */
+  _count?: { harvestInspections: number };
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * `farmerId` is excluded: moving an agreement to a different farmer would
+ * rewrite who the pre-season commitment was made to. The server refuses it.
+ */
+export type UpdateAgreementInput = Partial<Omit<CreateAgreementInput, 'farmerId'>>;
 
 export interface CreateAgreementInput {
   farmerId: string;
@@ -303,6 +315,8 @@ export interface SeedDistribution {
   distributedBy?: UserRef;
   createdAt: string;
 }
+
+export type UpdateSeedDistributionInput = Partial<CreateSeedDistributionInput>;
 
 export interface CreateSeedDistributionInput {
   farmerId: string;
@@ -352,6 +366,8 @@ export interface TrainingSessionDetail extends TrainingSession {
   attendances: TrainingAttendance[];
   materials: TrainingMaterial[];
 }
+
+export type UpdateTrainingSessionInput = Partial<CreateTrainingSessionInput>;
 
 export interface CreateTrainingSessionInput {
   title: string;
@@ -405,6 +421,8 @@ export interface FieldVisitDocument {
 export interface FieldVisitDetail extends FieldVisit {
   documents: FieldVisitDocument[];
 }
+
+export type UpdateFieldVisitInput = Partial<CreateFieldVisitInput>;
 
 export interface CreateFieldVisitInput {
   farmerId: string;
@@ -478,6 +496,8 @@ export interface ProcurementPlan {
   updatedAt: string;
 }
 
+export type UpdateProcurementPlanInput = Partial<CreateProcurementPlanInput>;
+
 export interface CreateProcurementPlanInput {
   cropName: string;
   plannedQuantity: number;
@@ -534,6 +554,9 @@ export interface HarvestInspection {
   createdAt: string;
   updatedAt: string;
 }
+
+/** `farmerId` is excluded — an APPROVED result must not be transferable to another farmer. */
+export type UpdateHarvestInspectionInput = Partial<Omit<CreateHarvestInspectionInput, 'farmerId'>>;
 
 export interface CreateHarvestInspectionInput {
   farmerId: string;
@@ -596,6 +619,23 @@ export interface RawMaterialCollection {
   updatedAt: string;
 }
 
+/**
+ * Written out rather than derived, because what is missing is the point:
+ * `inspectionId`, `warehouseId` and `collectionDate` are not correctable. The
+ * first is a unique relation, the second would move stock without a ledger
+ * entry, and the third is encoded into the receipt and batch numbers already
+ * printed on the farmer's receipt.
+ */
+export interface UpdateCollectionInput {
+  grossWeight?: number;
+  netWeight?: number;
+  purchaseRate?: number;
+  unit?: string;
+  collectionLocation?: string;
+  /** Written onto the stock ledger when the net weight changes. */
+  correctionReason?: string;
+}
+
 export interface CreateCollectionInput {
   inspectionId: string;
   branchId: string;
@@ -638,6 +678,26 @@ export interface RawMaterialBatch {
   status: BatchStatus;
   warehouseId: string | null;
   warehouse?: WarehouseRef | null;
+  /**
+   * GET /batches now includes the collection this batch was minted from.
+   *
+   * A batch has no figures of its own — quantity, crop and farmer are all
+   * inherited — so Correct and Delete on the batches screen act on the
+   * collection. Carrying it on the row means that screen can open the
+   * correction form without a round trip per row.
+   */
+  collection?: {
+    id: string;
+    receiptNumber: string;
+    collectionDate: string;
+    collectionLocation: string | null;
+    grossWeight: string;
+    netWeight: string;
+    unit: string;
+    purchaseRate: string;
+    totalAmount: string;
+    paymentStatus: PaymentStatus;
+  };
   createdAt: string;
   updatedAt: string;
 }

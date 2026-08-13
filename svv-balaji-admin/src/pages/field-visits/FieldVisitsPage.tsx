@@ -10,12 +10,26 @@ import { FarmerSelect } from '../../components/pickers';
 import { useFieldVisits } from '../../hooks/useFieldVisits';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
 import { FieldVisitDetailDrawer } from './FieldVisitDetailDrawer';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteFieldVisit } from '../../hooks/useFieldVisits';
 import { FieldVisitFormModal } from './FieldVisitFormModal';
 
 export function FieldVisitsPage() {
   const [farmerId, setFarmerId] = useState<string | undefined>();
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<FieldVisit | null>(null);
+  const remove = useDeleteFieldVisit();
+
+  const openEdit = (visit: FieldVisit) => {
+    setEditing(visit);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
 
   const visits = useFieldVisits(farmerId);
 
@@ -79,13 +93,23 @@ export function FieldVisitsPage() {
       render: (_, visit) => visit.expert?.fullName ?? EM_DASH,
     },
     {
-      title: '',
+      title: 'Actions',
       key: 'actions',
-      width: 90,
+      width: 230,
+      fixed: 'right',
       render: (_, visit) => (
-        <Button size="small" onClick={() => setDetailId(visit.id)}>
-          Open
-        </Button>
+        <RowActions
+          entity="field visit"
+          label={`the visit to ${visit.farmer?.fullName ?? 'this farmer'}`}
+          can="FIELD_VISIT_EDIT"
+          canDelete="RECORD_DELETE"
+          onEdit={() => openEdit(visit)}
+          onDelete={() => remove.mutateAsync(visit.id)}
+        >
+          <Button size="small" onClick={() => setDetailId(visit.id)}>
+            Open
+          </Button>
+        </RowActions>
       ),
     },
   ];
@@ -129,7 +153,7 @@ export function FieldVisitsPage() {
         emptyText={farmerId ? 'No visits recorded for this farmer' : 'No field visits recorded yet'}
       />
 
-      <FieldVisitFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <FieldVisitFormModal open={formOpen} visit={editing} onClose={closeForm} />
       <FieldVisitDetailDrawer visitId={detailId} onClose={() => setDetailId(null)} />
     </Card>
   );

@@ -10,10 +10,11 @@ import {
 import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
-import { RowActions } from '../../components/RowActions';
 import { FarmerSelect } from '../../components/pickers';
-import { useHarvestInspections, useDeleteHarvestInspection } from '../../hooks/useProcurement';
+import { useHarvestInspections } from '../../hooks/useProcurement';
 import { EM_DASH, formatDate } from '../../utils/format';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteHarvestInspection } from '../../hooks/useProcurement';
 import { HarvestInspectionFormModal } from './HarvestInspectionFormModal';
 
 const RESULT_COLOURS: Record<InspectionResult, string> = {
@@ -34,12 +35,10 @@ export function HarvestInspectionsPage() {
   const [filters, setFilters] = useState<{ farmerId?: string; result?: InspectionResult }>({});
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<HarvestInspection | null>(null);
-
-  const inspections = useHarvestInspections(filters);
   const remove = useDeleteHarvestInspection();
 
-  const openForm = (inspection?: HarvestInspection) => {
-    setEditing(inspection ?? null);
+  const openEdit = (inspection: HarvestInspection) => {
+    setEditing(inspection);
     setFormOpen(true);
   };
 
@@ -47,6 +46,8 @@ export function HarvestInspectionsPage() {
     setFormOpen(false);
     setEditing(null);
   };
+
+  const inspections = useHarvestInspections(filters);
 
   const columns: ColumnsType<HarvestInspection> = [
     {
@@ -123,22 +124,28 @@ export function HarvestInspectionsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       fixed: 'right',
-      render: (_, row) => (
-        <RowActions
-          entity="inspection"
-          label={`${formatDate(row.inspectionDate)} - ${row.cropName}`}
-          can="HARVEST_INSPECTION_EDIT"
-          onEdit={() => openForm(row)}
-          onDelete={() => remove.mutateAsync(row.id)}
-          deleteBlockedReason={
-            row.collection
-              ? `Cannot delete because it was already collected (receipt ${row.collection.receiptNumber})`
-              : undefined
-          }
-        />
-      ),
+      render: (_, row) => {
+        // Once collected, the result is what allowed that collection and the
+        // crop name is carried onto its batch. The list already knows, so the
+        // screen can say so rather than waiting for the server to refuse.
+        const collected = row.collection
+          ? `Already collected on receipt ${row.collection.receiptNumber} — delete that collection first`
+          : undefined;
+
+        return (
+          <RowActions
+            entity="inspection"
+            label={`the ${row.cropName} inspection`}
+            can="HARVEST_INSPECTION_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={row.collection ? undefined : () => openEdit(row)}
+            onDelete={() => remove.mutateAsync(row.id)}
+            deleteBlockedReason={collected}
+          />
+        );
+      },
     },
   ];
 
@@ -180,7 +187,7 @@ export function HarvestInspectionsPage() {
         }
         actions={
           <Can do="HARVEST_INSPECTION_CREATE">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               Record inspection
             </Button>
           </Can>
@@ -199,11 +206,7 @@ export function HarvestInspectionsPage() {
         emptyText="No inspections recorded yet"
       />
 
-      <HarvestInspectionFormModal
-        open={formOpen}
-        inspection={editing}
-        onClose={closeForm}
-      />
+      <HarvestInspectionFormModal open={formOpen} inspection={editing} onClose={closeForm} />
     </Card>
   );
 }

@@ -1,14 +1,27 @@
-import { App as AntApp, Col, DatePicker, Form, Input, InputNumber, Modal, Row } from 'antd';
-import type { Dayjs } from 'dayjs';
+import {
+  Alert,
+  App as AntApp,
+  Col,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+} from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import type { Agreement } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
-import { useCreateAgreement } from '../../hooks/useAgreements';
+import { useCreateAgreement, useUpdateAgreement } from '../../hooks/useAgreements';
 import { toIsoDate } from '../../utils/format';
 import { dateAfter, positiveNumber, required } from '../../validation/rules';
 
 interface AgreementFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
+  agreement?: Agreement | null;
   onClose: () => void;
 }
 
@@ -34,49 +47,85 @@ interface AgreementForm {
  * The rate recorded here is what a collection falls back to when no rate is
  * supplied at weighing, so it is not a nice-to-have field.
  */
-export function AgreementFormModal({ open, onClose }: AgreementFormModalProps) {
+export function AgreementFormModal({ open, agreement, onClose }: AgreementFormModalProps) {
   const [form] = Form.useForm<AgreementForm>();
   const { message } = AntApp.useApp();
   const createAgreement = useCreateAgreement();
+  const updateAgreement = useUpdateAgreement();
+
+  const isEdit = Boolean(agreement);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (agreement) {
+      form.setFieldsValue({
+        farmerId: agreement.farmerId,
+        cropName: agreement.cropName,
+        variety: agreement.variety ?? undefined,
+        // Decimals arrive as strings from Prisma.
+        expectedQuantity: Number(agreement.expectedQuantity),
+        purchaseRate: Number(agreement.purchaseRate),
+        agreementDate: dayjs(agreement.agreementDate),
+        harvestDate: agreement.harvestDate ? dayjs(agreement.harvestDate) : undefined,
+        qualityStandards: agreement.qualityStandards ?? undefined,
+      });
+    }
+  }, [open, agreement, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      cropName: values.cropName,
+      variety: values.variety,
+      expectedQuantity: values.expectedQuantity,
+      purchaseRate: values.purchaseRate,
+      agreementDate: toIsoDate(values.agreementDate) as string,
+      harvestDate: toIsoDate(values.harvestDate),
+      qualityStandards: values.qualityStandards,
+    };
+
     try {
-      await createAgreement.mutateAsync({
-        farmerId: values.farmerId,
-        cropName: values.cropName,
-        variety: values.variety,
-        expectedQuantity: values.expectedQuantity,
-        purchaseRate: values.purchaseRate,
-        agreementDate: toIsoDate(values.agreementDate) as string,
-        harvestDate: toIsoDate(values.harvestDate),
-        qualityStandards: values.qualityStandards,
-      });
-      message.success('Agreement recorded');
+      if (agreement) {
+        await updateAgreement.mutateAsync({ id: agreement.id, input: payload });
+        message.success('Agreement updated');
+      } else {
+        await createAgreement.mutateAsync({ farmerId: values.farmerId, ...payload });
+        message.success('Agreement recorded');
+      }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, 'Could not record the agreement'));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'record'} the agreement`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title="New agreement"
-      okText="Record agreement"
+      title={isEdit ? `Edit agreement — ${agreement?.cropName}` : 'New agreement'}
+      okText={isEdit ? 'Save changes' : 'Record agreement'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createAgreement.isPending}
+      confirmLoading={createAgreement.isPending || updateAgreement.isPending}
       width={680}
       destroyOnClose
     >
       <Form form={form} layout="vertical" requiredMark preserve={false}>
+        {isEdit ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="The farmer cannot be changed"
+            description="An agreement records a commitment made to one farmer. If it was raised against the wrong person, delete it and record a new one — the server refuses a reassignment."
+          />
+        ) : null}
+
         <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
-          <FarmerSelect />
+          <FarmerSelect disabled={isEdit} />
         </Form.Item>
 
         <Row gutter={16}>

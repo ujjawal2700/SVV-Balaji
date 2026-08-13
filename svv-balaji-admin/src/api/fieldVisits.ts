@@ -6,6 +6,7 @@ import type {
   FieldVisit,
   FieldVisitDetail,
   FieldVisitDocument,
+  UpdateFieldVisitInput,
 } from './types';
 
 export const fieldVisitsApi = {
@@ -36,5 +37,26 @@ export const fieldVisitsApi = {
       pruneEmpty(input),
     );
     return unwrap<FieldVisitDocument>(response.data);
+  },
+
+  /**
+   * Every field on a visit is an observation or a piece of advice, and nothing
+   * downstream derives from any of them, so all of it stays correctable.
+   */
+  async update(id: string, input: UpdateFieldVisitInput): Promise<FieldVisit> {
+    const response = await api.patch<FieldVisit>(`/field-visits/${id}`, pruneEmpty(input));
+    return unwrap<FieldVisit>(response.data);
+  },
+
+  /** Takes the visit's attached photos and reports with it. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/field-visits/${id}`);
+  },
+
+  async removeDocument(id: string, documentId: string): Promise<FieldVisitDetail> {
+    const response = await api.delete<FieldVisitDetail>(
+      `/field-visits/${id}/documents/${documentId}`,
+    );
+    return unwrap<FieldVisitDetail>(response.data);
   },
 };

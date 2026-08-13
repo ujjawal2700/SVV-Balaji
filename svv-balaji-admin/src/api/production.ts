@@ -138,21 +138,13 @@ export const productionApi = {
    * Mints the batch and consumes the named raw material in one transaction.
    *
    * The server refuses an unapproved recipe, a rejected batch, a crop that is
-   * not an ingredient of the recipe, insufficient stock, and — until the client
-   * confirms scope (A-05) — any MULTI_GRAIN recipe at all.
+   * not an ingredient of the recipe, insufficient stock, and — for a MULTI_GRAIN
+   * recipe — a mix that drifts more than half a percentage point from the
+   * approved ratio, or one missing a grain entirely.
    */
   async createBatch(input: CreateProductionBatchInput): Promise<ProductionBatch> {
     const response = await api.post<ProductionBatch>('/production-batches', pruneEmpty(input));
     return unwrap<ProductionBatch>(response.data);
-  },
-
-  async updateBatch(id: string, input: Partial<CreateProductionBatchInput>): Promise<ProductionBatch> {
-    const response = await api.patch<ProductionBatch>(`/production-batches/${id}`, pruneEmpty(input));
-    return unwrap<ProductionBatch>(response.data);
-  },
-
-  async deleteBatch(id: string): Promise<void> {
-    await api.delete(`/production-batches/${id}`);
   },
 
   /** FRD 20.5 — records actual output and derives process loss. */

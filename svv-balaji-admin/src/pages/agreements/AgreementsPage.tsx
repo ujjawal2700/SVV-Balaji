@@ -9,7 +9,12 @@ import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
 import { FarmerSelect } from '../../components/pickers';
-import { useAgreements, useSetAgreementStatus } from '../../hooks/useAgreements';
+import { RowActions } from '../../components/RowActions';
+import {
+  useAgreements,
+  useDeleteAgreement,
+  useSetAgreementStatus,
+} from '../../hooks/useAgreements';
 import { EM_DASH, formatCurrency, formatDate, formatQuantity } from '../../utils/format';
 import { AgreementFormModal } from './AgreementFormModal';
 
@@ -26,6 +31,18 @@ export function AgreementsPage() {
   const [formOpen, setFormOpen] = useState(false);
 
   const agreements = useAgreements(farmerId);
+  const remove = useDeleteAgreement();
+  const [editing, setEditing] = useState<Agreement | null>(null);
+
+  const openEdit = (agreement: Agreement) => {
+    setEditing(agreement);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
   const setStatus = useSetAgreementStatus();
   const canEdit = useCan('AGREEMENT_CREATE');
 
@@ -122,6 +139,33 @@ export function AgreementsPage() {
           <Tag color={STATUS_COLOURS[status]}>{status}</Tag>
         ),
     },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 150,
+      fixed: 'right',
+      render: (_, agreement) => {
+        // The list carries the inspection count, so the screen knows the terms
+        // are fixed before the user clicks and the server tells them.
+        const used = agreement._count?.harvestInspections ?? 0;
+        const locked =
+          used > 0
+            ? `Used for ${used} harvest inspection${used === 1 ? '' : 's'} — the agreed rate and quality standards are fixed`
+            : undefined;
+
+        return (
+          <RowActions
+            entity="agreement"
+            label={`the ${agreement.cropName} agreement`}
+            can="AGREEMENT_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={locked ? undefined : () => openEdit(agreement)}
+            onDelete={() => remove.mutateAsync(agreement.id)}
+            deleteBlockedReason={locked}
+          />
+        );
+      },
+    },
   ];
 
   const toolbar = (
@@ -163,7 +207,7 @@ export function AgreementsPage() {
         emptyText={farmerId ? 'No agreements for this farmer' : 'No agreements yet'}
       />
 
-      <AgreementFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <AgreementFormModal open={formOpen} agreement={editing} onClose={closeForm} />
     </Card>
   );
 }

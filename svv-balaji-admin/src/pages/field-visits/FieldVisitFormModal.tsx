@@ -1,14 +1,17 @@
 import { App as AntApp, Col, DatePicker, Divider, Form, Input, InputNumber, Modal, Row } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import type { FieldVisit } from '../../api/types';
 import { BranchSelect, FarmerSelect } from '../../components/pickers';
-import { useCreateFieldVisit } from '../../hooks/useFieldVisits';
+import { useCreateFieldVisit, useUpdateFieldVisit } from '../../hooks/useFieldVisits';
 import { toIsoDate } from '../../utils/format';
 import { positiveNumber, required } from '../../validation/rules';
 
 interface FieldVisitFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
+  visit?: FieldVisit | null;
   onClose: () => void;
 }
 
@@ -39,23 +42,52 @@ interface FieldVisitForm {
  * field. The same records are captured offline by the Agriculture Expert app
  * (WS3.1) and sync here.
  */
-export function FieldVisitFormModal({ open, onClose }: FieldVisitFormModalProps) {
+export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModalProps) {
   const [form] = Form.useForm<FieldVisitForm>();
   const { message } = AntApp.useApp();
   const createVisit = useCreateFieldVisit();
+  const updateVisit = useUpdateFieldVisit();
+
+  const isEdit = Boolean(visit);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (visit) {
+      form.setFieldsValue({
+        farmerId: visit.farmerId,
+        branchId: visit.branchId,
+        visitDate: dayjs(visit.visitDate),
+        cropName: visit.cropName ?? undefined,
+        cropGrowthStage: visit.cropGrowthStage ?? undefined,
+        cropHealth: visit.cropHealth ?? undefined,
+        pestStatus: visit.pestStatus ?? undefined,
+        diseaseObservation: visit.diseaseObservation ?? undefined,
+        fertilizerAdvice: visit.fertilizerAdvice ?? undefined,
+        irrigationAdvice: visit.irrigationAdvice ?? undefined,
+        pestControlSuggestions: visit.pestControlSuggestions ?? undefined,
+        harvestPreparation: visit.harvestPreparation ?? undefined,
+        yieldPredictionQty:
+          visit.yieldPredictionQty === null ? undefined : Number(visit.yieldPredictionQty),
+      });
+    }
+  }, [open, visit, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      ...values,
+      visitDate: toIsoDate(values.visitDate) as string,
+    };
+
     try {
-      await createVisit.mutateAsync({
-        ...values,
-        visitDate: toIsoDate(values.visitDate) as string,
-      });
-      message.success('Field visit recorded');
+      if (visit) {
+        await updateVisit.mutateAsync({ id: visit.id, input: payload });
+        message.success('Field visit updated');
+      } else {
+        await createVisit.mutateAsync(payload);
+        message.success('Field visit recorded');
+      }
       onClose();
     } catch (error) {
       message.error(apiErrorMessage(error, 'Could not record the visit'));
@@ -65,11 +97,11 @@ export function FieldVisitFormModal({ open, onClose }: FieldVisitFormModalProps)
   return (
     <Modal
       open={open}
-      title="Record field visit"
-      okText="Record visit"
+      title={isEdit ? `Edit visit — ${visit?.farmer?.fullName ?? ''}` : 'Record field visit'}
+      okText={isEdit ? 'Save changes' : 'Record visit'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createVisit.isPending}
+      confirmLoading={createVisit.isPending || updateVisit.isPending}
       width={760}
       destroyOnClose
     >

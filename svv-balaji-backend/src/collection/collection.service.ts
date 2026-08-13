@@ -200,55 +200,6 @@ export class CollectionService {
     });
   }
 
-  async updateCollection(id: string, dto: UpdateCollectionDto) {
-    const collection = await this.prisma.rawMaterialCollection.findUnique({ 
-      where: { id }, 
-      include: { batch: true } 
-    });
-    if (!collection) throw new NotFoundException('Collection not found');
-
-    const data: any = { ...dto };
-    if (dto.collectionDate) data.collectionDate = new Date(dto.collectionDate);
-
-    if (dto.netWeight !== undefined || dto.purchaseRate !== undefined) {
-      const netWeight = Number(dto.netWeight ?? collection.netWeight);
-      const purchaseRate = Number(dto.purchaseRate ?? collection.purchaseRate);
-      data.totalAmount = Number((netWeight * purchaseRate).toFixed(2));
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.rawMaterialCollection.update({ where: { id }, data });
-      if (dto.netWeight !== undefined && collection.batch) {
-        await tx.rawMaterialBatch.update({ 
-          where: { id: collection.batch.id }, 
-          data: { quantity: dto.netWeight } 
-        });
-      }
-      return updated;
-    });
-  }
-
-  async deleteCollection(id: string) {
-    const collection = await this.prisma.rawMaterialCollection.findUnique({
-      where: { id },
-      include: { batch: { include: { stockMovements: true } } }
-    });
-    if (!collection) throw new NotFoundException('Collection not found');
-
-    if (collection.batch?.stockMovements && collection.batch.stockMovements.length > 1) {
-       throw new BadRequestException('Cannot delete collection: batch has subsequent stock movements');
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-       if (collection.batch) {
-         await tx.stockMovement.deleteMany({ where: { batchId: collection.batch.id } });
-         await tx.warehouseStock.deleteMany({ where: { batchId: collection.batch.id } });
-         await tx.rawMaterialBatch.delete({ where: { id: collection.batch.id } });
-       }
-       return tx.rawMaterialCollection.delete({ where: { id } });
-    });
-  }
-
   // --- Batch queries (FRD 15.2 / 15.3) -------------------------------------
 
   findBatches(filters: { farmerId?: string; status?: any; warehouseId?: string }) {
@@ -258,6 +209,24 @@ export class CollectionService {
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
         warehouse: { select: { id: true, name: true } },
+        // The batches screen offers Correct and Delete, and both act on the
+        // collection rather than the batch - a batch has no figures of its own,
+        // it inherits them. Including the collection here means that screen can
+        // open the correction form without a second round trip per row.
+        collection: {
+          select: {
+            id: true,
+            receiptNumber: true,
+            collectionDate: true,
+            collectionLocation: true,
+            grossWeight: true,
+            netWeight: true,
+            unit: true,
+            purchaseRate: true,
+            totalAmount: true,
+            paymentStatus: true,
+          },
+        },
       },
     });
   }
@@ -290,5 +259,202 @@ export class CollectionService {
     });
     if (!batch) throw new NotFoundException(`No batch found with number ${batchNumber}`);
     return batch;
+  }
+
+  // --- Correcting and reversing a collection -------------------------------
+
+  /**
+   * A collection is only correctable while its batch is untouched.
+   *
+   * "Untouched" means: the batch has not been cleaned, graded, quality
+   * inspected or consumed by production, and its only stock movement is the
+   * initial receipt. Once any of those exist, the batch quantity is a number
+   * other records have already been derived from - a cleaning yield, a
+   * production consumption - and changing it would silently invalidate them.
+   *
+   * Within that window the net weight is genuinely correctable, and correcting
+   * it has to reach further than the collection row: the batch quantity, the
+   * warehouse stock line and the ledger all carry the same figure. Doing that
+   * in one transaction, with an ADJUSTMENT movement recording the difference,
+   * is what keeps the running balance and the audit trail from drifting apart -
+   * the invariant this whole module is built around.
+   */
+  async update(id: string, dto: UpdateCollectionDto, performedById: string) {
+    const collection = await this.prisma.rawMaterialCollection.findUnique({
+      where: { id },
+      include: { batch: true },
+    });
+    if (!collection) throw new NotFoundException('Collection not found');
+
+    const batch = collection.batch;
+    if (batch) await this.assertBatchUntouched(batch.id, batch.batchNumber);
+
+    const grossWeight = dto.grossWeight ?? Number(collection.grossWeight);
+    const netWeight = dto.netWeight ?? Number(collection.netWeight);
+    const purchaseRate = dto.purchaseRate ?? Number(collection.purchaseRate);
+    const unit = dto.unit ?? collection.unit;
+
+    if (netWeight > grossWeight) {
+      throw new BadRequestException('netWeight cannot exceed grossWeight');
+    }
+
+    const totalAmount = Number((netWeight * purchaseRate).toFixed(2));
+    const previousNet = Number(collection.netWeight);
+    const delta = Number((netWeight - previousNet).toFixed(2));
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.rawMaterialCollection.update({
+        where: { id },
+        data: {
+          grossWeight,
+          netWeight,
+          purchaseRate,
+          unit,
+          totalAmount,
+          collectionLocation: dto.collectionLocation,
+        },
+      });
+
+      if (batch && (delta !== 0 || unit !== batch.unit)) {
+        await tx.rawMaterialBatch.update({
+          where: { id: batch.id },
+          data: { quantity: netWeight, unit },
+        });
+
+        // Only warehoused batches have a stock line to keep in step. A batch
+        // still sitting at COLLECTED has none, and creating one here would
+        // invent stock in a warehouse nobody nominated.
+        if (batch.warehouseId && delta !== 0) {
+          const stock = await tx.warehouseStock.findFirst({
+            where: { warehouseId: batch.warehouseId, batchId: batch.id },
+          });
+
+          if (stock) {
+            await tx.warehouseStock.update({
+              where: { id: stock.id },
+              data: { quantity: netWeight, unit },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                batchId: batch.id,
+                toWarehouseId: delta > 0 ? batch.warehouseId : undefined,
+                fromWarehouseId: delta < 0 ? batch.warehouseId : undefined,
+                movementType: 'ADJUSTMENT',
+                quantity: Math.abs(delta),
+                unit,
+                reason:
+                  `Collection ${collection.receiptNumber} corrected: net weight ` +
+                  `${previousNet} -> ${netWeight} ${unit}` +
+                  (dto.correctionReason ? `. ${dto.correctionReason}` : ''),
+                performedById,
+              },
+            });
+          }
+        }
+      }
+
+      return tx.rawMaterialCollection.findUnique({
+        where: { id: updated.id },
+        include: {
+          farmer: { select: { id: true, fullName: true, farmerCode: true } },
+          batch: { select: { id: true, batchNumber: true, status: true } },
+          collectedBy: { select: { id: true, fullName: true } },
+        },
+      });
+    });
+  }
+
+  /**
+   * Reversing a collection recorded in error.
+   *
+   * Takes the batch, its stock line and its receipt movement with it, in one
+   * transaction - a batch without its collection has no farmer path and would
+   * sit in the warehouse untraceable, which is worse than either record.
+   *
+   * The receipt number is NOT reused. `generateReceiptNumber` counts existing
+   * receipts for the day, so deleting one makes the next collection reuse its
+   * number - two different farmers, two different payments, one receipt
+   * number, and no way to tell them apart afterwards. That is a real bug in
+   * the counter rather than in this method (`SequenceService` beside it does
+   * this correctly), so the deletion is refused when a later receipt exists
+   * for the same day until it is fixed.
+   */
+  async remove(id: string) {
+    const collection = await this.prisma.rawMaterialCollection.findUnique({
+      where: { id },
+      include: { batch: true },
+    });
+    if (!collection) throw new NotFoundException('Collection not found');
+
+    if (collection.paymentStatus !== 'PENDING') {
+      throw new BadRequestException(
+        `This collection is marked ${collection.paymentStatus}. The farmer has been paid ` +
+          `against receipt ${collection.receiptNumber}, so deleting it would leave a payment ` +
+          `with nothing to reconcile against.`,
+      );
+    }
+
+    if (collection.batch) {
+      await this.assertBatchUntouched(collection.batch.id, collection.batch.batchNumber);
+    }
+
+    const datePart = collection.receiptNumber.split('-')[1];
+    const laterSameDay = await this.prisma.rawMaterialCollection.count({
+      where: {
+        receiptNumber: { startsWith: `RC-${datePart}-`, gt: collection.receiptNumber },
+      },
+    });
+    if (laterSameDay > 0) {
+      throw new BadRequestException(
+        `${laterSameDay} later collection${laterSameDay === 1 ? ' was' : 's were'} recorded on ` +
+          `the same day. Receipt numbers are issued by counting the day's receipts, so removing ` +
+          `${collection.receiptNumber} would make the next one reuse it. Cancel this collection ` +
+          `by other means, or ask for the receipt counter to be fixed first.`,
+      );
+    }
+
+    const batchId = collection.batch?.id;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (batchId) {
+        await tx.stockMovement.deleteMany({ where: { batchId } });
+        await tx.warehouseStock.deleteMany({ where: { batchId } });
+        await tx.rawMaterialBatch.delete({ where: { id: batchId } });
+      }
+      await tx.rawMaterialCollection.delete({ where: { id } });
+    });
+
+    return { id, deleted: true, batchDeleted: collection.batch?.batchNumber ?? null };
+  }
+
+  /**
+   * The shared "nothing downstream has used this yet" check.
+   *
+   * A single stock movement beyond the initial receipt counts as touched: it
+   * means the batch has been issued, transferred or counted, and the quantity
+   * on the collection is no longer the only record of it.
+   */
+  private async assertBatchUntouched(batchId: string, batchNumber: string) {
+    const [cleaning, consumption, inspections, movements] = await this.prisma.$transaction([
+      this.prisma.cleaningGradingRecord.count({ where: { rawMaterialBatchId: batchId } }),
+      this.prisma.productionConsumption.count({ where: { rawMaterialBatchId: batchId } }),
+      this.prisma.qualityInspection.count({ where: { rawMaterialBatchId: batchId } }),
+      this.prisma.stockMovement.count({ where: { batchId } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (cleaning > 0) blockers.push(`${cleaning} cleaning/grading record${cleaning === 1 ? '' : 's'}`);
+    if (consumption > 0) blockers.push(`${consumption} production consumption${consumption === 1 ? '' : 's'}`);
+    if (inspections > 0) blockers.push(`${inspections} quality inspection${inspections === 1 ? '' : 's'}`);
+    if (movements > 1) blockers.push(`${movements - 1} stock movement${movements - 1 === 1 ? '' : 's'} since receipt`);
+
+    if (blockers.length > 0) {
+      throw new BadRequestException(
+        `Batch ${batchNumber} has already been used - ${blockers.join(', ')}. Its quantity is ` +
+          `now the basis of records downstream, so the collection figures are fixed. Use a stock ` +
+          `adjustment on the warehouse screen if the physical count differs.`,
+      );
+    }
   }
 }

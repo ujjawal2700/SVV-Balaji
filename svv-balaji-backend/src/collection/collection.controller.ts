@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BatchStatus, UserRole } from '@prisma/client';
 import { CollectionService } from './collection.service';
@@ -43,18 +53,6 @@ export class CollectionController {
     return this.collectionService.findOne(id);
   }
 
-  @Patch('collections/:id')
-  @Roles(UserRole.SUPER_ADMIN)
-  updateCollection(@Param('id') id: string, @Body() dto: UpdateCollectionDto) {
-    return this.collectionService.updateCollection(id, dto);
-  }
-
-  @Delete('collections/:id')
-  @Roles(UserRole.SUPER_ADMIN)
-  deleteCollection(@Param('id') id: string) {
-    return this.collectionService.deleteCollection(id);
-  }
-
   @Patch('collections/:id/payment-status')
   @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER)
   updatePaymentStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto) {
@@ -81,5 +79,35 @@ export class CollectionController {
   })
   trace(@Param('batchNumber') batchNumber: string) {
     return this.collectionService.traceBatch(batchNumber);
+  }
+
+  @Patch('collections/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER)
+  @ApiOperation({
+    summary: 'Correct the figures on a collection',
+    description:
+      'Weights and rate only, and only while the batch is untouched - not cleaned, inspected, ' +
+      'consumed, or moved since receipt. A net weight change also updates the batch quantity ' +
+      'and the warehouse stock line, and writes an ADJUSTMENT to the movement ledger.',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateCollectionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.collectionService.update(id, dto, user.sub);
+  }
+
+  @Delete('collections/:id')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Reverse a collection recorded in error',
+    description:
+      'Deletes the batch, its stock line and its receipt movement with it. Refused once the ' +
+      'farmer has been paid, once the batch has been used, or when a later receipt exists for ' +
+      'the same day (the receipt number would be reused).',
+  })
+  remove(@Param('id') id: string) {
+    return this.collectionService.remove(id);
   }
 }

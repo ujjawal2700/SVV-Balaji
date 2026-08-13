@@ -1,14 +1,20 @@
 import { App as AntApp, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import type { SeedDistribution } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
-import { useCreateSeedDistribution } from '../../hooks/useSeedDistribution';
+import {
+  useCreateSeedDistribution,
+  useUpdateSeedDistribution,
+} from '../../hooks/useSeedDistribution';
 import { toIsoDate } from '../../utils/format';
 import { positiveNumber, required } from '../../validation/rules';
 
 interface SeedDistributionFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
+  record?: SeedDistribution | null;
   onClose: () => void;
 }
 
@@ -31,42 +37,71 @@ const UNITS = ['KG', 'GRAM', 'QUINTAL', 'PACKET', 'LITRE'];
  * distributing user is taken from the token server-side, so there is no "issued
  * by" field here — it is always whoever is signed in.
  */
-export function SeedDistributionFormModal({ open, onClose }: SeedDistributionFormModalProps) {
+export function SeedDistributionFormModal({
+  open,
+  record,
+  onClose,
+}: SeedDistributionFormModalProps) {
   const [form] = Form.useForm<SeedForm>();
   const { message } = AntApp.useApp();
   const createDistribution = useCreateSeedDistribution();
+  const updateDistribution = useUpdateSeedDistribution();
+
+  const isEdit = Boolean(record);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (record) {
+      form.setFieldsValue({
+        farmerId: record.farmerId,
+        seedName: record.seedName,
+        seedVariety: record.seedVariety ?? undefined,
+        quantity: Number(record.quantity),
+        unit: record.unit,
+        batchNumber: record.batchNumber ?? undefined,
+        distributionDate: dayjs(record.distributionDate),
+      });
+    }
+  }, [open, record, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      farmerId: values.farmerId,
+      seedName: values.seedName,
+      seedVariety: values.seedVariety,
+      quantity: values.quantity,
+      unit: values.unit,
+      batchNumber: values.batchNumber,
+      distributionDate: toIsoDate(values.distributionDate) as string,
+    };
+
     try {
-      await createDistribution.mutateAsync({
-        farmerId: values.farmerId,
-        seedName: values.seedName,
-        seedVariety: values.seedVariety,
-        quantity: values.quantity,
-        unit: values.unit,
-        batchNumber: values.batchNumber,
-        distributionDate: toIsoDate(values.distributionDate) as string,
-      });
-      message.success('Distribution logged');
+      if (record) {
+        await updateDistribution.mutateAsync({ id: record.id, input: payload });
+        message.success('Distribution updated');
+      } else {
+        await createDistribution.mutateAsync(payload);
+        message.success('Distribution logged');
+      }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, 'Could not log the distribution'));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'log'} the distribution`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title="Log seed distribution"
-      okText="Log distribution"
+      title={isEdit ? `Edit — ${record?.seedName}` : 'Log seed distribution'}
+      okText={isEdit ? 'Save changes' : 'Log distribution'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createDistribution.isPending}
+      confirmLoading={createDistribution.isPending || updateDistribution.isPending}
       width={620}
       destroyOnClose
     >

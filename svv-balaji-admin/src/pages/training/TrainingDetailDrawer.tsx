@@ -1,10 +1,11 @@
-import { LinkOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Alert,
   App as AntApp,
   Button,
   Descriptions,
   Drawer,
+  Popconfirm,
   Empty,
   Form,
   Input,
@@ -22,7 +23,13 @@ import { apiErrorMessage } from '../../api/client';
 import type { TrainingAttendance, TrainingMaterial } from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { useFarmers } from '../../hooks/useFarmers';
-import { useAddTrainingMaterial, useMarkAttendance, useTrainingSession } from '../../hooks/useTraining';
+import {
+  useAddTrainingMaterial,
+  useMarkAttendance,
+  useRemoveAttendance,
+  useRemoveTrainingMaterial,
+  useTrainingSession,
+} from '../../hooks/useTraining';
 import { EM_DASH, formatDate } from '../../utils/format';
 
 interface TrainingDetailDrawerProps {
@@ -38,7 +45,29 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
   const farmers = useFarmers({});
   const markAttendance = useMarkAttendance();
   const addMaterial = useAddTrainingMaterial();
+  const removeAttendance = useRemoveAttendance();
+  const removeMaterial = useRemoveTrainingMaterial();
   const canEdit = useCan('TRAINING_CREATE');
+
+  const handleRemoveAttendance = async (farmerId: string, name: string) => {
+    if (!sessionId) return;
+    try {
+      await removeAttendance.mutateAsync({ id: sessionId, farmerId });
+      message.success(`${name} removed from this session`);
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Could not remove the attendance'), 8);
+    }
+  };
+
+  const handleRemoveMaterial = async (materialId: string) => {
+    if (!sessionId) return;
+    try {
+      await removeMaterial.mutateAsync({ id: sessionId, materialId });
+      message.success('Material removed');
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Could not remove the material'), 8);
+    }
+  };
 
   const [selectedFarmers, setSelectedFarmers] = useState<string[]>([]);
   const [materialForm] = Form.useForm<{ fileUrl: string; fileType: string }>();
@@ -178,6 +207,37 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
                         render: (attended: boolean) =>
                           attended ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>,
                       },
+                      ...(canEdit
+                        ? [
+                            {
+                              title: '',
+                              key: 'remove',
+                              width: 50,
+                              render: (_: unknown, row: TrainingAttendance) => (
+                                <Popconfirm
+                                  title="Remove from this session?"
+                                  description="Marked by mistake — the farmer's other sessions are unaffected."
+                                  okText="Remove"
+                                  okButtonProps={{ danger: true }}
+                                  onConfirm={() =>
+                                    void handleRemoveAttendance(
+                                      row.farmerId,
+                                      row.farmer?.fullName ?? 'The farmer',
+                                    )
+                                  }
+                                >
+                                  <Button
+                                    size="small"
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    aria-label="Remove attendance"
+                                  />
+                                </Popconfirm>
+                              ),
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 </Space>
@@ -235,7 +295,29 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
                     dataSource={data.materials}
                     locale={{ emptyText: <Empty description="No materials attached" /> }}
                     renderItem={(material) => (
-                      <List.Item>
+                      <List.Item
+                        actions={
+                          canEdit
+                            ? [
+                                <Popconfirm
+                                  key="remove"
+                                  title="Remove this material?"
+                                  okText="Remove"
+                                  okButtonProps={{ danger: true }}
+                                  onConfirm={() => void handleRemoveMaterial(material.id)}
+                                >
+                                  <Button
+                                    size="small"
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    aria-label="Remove material"
+                                  />
+                                </Popconfirm>,
+                              ]
+                            : undefined
+                        }
+                      >
                         <Space>
                           <Tag>{material.fileType}</Tag>
                           <Typography.Link

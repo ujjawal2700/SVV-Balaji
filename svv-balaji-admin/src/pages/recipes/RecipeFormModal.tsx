@@ -159,11 +159,11 @@ export function RecipeFormModal({ open, onClose }: RecipeFormModalProps) {
 
         {multigrain ? (
           <Alert
-            type="warning"
+            type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="Multigrain production is not enabled yet"
-            description="The blend can be defined and approved, but starting a production run from it will be refused until the client confirms the ratio engine is in scope (action A-05)."
+            message="These percentages become a production rule"
+            description="Once this version is approved, every run made from it has to hold this ratio to within half a percentage point of the total input — the server refuses anything further out. Set them to what the blend actually is, not to what is convenient here."
           />
         ) : null}
 

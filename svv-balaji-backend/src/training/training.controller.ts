@@ -1,8 +1,19 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { TrainingService } from './training.service';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
+import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { AddTrainingMaterialDto } from './dto/add-training-material.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -44,5 +55,36 @@ export class TrainingController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.AGRICULTURE_EXPERT)
   addMaterial(@Param('id') id: string, @Body() dto: AddTrainingMaterialDto) {
     return this.trainingService.addMaterial(id, dto);
+  }
+
+  @Delete(':id/attendance/:farmerId')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGRICULTURE_EXPERT)
+  @ApiOperation({ summary: 'Remove a farmer marked present by mistake' })
+  removeAttendance(@Param('id') id: string, @Param('farmerId') farmerId: string) {
+    return this.trainingService.removeAttendance(id, farmerId);
+  }
+
+  @Delete(':id/materials/:materialId')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGRICULTURE_EXPERT)
+  removeMaterial(@Param('id') id: string, @Param('materialId') materialId: string) {
+    return this.trainingService.removeMaterial(id, materialId);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGRICULTURE_EXPERT)
+  update(@Param('id') id: string, @Body() dto: UpdateTrainingSessionDto) {
+    return this.trainingService.updateSession(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Delete a training session',
+    description:
+      'Blocked once attendance has been marked - that is the record of which farmers were ' +
+      'trained. Materials are removed with the session.',
+  })
+  remove(@Param('id') id: string) {
+    return this.trainingService.removeSession(id);
   }
 }

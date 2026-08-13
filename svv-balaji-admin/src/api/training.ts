@@ -6,6 +6,7 @@ import type {
   TrainingMaterial,
   TrainingSession,
   TrainingSessionDetail,
+  UpdateTrainingSessionInput,
 } from './types';
 
 export const trainingApi = {
@@ -47,5 +48,33 @@ export const trainingApi = {
       pruneEmpty(input),
     );
     return unwrap<TrainingMaterial>(response.data);
+  },
+
+  async update(id: string, input: UpdateTrainingSessionInput): Promise<TrainingSession> {
+    const response = await api.patch<TrainingSession>(
+      `/training-sessions/${id}`,
+      pruneEmpty(input),
+    );
+    return unwrap<TrainingSession>(response.data);
+  },
+
+  /** Refused by the server once attendance has been marked. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/training-sessions/${id}`);
+  },
+
+  /** Removing a farmer marked present by mistake. Returns the session refreshed. */
+  async removeAttendance(id: string, farmerId: string): Promise<TrainingSessionDetail> {
+    const response = await api.delete<TrainingSessionDetail>(
+      `/training-sessions/${id}/attendance/${farmerId}`,
+    );
+    return unwrap<TrainingSessionDetail>(response.data);
+  },
+
+  async removeMaterial(id: string, materialId: string): Promise<TrainingSessionDetail> {
+    const response = await api.delete<TrainingSessionDetail>(
+      `/training-sessions/${id}/materials/${materialId}`,
+    );
+    return unwrap<TrainingSessionDetail>(response.data);
   },
 };

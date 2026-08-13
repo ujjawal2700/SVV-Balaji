@@ -1,13 +1,20 @@
 import { NodeIndexOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Row, Select, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Row, Select, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
-import { BATCH_STATUSES, type BatchStatus, type RawMaterialBatch } from '../../api/types';
+import {
+  BATCH_STATUSES,
+  type BatchStatus,
+  type RawMaterialBatch,
+  type RawMaterialCollection,
+} from '../../api/types';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
+import { RowActions } from '../../components/RowActions';
 import { FarmerSelect, WarehouseSelect } from '../../components/pickers';
-import { useBatches } from '../../hooks/useCollections';
+import { useBatches, useDeleteCollection } from '../../hooks/useCollections';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
+import { CollectionCorrectionModal } from '../collections/CollectionCorrectionModal';
 import { BatchTraceDrawer } from './BatchTraceDrawer';
 
 const STATUS_COLOURS: Record<BatchStatus, string> = {
@@ -30,8 +37,34 @@ export function BatchesPage() {
     warehouseId?: string;
   }>({});
   const [tracing, setTracing] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<RawMaterialCollection | null>(null);
 
   const batches = useBatches(filters);
+  const removeCollection = useDeleteCollection();
+
+  /**
+   * A batch has no editable fields of its own. Quantity, crop, farmer and
+   * branch are all copied from the collection that minted it, so correcting a
+   * batch means correcting that collection - and the same is true of deleting
+   * one, which is why both actions here operate on the collection and take the
+   * batch with them. Two places to change a quantity would guarantee they
+   * eventually disagree.
+   */
+  const asCollection = (batch: RawMaterialBatch): RawMaterialCollection | null => {
+    if (!batch.collection) return null;
+    return {
+      ...batch.collection,
+      inspectionId: '',
+      farmerId: batch.farmerId,
+      farmer: batch.farmer,
+      branchId: batch.branchId,
+      cropName: batch.cropName,
+      collectedById: '',
+      batch: { id: batch.id, batchNumber: batch.batchNumber, status: batch.status },
+      createdAt: batch.createdAt,
+      updatedAt: batch.updatedAt,
+    } as RawMaterialCollection;
+  };
 
   const columns: ColumnsType<RawMaterialBatch> = [
     {
@@ -85,18 +118,41 @@ export function BatchesPage() {
       sorter: (a, b) => a.createdAt.localeCompare(b.createdAt),
     },
     {
-      title: '',
+      title: 'Actions',
       key: 'actions',
-      width: 90,
-      render: (_, batch) => (
-        <Button
-          size="small"
-          icon={<NodeIndexOutlined />}
-          onClick={() => setTracing(batch.batchNumber)}
-        >
-          Trace
-        </Button>
-      ),
+      width: 240,
+      fixed: 'right',
+      render: (_, batch) => {
+        const collection = asCollection(batch);
+        const movedOn =
+          batch.status !== 'COLLECTED' && batch.status !== 'STORED'
+            ? `This batch is ${label(batch.status).toLowerCase()} — it has moved on into production`
+            : undefined;
+        const paid =
+          collection && collection.paymentStatus !== 'PENDING'
+            ? `The farmer has been paid against ${collection.receiptNumber}`
+            : undefined;
+
+        return (
+          <RowActions
+            entity="batch"
+            label={batch.batchNumber}
+            can="COLLECTION_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={collection && !movedOn ? () => setCorrecting(collection) : undefined}
+            onDelete={collection ? () => removeCollection.mutateAsync(collection.id) : undefined}
+            deleteBlockedReason={movedOn ?? paid}
+          >
+            <Button
+              size="small"
+              icon={<NodeIndexOutlined />}
+              onClick={() => setTracing(batch.batchNumber)}
+            >
+              Trace
+            </Button>
+          </RowActions>
+        );
+      },
     },
   ];
 
@@ -138,18 +194,28 @@ export function BatchesPage() {
         subtitle="Every batch minted at collection (FRD Section 15). Click a batch number to walk it back to the farmer, the inspection that approved it, and its full stock history."
       />
 
-      <DataTable<RawMaterialBatch>
-        rows={batches.data?.data}
-        columns={columns}
-        rowKey="id"
-        isLoading={batches.isLoading}
-        isFetching={batches.isFetching}
-        error={batches.error}
-        onRetry={() => void batches.refetch()}
-        toolbar={toolbar}
-        emptyText="No batches yet — they are minted when a harvest is collected"
-      />
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Alert
+          type="info"
+          showIcon
+          message="Batches are corrected through their collection"
+          description="A batch inherits its quantity, crop and farmer from the collection that minted it, so Correct and Delete here act on that collection — and deleting one removes the batch, its stock line and its receipt movement together. Both are refused once the batch has been cleaned, inspected, consumed or moved."
+        />
 
+        <DataTable<RawMaterialBatch>
+          rows={batches.data?.data}
+          columns={columns}
+          rowKey="id"
+          isLoading={batches.isLoading}
+          isFetching={batches.isFetching}
+          error={batches.error}
+          onRetry={() => void batches.refetch()}
+          toolbar={toolbar}
+          emptyText="No batches yet — they are minted when a harvest is collected"
+        />
+      </Space>
+
+      <CollectionCorrectionModal collection={correcting} onClose={() => setCorrecting(null)} />
       <BatchTraceDrawer batchNumber={tracing} onClose={() => setTracing(null)} />
     </Card>
   );

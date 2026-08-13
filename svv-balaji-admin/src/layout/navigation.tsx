@@ -255,7 +255,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description:
           'Versioned formulas with an approval gate — Super Admin only. Approving a version ' +
           'retires the previously approved one. Multigrain recipes need percentages totalling ' +
-          '100, and multigrain PRODUCTION is disabled until the client confirms scope.',
+          '100, and every production run made from one has to hold that ratio.',
         endpoints: [
           'GET /recipes',
           'POST /recipes',

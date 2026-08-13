@@ -1,8 +1,19 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { SeedDistributionService } from './seed-distribution.service';
 import { CreateSeedDistributionDto } from './dto/create-seed-distribution.dto';
+import { UpdateSeedDistributionDto } from './dto/update-seed-distribution.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -26,5 +37,22 @@ export class SeedDistributionController {
   @Get()
   findAll(@Query('farmerId') farmerId?: string) {
     return this.seedDistributionService.findAll(farmerId);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.seedDistributionService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.AGRICULTURE_EXPERT)
+  update(@Param('id') id: string, @Body() dto: UpdateSeedDistributionDto) {
+    return this.seedDistributionService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN)
+  remove(@Param('id') id: string) {
+    return this.seedDistributionService.remove(id);
   }
 }
