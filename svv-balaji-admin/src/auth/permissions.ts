@@ -25,8 +25,17 @@ export const PERMISSIONS = {
   USER_CREATE: ['SUPER_ADMIN'],
   /** GET /users - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
   USER_VIEW: ['BRANCH_MANAGER'],
+  /**
+   * PATCH /users/:id, /status, /password and DELETE /users/:id - all
+   * @Roles(SUPER_ADMIN). One permission covers the group because the backend
+   * guards them identically; splitting it here would imply a distinction the
+   * server does not make.
+   */
+  USER_MANAGE: ['SUPER_ADMIN'],
   /** POST /branches - @Roles(SUPER_ADMIN) */
   BRANCH_CREATE: ['SUPER_ADMIN'],
+  /** PATCH /branches/:id, /active and DELETE /branches/:id - @Roles(SUPER_ADMIN) */
+  BRANCH_MANAGE: ['SUPER_ADMIN'],
 
   // --- Farmers (FRD 7-8) ----------------------------------------------------
   /** POST /farmers - @Roles(SUPER_ADMIN, BRANCH_MANAGER, PROCUREMENT_MANAGER), FRD 7.1 */
@@ -35,6 +44,13 @@ export const PERMISSIONS = {
   FARMER_APPROVE: ['SUPER_ADMIN'],
   /** PATCH /farmers/:id/status - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
   FARMER_SET_STATUS: ['BRANCH_MANAGER'],
+  /** PATCH /farmers/:id - same roles that may register one */
+  FARMER_EDIT: ['BRANCH_MANAGER', 'PROCUREMENT_MANAGER'],
+  /**
+   * DELETE /farmers/:id - @Roles(SUPER_ADMIN) only, and narrower still on the
+   * server: refused outright once a traceability code has been issued.
+   */
+  FARMER_DELETE: ['SUPER_ADMIN'],
 
   // --- Phase 1 (registered now so WS2.2 screens have them ready) ------------
   /** POST /agreements - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
@@ -49,18 +65,34 @@ export const PERMISSIONS = {
   // --- Phase 2 --------------------------------------------------------------
   /** POST /procurement-plans - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, BRANCH_MANAGER) */
   PROCUREMENT_PLAN_CREATE: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER'],
+  /** PATCH /procurement-plans/:id - @Roles(SUPER_ADMIN) */
+  PROCUREMENT_PLAN_EDIT: ['SUPER_ADMIN'],
+  /** DELETE /procurement-plans/:id - @Roles(SUPER_ADMIN) */
+  PROCUREMENT_PLAN_DELETE: ['SUPER_ADMIN'],
   /** POST /harvest-inspections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, QA_MANAGER) */
   HARVEST_INSPECTION_CREATE: ['PROCUREMENT_MANAGER', 'QA_MANAGER'],
+  /** PATCH /harvest-inspections/:id - @Roles(SUPER_ADMIN) */
+  HARVEST_INSPECTION_EDIT: ['SUPER_ADMIN'],
+  /** DELETE /harvest-inspections/:id - @Roles(SUPER_ADMIN) */
+  HARVEST_INSPECTION_DELETE: ['SUPER_ADMIN'],
   /** POST /collections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
   COLLECTION_CREATE: ['PROCUREMENT_MANAGER'],
+  /** PATCH /collections/:id - @Roles(SUPER_ADMIN) */
+  COLLECTION_EDIT: ['SUPER_ADMIN'],
+  /** DELETE /collections/:id - @Roles(SUPER_ADMIN) */
+  COLLECTION_DELETE: ['SUPER_ADMIN'],
   /** POST /warehouses - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
   WAREHOUSE_CREATE: ['BRANCH_MANAGER'],
+  /** PATCH /warehouses/:id and /active - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
+  WAREHOUSE_MANAGE: ['BRANCH_MANAGER'],
   /** stock-in / stock-out / adjust / transfer - STOCK_ROLES in warehouse.controller.ts */
   STOCK_MUTATE: ['BRANCH_MANAGER', 'WAREHOUSE_MANAGER'],
 
   // --- Phase 3 --------------------------------------------------------------
   /** POST /products - @Roles(SUPER_ADMIN) */
   PRODUCT_CREATE: ['SUPER_ADMIN'],
+  /** PATCH /products/:id, /active and DELETE /products/:id - @Roles(SUPER_ADMIN) */
+  PRODUCT_MANAGE: ['SUPER_ADMIN'],
   /** POST /recipes and PATCH /recipes/:id/approve - @Roles(SUPER_ADMIN) only, FRD 19.1/19.4 */
   RECIPE_CREATE: ['SUPER_ADMIN'],
   RECIPE_APPROVE: ['SUPER_ADMIN'],
@@ -68,6 +100,10 @@ export const PERMISSIONS = {
   CLEANING_GRADING_CREATE: ['PRODUCTION_MANAGER', 'QA_MANAGER'],
   /** POST /production-batches - @Roles(SUPER_ADMIN, PRODUCTION_MANAGER) */
   PRODUCTION_BATCH_CREATE: ['PRODUCTION_MANAGER'],
+  /** PATCH /production-batches/:id - @Roles(SUPER_ADMIN) */
+  PRODUCTION_BATCH_EDIT: ['SUPER_ADMIN'],
+  /** DELETE /production-batches/:id - @Roles(SUPER_ADMIN) */
+  PRODUCTION_BATCH_DELETE: ['SUPER_ADMIN'],
   /** POST /quality-inspections and the release gate - @Roles(SUPER_ADMIN, QA_MANAGER), FRD 21.5 */
   QUALITY_INSPECT: ['QA_MANAGER'],
   QUALITY_RELEASE: ['QA_MANAGER'],

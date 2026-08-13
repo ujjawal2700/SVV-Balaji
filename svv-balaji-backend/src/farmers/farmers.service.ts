@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { FarmerVerificationAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertDeletable } from '../common/dependants';
 import { CreateFarmerDto } from './dto/create-farmer.dto';
+import { UpdateFarmerDto } from './dto/update-farmer.dto';
 import { VerifyFarmerDto } from './dto/verify-farmer.dto';
 import { QueryFarmerDto } from './dto/query-farmer.dto';
 
@@ -115,5 +117,80 @@ export class FarmersService {
       throw new BadRequestException('Farmer must be approved (assigned a farmerCode) before being set ACTIVE');
     }
     return this.prisma.farmer.update({ where: { id }, data: { status } });
+  }
+
+  /**
+   * Correcting farmer details. Everything on the registration form is editable
+   * - names are misheard, bank accounts change, a farmer moves branch - but
+   * `farmerCode` is not on the DTO and so cannot be touched (see UpdateFarmerDto).
+   * Status is likewise excluded: it moves through `verify` and `updateStatus`,
+   * which is what writes the verification log.
+   */
+  async update(id: string, dto: UpdateFarmerDto) {
+    const farmer = await this.prisma.farmer.findUnique({ where: { id } });
+    if (!farmer) throw new NotFoundException('Farmer not found');
+
+    return this.prisma.farmer.update({
+      where: { id },
+      data: dto,
+      include: { branch: { select: { id: true, name: true } } },
+    });
+  }
+
+  /**
+   * Deleting a farmer.
+   *
+   * An approved farmer is never deletable, whatever else is true of them: the
+   * `SVV-YYYY-NNNNNN` code has been issued from an atomic per-year counter and
+   * is never reissued, so removing the row leaves a code that resolves to
+   * nothing if it appears on a printed agreement or an old batch record. For
+   * those, `updateStatus` to INACTIVE or BLACKLISTED is the right action - it
+   * stops the farmer being selected anywhere without erasing them.
+   *
+   * That leaves exactly the case this is for: an entry created in error, before
+   * verification, with nothing recorded against it. Verification logs alone do
+   * not block - a rejected farmer has one - so they are removed with the farmer
+   * in the same transaction rather than being left as orphans.
+   */
+  async remove(id: string) {
+    const farmer = await this.prisma.farmer.findUnique({ where: { id } });
+    if (!farmer) throw new NotFoundException('Farmer not found');
+
+    if (farmer.farmerCode) {
+      throw new BadRequestException(
+        `${farmer.fullName} has been approved and holds traceability code ${farmer.farmerCode}, ` +
+          `which is never reissued. Approved farmers cannot be deleted - set the status to ` +
+          `INACTIVE or BLACKLISTED instead, which removes them from every picker while ` +
+          `keeping the code resolvable.`,
+      );
+    }
+
+    const [agreements, seedDistributions, trainingAttendances, fieldVisits, inspections, collections, batches] =
+      await this.prisma.$transaction([
+        this.prisma.agreement.count({ where: { farmerId: id } }),
+        this.prisma.seedDistribution.count({ where: { farmerId: id } }),
+        this.prisma.trainingAttendance.count({ where: { farmerId: id } }),
+        this.prisma.fieldVisit.count({ where: { farmerId: id } }),
+        this.prisma.harvestInspection.count({ where: { farmerId: id } }),
+        this.prisma.rawMaterialCollection.count({ where: { farmerId: id } }),
+        this.prisma.rawMaterialBatch.count({ where: { farmerId: id } }),
+      ]);
+
+    assertDeletable('Farmer', farmer.fullName, {
+      agreements,
+      'seed distributions': seedDistributions,
+      'training attendances': trainingAttendances,
+      'field visits': fieldVisits,
+      inspections,
+      collections,
+      batches,
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.farmerVerificationLog.deleteMany({ where: { farmerId: id } }),
+      this.prisma.farmer.delete({ where: { id } }),
+    ]);
+
+    return { id, deleted: true };
   }
 }

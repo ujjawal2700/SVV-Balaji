@@ -121,19 +121,70 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
             └─ SVV-2026-000001   farmer — name, village, district, GPS
 ```
 
-### Admin panel — started 11 Aug (evening)
+### Admin panel — started 11 Aug (evening), **22 of 25 screens built as at 13 Aug**
 
-`svv-balaji-admin/` — Vite + React + TypeScript + Ant Design. **WS2.1 is in: authentication,
-boot-time session restore, single-flight token refresh, sign-out, role-filtered navigation across
-all 22 screens, and route-level role guards, all working against the live API.** The screens
-themselves are placeholders that state what each will do and which routes it drives, so the shell
-is demonstrable to the client today.
+`svv-balaji-admin/` — Vite + React + TypeScript + Ant Design.
 
-Navigation and routing are both generated from `src/layout/navigation.tsx` — one entry per screen,
-with the roles that may see it. A screen cannot appear in the menu and be missing from the router.
+| Workstream | Screens | State |
+|---|---|---|
+| WS2.1 Scaffolding & auth | login, dashboard shell | ✅ Complete |
+| WS2.2 Zone 1 — master data & farm sourcing | branches, users, farmers, agreements, seed distribution, training, field visits | ✅ Screens complete, manually tested |
+| WS2.3 Zone 2 — procurement & warehouse | procurement plans, harvest inspections, collections, raw material batches, warehouses, stock, movement ledger, trace | ✅ Complete |
+| WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete |
+| WS2.5 Zone 4 — sales | customers, price lists, orders | ⬜ Placeholders — held on A-13 |
+| WS2.6 Dashboards & reports | trace screen built; dashboards/MIS outstanding | 🟡 15% |
 
-This unblocked a backend gap first: `/auth/refresh`, `/auth/logout` and `/auth/me` did not exist,
-so no client could hold a session past 15 minutes. Those are now built with rotating refresh
+Auth is real: boot-time session restore, single-flight token refresh, sign-out, role-filtered
+navigation and route-level role guards, all against the live API. Navigation and routing are both
+generated from `src/layout/navigation.tsx` — one entry per screen, with the roles that may see it.
+A screen cannot appear in the menu and be missing from the router. Routes are code-split with
+`React.lazy`, so the login page does not pull the whole application.
+
+Standing conventions in the panel, worth knowing before adding to it:
+
+- **`src/api/envelope.ts`** is the single response contract. Screens are written against
+  `ApiResult<T>` / `Paginated<T>` while the API still returns bare arrays; the adapter absorbs the
+  difference, which is what makes A-12 a non-breaking change. Page size is 20.
+- **All server state goes through TanStack Query**, keyed from `src/api/queryKeys.ts`. No component
+  fetches directly.
+- **`src/auth/permissions.ts`** maps every guarded action to the roles allowed it, each entry citing
+  the backend `@Roles()` it mirrors. It is a usability layer, not a security boundary — the server
+  still decides.
+- **`src/validation/rules.ts`** mirrors the backend class-validator DTOs, so the form rejects what
+  the server would reject, with the same message.
+- **`src/components/DataTable.tsx`** is the only table. Loading, error-with-retry, empty and
+  pagination behave identically everywhere.
+- **Decimals are typed as `string`** throughout. Prisma returns them as JSON strings; coercing at
+  the boundary would hide precision loss on money and weights.
+- **`src/components/RowActions.tsx`** is the row action menu on every master screen — edit,
+  deactivate/reactivate, delete. It shows the server's refusal message verbatim, because that
+  message names what is blocking the delete and is the whole reason the user clicked.
+- **One modal per entity, used for both create and edit.** A separate edit form is how the two
+  quietly drift apart until a field validated on create is accepted on edit.
+
+### Delete semantics (agreed 13 Aug)
+
+This is a traceability system, so "delete" is not one thing:
+
+| Kind of record | What the panel offers |
+|---|---|
+| Masters — branch, user, farmer, product, warehouse | Full edit, plus deactivate / reactivate |
+| Anything, while genuinely unused | Real `DELETE`, refused with a reason the moment something references it |
+| Traceability and ledger rows — batches, movements, inspections, consumption | No delete. Correction is a new record, the way `adjust` already works |
+
+`src/common/dependants.ts` in the backend is the shared refusal. Every relation in the schema is
+RESTRICT, so a blocked delete would otherwise surface as `P2003 Foreign key constraint failed`.
+`assertDeletable()` counts first and throws a 409 naming the blockers. Reuse it for customers and
+price lists in WS2.5.
+
+The guards that matter, because they are what keeps the system reachable: nobody can demote,
+deactivate or delete themselves; the last active Super Admin cannot be demoted or deactivated at
+all; deactivating a user clears their refresh token so a live session stops working; an approved
+farmer can never be deleted (the traceability code is never reissued); a branch with active users
+cannot be deactivated; a warehouse holding stock cannot be closed.
+
+This work unblocked a backend gap first: `/auth/refresh`, `/auth/logout` and `/auth/me` did not
+exist, so no client could hold a session past 15 minutes. Those are now built with rotating refresh
 tokens and replay detection (see `DEV_LOG.md` for the contract).
 
 **Still not started — the four mobile apps.** Together with the remaining panel screens that is
@@ -164,20 +215,31 @@ must not be read as "nearly ready".
 1. ~~**WS2.1 Panel scaffolding, auth, role-based navigation**~~ — ✅ **done 11 Aug (evening).**
    Also added the missing `/auth/refresh`, `/auth/logout` and `/auth/me` to the backend, without
    which no client could hold a session.
-2. **WS2.2 Master data & farmer management screens — next.** Farmers first (list, register,
-   verification workflow, traceability codes), then agreements, seed distribution and training.
-   **Blocked on one thing:** a pagination convention. Every list endpoint returns an unbounded
-   array; agreeing a `page`/`limit` + `{ data, total }` shape with Ujjawal now means ~20 list
-   screens get built once instead of reworked later.
-3. When you reach the training screens, remember: **executive-entered, no farmer login.** Design
-   for a staff member typing up a visit, not a farmer self-reporting.
-4. **Product screens now carry two prices.** `GET /price-lists/product/:id/comparison` returns both
-   channels side by side. Prices must not be editable in place — changing one means calling
-   `supersede`, which closes the old rule and opens a new one, so render it as "change price from
-   [date]". Overwriting a rate in the UI would stop historical invoices reproducing.
-5. **Customer forms are channel-dependent.** Choose channel first, then show the rest: B2B gets a
-   mandatory GSTIN, credit limit, payment terms and an executive picker; B2C gets none of those.
-6. **WS3.1 Agriculture Expert app** — offline-first is a hard requirement, not a nice-to-have.
+2. ~~**WS2.2 Zone 1 — master data & farm sourcing**~~ — ✅ **done 12 Aug**, manually tested 13 Aug.
+3. ~~**WS2.3 Zone 2 — procurement & warehouse**~~ — ✅ **done 13 Aug**, plus the `/trace` screen.
+4. ~~**WS2.4 Zone 3 — processing, QA & packaging**~~ — ✅ **done 13 Aug (evening).** Products,
+   recipes with versioning, cleaning & grading, production batches, quality inspections, finished
+   goods. `/trace` now has something real to resolve.
+5. ~~**Edit / deactivate / delete on the master screens**~~ — ✅ **done 13 Aug (late).** Required
+   building 14 backend endpoints first: there was no generic update route except
+   `PATCH /customers/:id`, and no `@Delete` route anywhere. See DEV_LOG for the full contract.
+   Remaining: the transactional screens (agreements, seed distribution, training, field visits,
+   procurement plans, harvest inspections, collections) need edit-while-unconsumed rather than
+   edit-always — the guard is per-record state, not per-type, and that line wants agreeing first.
+6. **Manual test pass on WS2.4 — next.** Suggested order, because each step feeds the next:
+   product → recipe → approve recipe → cleaning & grading → production batch → start → complete →
+   quality inspection (in-process) → pack → finished-goods inspection → release → stock in → then
+   open `/trace` with the `FG-` number and check the chain resolves back to the farmer.
+6. **WS2.5 Zone 4 — sales (customers, price lists, orders)** is the last block, and the only one
+   with an open design question: **A-13**. Get an answer before building the order screen.
+   - **Product screens carry two prices.** `GET /price-lists/product/:id/comparison` returns both
+     channels side by side. Prices must not be editable in place — changing one means calling
+     `supersede`, which closes the old rule and opens a new one, so render it as "change price from
+     [date]". Overwriting a rate in the UI would stop historical invoices reproducing.
+   - **Customer forms are channel-dependent.** Choose channel first, then show the rest: B2B gets a
+     mandatory GSTIN, credit limit, payment terms and an executive picker; B2C gets none of those.
+7. **WS2.6 dashboards & MIS reports** — the trace screen is done; the dashboards are not.
+8. **WS3.1 Agriculture Expert app** — offline-first is a hard requirement, not a nice-to-have.
 
 ### Both
 
@@ -194,14 +256,14 @@ must not be read as "nearly ready".
 | A-02 | Decision 1 — sales channel scope | SVV Balaji | 12 Aug | ✅ **Closed 11 Aug** — B2B + B2C |
 | A-03 | Decision 2 — GST e-invoicing route | SVV Balaji | 14 Aug | ✅ **Closed 11 Aug** — GSP approved |
 | A-04 | Decision 3 — storage provider & process videos | SVV Balaji | 14 Aug | Open — blocking WS4.1 |
-| A-05 | Decision 4 — multigrain in scope | SVV Balaji | 14 Aug | Open |
+| A-05 | Decision 4 — multigrain in scope | SVV Balaji | 14 Aug | Open — now visible in the panel: multigrain recipes can be created but not produced |
 | A-06 | Provide customer & product master data | SVV Balaji | 28 Aug | Open |
 | A-07 | Nominate UAT participants | SVV Balaji | 28 Aug | Open |
 | A-08 | Confirm hosting upgrade path | Joint | 21 Aug | Open |
 | A-09 | Staging environment for client access | Appzeto | 21 Aug | Open |
 | **A-10** | **Agree cost & timeline for added B2C scope, in writing** | Ravi / SVV Balaji | **18 Aug** | **Open — Critical** |
 | **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
-| **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open** — blocks WS2.2 list screens being built once |
+| **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
 | A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Ujjawal / Raunak | 15 Aug | Open — shapes WS2.5 screens |
 
 ---

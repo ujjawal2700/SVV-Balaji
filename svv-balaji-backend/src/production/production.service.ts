@@ -7,6 +7,7 @@ import {
   CreateCleaningGradingDto,
   CreateProductionBatchDto,
 } from './dto/production.dto';
+import { UpdateProductionBatchDto } from './dto/update-production-batch.dto';
 
 /**
  * Set MULTIGRAIN_ENABLED=true once the client confirms the multigrain
@@ -229,6 +230,49 @@ export class ProductionService {
       throw new BadRequestException('Use the /complete endpoint, which records actual output');
     }
     return this.prisma.productionBatch.update({ where: { id }, data: { status } });
+  }
+
+  async updateProductionBatch(id: string, dto: UpdateProductionBatchDto) {
+    const batch = await this.prisma.productionBatch.findUnique({ where: { id } });
+    if (!batch) throw new NotFoundException('Production batch not found');
+
+    const data: any = { ...dto };
+    if (dto.productionDate) data.productionDate = new Date(dto.productionDate);
+    // Ignore complex fields for simple edits
+    delete data.consumptions;
+    delete data.recipeId;
+    delete data.warehouseId;
+
+    return this.prisma.productionBatch.update({ where: { id }, data });
+  }
+
+  async deleteProductionBatch(id: string) {
+    const batch = await this.prisma.productionBatch.findUnique({
+      where: { id },
+      include: { 
+        consumptions: true,
+        qualityInspections: true,
+        finishedGoodsBatches: true
+      }
+    });
+    if (!batch) throw new NotFoundException('Production batch not found');
+
+    if (batch.qualityInspections.length > 0 || batch.finishedGoodsBatches.length > 0) {
+      throw new BadRequestException('Cannot delete production batch that has quality inspections or finished goods batches');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+       await tx.productionConsumption.deleteMany({ where: { productionBatchId: id } });
+       
+       for (const c of batch.consumptions) {
+         await tx.rawMaterialBatch.update({
+           where: { id: c.rawMaterialBatchId },
+           data: { status: 'STORED' }
+         });
+         // Full stock reversal is omitted here for safety unless fully tracking stock movements.
+       }
+       return tx.productionBatch.delete({ where: { id } });
+    });
   }
 
   findAll(filters: { status?: ProductionStatus; branchId?: string; productId?: string }) {

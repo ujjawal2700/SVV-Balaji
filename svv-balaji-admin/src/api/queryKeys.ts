@@ -13,13 +13,17 @@ import type { FarmerQuery } from './types';
 export const queryKeys = {
   branches: {
     all: ['branches'] as const,
-    list: () => [...queryKeys.branches.all, 'list'] as const,
+    // activeOnly is part of the key: the pickers ask for active branches only,
+    // the master screen asks for all of them, and the two must not overwrite
+    // each other in the cache.
+    list: (activeOnly = false) => [...queryKeys.branches.all, 'list', activeOnly] as const,
     detail: (id: string) => [...queryKeys.branches.all, 'detail', id] as const,
   },
 
   users: {
     all: ['users'] as const,
-    list: () => [...queryKeys.users.all, 'list'] as const,
+    list: (filters: { branchId?: string; status?: string } = {}) =>
+      [...queryKeys.users.all, 'list', filters] as const,
     detail: (id: string) => [...queryKeys.users.all, 'detail', id] as const,
   },
 
@@ -54,5 +58,98 @@ export const queryKeys = {
     all: ['field-visits'] as const,
     list: (farmerId?: string) => [...queryKeys.fieldVisits.all, 'list', farmerId ?? null] as const,
     detail: (id: string) => [...queryKeys.fieldVisits.all, 'detail', id] as const,
+  },
+
+  // --- Zone 2 ---------------------------------------------------------------
+
+  warehouses: {
+    all: ['warehouses'] as const,
+    list: (branchId?: string, includeInactive = false) =>
+      [...queryKeys.warehouses.all, 'list', branchId ?? null, includeInactive] as const,
+    status: (id: string) => [...queryKeys.warehouses.all, 'status', id] as const,
+    // Stock and movements live under the warehouses tree on purpose: a stock
+    // mutation changes the balance, the ledger AND the occupancy figure, so one
+    // invalidation of `warehouses.all` refreshes all three.
+    stock: (filters: Record<string, unknown>) =>
+      [...queryKeys.warehouses.all, 'stock', filters] as const,
+    lowStock: (threshold: number, warehouseId?: string) =>
+      [...queryKeys.warehouses.all, 'low-stock', threshold, warehouseId ?? null] as const,
+    movements: (filters: Record<string, unknown>) =>
+      [...queryKeys.warehouses.all, 'movements', filters] as const,
+  },
+
+  procurementPlans: {
+    all: ['procurement-plans'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.procurementPlans.all, 'list', filters] as const,
+  },
+
+  inspections: {
+    all: ['harvest-inspections'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.inspections.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.inspections.all, 'detail', id] as const,
+  },
+
+  collections: {
+    all: ['collections'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.collections.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.collections.all, 'detail', id] as const,
+  },
+
+  batches: {
+    all: ['batches'] as const,
+    list: (filters: Record<string, unknown>) => [...queryKeys.batches.all, 'list', filters] as const,
+    trace: (batchNumber: string) => [...queryKeys.batches.all, 'trace', batchNumber] as const,
+  },
+
+  trace: {
+    all: ['trace'] as const,
+    finishedGoods: (fgBatchNumber: string) =>
+      [...queryKeys.trace.all, 'fg', fgBatchNumber] as const,
+  },
+
+  // --- Zone 3 ---------------------------------------------------------------
+
+  products: {
+    all: ['products'] as const,
+    list: (includeInactive = false) =>
+      [...queryKeys.products.all, 'list', includeInactive] as const,
+    detail: (id: string) => [...queryKeys.products.all, 'detail', id] as const,
+  },
+
+  recipes: {
+    all: ['recipes'] as const,
+    list: (filters: Record<string, unknown>) => [...queryKeys.recipes.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.recipes.all, 'detail', id] as const,
+    versions: (recipeCode: string) => [...queryKeys.recipes.all, 'versions', recipeCode] as const,
+  },
+
+  cleaning: {
+    all: ['cleaning-grading'] as const,
+    list: (rawMaterialBatchId?: string) =>
+      [...queryKeys.cleaning.all, 'list', rawMaterialBatchId ?? null] as const,
+  },
+
+  productionBatches: {
+    all: ['production-batches'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.productionBatches.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.productionBatches.all, 'detail', id] as const,
+  },
+
+  quality: {
+    all: ['quality-inspections'] as const,
+    list: (filters: Record<string, unknown>) => [...queryKeys.quality.all, 'list', filters] as const,
+  },
+
+  finishedGoods: {
+    all: ['finished-goods'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.finishedGoods.all, 'list', filters] as const,
+    label: (id: string) => [...queryKeys.finishedGoods.all, 'label', id] as const,
+    stock: (warehouseId?: string) =>
+      [...queryKeys.finishedGoods.all, 'stock', warehouseId ?? null] as const,
   },
 } as const;

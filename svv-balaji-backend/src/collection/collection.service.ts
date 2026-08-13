@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
+import { UpdateCollectionDto } from './dto/update-collection.dto';
 
 @Injectable()
 export class CollectionService {
@@ -196,6 +197,55 @@ export class CollectionService {
     return this.prisma.rawMaterialCollection.update({
       where: { id },
       data: { paymentStatus },
+    });
+  }
+
+  async updateCollection(id: string, dto: UpdateCollectionDto) {
+    const collection = await this.prisma.rawMaterialCollection.findUnique({ 
+      where: { id }, 
+      include: { batch: true } 
+    });
+    if (!collection) throw new NotFoundException('Collection not found');
+
+    const data: any = { ...dto };
+    if (dto.collectionDate) data.collectionDate = new Date(dto.collectionDate);
+
+    if (dto.netWeight !== undefined || dto.purchaseRate !== undefined) {
+      const netWeight = Number(dto.netWeight ?? collection.netWeight);
+      const purchaseRate = Number(dto.purchaseRate ?? collection.purchaseRate);
+      data.totalAmount = Number((netWeight * purchaseRate).toFixed(2));
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.rawMaterialCollection.update({ where: { id }, data });
+      if (dto.netWeight !== undefined && collection.batch) {
+        await tx.rawMaterialBatch.update({ 
+          where: { id: collection.batch.id }, 
+          data: { quantity: dto.netWeight } 
+        });
+      }
+      return updated;
+    });
+  }
+
+  async deleteCollection(id: string) {
+    const collection = await this.prisma.rawMaterialCollection.findUnique({
+      where: { id },
+      include: { batch: { include: { stockMovements: true } } }
+    });
+    if (!collection) throw new NotFoundException('Collection not found');
+
+    if (collection.batch?.stockMovements && collection.batch.stockMovements.length > 1) {
+       throw new BadRequestException('Cannot delete collection: batch has subsequent stock movements');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+       if (collection.batch) {
+         await tx.stockMovement.deleteMany({ where: { batchId: collection.batch.id } });
+         await tx.warehouseStock.deleteMany({ where: { batchId: collection.batch.id } });
+         await tx.rawMaterialBatch.delete({ where: { id: collection.batch.id } });
+       }
+       return tx.rawMaterialCollection.delete({ where: { id } });
     });
   }
 

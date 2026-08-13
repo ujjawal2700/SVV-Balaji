@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { WarehouseService } from './warehouse.service';
 import {
@@ -8,10 +18,12 @@ import {
   StockInDto,
   StockOutDto,
   TransferStockDto,
+  UpdateWarehouseDto,
 } from './dto/warehouse.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { SetActiveDto } from '../common/dto/set-active.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
@@ -35,8 +47,13 @@ export class WarehouseController {
   }
 
   @Get()
-  findAll(@Query('branchId') branchId?: string) {
-    return this.warehouseService.findAll(branchId);
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
+  findAll(
+    @Query('branchId') branchId?: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.warehouseService.findAll(branchId, includeInactive === 'true');
   }
 
   @Get('stock')
@@ -87,5 +104,44 @@ export class WarehouseController {
   @ApiOperation({ summary: 'Move stock between warehouses (FRD 16.4)' })
   transfer(@Body() dto: TransferStockDto, @CurrentUser() user: JwtPayload) {
     return this.warehouseService.transfer(dto, user.sub);
+  }
+
+  // --- Warehouse master maintenance ----------------------------------------
+  // Declared after the fixed-path routes above so that /warehouses/stock and
+  // /warehouses/movements are never swallowed by the :id parameter.
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.warehouseService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  update(@Param('id') id: string, @Body() dto: UpdateWarehouseDto) {
+    return this.warehouseService.update(id, dto);
+  }
+
+  @Patch(':id/active')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @ApiOperation({
+    summary: 'Close or reopen a warehouse',
+    description:
+      'Refused while the warehouse still holds stock - a closed warehouse leaves the ' +
+      'transfer picker, so its remaining stock would have no way out.',
+  })
+  setActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
+    return this.warehouseService.setActive(id, dto.isActive);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Permanently delete a warehouse',
+    description:
+      'Only while nothing references it. A single stock movement - even a historic one - ' +
+      'blocks it, because the movement ledger is the inventory audit trail. Close it instead.',
+  })
+  remove(@Param('id') id: string) {
+    return this.warehouseService.remove(id);
   }
 }

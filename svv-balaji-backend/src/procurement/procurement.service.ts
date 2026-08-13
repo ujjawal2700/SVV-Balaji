@@ -2,7 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InspectionResult, ProcurementPlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProcurementPlanDto } from './dto/create-procurement-plan.dto';
+import { UpdateProcurementPlanDto } from './dto/update-procurement-plan.dto';
 import { CreateHarvestInspectionDto } from './dto/create-harvest-inspection.dto';
+import { UpdateHarvestInspectionDto } from './dto/update-harvest-inspection.dto';
 
 @Injectable()
 export class ProcurementService {
@@ -47,6 +49,35 @@ export class ProcurementService {
     const plan = await this.prisma.procurementPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Procurement plan not found');
     return this.prisma.procurementPlan.update({ where: { id }, data: { status } });
+  }
+
+  async updatePlan(id: string, dto: UpdateProcurementPlanDto) {
+    const plan = await this.prisma.procurementPlan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Procurement plan not found');
+
+    const data: any = { ...dto };
+    if (dto.scheduledFrom) data.scheduledFrom = new Date(dto.scheduledFrom);
+    if (dto.scheduledTo) data.scheduledTo = new Date(dto.scheduledTo);
+
+    if (data.scheduledTo && data.scheduledFrom && data.scheduledTo < data.scheduledFrom) {
+      throw new BadRequestException('scheduledTo cannot be earlier than scheduledFrom');
+    }
+
+    return this.prisma.procurementPlan.update({ where: { id }, data });
+  }
+
+  async deletePlan(id: string) {
+    const plan = await this.prisma.procurementPlan.findUnique({ 
+      where: { id },
+      include: { _count: { select: { inspections: true } } }
+    });
+    if (!plan) throw new NotFoundException('Procurement plan not found');
+
+    if (plan._count.inspections > 0) {
+      throw new BadRequestException('Cannot delete a plan that has associated harvest inspections');
+    }
+
+    return this.prisma.procurementPlan.delete({ where: { id } });
   }
 
   // --- Harvest Inspection (FRD 13.2 - 13.5) --------------------------------
@@ -119,6 +150,42 @@ export class ProcurementService {
     });
     if (!inspection) throw new NotFoundException('Harvest inspection not found');
     return inspection;
+  }
+
+  async updateInspection(id: string, dto: UpdateHarvestInspectionDto) {
+    const inspection = await this.prisma.harvestInspection.findUnique({ where: { id } });
+    if (!inspection) throw new NotFoundException('Harvest inspection not found');
+
+    if (dto.farmerId && dto.farmerId !== inspection.farmerId) {
+      const farmer = await this.prisma.farmer.findUnique({ where: { id: dto.farmerId } });
+      if (!farmer || farmer.status !== 'ACTIVE' || !farmer.farmerCode) {
+        throw new BadRequestException('Farmer must be approved and hold a traceability code');
+      }
+    }
+
+    const data: any = { ...dto };
+    if (dto.inspectionDate) {
+      data.inspectionDate = new Date(dto.inspectionDate);
+    }
+
+    return this.prisma.harvestInspection.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async deleteInspection(id: string) {
+    const inspection = await this.prisma.harvestInspection.findUnique({ 
+      where: { id },
+      include: { collection: true }
+    });
+    if (!inspection) throw new NotFoundException('Harvest inspection not found');
+
+    if (inspection.collection) {
+      throw new BadRequestException('Cannot delete an inspection that has already been collected');
+    }
+
+    return this.prisma.harvestInspection.delete({ where: { id } });
   }
 
   async addInspectionDocument(inspectionId: string, fileUrl: string, fileType: string) {

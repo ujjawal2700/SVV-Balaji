@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertDeletable } from '../common/dependants';
 import {
   AdjustStockDto,
   CreateWarehouseDto,
   StockInDto,
   StockOutDto,
   TransferStockDto,
+  UpdateWarehouseDto,
 } from './dto/warehouse.dto';
 
 /**
@@ -27,12 +29,93 @@ export class WarehouseService {
     return this.prisma.warehouse.create({ data: dto });
   }
 
-  findAll(branchId?: string) {
+  /**
+   * Active-only by default so pickers never offer a closed warehouse. The
+   * warehouse master screen passes `includeInactive`, without which a closed
+   * warehouse would be invisible to the only screen able to reopen it.
+   */
+  findAll(branchId?: string, includeInactive = false) {
     return this.prisma.warehouse.findMany({
-      where: { branchId, isActive: true },
+      where: { branchId, isActive: includeInactive ? undefined : true },
       orderBy: { name: 'asc' },
       include: { branch: { select: { id: true, name: true } } },
     });
+  }
+
+  async findOne(id: string) {
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id },
+      include: { branch: { select: { id: true, name: true } } },
+    });
+    if (!warehouse) throw new NotFoundException('Warehouse not found');
+    return warehouse;
+  }
+
+  async update(id: string, dto: UpdateWarehouseDto) {
+    await this.findOne(id);
+    return this.prisma.warehouse.update({
+      where: { id },
+      data: dto,
+      include: { branch: { select: { id: true, name: true } } },
+    });
+  }
+
+  /**
+   * Closing a warehouse. Refused while it still physically holds anything -
+   * a closed warehouse disappears from the transfer and stock-out pickers, so
+   * closing one with stock in it would strand that stock with no screen able
+   * to move it out.
+   */
+  async setActive(id: string, isActive: boolean) {
+    const warehouse = await this.findOne(id);
+    if (warehouse.isActive === isActive) return warehouse;
+
+    if (!isActive) {
+      const [raw, finished] = await this.prisma.$transaction([
+        this.prisma.warehouseStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
+        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
+      ]);
+      const holding = raw + finished;
+      if (holding > 0) {
+        throw new BadRequestException(
+          `This warehouse still holds ${holding} stock line${holding === 1 ? '' : 's'}. ` +
+            `Transfer or issue the stock first - once the warehouse is closed it no longer ` +
+            `appears in the transfer picker, and the stock would be stranded.`,
+        );
+      }
+    }
+
+    return this.prisma.warehouse.update({
+      where: { id },
+      data: { isActive },
+      include: { branch: { select: { id: true, name: true } } },
+    });
+  }
+
+  async remove(id: string) {
+    const warehouse = await this.findOne(id);
+
+    const [batches, stock, movementsOut, movementsIn, finishedStock, orders, allocations] =
+      await this.prisma.$transaction([
+        this.prisma.rawMaterialBatch.count({ where: { warehouseId: id } }),
+        this.prisma.warehouseStock.count({ where: { warehouseId: id } }),
+        this.prisma.stockMovement.count({ where: { fromWarehouseId: id } }),
+        this.prisma.stockMovement.count({ where: { toWarehouseId: id } }),
+        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id } }),
+        this.prisma.order.count({ where: { warehouseId: id } }),
+        this.prisma.orderAllocation.count({ where: { warehouseId: id } }),
+      ]);
+
+    assertDeletable('Warehouse', warehouse.name, {
+      batches,
+      'stock lines': stock + finishedStock,
+      'stock movements': movementsOut + movementsIn,
+      orders,
+      allocations,
+    });
+
+    await this.prisma.warehouse.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
   /** FRD 16.6 - live occupancy against capacity. */

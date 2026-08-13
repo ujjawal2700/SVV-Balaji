@@ -15,8 +15,9 @@ import { useCan } from '../../auth/useCan';
 import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
+import { RowActions } from '../../components/RowActions';
 import { useBranches } from '../../hooks/useBranches';
-import { useFarmers, useSetFarmerStatus } from '../../hooks/useFarmers';
+import { useDeleteFarmer, useFarmers, useSetFarmerStatus } from '../../hooks/useFarmers';
 import { FarmerCodesModal } from './FarmerCodesModal';
 import { FarmerDetailDrawer } from './FarmerDetailDrawer';
 import { FarmerFormModal } from './FarmerFormModal';
@@ -27,16 +28,29 @@ export function FarmersPage() {
   const { message } = AntApp.useApp();
   const [query, setQuery] = useState<FarmerQuery>({});
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [editing, setEditing] = useState<Farmer | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [verifying, setVerifying] = useState<Farmer | null>(null);
   const [showingCodes, setShowingCodes] = useState<Farmer | null>(null);
 
   const farmers = useFarmers(query);
-  const branches = useBranches();
+  const branches = useBranches(true);
   const setStatus = useSetFarmerStatus();
+  const remove = useDeleteFarmer();
+
+  const openEdit = (farmer: Farmer) => {
+    setEditing(farmer);
+    setRegisterOpen(true);
+  };
+
+  const closeForm = () => {
+    setRegisterOpen(false);
+    setEditing(null);
+  };
 
   const canApprove = useCan('FARMER_APPROVE');
   const canSetStatus = useCan('FARMER_SET_STATUS');
+  const canDelete = useCan('FARMER_DELETE');
 
   const handleStatusChange = async (farmer: Farmer, status: SettableFarmerStatus) => {
     try {
@@ -116,7 +130,7 @@ export function FarmersPage() {
       {
         title: 'Actions',
         key: 'actions',
-        width: 200,
+        width: 320,
         fixed: 'right',
         render: (_, farmer) => (
           <Space size={4}>
@@ -153,6 +167,22 @@ export function FarmersPage() {
                 onClick={() => setShowingCodes(farmer)}
               />
             </Tooltip>
+
+            <RowActions
+              entity="farmer"
+              label={farmer.fullName}
+              can="FARMER_EDIT"
+              onEdit={() => openEdit(farmer)}
+              onDelete={canDelete ? () => remove.mutateAsync(farmer.id) : undefined}
+              // An approved farmer holds a traceability code that is never
+              // reissued, so the server refuses outright. Saying so on the
+              // disabled item is better than letting them find out from a 400.
+              deleteBlockedReason={
+                farmer.farmerCode
+                  ? `${farmer.farmerCode} has been issued — set the status to Inactive or Blacklisted instead`
+                  : undefined
+              }
+            />
           </Space>
         ),
       },
@@ -247,7 +277,7 @@ export function FarmersPage() {
         emptyText="No farmers match these filters"
       />
 
-      <FarmerFormModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
+      <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />
       <FarmerDetailDrawer farmerId={detailId} onClose={() => setDetailId(null)} />
       <VerifyFarmerModal farmer={verifying} onClose={() => setVerifying(null)} />
       <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />

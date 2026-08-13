@@ -16,6 +16,290 @@ how each side learns what the other did.
 
 ---
 
+## 2026-08-13 (late) — Raunak
+
+**Did:** Added edit and delete to the master screens — and had to build the endpoints first,
+because **the backend had no generic update route except `PATCH /customers/:id`, and no `@Delete`
+route anywhere at all.** 14 new routes, 5 modules, in your workstream. Details below; shout if you
+want any of it changed.
+
+**The rule I applied, since "delete" is not one thing in a traceability system:**
+
+| Kind of record | What the panel offers |
+|---|---|
+| Masters — branch, user, farmer, product, warehouse | Full edit, plus deactivate / reactivate |
+| Anything, when genuinely unused | Real `DELETE`, refused with a reason the moment something references it |
+| Traceability and ledger rows — batches, movements, inspections, consumption | No delete. Correction is a new record, the way `adjust` already works |
+
+Deactivation is the routine action and delete is for entries created by mistake. That is stated in
+the confirm dialogs, so the distinction is not folklore.
+
+**New routes (contract change):**
+
+```
+PATCH  /branches/:id                 SUPER_ADMIN
+PATCH  /branches/:id/active          SUPER_ADMIN     { isActive: boolean }
+DELETE /branches/:id                 SUPER_ADMIN
+GET    /branches?activeOnly=true                     (new query param)
+
+PATCH  /users/:id                    SUPER_ADMIN
+PATCH  /users/:id/status             SUPER_ADMIN     { status: UserStatus }
+PATCH  /users/:id/password           SUPER_ADMIN     { password: string }
+DELETE /users/:id                    SUPER_ADMIN
+GET    /users?branchId=&status=                      (new query params)
+
+PATCH  /farmers/:id                  SUPER_ADMIN, BRANCH_MANAGER, PROCUREMENT_MANAGER
+DELETE /farmers/:id                  SUPER_ADMIN
+
+PATCH  /products/:id                 SUPER_ADMIN
+PATCH  /products/:id/active          SUPER_ADMIN
+DELETE /products/:id                 SUPER_ADMIN
+GET    /products?includeInactive=true                (new query param)
+
+GET    /warehouses/:id               any authenticated
+PATCH  /warehouses/:id               SUPER_ADMIN, BRANCH_MANAGER
+PATCH  /warehouses/:id/active        SUPER_ADMIN, BRANCH_MANAGER
+DELETE /warehouses/:id               SUPER_ADMIN
+GET    /warehouses?includeInactive=true              (new query param)
+```
+
+New DTOs: `UpdateBranchDto`, `UpdateUserDto`, `UpdateUserStatusDto`, `ResetUserPasswordDto`,
+`UpdateFarmerDto`, `UpdateProductDto`, `UpdateWarehouseDto`, and a shared `SetActiveDto` in
+`src/common/dto/`. All are `PartialType(Create…)` so nothing new to validate.
+
+**Two `GET` defaults changed, both non-breaking:** `/products` and `/warehouses` already filtered to
+active only; they now accept `includeInactive` so the master screens can see and reinstate a
+deactivated row. Without that, deactivating something hides it from the one screen able to bring it
+back. `/branches` still returns everything by default and now accepts `activeOnly`, which is what
+the pickers pass.
+
+**`src/common/dependants.ts` is the piece worth knowing about.** Every relation in the schema is
+RESTRICT, so a blocked delete would otherwise surface as `P2003 Foreign key constraint failed` —
+true, and useless. `assertDeletable()` counts the referencing rows first and throws a 409 naming
+them: *"Branch "Nagpur" cannot be deleted — 12 farmers, 3 warehouses and 1 user still reference it.
+Deactivate it instead…"*. The panel shows that message verbatim, which is the whole point of
+writing it carefully. Reuse it for customers and price lists in WS2.5.
+
+**Guards worth reviewing, because they are the ones protecting against a locked-out system:**
+
+- **A user cannot demote, deactivate or delete themselves**, and **the last active Super Admin
+  cannot be demoted or deactivated by anyone.** Without the second one, two clicks leave nobody able
+  to administer the system and recovery means a script against the database — which we have already
+  done once this week.
+- **Deactivating a user clears `refreshTokenHash`**, so a session they currently hold stops working
+  rather than surviving until the token expires. Same for a password reset. For someone who has just
+  left, that is the difference that matters.
+- **An approved farmer can never be deleted** — the `SVV-YYYY-NNNNNN` code comes from an atomic
+  per-year counter and is never reissued, so a printed agreement carrying it would resolve to
+  nothing. The refusal names the code and points at INACTIVE / BLACKLISTED instead.
+- **A branch with active users cannot be deactivated** — they would sign in with no branch context.
+- **A warehouse still holding stock cannot be closed** — closing removes it from the transfer
+  picker, so the stock would be stranded with no screen able to move it.
+
+**Also fixed while I was in there:** `GET /users` now includes the `branch` relation (the list was
+showing a raw uuid) and accepts `branchId` / `status` filters. That was the gap I raised on 12 Aug —
+an ex-employee could not be deactivated at all.
+
+**Contract changes:** yes — the 14 routes and 4 query params above. Swagger is annotated;
+`/api/docs` is accurate.
+
+**Other developer needs to know (Ujjawal):**
+
+- **These are edits inside your workstream.** Everything follows the existing style — service holds
+  the rules, controller is thin, `@Roles()` on every write. Nothing existing changed behaviour
+  except the two `GET` defaults noted above, both additive.
+- **57 tests added** across `dependants.spec.ts`, `branches.service.spec.ts`,
+  `users.service.spec.ts`, `farmers-delete.service.spec.ts` and
+  `warehouse-master.service.spec.ts` — the delete guards, the lockout guards and the refusal
+  wording. Suite should now be **185**. I could not run them here (no registry access in my
+  sandbox); please confirm on your machine.
+- **The three stock-mutation races are still open** and now sit next to a delete button. Nothing I
+  added makes them worse, but `warehouse.setActive` reads the stock count outside a transaction for
+  the same structural reason `stockOut` does.
+
+**Next:** the same treatment for the transactional screens — agreements, seed distribution,
+training, field visits, procurement plans, harvest inspections and collections. Those need
+edit-while-unconsumed rather than edit-always, so the guard is per-record state rather than per-type,
+and I want your view on where the line sits before I build it.
+
+---
+
+## 2026-08-13 (evening) — Raunak
+
+**Did:** Built WS2.4 — Zone 3, processing, QA and packaging. Six screens, 24 files. Panel is now
+**22 of 25 screens**. `/trace` can resolve a real pack for the first time.
+
+**Products (`/products`).** Master list with type, crop, HSN, GST and the two-price channel split
+(B2B / B2C) that A-08 introduced. Both prices are shown side by side rather than one "price" column,
+because the sales screens will filter by channel and a single figure would be ambiguous.
+
+**Recipes (`/recipes`).** Create, approve, and a version drawer. The server's two hard rules are
+enforced in the form before submit: SINGLE_GRAIN takes exactly one ingredient, MULTI_GRAIN takes two
+or more whose percentages total 100 (±0.05). The running total is displayed live as you type, so you
+find out at the third ingredient rather than on the error toast. Reusing a `recipeCode` mints a new
+version rather than editing in place — the drawer makes that lineage visible, which matters because
+a production run references the version it was made against.
+
+**Cleaning & grading (`/production/cleaning`).** Records the step and shows the yield loss against
+input quantity.
+
+**Production batches (`/production`).** Create, start, complete, and a detail drawer showing
+consumption per raw-material batch. The form only offers APPROVED recipes; once a recipe is chosen
+the raw-material picker is filtered to that recipe's crops **and** to stock actually available in the
+nominated warehouse, so you cannot compose a run the server will reject. Multigrain runs are blocked
+at the OK button with the reason on screen (pending A-05).
+
+**Quality inspections (`/quality`).** One form, three stages. The stage selection drives the target
+picker, the parameter set and the consequence text; switching stage clears the other target ids
+because the server requires exactly one. Per your 07-Aug note the gates are surfaced as hard stops:
+selecting FAIL shows what it will do before you save — raw material FAIL rejects the batch
+permanently, finished-goods FAIL withdraws release.
+
+**Finished goods (`/packaging`).** Pack a completed run, release after QA, print the label, book into
+stock. The pack form warns live when net weight × pack count exceeds what the run actually produced,
+and says the server also counts what was already packed from that run. The label modal renders your
+server-generated QR and barcode SVGs as-is — the panel never builds the traceability URL itself, so
+the printed code and the server's idea of it cannot drift.
+
+**Contract changes:** none. Front-end only.
+
+**Other developer needs to know (Ujjawal):**
+
+- **A-12 is still outstanding** and there are now 22 screens on the unpaginated shape. The adapter
+  absorbs it, but the production and quality lists join the movement ledger as lists that grow
+  monotonically on real data.
+- **A-05 (multigrain production) now has a visible cost.** The recipe screen accepts multigrain
+  recipes because the API does, then disables the production button for them. That is an obviously
+  incomplete path for anyone demoing the panel.
+- **A-13 still shapes WS2.5.** The remaining three screens are customers, price lists and orders.
+
+**Next:** WS2.4 manual test pass, then WS2.5 — the last three screens.
+
+---
+
+## 2026-08-13 — Raunak
+
+**Did:** Finished WS2.3 and built the traceability screen. Panel is now **16 of 25 screens**.
+
+**Zone 2 — Procurement (5 screens).** Procurement plans, harvest inspections, collections, raw
+material batches with an upstream trace drawer, plus the farm-to-fork trace screen.
+
+The gates are visible in the UI rather than discovered through errors: the inspection form's farmer
+picker is restricted to approved farmers only, and says so when the list is empty; the collection
+form's harvest picker offers only APPROVED inspections that are not already collected; choosing a
+non-APPROVED result shows a warning that it blocks collection permanently. Where an agreement is
+linked, the rate field reads "leave empty to use the agreed rate of ₹X".
+
+**Zone 2 — Warehouse (3 screens).** Warehouses with occupancy, batch-wise stock with all four
+mutations, and the movement ledger.
+
+One deliberate deviation worth knowing about: **the occupancy view does not always show your
+`utilisationPercent`.** `warehouse.status()` sums `quantity` across batches ignoring `unit`, so a
+warehouse holding both KG and QUINTAL reports a meaningless figure — and a percentage derived from
+it looks authoritative while being nonsense. The drawer computes its own per-unit breakdown from the
+stock rows and only draws the utilisation bar when every batch shares one unit; otherwise it says
+why it cannot. If the API starts normalising units, that branch just stops being reached.
+
+**Traceability screen (`/trace`).** Enter an `FG-` number and it renders the chain as steps, the
+product and production cards, quality checks, and the farmers behind the pack with village, district
+and GPS. Worth having ready for the staging demo. It currently resolves nothing because no finished
+goods exist yet — WS2.4 fixes that.
+
+**Contract changes:** none. Front-end only.
+
+**Other developer needs to know (Ujjawal):**
+
+- **A-12 was due today and has not landed** — no `src/common/pagination.dto.ts` yet. Sixteen screens
+  are now built against the unpaginated shape. The adapter means nothing breaks, but
+  `/warehouses/movements` in particular is append-only and never pruned, so it is the first list that
+  will become unusable on real data. The proposal has the interceptor, the DTO and a migration path
+  that keeps the smoke test green throughout.
+- **The stock over-draw race is now reachable from the UI.** `stockOut`, `transfer` and `adjust` read
+  available stock outside the transaction. With the warehouse screens live, a warehouse manager and a
+  production manager drawing the same batch at once can drive the quantity negative, and the screen
+  will faithfully display it. Client-side validation does not help — both checks happen before the
+  commit.
+- A-13 (order DRAFT state, finished-goods movement ledger, allocation history on cancel) shapes WS2.5.
+  I would like an answer before I design the order screen.
+
+**Workbook updated:** WS2.3 to 100% Complete on the Gantt, baseline and weekly progress. Weighted
+completion **29.9% → 31.65%**.
+
+**Next:** Zone 2 manual test (warehouse → collection → stock in → transfer → adjust → ledger), then
+WS2.4 — products, recipes, cleaning & grading, production batches, quality inspections, finished
+goods. That block is also what makes `/trace` resolve for real.
+
+---
+
+## 2026-08-12 — Raunak
+
+**Did:** Finished Zone 1 in the panel, and fixed a trap in the seed script that cost me an hour.
+
+**1. Zone 1 screens complete (WS2.2).** Agreements, seed distribution, training and field visits, all
+on the shared layer from the previous session. Panel is now **8 of 25 screens** built: dashboard,
+branches, users, farmers, agreements, seed distribution, training, field visits.
+
+Notable bits: training attendance is a multi-select seeded with whoever is already marked, submitted
+whole rather than diffed — safe because your `markAttendance` upserts. The field-visit form separates
+*observed* from *advised*, because when a batch later fails inspection the question is always which
+of the two was wrong. Both file-attachment spots state on screen that they are links only and why
+(A-04), rather than leaving a mystery where an upload button should be.
+
+Page size is **20** everywhere, per your call — `DEFAULT_PAGE_SIZE`, the size options, and the A-12
+proposal so the backend default matches.
+
+**2. Route-level code splitting.** The panel was importing every page statically, so the login screen
+pulled in the whole admin app. Screens are now `React.lazy` with the Suspense boundary inside the
+layout, so the shell stays put while a chunk loads. Vendor chunks split too. Not urgent, but it would
+have been embarrassing at the staging demo.
+
+**3. `prisma/seed.ts` — your file, changed. Please read this bit.**
+
+The old script bailed at the top:
+
+```ts
+if (existing) { console.log('Super Admin already exists'); return; }
+```
+
+So changing `SEED_SUPER_ADMIN_PASSWORD` in `.env` and re-running the seed printed a success message
+and changed nothing — the password is a bcrypt hash in `users`, and `.env` only supplies it at
+creation. That is a very easy hole to fall into and it gives no signal at all; it cost me an hour of
+looking in the wrong place. The seed now:
+
+- bcrypt-compares the `.env` password against the stored hash and, when they differ, says so
+  explicitly with instructions rather than reporting success
+- resets the password when `SEED_RESET_PASSWORD="true"` is set, clearing `refreshTokenHash` so a live
+  session cannot outlive the password it was issued under
+- reactivates the admin if it is ever left non-`ACTIVE` or demoted — `AuthService` refuses any
+  non-ACTIVE user, so that state locks everyone out of the panel with no route back through the UI
+- creates the default branch independently of the admin. It used to sit *after* that early return, so
+  a database with an admin but no branch was a dead end — farmers, users and warehouses all need one
+
+**4. New utility: `npm run admin:password`.** Lists every user with role and status; with arguments
+(`-- <email> "<password>"`) it sets a password directly, no `.env` involved. Also reports when the
+password already matched, which points at a config mismatch rather than a credential problem. Worth
+knowing about before UAT, since there is still no `PATCH /users/:id`.
+
+**Contract changes:** none. `prisma/seed.ts` behaviour changed (above) and one npm script added.
+
+**Other developer needs to know (Ujjawal):**
+
+- **A-12 is the one blocking me.** Proposal is in `SVV_Balaji_A12_Pagination_and_Envelope_Proposal.md`
+  — concrete shapes, the interceptor, the DTO, and a migration path where the panel and the smoke test
+  both stay green while you go endpoint by endpoint. Target was 13 Aug. Everything left in WS2.3 is a
+  list screen.
+- Two traps flagged in that doc worth not discovering the hard way: the envelope interceptor must skip
+  raw strings or the `qr.svg` endpoints break, and `findMany`/`count` must share a transaction or the
+  last page vanishes under load.
+- Still open from before: `GET /users` has no `branch` include, and there is no `PATCH /users/:id`.
+- A-13 (order drafts, finished-goods movement ledger, allocation history on cancel) shapes the WS2.5
+  screens. Not urgent this week.
+
+**Next:** click through Zone 1 against real data end to end (register → approve → agreement → seed →
+training → field visit), then the traceability screen, then WS2.3 procurement and warehouse.
+
+---
+
 ## 2026-08-11 (late evening) — Raunak
 
 **Did:** WS2.2 first pass — the shared front-end layer, then Branches, Users and Farmers as real

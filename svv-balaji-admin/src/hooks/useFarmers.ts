@@ -5,6 +5,7 @@ import type {
   CreateFarmerInput,
   FarmerQuery,
   SettableFarmerStatus,
+  UpdateFarmerInput,
   VerifyFarmerInput,
 } from '../api/types';
 
@@ -78,6 +79,38 @@ export function useSetFarmerStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: SettableFarmerStatus }) =>
       farmersApi.setStatus(id, status),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
+    },
+  });
+}
+
+export function useUpdateFarmer() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateFarmerInput }) =>
+      farmersApi.update(id, input),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
+      // The detail drawer holds agreements, visits and verification history
+      // that the list does not, so refresh it by id rather than relying on the
+      // list invalidation above.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * Only ever succeeds on an unapproved farmer with nothing recorded against
+ * them. The server refuses anything else and says why - see `RowActions`, which
+ * shows that reason verbatim.
+ */
+export function useDeleteFarmer() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => farmersApi.remove(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
     },

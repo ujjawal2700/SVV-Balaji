@@ -1,5 +1,5 @@
 import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateWarehouseDto {
   @ApiProperty()
@@ -95,3 +95,10 @@ export class AdjustStockDto {
   @IsString()
   reason: string;
 }
+
+/**
+ * Every field on a warehouse is editable. Capacity in particular is expected
+ * to change - racking gets added - and the occupancy figures are derived, not
+ * stored, so a capacity change is reflected immediately without a migration.
+ */
+export class UpdateWarehouseDto extends PartialType(CreateWarehouseDto) {}

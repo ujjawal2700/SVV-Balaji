@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -18,6 +19,7 @@ import { CreateFarmerDto } from './dto/create-farmer.dto';
 import { VerifyFarmerDto } from './dto/verify-farmer.dto';
 import { QueryFarmerDto } from './dto/query-farmer.dto';
 import { UpdateFarmerStatusDto } from './dto/update-farmer-status.dto';
+import { UpdateFarmerDto } from './dto/update-farmer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -67,6 +69,32 @@ export class FarmersController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
   updateStatus(@Param('id') id: string, @Body() dto: UpdateFarmerStatusDto) {
     return this.farmersService.updateStatus(id, dto.status);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.PROCUREMENT_MANAGER)
+  @ApiOperation({
+    summary: 'Correct farmer details',
+    description:
+      'Same roles that may register a farmer. The traceability code cannot be changed - ' +
+      'it is not on the DTO - and status moves through /verify and /status so that the ' +
+      'verification log is written.',
+  })
+  update(@Param('id') id: string, @Body() dto: UpdateFarmerDto) {
+    return this.farmersService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Permanently delete an unapproved farmer',
+    description:
+      'For entries created in error. Refused once a traceability code has been issued, ' +
+      'or once anything - an agreement, a visit, a collection - references the farmer. ' +
+      'Set the status to INACTIVE or BLACKLISTED instead.',
+  })
+  remove(@Param('id') id: string) {
+    return this.farmersService.remove(id);
   }
 
   // -------------------------------------------------------------------------
