@@ -90,7 +90,8 @@ export function FarmerCodesModal({ farmer, onClose }: FarmerCodesModalProps) {
         <Alert type="error" showIcon message={apiErrorMessage(codes.error)} />
       ) : codes.data ? (
         <div ref={printRef}>
-          <Space direction="vertical" align="center" size={12} style={{ width: '100%' }}>
+          <style>{`.code-svg-wrapper svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }`}</style>
+          <Space direction="vertical" align="center" size={12} style={{ width: '100%' }} className="code-svg-wrapper">
             <Typography.Text code strong style={{ fontSize: 18 }}>
               {codes.data.farmerCode}
             </Typography.Text>
@@ -98,11 +99,11 @@ export function FarmerCodesModal({ farmer, onClose }: FarmerCodesModalProps) {
             {/* Server-generated SVG. Safe to inline: it is our own API's output,
                 not user-supplied content. */}
             <div
-              style={{ width: 200 }}
+              style={{ width: 200, maxWidth: '100%' }}
               dangerouslySetInnerHTML={{ __html: codes.data.qrSvg }}
             />
             <div
-              style={{ width: 260 }}
+              style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
               dangerouslySetInnerHTML={{ __html: codes.data.barcodeSvg }}
             />
 

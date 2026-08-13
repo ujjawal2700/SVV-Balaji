@@ -54,7 +54,7 @@ export function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} trigger={null} width={232} theme="light">
+      <Sider collapsible collapsed={collapsed} trigger={null} width={232} theme="light" className="admin-sidebar">
         <div
           style={{
             height: 56,
@@ -83,7 +83,6 @@ export function AppLayout() {
       <Layout>
         <Header
           style={{
-            background: '#fff',
             padding: '0 16px 0 8px',
             display: 'flex',
             alignItems: 'center',

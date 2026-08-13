@@ -3,19 +3,21 @@ import type { ThemeConfig } from 'antd';
 /**
  * Ant Design theme tokens.
  *
- * Kept small on purpose. The client has not supplied a brand palette yet, so
- * this is a neutral, legible starting point rather than a guess at their
- * colours — swap `colorPrimary` once branding lands.
+ * Configured to use the modern, clean color palette requested.
  */
 export const theme: ThemeConfig = {
   token: {
-    colorPrimary: '#2e7d32',
+    colorPrimary: '#844FC1',
+    colorSuccess: '#21BF06',
+    colorInfo: '#3B86D1',
+    colorTextSecondary: '#6C7293',
+    colorBgLayout: '#F8F9FA',
     borderRadius: 6,
     fontSize: 14,
   },
   components: {
     Layout: {
-      headerBg: '#ffffff',
+      headerBg: '#87ceeb',
       siderBg: '#ffffff',
     },
   },

@@ -7,6 +7,7 @@ import {
   CreateCleaningGradingDto,
   CreateProductionBatchDto,
 } from './dto/production.dto';
+import { UpdateProductionBatchDto } from './dto/update-production-batch.dto';
 
 /**
  * How far a blend may drift from its recipe before production is refused,
@@ -324,7 +325,7 @@ export class ProductionService {
       include: {
         product: { select: { id: true, name: true, sku: true } },
         recipe: { select: { recipeCode: true, version: true } },
-        _count: { select: { consumptions: true, finishedGoodsBatches: true } },
+        _count: { select: { consumptions: true, finishedGoodsBatches: true, qualityInspections: true } },
       },
     });
   }
@@ -355,5 +356,22 @@ export class ProductionService {
     });
     if (!production) throw new NotFoundException('Production batch not found');
     return production;
+  }
+
+  async updateProductionBatch(id: string, dto: UpdateProductionBatchDto) {
+    const production = await this.prisma.productionBatch.findUnique({ where: { id } });
+    if (!production) throw new NotFoundException('Production batch not found');
+
+    return this.prisma.productionBatch.update({
+      where: { id },
+      data: dto as any,
+    });
+  }
+
+  async deleteProductionBatch(id: string) {
+    const production = await this.prisma.productionBatch.findUnique({ where: { id } });
+    if (!production) throw new NotFoundException('Production batch not found');
+
+    await this.prisma.productionBatch.delete({ where: { id } });
   }
 }

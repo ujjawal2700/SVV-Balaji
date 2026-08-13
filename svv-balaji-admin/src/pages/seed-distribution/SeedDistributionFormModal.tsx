@@ -1,7 +1,8 @@
-import { App as AntApp, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
+import { App as AntApp, Col, DatePicker, Form, Input, InputNumber, Row, Select } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import { Sheet } from '../../components/Sheet';
 import type { SeedDistribution } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
 import {
@@ -95,7 +96,7 @@ export function SeedDistributionFormModal({
   };
 
   return (
-    <Modal
+    <Sheet
       open={open}
       title={isEdit ? `Edit — ${record?.seedName}` : 'Log seed distribution'}
       okText={isEdit ? 'Save changes' : 'Log distribution'}
@@ -163,6 +164,6 @@ export function SeedDistributionFormModal({
           </Col>
         </Row>
       </Form>
-    </Modal>
+    </Sheet>
   );
 }

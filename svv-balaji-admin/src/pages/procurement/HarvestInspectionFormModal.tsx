@@ -14,7 +14,7 @@ import {
   Space,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { apiErrorMessage } from '../../api/client';
 import type { CreateHarvestInspectionInput, HarvestInspection } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
@@ -68,43 +68,33 @@ export function HarvestInspectionFormModal({
   // supplies the fallback purchase rate at collection.
   const agreements = useAgreements(farmerId);
 
-  useEffect(() => {
-    if (!open) return;
-    form.resetFields();
-    if (inspection) {
-      form.setFieldsValue({
-        farmerId: inspection.farmerId,
-        agreementId: inspection.agreementId ?? undefined,
-        procurementPlanId: inspection.procurementPlanId ?? undefined,
-        cropName: inspection.cropName,
-        inspectionDate: dayjs(inspection.inspectionDate),
-        moistureLevel:
-          inspection.moistureLevel === null ? undefined : Number(inspection.moistureLevel),
-        foreignMatter:
-          inspection.foreignMatter === null ? undefined : Number(inspection.foreignMatter),
-        grainSize: inspection.grainSize ?? undefined,
-        grainColor: inspection.grainColor ?? undefined,
-        smell: inspection.smell ?? undefined,
-        physicalDamage: inspection.physicalDamage ?? undefined,
-        result: inspection.result,
-        remarks: inspection.remarks ?? undefined,
-      } as Partial<InspectionForm>);
-    }
-  }, [open, inspection, form]);
+  const initialValues = useMemo(() => {
+    if (!inspection) return undefined;
+    return {
+      farmerId: inspection.farmerId,
+      agreementId: inspection.agreementId ?? undefined,
+      procurementPlanId: inspection.procurementPlanId ?? undefined,
+      cropName: inspection.cropName,
+      inspectionDate: dayjs(inspection.inspectionDate),
+      moistureLevel:
+        inspection.moistureLevel === null ? undefined : Number(inspection.moistureLevel),
+      foreignMatter:
+        inspection.foreignMatter === null ? undefined : Number(inspection.foreignMatter),
+      grainSize: inspection.grainSize ?? undefined,
+      grainColor: inspection.grainColor ?? undefined,
+      smell: inspection.smell ?? undefined,
+      physicalDamage: inspection.physicalDamage ?? undefined,
+      result: inspection.result,
+      remarks: inspection.remarks ?? undefined,
+    } as Partial<InspectionForm>;
+  }, [inspection]);
 
-  // A stale agreement selection after switching farmer would be rejected by the
-  // server ("Agreement does not belong to this farmer") - clear it instead.
-  // Skipped on the first pass in edit mode, which would otherwise wipe the
-  // agreement the record already carries.
-  const [farmerTouched, setFarmerTouched] = useState(false);
   useEffect(() => {
-    if (!farmerTouched) {
-      setFarmerTouched(true);
-      return;
+    if (open) {
+      // Small timeout ensures the Modal and Form are fully mounted before reset
+      setTimeout(() => form.resetFields(), 0);
     }
-    form.setFieldValue('agreementId', undefined);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [farmerId, form]);
+  }, [open, form, initialValues]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
@@ -147,7 +137,18 @@ export function HarvestInspectionFormModal({
       width={760}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" requiredMark preserve={false}>
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark
+        preserve={false}
+        initialValues={initialValues}
+        onValuesChange={(changedValues) => {
+          if ('farmerId' in changedValues) {
+            form.setFieldValue('agreementId', undefined);
+          }
+        }}
+      >
         <Row gutter={16}>
           <Col xs={24} md={12}>
             <Form.Item
@@ -263,7 +264,7 @@ export function HarvestInspectionFormModal({
             showIcon
             style={{ marginBottom: 16 }}
             message="This blocks collection"
-            description="Only an APPROVED inspection can be collected (FRD 13.5). A rejected or held harvest cannot be received into stock until a new inspection approves it."
+            description="Only an APPROVED inspection can be collected. A rejected or held harvest cannot be received into stock until a new inspection approves it."
           />
         ) : null}
 
