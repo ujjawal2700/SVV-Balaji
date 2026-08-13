@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequireRole } from './auth/RequireRole';
 import { AppLayout } from './layout/AppLayout';
+import { FieldLayout } from './layout/FieldLayout';
 import { NAV_ITEMS } from './layout/navigation';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 import { LoginPage } from './pages/LoginPage';
@@ -25,6 +26,18 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
  * other two are a few lines each and needed at unpredictable moments, where a
  * loading flicker would be worse than their weight.
  */
+const FieldExecutivePage = lazy(() =>
+  import('./pages/field/FieldExecutivePage').then((m) => ({ default: m.FieldExecutivePage })),
+);
+const FieldVisitsTab = lazy(() =>
+  import('./pages/field/FieldVisitsTab').then((m) => ({ default: m.FieldVisitsTab })),
+);
+const FieldSeedTab = lazy(() =>
+  import('./pages/field/FieldSeedTab').then((m) => ({ default: m.FieldSeedTab })),
+);
+const FieldTrainingTab = lazy(() =>
+  import('./pages/field/FieldTrainingTab').then((m) => ({ default: m.FieldTrainingTab })),
+);
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
@@ -112,6 +125,9 @@ const FinishedGoodsPage = lazy(() =>
  * Anything without an entry below renders the placeholder, which describes what
  * the screen will do and which API routes it drives.
  */
+/** Declared explicitly below rather than generated, so its children can nest. */
+const FIELD_ITEM = NAV_ITEMS.find((item) => item.path === '/field');
+
 const SCREENS: Record<string, ReactElement> = {
   '/': <DashboardPage />,
   '/branches': <BranchesPage />,
@@ -147,12 +163,28 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<RequireAuth />}>
+        {/* The field executive routes get their own shell.
+            On a phone FieldLayout replaces the sider with bottom tabs; on a
+            desktop it renders AppLayout, so these screens sit in the ordinary
+            chrome. Declared separately from the generated routes below because
+            they are the only nested tree in the app. */}
+        {FIELD_ITEM ? (
+          <Route element={<RequireRole allowed={FIELD_ITEM.roles} />}>
+            <Route path="/field" element={<FieldLayout />}>
+              <Route index element={<FieldExecutivePage />} />
+              <Route path="visits" element={<FieldVisitsTab />} />
+              <Route path="seed" element={<FieldSeedTab />} />
+              <Route path="training" element={<FieldTrainingTab />} />
+            </Route>
+          </Route>
+        ) : null}
+
         {/* AppLayout provides the Suspense boundary, so the sider and header
             stay put while a screen's chunk loads. */}
         <Route element={<AppLayout />}>
           <Route path="/forbidden" element={<ForbiddenPage />} />
 
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => item.path !== '/field').map((item) => (
             <Route key={item.key} element={<RequireRole allowed={item.roles} />}>
               <Route path={item.path} element={SCREENS[item.path] ?? <PlaceholderPage />} />
             </Route>

@@ -108,7 +108,7 @@ export function HarvestInspectionsPage() {
         }
         if (row.result !== 'APPROVED') {
           return (
-            <Tooltip title="Only an APPROVED inspection can be collected (FRD 13.5)">
+            <Tooltip title="Only an APPROVED inspection can be collected">
               <Typography.Text type="secondary">Blocked</Typography.Text>
             </Tooltip>
           );
@@ -182,8 +182,8 @@ export function HarvestInspectionsPage() {
         title="Harvest inspections"
         subtitle={
           awaiting > 0
-            ? `${awaiting} approved harvest${awaiting === 1 ? '' : 's'} awaiting collection. Only an APPROVED inspection can be collected (FRD 13.5).`
-            : 'Pre-harvest quality checks (FRD 13.2–13.5). The result is a gate: only an approved harvest can be collected.'
+            ? `${awaiting} approved harvest${awaiting === 1 ? '' : 's'} awaiting collection. Only an APPROVED inspection can be collected.`
+            : 'Pre-harvest quality checks. The result is a gate: only an approved harvest can be collected.'
         }
         actions={
           <Can do="HARVEST_INSPECTION_CREATE">

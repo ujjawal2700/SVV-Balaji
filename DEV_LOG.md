@@ -16,6 +16,97 @@ how each side learns what the other did.
 
 ---
 
+## 2026-08-14 (late) — Raunak
+
+**Did:** Started the field executive work — and to do it honestly I had to build the upload layer
+first, which is WS4.1 and yours. Flagging that up front.
+
+**The problem:** three endpoints take a `fileUrl` with the comment *"from your object storage"*, and
+I checked — there are **zero upload endpoints in the whole API**. Not one `FileInterceptor`, no
+multipart anywhere. So "attach a photo" meant "upload it to Drive yourself and paste a link", which
+nobody standing in a field was ever going to do. A field executive's job is largely photographic;
+without this the module is a notepad.
+
+**Client has given us a Cloudinary account to use in the interim**, so the flow is unblocked without
+waiting on A-04.
+
+**`src/uploads/` — three files and a seam.** `StorageService` is an abstract class;
+`CloudinaryStorage` implements it; `uploads.module.ts` binds one to the other. **Answering A-04 with
+S3 or GCS later is a new class in that folder and one line in that module** — no screen, no
+endpoint, no DTO changes. That was the point of not calling Cloudinary from the places that need a
+file.
+
+**No new npm dependencies.** Signed uploads are a documented REST call, and Node 20 has `fetch`,
+`FormData` and `crypto` built in — so no `cloudinary` package to install, and nothing new in
+`package-lock.json` for you to review. If you would rather use the official SDK later, it swaps in
+behind the same interface.
+
+**Uploads go browser → our API → Cloudinary, never browser → Cloudinary.** The direct-upload widget
+would be less code but needs an unsigned preset, which is a public write endpoint on the media
+account that anyone reading the bundle can post to. Signing server-side keeps the secret out of the
+browser and means every upload has already passed `JwtAuthGuard`.
+
+**New route (contract change):**
+
+```
+POST /uploads/:folder     any authenticated · multipart, field name "file"
+                          folder: field-visits | training | inspections | farmers
+                          → { url, key, mimeType, bytes, width?, height? }
+```
+
+`url` goes straight into the existing `fileUrl` DTOs unchanged — that is why none of them needed a
+migration. Images (JPEG/PNG/WebP/HEIC) and PDFs, 10 MB cap, both configurable. SVG is deliberately
+excluded: it is scriptable, and serving one from our own origin is an XSS vector.
+
+Not role-restricted beyond "signed in", on purpose — the three endpoints that *consume* a `fileUrl`
+are each guarded already, and that is where the authority belongs. Restricting here too would mean
+adding a role every time another screen learns to take an attachment, and forgetting to would
+produce a 403 with nothing explaining it.
+
+**Panel — `/field`, "My Field Work".** The Agriculture Expert landing screen. The rest of the panel
+is organised the way an administrator thinks, one screen per table; this one is organised around
+the executive's day, which is three verbs: I visited a farm, I handed out seed, I ran a session.
+Three buttons, then "what have I done lately" rather than "what exists in the system" — my visits,
+my farmers, my handouts, my sessions.
+
+It reuses the existing form modals rather than growing its own. A second field-visit form would be
+a second set of validation rules to keep in step with the DTO, and they would not stay in step.
+
+**Paste-a-URL is gone** from field visit documents and training materials, replaced by a real
+drag-and-drop upload with progress. One `FileUploadField` component, shaped as a form control so
+each call site is one line.
+
+**Contract changes:** `POST /uploads/:folder` is new. Nothing existing changed.
+
+**Other developer needs to know (Ujjawal):**
+
+- **This is WS4.1 territory and I have entered it.** It is a small, well-fenced piece — one folder,
+  one route, no schema change — but say if you would rather own it.
+- **`.env` needs four new keys**: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+  `CLOUDINARY_API_SECRET`, `MAX_UPLOAD_BYTES`. `.env.example` documents them. Rounak has the values.
+- **I could not verify the signature against the live API** — my sandbox blocks
+  `api.cloudinary.com` at the network layer. The algorithm is the documented one and the
+  canonicalisation is pinned by 7 tests, but **the first real upload on a machine with network
+  access is the actual proof**. If it comes back "Invalid Signature", that is where to look.
+- **7 tests** in `cloudinary.storage.spec.ts`. They assert the *string that gets hashed*, computed
+  independently — a hard-coded digest would pass happily even if code and expectation were wrong
+  together. Suite should now be **258**.
+- **`/field-visits` has no `expertId` query parameter**, so "my visits" is filtered client-side.
+  That is fine today and wrong the moment A-12 lands — filtering a page rather than the set would
+  quietly under-report. A `expertId` filter on that endpoint would fix it properly.
+
+**A-04 escalation issued:** `SVV_Balaji_A04_Storage_Decision_Note.md` — one page for Ravi. What is
+blocked (nothing, now), what accumulates if it slips (migration cost, and client media sitting in a
+vendor account), and a recommendation so the decision is a yes/no. It also raises the thing nobody
+has asked yet: **retention and access policy for farmer KYC documents.** Aadhaar and PAN images are
+personal data and that shapes access control, not just storage.
+
+**Next:** WS2.5 — customers, price lists, orders — still wanting an A-13 answer. The offline
+Agriculture Expert app (WS3.1) remains the right long-term answer for capture with no signal; this
+screen is the portal half of the workflow the client actually described.
+
+---
+
 ## 2026-08-14 (evening) — Raunak
 
 **Did:** **A-05 is closed — the client has confirmed multigrain is in scope.** Removed the gate and

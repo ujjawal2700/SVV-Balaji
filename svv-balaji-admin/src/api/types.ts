@@ -1035,7 +1035,7 @@ export interface ProductionBatch {
   consumptions?: ProductionConsumption[];
   qualityInspections?: QualityInspection[];
   finishedGoodsBatches?: Array<{ id: string; fgBatchNumber: string; qaReleased: boolean }>;
-  _count?: { consumptions: number; finishedGoodsBatches: number };
+  _count?: { consumptions: number; finishedGoodsBatches: number; qualityInspections: number };
 
   createdAt: string;
   updatedAt: string;

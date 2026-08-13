@@ -1,7 +1,8 @@
-import { App as AntApp, Col, DatePicker, Divider, Form, Input, InputNumber, Modal, Row } from 'antd';
+import { App as AntApp, Col, DatePicker, Divider, Form, Input, InputNumber, Row } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import { Sheet } from '../../components/Sheet';
 import type { FieldVisit } from '../../api/types';
 import { BranchSelect, FarmerSelect } from '../../components/pickers';
 import { useCreateFieldVisit, useUpdateFieldVisit } from '../../hooks/useFieldVisits';
@@ -95,7 +96,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
   };
 
   return (
-    <Modal
+    <Sheet
       open={open}
       title={isEdit ? `Edit visit — ${visit?.farmer?.fullName ?? ''}` : 'Record field visit'}
       okText={isEdit ? 'Save changes' : 'Record visit'}
@@ -193,6 +194,6 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
           </Col>
         </Row>
       </Form>
-    </Modal>
+    </Sheet>
   );
 }

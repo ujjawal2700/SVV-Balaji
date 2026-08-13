@@ -10,3 +10,77 @@ body {
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ---------------------------------------------------------------------------
+   Field panel — phone behaviours that cannot be done inline.
+
+   These are scoped to the field routes rather than applied globally: the admin
+   panel is a desktop tool and should keep browser-standard text selection and
+   overscroll.
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 767px) {
+  /* Kills the rubber-band bounce that would otherwise reveal a blank strip
+     above the fixed app bar when a list is flicked at the top. */
+  body:has(.field-shell) {
+    overscroll-behavior: none;
+  }
+
+  /* Tapping a card or tab should not select its label the way a double-tap on
+     a web page does. Inputs and text areas are excluded — a field executive
+     correcting a typo still needs to select what they typed. */
+  .field-shell button,
+  .field-shell .ant-card,
+  .field-shell .ant-list-item {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* iOS zooms the viewport when a focused input's font is under 16px, and does
+     not zoom back out. That single behaviour is the most common reason a
+     responsive site feels broken on a phone. */
+  .field-shell input,
+  .field-shell textarea,
+  .field-shell .ant-select-selection-search-input {
+    font-size: 16px;
+  }
+
+  /* Full-height sheets should scroll their body, not the page behind them. */
+  .field-sheet .ant-drawer-body {
+    overscroll-behavior: contain;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Admin Panel Sidebar Theme
+   Configurable via CSS variables.
+   --------------------------------------------------------------------------- */
+:root {
+  --sidebar-bg-gradient: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);
+  --sidebar-item-hover-bg: #f3ebfc;
+  --sidebar-item-hover-color: #844FC1;
+  --sidebar-transition-duration: 0.3s;
+}
+
+.admin-sidebar {
+  background: var(--sidebar-bg-gradient) !important;
+}
+
+.admin-sidebar .ant-menu,
+.admin-sidebar .ant-menu-sub {
+  background: transparent !important;
+}
+
+/* Smooth hover effect for menu items */
+.admin-sidebar .ant-menu-item,
+.admin-sidebar .ant-menu-submenu-title {
+  transition: all var(--sidebar-transition-duration) ease-in-out !important;
+}
+
+.admin-sidebar .ant-menu-item:hover,
+.admin-sidebar .ant-menu-submenu-title:hover {
+  background-color: var(--sidebar-item-hover-bg) !important;
+  color: var(--sidebar-item-hover-color) !important;
+  transform: translateX(6px);
+}

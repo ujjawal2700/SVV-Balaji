@@ -63,6 +63,20 @@ export const NAV_SECTIONS: NavSection[] = [
         workstream: 'WS2.6',
       },
       {
+        key: 'field-executive',
+        path: '/field',
+        label: 'My Field Work',
+        // Read by the roles that actually do the field work. Everyone else has
+        // no "my visits" to show, so the screen would be an empty shell.
+        roles: ['AGRICULTURE_EXPERT', 'BRANCH_MANAGER'],
+        description:
+          'The Agriculture Expert landing screen — organised around the day rather than the ' +
+          'tables: log a visit, record a seed handout, run a session, and see what you have ' +
+          'done lately. Field capture with no signal is WS3.1.',
+        endpoints: ['GET /field-visits', 'GET /seed-distribution', 'GET /training-sessions'],
+        workstream: 'WS2.2',
+      },
+      {
         key: 'trace',
         path: '/trace',
         label: 'Trace a Pack',

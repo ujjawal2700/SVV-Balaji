@@ -17,7 +17,7 @@ are now answered** — only cloud storage (Decision 3) is still outstanding.
 |---|---|---|---|---|
 | 1 | Sales channels | **Both B2B and B2C, with different pricing per channel** | 11 Aug 2026 | ✅ WS1.5 unblocked · ⚠️ scope increase |
 | 2 | GST e-invoicing | **Approved — integrate via a GST Suvidha Provider** | 11 Aug 2026 | ✅ WS4.4 unblocked |
-| 3 | Cloud storage provider | *No answer yet* | — | 🔴 WS4.1 still blocked |
+| 3 | Cloud storage provider | *No answer yet* | — | 🟡 **Unblocked in practice** — interim Cloudinary account in use since 14 Aug; the decision is now about ownership and permanence, not capability |
 | 4 | Multigrain recipe engine | **Confirmed in scope** | 14 Aug 2026 | ✅ Gate removed, blend ratio now enforced at production time |
 | — | Farmer training channel | **No farmer app — executive visits the farm, trains, logs manually in the portal** | 11 Aug 2026 | ✅ Scope confirmed, no change needed |
 
@@ -121,7 +121,7 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
             └─ SVV-2026-000001   farmer — name, village, district, GPS
 ```
 
-### Admin panel — started 11 Aug (evening), **22 of 25 screens built as at 13 Aug**
+### Admin panel — started 11 Aug (evening), **23 of 26 screens built as at 14 Aug**
 
 `svv-balaji-admin/` — Vite + React + TypeScript + Ant Design.
 
@@ -133,6 +133,7 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
 | WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete, multigrain live |
 | WS2.5 Zone 4 — sales | customers, price lists, orders | ⬜ Placeholders — held on A-13 |
 | WS2.6 Dashboards & reports | trace screen built; dashboards/MIS outstanding | 🟡 15% |
+| — Field executive | `/field` "My Field Work" — the Agriculture Expert landing screen, plus real photo upload replacing paste-a-URL everywhere | ✅ Complete (14 Aug) |
 
 Auth is real: boot-time session restore, single-flight token refresh, sign-out, role-filtered
 navigation and route-level role guards, all against the live API. Navigation and routing are both
@@ -156,6 +157,11 @@ Standing conventions in the panel, worth knowing before adding to it:
   pagination behave identically everywhere.
 - **Decimals are typed as `string`** throughout. Prisma returns them as JSON strings; coercing at
   the boundary would hide precision loss on money and weights.
+- **`src/uploads/` in the backend is the only place a file enters the system.** `StorageService` is
+  an abstract class, `CloudinaryStorage` implements it, and `uploads.module.ts` binds them.
+  Answering A-04 with S3 or GCS is a new class in that folder and one line in that module — no
+  screen, endpoint or DTO changes. The panel's counterpart is `FileUploadField`, used on every
+  surface that takes an attachment.
 - **`src/pages/production/BlendPlanner.tsx`** holds the multigrain worksheet and
   `BLEND_TOLERANCE_POINTS`, which mirrors the constant of the same name in the backend's
   `production.service.ts`. Change one, change the other — it decides both what the operator is
@@ -279,7 +285,7 @@ must not be read as "nearly ready".
 | A-01 | Approve the schedule baseline | SVV Balaji | 14 Aug | Open |
 | A-02 | Decision 1 — sales channel scope | SVV Balaji | 12 Aug | ✅ **Closed 11 Aug** — B2B + B2C |
 | A-03 | Decision 2 — GST e-invoicing route | SVV Balaji | 14 Aug | ✅ **Closed 11 Aug** — GSP approved |
-| A-04 | Decision 3 — storage provider & process videos | SVV Balaji | 14 Aug | Open — blocking WS4.1 |
+| A-04 | Decision 3 — storage provider & process videos | SVV Balaji | **21 Aug** | Open — no longer blocking. Escalation note issued 14 Aug (`SVV_Balaji_A04_Storage_Decision_Note.md`). Also needs a retention/access policy for farmer KYC images |
 | A-05 | Decision 4 — multigrain in scope | SVV Balaji | 14 Aug | ✅ **Closed 14 Aug** — confirmed. Flag removed; blend ratio enforced within 0.5pp on every run |
 | A-06 | Provide customer & product master data | SVV Balaji | 28 Aug | Open |
 | A-07 | Nominate UAT participants | SVV Balaji | 28 Aug | Open |

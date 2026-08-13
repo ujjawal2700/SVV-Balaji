@@ -147,6 +147,15 @@ export const productionApi = {
     return unwrap<ProductionBatch>(response.data);
   },
 
+  async updateBatch(id: string, input: Partial<CreateProductionBatchInput>): Promise<ProductionBatch> {
+    const response = await api.patch<ProductionBatch>(`/production-batches/${id}`, pruneEmpty(input));
+    return unwrap<ProductionBatch>(response.data);
+  },
+
+  async deleteBatch(id: string): Promise<void> {
+    await api.delete(`/production-batches/${id}`);
+  },
+
   /** FRD 20.5 — records actual output and derives process loss. */
   async complete(id: string, actualQuantity: number): Promise<ProductionBatch> {
     const response = await api.patch<ProductionBatch>(`/production-batches/${id}/complete`, {

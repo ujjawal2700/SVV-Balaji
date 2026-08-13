@@ -210,7 +210,7 @@ export function ProductionBatchesPage() {
           <RowActions
             entity="production batch"
             label={batch.productionBatchNumber}
-            can="PRODUCTION_BATCH_EDIT"
+            can="PRODUCTION_BATCH_CREATE"
             onEdit={() => openForm(batch)}
             onDelete={() => remove.mutateAsync(batch.id)}
             deleteBlockedReason={

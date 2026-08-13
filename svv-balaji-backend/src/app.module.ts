@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { CodesModule } from './codes/codes.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BranchesModule } from './branches/branches.module';
@@ -29,6 +30,7 @@ import { SalesModule } from './sales/sales.module';
     PrismaModule,
     CommonModule, // global - shared sequence/document numbering
     CodesModule, // global - QR/barcode generation, reused by Phase 2/3 batch + packaging
+    UploadsModule, // global - the one place a file enters the system (WS4.1 interim, see A-04)
     AuthModule,
     UsersModule,
     BranchesModule,

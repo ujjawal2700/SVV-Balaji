@@ -18,7 +18,7 @@ import {
 import type { Dayjs } from 'dayjs';
 import { useEffect, useMemo } from 'react';
 import { apiErrorMessage } from '../../api/client';
-import type { CreateProductionBatchInput } from '../../api/types';
+import type { CreateProductionBatchInput, ProductionBatch } from '../../api/types';
 import { BranchSelect, WarehouseSelect } from '../../components/pickers';
 import { useWarehouseStock } from '../../hooks/useWarehouses';
 import { useCreateProductionBatch, useRecipes } from '../../hooks/useProduction';
@@ -28,6 +28,7 @@ import { BlendPlanner, checkBlend } from './BlendPlanner';
 
 interface ProductionBatchFormModalProps {
   open: boolean;
+  batch?: ProductionBatch | null;
   onClose: () => void;
 }
 

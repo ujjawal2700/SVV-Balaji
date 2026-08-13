@@ -7,7 +7,6 @@ import {
   Drawer,
   Empty,
   Form,
-  Input,
   List,
   Select,
   Space,
@@ -18,6 +17,7 @@ import {
 import { apiErrorMessage } from '../../api/client';
 import type { FieldVisitDocument } from '../../api/types';
 import { useCan } from '../../auth/useCan';
+import { FileUploadField } from '../../components/FileUploadField';
 import { useAddFieldVisitDocument, useFieldVisit } from '../../hooks/useFieldVisits';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
 
@@ -115,25 +115,16 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
           <div>
             <Typography.Title level={5}>Documents ({data.documents.length})</Typography.Title>
 
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 12 }}
-              message="Links only, for now"
-              description="The API stores a URL rather than handling the upload — object storage is still an open client decision (action A-04). Field photos taken in the Agriculture Expert app will land here once that is settled."
-            />
-
             {canEdit ? (
-              <Form form={documentForm} layout="inline" style={{ rowGap: 8, marginBottom: 12 }}>
+              <Form form={documentForm} layout="vertical" style={{ marginBottom: 12 }}>
                 <Form.Item
                   name="fileUrl"
-                  rules={[
-                    { required: true, message: 'Paste the file URL' },
-                    { type: 'url', message: 'That is not a URL' },
-                  ]}
-                  style={{ flex: 1, minWidth: 240 }}
+                  rules={[{ required: true, message: 'Attach a photo or document first' }]}
                 >
-                  <Input placeholder="https://…" />
+                  <FileUploadField
+                    folder="field-visits"
+                    hint="Crop photographs, pest damage, an inspection report — JPEG, PNG, HEIC or PDF, up to 10 MB"
+                  />
                 </Form.Item>
                 <Form.Item name="fileType" initialValue="photo" rules={[{ required: true }]}>
                   <Select

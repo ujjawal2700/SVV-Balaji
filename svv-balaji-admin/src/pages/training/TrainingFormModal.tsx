@@ -1,7 +1,8 @@
-import { App as AntApp, DatePicker, Form, Input, Modal } from 'antd';
+import { App as AntApp, DatePicker, Form, Input } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import { Sheet } from '../../components/Sheet';
 import type { TrainingSession } from '../../api/types';
 import { BranchSelect } from '../../components/pickers';
 import {
@@ -73,7 +74,7 @@ export function TrainingFormModal({ open, session, onClose }: TrainingFormModalP
   };
 
   return (
-    <Modal
+    <Sheet
       open={open}
       title={isEdit ? `Edit — ${session?.title}` : 'New training session'}
       okText={isEdit ? 'Save changes' : 'Create session'}
@@ -103,6 +104,6 @@ export function TrainingFormModal({ open, session, onClose }: TrainingFormModalP
           <Input.TextArea rows={3} placeholder="Optional" />
         </Form.Item>
       </Form>
-    </Modal>
+    </Sheet>
   );
 }

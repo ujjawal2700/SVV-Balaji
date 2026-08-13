@@ -8,7 +8,6 @@ import {
   Popconfirm,
   Empty,
   Form,
-  Input,
   List,
   Select,
   Space,
@@ -30,6 +29,7 @@ import {
   useRemoveTrainingMaterial,
   useTrainingSession,
 } from '../../hooks/useTraining';
+import { FileUploadField } from '../../components/FileUploadField';
 import { EM_DASH, formatDate } from '../../utils/format';
 
 interface TrainingDetailDrawerProps {
@@ -248,24 +248,17 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
               label: `Materials (${data.materials.length})`,
               children: (
                 <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="Links only, for now"
-                    description="The API stores a URL rather than handling the upload itself — object storage is still an open client decision (action A-04). Paste a link to a file you have already hosted."
-                  />
 
                   {canEdit ? (
-                    <Form form={materialForm} layout="inline" style={{ rowGap: 8 }}>
+                    <Form form={materialForm} layout="vertical">
                       <Form.Item
                         name="fileUrl"
-                        rules={[
-                          { required: true, message: 'Paste the file URL' },
-                          { type: 'url', message: 'That is not a URL' },
-                        ]}
-                        style={{ flex: 1, minWidth: 260 }}
+                        rules={[{ required: true, message: 'Attach the material first' }]}
                       >
-                        <Input placeholder="https://…" />
+                        <FileUploadField
+                          folder="training"
+                          hint="A handout, slide deck or photograph from the session — JPEG, PNG, HEIC or PDF, up to 10 MB"
+                        />
                       </Form.Item>
                       <Form.Item
                         name="fileType"
