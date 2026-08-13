@@ -1,7 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { agreementsApi } from '../api/agreements';
 import { queryKeys } from '../api/queryKeys';
-import type { AgreementStatus, CreateAgreementInput } from '../api/types';
+import type {
+  AgreementStatus,
+  CreateAgreementInput,
+  UpdateAgreementInput,
+} from '../api/types';
 
 export function useAgreements(farmerId?: string) {
   return useQuery({
@@ -34,6 +38,32 @@ export function useSetAgreementStatus() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agreements.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
+    },
+  });
+}
+
+export function useUpdateAgreement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateAgreementInput }) =>
+      agreementsApi.update(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agreements.all });
+    },
+  });
+}
+
+export function useDeleteAgreement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => agreementsApi.remove(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agreements.all });
+      // The collection form shows the agreed rate as a fallback hint, so a
+      // removed agreement has to leave that picker too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
     },
   });
 }

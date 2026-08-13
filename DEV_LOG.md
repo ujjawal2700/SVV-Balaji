@@ -16,6 +16,198 @@ how each side learns what the other did.
 
 ---
 
+## 2026-08-14 (evening) — Raunak
+
+**Did:** **A-05 is closed — the client has confirmed multigrain is in scope.** Removed the gate and
+built the thing it was standing in for.
+
+**The flag is gone rather than set to `true`.** A stale `.env` carrying `MULTIGRAIN_ENABLED=false`
+on somebody's machine would have silently refused production runs with no clue as to why, and
+`.env.example` now says so where the variable used to be.
+
+**But removing the gate on its own would have been the wrong change,** and this is the part worth
+reading. Approving a recipe fixed a ratio; nothing made that ratio true at production time. A 60/40
+wheat-bajra blend could have been produced from 90% wheat, packed, labelled and sold as the
+approved blend, and the system would have agreed with the label. That is a mislabelled-food
+problem, not a data-quality one.
+
+So `createProductionBatch` now enforces the blend on every MULTI_GRAIN run:
+
+- **every grain in the formula must be present** — a three-grain blend made from two grains is a
+  different product, not a rounding error;
+- **each grain's share of the total input must be within `BLEND_TOLERANCE_POINTS` (0.5 pp)** of its
+  recipe percentage.
+
+Two decisions in there that are worth disagreeing with if you want to:
+
+1. **Ratios are measured against total input, not planned output.** The recipe describes the mix
+   going in; process loss applies to the mix as a whole and is only known at completion. So a run
+   that inputs 1,020 kg against a 1,000 kg plan passes, as long as the proportions hold. Checking
+   against the plan would fail honest runs.
+2. **0.5 percentage points.** Tight enough that 60/40 cannot quietly become 65/35, loose enough to
+   absorb drawing whole-ish quantities from stock — 5 kg of slack per grain on a 1,000 kg mix. It
+   is a named constant, and the panel mirrors it with a comment pointing back here.
+
+Crop names are matched case- and whitespace-insensitively. "Wheat" on the recipe and `"wheat "`
+typed by a collection clerk in the field are the same grain, and blocking a legitimate run over a
+trailing space would be the first thing anyone hit.
+
+**The refusal names the fix**, not just the failure:
+
+> The mix does not match recipe MG-ATTA: Wheat is 90.00% of the mix but the recipe says 60.00%
+> (needs 600.00 of the 1000.00 total). Blends may drift by at most 0.5 percentage points.
+
+**Panel — the blend worksheet.** `BlendPlanner.tsx` does the same arithmetic live while the run is
+being set up: a row per grain showing the recipe percentage, the target quantity for the planned
+output, what is in the mix so far, and the running share with a tick or a warning. The submit
+button stays disabled until every grain is green, so an off-ratio run cannot be started rather than
+being refused after the fact. Single-grain runs are untouched — there is no ratio to hold.
+
+All the "disabled pending A-05" copy is gone. Where it sat on the recipe form, it now says what the
+percentages actually commit you to: *once this version is approved, every run made from it has to
+hold this ratio.*
+
+**Contract changes:** none — no route, DTO or enum changed. `POST /production-batches` accepts a
+MULTI_GRAIN recipe where it used to refuse one, and refuses an off-ratio mix where it used to
+accept one. Behavioural, and worth a line in your notes.
+
+**Other developer needs to know (Ujjawal):**
+
+- **`MULTIGRAIN_ENABLED` no longer exists.** Drop it from your local `.env`; nothing reads it.
+- **17 tests** in `blend-ratio.service.spec.ts` — exact match, tolerance boundary either side,
+  missing grain, multiple batches of one grain, case/whitespace crop matching, and that the
+  existing gates (unapproved recipe, QA-rejected batch, insufficient stock, reserved stock) still
+  fire before the ratio check. Suite should now be **251** across 20 spec files. Still cannot run
+  them here — no npm registry in my sandbox.
+- **`completeProduction` still allows a negative `productionLoss`** when actual output exceeds
+  planned. It mattered less when blends could not run; now that yields are the point of the
+  feature, it is worth a look. Left alone — your call, your module.
+
+**Workbook updated:** A-05 closed with the date and effect. Open actions 11 → 10, closed 2 → 3.
+Weighted completion unchanged at **35.65%** — this closes a decision and completes a gated path
+rather than adding new scope.
+
+**Next:** WS2.5 — customers, price lists, orders. Still wants an A-13 answer before the order
+screen is designed; `PATCH /customers/:id` already exists, so that screen gets edit for free.
+
+---
+
+## 2026-08-14 — Raunak
+
+**Did:** Finished the job started last night — edit and delete on the transactional screens too.
+**22 more endpoints**, again in your workstream, again because none existed. Every form on every
+screen now opens pre-filled in edit mode; the create modal is reused rather than duplicated.
+
+**The guard is per-record state here, not per-type** — which is the thing worth reading. A
+transactional record stays correctable exactly as long as nothing downstream has relied on it:
+
+| Record | Editable until | Deletable until |
+|---|---|---|
+| Agreement | a harvest inspection is raised against it | same |
+| Seed distribution | always | always |
+| Training session | always | attendance is marked |
+| Field visit | always | always (takes its documents) |
+| Procurement plan | it leaves DRAFT / SCHEDULED | an inspection is booked against it |
+| Harvest inspection | a collection is recorded against it | same |
+| Collection | the batch is cleaned, inspected, consumed or moved since receipt | same, plus: farmer unpaid, no later receipt that day |
+| Raw material batch | — acts on its collection — | — acts on its collection — |
+
+**New routes (contract change):**
+
+```
+PATCH  /agreements/:id                            SUPER_ADMIN, PROCUREMENT_MANAGER
+DELETE /agreements/:id                            SUPER_ADMIN
+
+GET    /seed-distribution/:id                     any authenticated
+PATCH  /seed-distribution/:id                     SUPER_ADMIN, AGRICULTURE_EXPERT
+DELETE /seed-distribution/:id                     SUPER_ADMIN
+
+PATCH  /training-sessions/:id                     SUPER_ADMIN, AGRICULTURE_EXPERT
+DELETE /training-sessions/:id                     SUPER_ADMIN
+DELETE /training-sessions/:id/attendance/:farmerId  SUPER_ADMIN, AGRICULTURE_EXPERT
+DELETE /training-sessions/:id/materials/:materialId SUPER_ADMIN, AGRICULTURE_EXPERT
+
+PATCH  /field-visits/:id                          SUPER_ADMIN, AGRICULTURE_EXPERT
+DELETE /field-visits/:id                          SUPER_ADMIN
+DELETE /field-visits/:id/documents/:documentId    SUPER_ADMIN, AGRICULTURE_EXPERT
+
+GET    /procurement-plans/:id                     any authenticated
+PATCH  /procurement-plans/:id                     SUPER_ADMIN, PROCUREMENT_MANAGER, BRANCH_MANAGER
+DELETE /procurement-plans/:id                     SUPER_ADMIN
+
+PATCH  /harvest-inspections/:id                   SUPER_ADMIN, PROCUREMENT_MANAGER, QA_MANAGER
+DELETE /harvest-inspections/:id                   SUPER_ADMIN
+DELETE /harvest-inspections/:id/documents/:documentId  SUPER_ADMIN, PROCUREMENT_MANAGER, QA_MANAGER
+
+PATCH  /collections/:id                           SUPER_ADMIN, PROCUREMENT_MANAGER
+DELETE /collections/:id                           SUPER_ADMIN
+```
+
+New DTOs: `UpdateAgreementDto`, `UpdateSeedDistributionDto`, `UpdateTrainingSessionDto`,
+`UpdateFieldVisitDto`, `UpdateProcurementPlanDto`, `UpdateHarvestInspectionDto`,
+`UpdateCollectionDto`. All `PartialType(Create…)` except the last.
+
+**`GET /batches` now includes `collection`** (id, receipt number, weights, rate, payment status).
+The batches screen offers Correct and Delete, both acting on the collection, and without the
+include that would be a round trip per row.
+
+---
+
+### `PATCH /collections/:id` is the one to look at
+
+**This is the correction path the system had no answer for.** A weighbridge slip read as 500
+instead of 50 currently means cancelling and re-collecting the harvest, which is worse than the
+typo. It is also the only edit that reaches outside its own row: the net weight lives in four
+places — the collection, the batch quantity, the warehouse stock line and the movement ledger.
+
+So the update does all four in one transaction and writes an **`ADJUSTMENT` movement** carrying
+the before/after and the reason the user typed. Your invariant — *stock is only ever mutated
+inside a transaction that also writes a movement row* — is preserved rather than worked around.
+
+`UpdateCollectionDto` deliberately excludes three fields, and the reasoning is in the file:
+
+- **`inspectionId`** — unique relation. Repointing it leaves the original inspection looking
+  uncollected while its batch still traces through it.
+- **`warehouseId`** — stock moves between warehouses through transfer, which writes the ledger.
+  Changing it here relocates stock with no entry, which is the exact drift the ledger prevents.
+- **`collectionDate`** — encoded into the receipt and batch numbers, already printed on the
+  farmer's copy. Changing the date makes them wrong rather than regenerating them.
+
+**`DELETE /collections/:id` takes the batch, its stock line and its receipt movement with it**, in
+one transaction — a batch without its collection has no farmer path and would sit in the warehouse
+untraceable.
+
+**And it surfaced a real bug of yours, which I have guarded rather than fixed.**
+`generateReceiptNumber()` counts the day's receipts instead of using `SequenceService` beside it,
+so deleting a receipt makes the *next* collection reuse its number — two farmers, two payments,
+one receipt number, indistinguishable afterwards. Until that is fixed, `remove()` refuses when a
+later receipt exists for the same day, with that explanation in the message. **One line to fix:**
+`SequenceService.next(tx, 'RC', collectionDate)`. I have left it alone because it is the same
+defect I flagged on 11 Aug and it is yours to close.
+
+---
+
+**Contract changes:** yes — the 22 routes above, plus the `collection` include on `GET /batches`.
+Swagger annotated.
+
+**Other developer needs to know (Ujjawal):**
+
+- **49 more tests** in `collection-correction.service.spec.ts`,
+  `procurement-maintenance.service.spec.ts`, `agreements.service.spec.ts` and
+  `training.service.spec.ts` — the four-way weight correction, the untouched-batch guard, the
+  collected-inspection lock, the in-progress plan lock. Suite should now be **234**. Still cannot
+  run them here (no registry access in my sandbox) — please confirm on your machine.
+- **The receipt counter, again.** See above. It now has a user-visible consequence rather than
+  just a theoretical one.
+- **`assertBatchUntouched` in `collection.service.ts` is reusable** and probably wants to move
+  somewhere shared when you add order cancellation — "has anything downstream used this" is the
+  same question there.
+
+**Next:** WS2.5 — customers, price lists, orders — which still wants an A-13 answer before the
+order screen is designed. `PATCH /customers/:id` already exists, so that screen gets edit for free.
+
+---
+
 ## 2026-08-13 (late) — Raunak
 
 **Did:** Added edit and delete to the master screens — and had to build the endpoints first,

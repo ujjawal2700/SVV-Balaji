@@ -77,7 +77,7 @@ export function RecipesPage() {
       width: 140,
       render: (type: Recipe['productionType']) =>
         type === 'MULTI_GRAIN' ? (
-          <Tooltip title="Production from a blend is disabled until the client confirms scope (A-05)">
+          <Tooltip title="Runs from this recipe must hold its ratio to within 0.5 percentage points">
             <Tag color="purple">Multigrain</Tag>
           </Tooltip>
         ) : (

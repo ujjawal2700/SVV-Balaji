@@ -10,12 +10,26 @@ import { BranchSelect } from '../../components/pickers';
 import { useTrainingSessions } from '../../hooks/useTraining';
 import { EM_DASH, formatDate } from '../../utils/format';
 import { TrainingDetailDrawer } from './TrainingDetailDrawer';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteTrainingSession } from '../../hooks/useTraining';
 import { TrainingFormModal } from './TrainingFormModal';
 
 export function TrainingPage() {
   const [branchId, setBranchId] = useState<string | undefined>();
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<TrainingSession | null>(null);
+  const remove = useDeleteTrainingSession();
+
+  const openEdit = (session: TrainingSession) => {
+    setEditing(session);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
 
   const sessions = useTrainingSessions(branchId);
 
@@ -82,14 +96,35 @@ export function TrainingPage() {
       ),
     },
     {
-      title: '',
+      title: 'Actions',
       key: 'actions',
-      width: 90,
-      render: (_, session) => (
-        <Button size="small" onClick={() => setDetailId(session.id)}>
-          Open
-        </Button>
-      ),
+      width: 230,
+      fixed: 'right',
+      render: (_, session) => {
+        // Attendance is the record of which farmers were trained, so the server
+        // refuses the delete once any is marked. Saying so on the disabled item
+        // is better than a 409 after the confirm dialog.
+        const attended = session._count?.attendances ?? 0;
+        return (
+          <RowActions
+            entity="training session"
+            label={session.title}
+            can="TRAINING_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={() => openEdit(session)}
+            onDelete={() => remove.mutateAsync(session.id)}
+            deleteBlockedReason={
+              attended > 0
+                ? `${attended} farmer${attended === 1 ? '' : 's'} marked present — remove the attendance first, from Open`
+                : undefined
+            }
+          >
+            <Button size="small" onClick={() => setDetailId(session.id)}>
+              Open
+            </Button>
+          </RowActions>
+        );
+      },
     },
   ];
 
@@ -132,7 +167,7 @@ export function TrainingPage() {
         emptyText="No training sessions recorded yet"
       />
 
-      <TrainingFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <TrainingFormModal open={formOpen} session={editing} onClose={closeForm} />
       <TrainingDetailDrawer sessionId={detailId} onClose={() => setDetailId(null)} />
     </Card>
   );

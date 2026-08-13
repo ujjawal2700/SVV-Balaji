@@ -13,19 +13,22 @@ import {
   Select,
   Space,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
-import { useEffect } from 'react';
+import dayjs, { type Dayjs } from 'dayjs';
+import { useEffect, useState } from 'react';
 import { apiErrorMessage } from '../../api/client';
 import type { CreateHarvestInspectionInput, HarvestInspection } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
 import { useAgreements } from '../../hooks/useAgreements';
-import { useCreateHarvestInspection, useUpdateHarvestInspection } from '../../hooks/useProcurement';
+import {
+  useCreateHarvestInspection,
+  useUpdateHarvestInspection,
+} from '../../hooks/useProcurement';
 import { toIsoDate } from '../../utils/format';
 import { positiveNumber, required } from '../../validation/rules';
-import dayjs from 'dayjs';
 
 interface HarvestInspectionFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
   inspection?: HarvestInspection | null;
   onClose: () => void;
 }
@@ -46,31 +49,17 @@ interface InspectionForm extends Omit<CreateHarvestInspectionInput, 'inspectionD
  *     APPROVED passes the gate in collection.service.ts, so the choice is
  *     spelled out rather than left as a neutral dropdown.
  */
-export function HarvestInspectionFormModal({ open, inspection, onClose }: HarvestInspectionFormModalProps) {
+export function HarvestInspectionFormModal({
+  open,
+  inspection,
+  onClose,
+}: HarvestInspectionFormModalProps) {
   const [form] = Form.useForm<InspectionForm>();
   const { message } = AntApp.useApp();
   const createInspection = useCreateHarvestInspection();
   const updateInspection = useUpdateHarvestInspection();
 
   const isEdit = Boolean(inspection);
-
-  const initialValues = inspection
-    ? {
-        farmerId: inspection.farmerId,
-        agreementId: inspection.agreementId ?? undefined,
-        procurementPlanId: inspection.procurementPlanId ?? undefined,
-        cropName: inspection.cropName,
-        inspectionDate: dayjs(inspection.inspectionDate),
-        moistureLevel: inspection.moistureLevel === null ? undefined : Number(inspection.moistureLevel),
-        foreignMatter: inspection.foreignMatter === null ? undefined : Number(inspection.foreignMatter),
-        grainSize: inspection.grainSize ?? undefined,
-        grainColor: inspection.grainColor ?? undefined,
-        smell: inspection.smell ?? undefined,
-        physicalDamage: inspection.physicalDamage ?? undefined,
-        result: inspection.result,
-        remarks: inspection.remarks ?? undefined,
-      }
-    : undefined;
 
   const farmerId = Form.useWatch('farmerId', form);
   const result = Form.useWatch('result', form);
@@ -80,25 +69,55 @@ export function HarvestInspectionFormModal({ open, inspection, onClose }: Harves
   const agreements = useAgreements(farmerId);
 
   useEffect(() => {
-    if (open && !inspection) form.resetFields();
+    if (!open) return;
+    form.resetFields();
+    if (inspection) {
+      form.setFieldsValue({
+        farmerId: inspection.farmerId,
+        agreementId: inspection.agreementId ?? undefined,
+        procurementPlanId: inspection.procurementPlanId ?? undefined,
+        cropName: inspection.cropName,
+        inspectionDate: dayjs(inspection.inspectionDate),
+        moistureLevel:
+          inspection.moistureLevel === null ? undefined : Number(inspection.moistureLevel),
+        foreignMatter:
+          inspection.foreignMatter === null ? undefined : Number(inspection.foreignMatter),
+        grainSize: inspection.grainSize ?? undefined,
+        grainColor: inspection.grainColor ?? undefined,
+        smell: inspection.smell ?? undefined,
+        physicalDamage: inspection.physicalDamage ?? undefined,
+        result: inspection.result,
+        remarks: inspection.remarks ?? undefined,
+      } as Partial<InspectionForm>);
+    }
   }, [open, inspection, form]);
 
   // A stale agreement selection after switching farmer would be rejected by the
   // server ("Agreement does not belong to this farmer") - clear it instead.
+  // Skipped on the first pass in edit mode, which would otherwise wipe the
+  // agreement the record already carries.
+  const [farmerTouched, setFarmerTouched] = useState(false);
   useEffect(() => {
+    if (!farmerTouched) {
+      setFarmerTouched(true);
+      return;
+    }
     form.setFieldValue('agreementId', undefined);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [farmerId, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      ...values,
+      inspectionDate: toIsoDate(values.inspectionDate) as string,
+    };
+
     try {
-      const payload = {
-        ...values,
-        inspectionDate: toIsoDate(values.inspectionDate) as string,
-      };
-      
-      if (isEdit && inspection) {
-        await updateInspection.mutateAsync({ id: inspection.id, input: payload });
+      if (inspection) {
+        const { farmerId: _farmerId, ...editable } = payload;
+        void _farmerId;
+        await updateInspection.mutateAsync({ id: inspection.id, input: editable });
         message.success('Inspection updated');
       } else {
         await createInspection.mutateAsync(payload);
@@ -110,14 +129,17 @@ export function HarvestInspectionFormModal({ open, inspection, onClose }: Harves
       }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'record'} the inspection`));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'record'} the inspection`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title={isEdit ? 'Edit harvest inspection' : 'Record harvest inspection'}
+      title={isEdit ? `Edit inspection — ${inspection?.cropName}` : 'Record harvest inspection'}
       okText={isEdit ? 'Save changes' : 'Record inspection'}
       onOk={handleSubmit}
       onCancel={onClose}
@@ -125,16 +147,20 @@ export function HarvestInspectionFormModal({ open, inspection, onClose }: Harves
       width={760}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" requiredMark preserve={false} initialValues={initialValues}>
+      <Form form={form} layout="vertical" requiredMark preserve={false}>
         <Row gutter={16}>
           <Col xs={24} md={12}>
             <Form.Item
               name="farmerId"
               label="Farmer"
               rules={[required('Farmer')]}
-              extra="Approved farmers only — an unapproved farmer has no traceability code."
+              extra={
+                isEdit
+                  ? 'Fixed. An APPROVED result must not become transferable to another farmer.'
+                  : 'Approved farmers only — an unapproved farmer has no traceability code.'
+              }
             >
-              <FarmerSelect approvedOnly />
+              <FarmerSelect approvedOnly disabled={isEdit} />
             </Form.Item>
           </Col>
           <Col xs={24} md={6}>

@@ -1,14 +1,20 @@
 import { App as AntApp, DatePicker, Form, Input, Modal } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import type { TrainingSession } from '../../api/types';
 import { BranchSelect } from '../../components/pickers';
-import { useCreateTrainingSession } from '../../hooks/useTraining';
+import {
+  useCreateTrainingSession,
+  useUpdateTrainingSession,
+} from '../../hooks/useTraining';
 import { toIsoDate } from '../../utils/format';
 import { maxLength, required } from '../../validation/rules';
 
 interface TrainingFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
+  session?: TrainingSession | null;
   onClose: () => void;
 }
 
@@ -19,39 +25,61 @@ interface TrainingForm {
   branchId: string;
 }
 
-export function TrainingFormModal({ open, onClose }: TrainingFormModalProps) {
+export function TrainingFormModal({ open, session, onClose }: TrainingFormModalProps) {
   const [form] = Form.useForm<TrainingForm>();
   const { message } = AntApp.useApp();
   const createSession = useCreateTrainingSession();
+  const updateSession = useUpdateTrainingSession();
+
+  const isEdit = Boolean(session);
 
   useEffect(() => {
-    if (open) form.resetFields();
-  }, [open, form]);
+    if (!open) return;
+    form.resetFields();
+    if (session) {
+      form.setFieldsValue({
+        title: session.title,
+        description: session.description ?? undefined,
+        scheduledDate: dayjs(session.scheduledDate),
+        branchId: session.branchId,
+      });
+    }
+  }, [open, session, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+    const payload = {
+      title: values.title,
+      description: values.description,
+      scheduledDate: toIsoDate(values.scheduledDate) as string,
+      branchId: values.branchId,
+    };
+
     try {
-      await createSession.mutateAsync({
-        title: values.title,
-        description: values.description,
-        scheduledDate: toIsoDate(values.scheduledDate) as string,
-        branchId: values.branchId,
-      });
-      message.success('Session created — mark attendance from the session view');
+      if (session) {
+        await updateSession.mutateAsync({ id: session.id, input: payload });
+        message.success('Session updated');
+      } else {
+        await createSession.mutateAsync(payload);
+        message.success('Session created — mark attendance from the session view');
+      }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, 'Could not create the session'));
+      message.error(
+        apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'create'} the session`),
+        8,
+      );
     }
   };
 
   return (
     <Modal
       open={open}
-      title="New training session"
-      okText="Create session"
+      title={isEdit ? `Edit — ${session?.title}` : 'New training session'}
+      okText={isEdit ? 'Save changes' : 'Create session'}
       onOk={handleSubmit}
       onCancel={onClose}
-      confirmLoading={createSession.isPending}
+      confirmLoading={createSession.isPending || updateSession.isPending}
       destroyOnClose
     >
       <Form form={form} layout="vertical" requiredMark preserve={false}>

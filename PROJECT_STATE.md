@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 11 August 2026 (evening) · **Updated by:** Raunak
+**Last updated:** 14 August 2026 · **Updated by:** Raunak
 **Programme week:** 2 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -10,15 +10,15 @@
 
 ## 1. Client decisions — current position
 
-Four decisions were put to the client in `SVV_Balaji_Client_Decision_Memo.md`. Three answers have
-now been received.
+Four decisions were put to the client in `SVV_Balaji_Client_Decision_Memo.md`. **Three of the four
+are now answered** — only cloud storage (Decision 3) is still outstanding.
 
 | # | Decision | Client answer | Received | Effect |
 |---|---|---|---|---|
 | 1 | Sales channels | **Both B2B and B2C, with different pricing per channel** | 11 Aug 2026 | ✅ WS1.5 unblocked · ⚠️ scope increase |
 | 2 | GST e-invoicing | **Approved — integrate via a GST Suvidha Provider** | 11 Aug 2026 | ✅ WS4.4 unblocked |
 | 3 | Cloud storage provider | *No answer yet* | — | 🔴 WS4.1 still blocked |
-| 4 | Multigrain recipe engine | *No answer yet* | — | 🟡 Built, awaiting confirmation to enable |
+| 4 | Multigrain recipe engine | **Confirmed in scope** | 14 Aug 2026 | ✅ Gate removed, blend ratio now enforced at production time |
 | — | Farmer training channel | **No farmer app — executive visits the farm, trains, logs manually in the portal** | 11 Aug 2026 | ✅ Scope confirmed, no change needed |
 
 ### Decision 1 — B2B + B2C with per-channel pricing
@@ -130,7 +130,7 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
 | WS2.1 Scaffolding & auth | login, dashboard shell | ✅ Complete |
 | WS2.2 Zone 1 — master data & farm sourcing | branches, users, farmers, agreements, seed distribution, training, field visits | ✅ Screens complete, manually tested |
 | WS2.3 Zone 2 — procurement & warehouse | procurement plans, harvest inspections, collections, raw material batches, warehouses, stock, movement ledger, trace | ✅ Complete |
-| WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete |
+| WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete, multigrain live |
 | WS2.5 Zone 4 — sales | customers, price lists, orders | ⬜ Placeholders — held on A-13 |
 | WS2.6 Dashboards & reports | trace screen built; dashboards/MIS outstanding | 🟡 15% |
 
@@ -156,13 +156,17 @@ Standing conventions in the panel, worth knowing before adding to it:
   pagination behave identically everywhere.
 - **Decimals are typed as `string`** throughout. Prisma returns them as JSON strings; coercing at
   the boundary would hide precision loss on money and weights.
+- **`src/pages/production/BlendPlanner.tsx`** holds the multigrain worksheet and
+  `BLEND_TOLERANCE_POINTS`, which mirrors the constant of the same name in the backend's
+  `production.service.ts`. Change one, change the other — it decides both what the operator is
+  shown and whether the server will accept the run.
 - **`src/components/RowActions.tsx`** is the row action menu on every master screen — edit,
   deactivate/reactivate, delete. It shows the server's refusal message verbatim, because that
   message names what is blocking the delete and is the whole reason the user clicked.
 - **One modal per entity, used for both create and edit.** A separate edit form is how the two
   quietly drift apart until a field validated on create is accepted on edit.
 
-### Delete semantics (agreed 13 Aug)
+### Edit and delete semantics (agreed 13 Aug, completed 14 Aug)
 
 This is a traceability system, so "delete" is not one thing:
 
@@ -170,7 +174,28 @@ This is a traceability system, so "delete" is not one thing:
 |---|---|
 | Masters — branch, user, farmer, product, warehouse | Full edit, plus deactivate / reactivate |
 | Anything, while genuinely unused | Real `DELETE`, refused with a reason the moment something references it |
-| Traceability and ledger rows — batches, movements, inspections, consumption | No delete. Correction is a new record, the way `adjust` already works |
+| Traceability and ledger rows — production batches, movements, quality inspections, consumption | No delete. Correction is a new record, the way `adjust` already works |
+
+For the transactional records the guard is **per-record state, not per-type** — a record stays
+correctable exactly as long as nothing downstream has relied on it:
+
+| Record | Editable until | Deletable until |
+|---|---|---|
+| Agreement | a harvest inspection is raised against it | same |
+| Seed distribution | always | always |
+| Training session | always | attendance is marked |
+| Field visit | always | always (takes its documents) |
+| Procurement plan | it leaves DRAFT / SCHEDULED | an inspection is booked against it |
+| Harvest inspection | a collection is recorded against it | same |
+| Collection | the batch is cleaned, inspected, consumed or moved since receipt | same, plus: farmer unpaid, no later receipt that day |
+| Raw material batch | — has no figures of its own; both act on its collection — ||
+
+**`PATCH /collections/:id` is the correction path the system had no answer for.** A weighbridge
+figure entered as 500 instead of 50 previously meant cancelling and re-collecting the harvest. It
+is also the only edit that reaches outside its own row — the net weight lives in the collection,
+the batch quantity, the warehouse stock line and the movement ledger — so it updates all four in
+one transaction and writes an `ADJUSTMENT` movement carrying the before/after and the reason. The
+invariant that stock is only ever mutated alongside a movement row is preserved, not worked around.
 
 `src/common/dependants.ts` in the backend is the shared refusal. Every relation in the schema is
 RESTRICT, so a blocked delete would otherwise surface as `P2003 Foreign key constraint failed`.
@@ -220,12 +245,11 @@ must not be read as "nearly ready".
 4. ~~**WS2.4 Zone 3 — processing, QA & packaging**~~ — ✅ **done 13 Aug (evening).** Products,
    recipes with versioning, cleaning & grading, production batches, quality inspections, finished
    goods. `/trace` now has something real to resolve.
-5. ~~**Edit / deactivate / delete on the master screens**~~ — ✅ **done 13 Aug (late).** Required
-   building 14 backend endpoints first: there was no generic update route except
-   `PATCH /customers/:id`, and no `@Delete` route anywhere. See DEV_LOG for the full contract.
-   Remaining: the transactional screens (agreements, seed distribution, training, field visits,
-   procurement plans, harvest inspections, collections) need edit-while-unconsumed rather than
-   edit-always — the guard is per-record state, not per-type, and that line wants agreeing first.
+5. ~~**Edit / deactivate / delete across the panel**~~ — ✅ **done 13–14 Aug.** Required building
+   **36 backend endpoints** first: there was no generic update route except `PATCH /customers/:id`,
+   and no `@Delete` route anywhere in the API. Masters got edit + deactivate + guarded delete;
+   the transactional screens got edit-while-unconsumed. See DEV_LOG for the full contract and the
+   per-record boundary table. Every form on every screen now opens pre-filled in edit mode.
 6. **Manual test pass on WS2.4 — next.** Suggested order, because each step feeds the next:
    product → recipe → approve recipe → cleaning & grading → production batch → start → complete →
    quality inspection (in-process) → pack → finished-goods inspection → release → stock in → then
@@ -256,7 +280,7 @@ must not be read as "nearly ready".
 | A-02 | Decision 1 — sales channel scope | SVV Balaji | 12 Aug | ✅ **Closed 11 Aug** — B2B + B2C |
 | A-03 | Decision 2 — GST e-invoicing route | SVV Balaji | 14 Aug | ✅ **Closed 11 Aug** — GSP approved |
 | A-04 | Decision 3 — storage provider & process videos | SVV Balaji | 14 Aug | Open — blocking WS4.1 |
-| A-05 | Decision 4 — multigrain in scope | SVV Balaji | 14 Aug | Open — now visible in the panel: multigrain recipes can be created but not produced |
+| A-05 | Decision 4 — multigrain in scope | SVV Balaji | 14 Aug | ✅ **Closed 14 Aug** — confirmed. Flag removed; blend ratio enforced within 0.5pp on every run |
 | A-06 | Provide customer & product master data | SVV Balaji | 28 Aug | Open |
 | A-07 | Nominate UAT participants | SVV Balaji | 28 Aug | Open |
 | A-08 | Confirm hosting upgrade path | Joint | 21 Aug | Open |

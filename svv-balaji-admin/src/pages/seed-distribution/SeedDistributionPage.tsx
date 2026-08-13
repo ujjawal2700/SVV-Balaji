@@ -9,11 +9,25 @@ import { PageHeader } from '../../components/PageHeader';
 import { FarmerSelect } from '../../components/pickers';
 import { useSeedDistribution } from '../../hooks/useSeedDistribution';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteSeedDistribution } from '../../hooks/useSeedDistribution';
 import { SeedDistributionFormModal } from './SeedDistributionFormModal';
 
 export function SeedDistributionPage() {
   const [farmerId, setFarmerId] = useState<string | undefined>();
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<SeedDistribution | null>(null);
+  const remove = useDeleteSeedDistribution();
+
+  const openEdit = (record: SeedDistribution) => {
+    setEditing(record);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
   const distributions = useSeedDistribution(farmerId);
 
   const columns: ColumnsType<SeedDistribution> = [
@@ -69,6 +83,22 @@ export function SeedDistributionPage() {
       key: 'distributedBy',
       render: (_, row) => row.distributedBy?.fullName ?? EM_DASH,
     },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 150,
+      fixed: 'right',
+      render: (_, row) => (
+        <RowActions
+          entity="distribution record"
+          label={`the ${row.seedName} handout`}
+          can="SEED_DISTRIBUTION_EDIT"
+          canDelete="RECORD_DELETE"
+          onEdit={() => openEdit(row)}
+          onDelete={() => remove.mutateAsync(row.id)}
+        />
+      ),
+    },
   ];
 
   const toolbar = (
@@ -110,7 +140,7 @@ export function SeedDistributionPage() {
         emptyText={farmerId ? 'Nothing issued to this farmer yet' : 'No distributions logged yet'}
       />
 
-      <SeedDistributionFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <SeedDistributionFormModal open={formOpen} record={editing} onClose={closeForm} />
     </Card>
   );
 }

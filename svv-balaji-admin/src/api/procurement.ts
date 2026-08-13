@@ -9,6 +9,8 @@ import type {
   InspectionResult,
   ProcurementPlan,
   ProcurementPlanStatus,
+  UpdateHarvestInspectionInput,
+  UpdateProcurementPlanInput,
 } from './types';
 
 export const procurementApi = {
@@ -29,7 +31,19 @@ export const procurementApi = {
     return unwrap<ProcurementPlan>(response.data);
   },
 
-  async updatePlan(id: string, input: Partial<CreateProcurementPlanInput>): Promise<ProcurementPlan> {
+  async setPlanStatus(id: string, status: ProcurementPlanStatus): Promise<ProcurementPlan> {
+    const response = await api.patch<ProcurementPlan>(`/procurement-plans/${id}/status`, {
+      status,
+    });
+    return unwrap<ProcurementPlan>(response.data);
+  },
+
+  /**
+   * DRAFT and SCHEDULED only. Once a plan is IN_PROGRESS its planned quantity
+   * is the number actual procurement is measured against, so editing it would
+   * rewrite the variance rather than record it.
+   */
+  async updatePlan(id: string, input: UpdateProcurementPlanInput): Promise<ProcurementPlan> {
     const response = await api.patch<ProcurementPlan>(
       `/procurement-plans/${id}`,
       pruneEmpty(input),
@@ -37,15 +51,8 @@ export const procurementApi = {
     return unwrap<ProcurementPlan>(response.data);
   },
 
-  async deletePlan(id: string): Promise<void> {
+  async removePlan(id: string): Promise<void> {
     await api.delete(`/procurement-plans/${id}`);
-  },
-
-  async setPlanStatus(id: string, status: ProcurementPlanStatus): Promise<ProcurementPlan> {
-    const response = await api.patch<ProcurementPlan>(`/procurement-plans/${id}/status`, {
-      status,
-    });
-    return unwrap<ProcurementPlan>(response.data);
   },
 
   // --- Harvest inspection (FRD 13.2 - 13.5) ---------------------------------
@@ -78,18 +85,6 @@ export const procurementApi = {
     return unwrap<HarvestInspection>(response.data);
   },
 
-  async updateInspection(id: string, input: Partial<CreateHarvestInspectionInput>): Promise<HarvestInspection> {
-    const response = await api.patch<HarvestInspection>(
-      `/harvest-inspections/${id}`,
-      pruneEmpty(input),
-    );
-    return unwrap<HarvestInspection>(response.data);
-  },
-
-  async deleteInspection(id: string): Promise<void> {
-    await api.delete(`/harvest-inspections/${id}`);
-  },
-
   async addInspectionDocument(
     id: string,
     input: AddDocumentInput,
@@ -99,5 +94,32 @@ export const procurementApi = {
       pruneEmpty(input),
     );
     return unwrap<HarvestInspectionDocument>(response.data);
+  },
+
+  /**
+   * Locked server-side once a collection exists against this inspection: the
+   * result is what allowed that collection, and the crop name is carried onto
+   * its batch.
+   */
+  async updateInspection(
+    id: string,
+    input: UpdateHarvestInspectionInput,
+  ): Promise<HarvestInspection> {
+    const response = await api.patch<HarvestInspection>(
+      `/harvest-inspections/${id}`,
+      pruneEmpty(input),
+    );
+    return unwrap<HarvestInspection>(response.data);
+  },
+
+  async removeInspection(id: string): Promise<void> {
+    await api.delete(`/harvest-inspections/${id}`);
+  },
+
+  async removeInspectionDocument(id: string, documentId: string): Promise<HarvestInspection> {
+    const response = await api.delete<HarvestInspection>(
+      `/harvest-inspections/${id}/documents/${documentId}`,
+    );
+    return unwrap<HarvestInspection>(response.data);
   },
 };

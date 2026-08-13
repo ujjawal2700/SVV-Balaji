@@ -2,9 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InspectionResult, ProcurementPlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProcurementPlanDto } from './dto/create-procurement-plan.dto';
-import { UpdateProcurementPlanDto } from './dto/update-procurement-plan.dto';
 import { CreateHarvestInspectionDto } from './dto/create-harvest-inspection.dto';
-import { UpdateHarvestInspectionDto } from './dto/update-harvest-inspection.dto';
+import {
+  UpdateHarvestInspectionDto,
+  UpdateProcurementPlanDto,
+} from './dto/update-procurement.dto';
+import { assertDeletable } from '../common/dependants';
 
 @Injectable()
 export class ProcurementService {
@@ -45,39 +48,86 @@ export class ProcurementService {
     });
   }
 
+  async findPlan(id: string) {
+    const plan = await this.prisma.procurementPlan.findUnique({
+      where: { id },
+      include: {
+        branch: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, fullName: true } },
+        _count: { select: { inspections: true } },
+      },
+    });
+    if (!plan) throw new NotFoundException('Procurement plan not found');
+    return plan;
+  }
+
   async updatePlanStatus(id: string, status: ProcurementPlanStatus) {
     const plan = await this.prisma.procurementPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Procurement plan not found');
     return this.prisma.procurementPlan.update({ where: { id }, data: { status } });
   }
 
+  /**
+   * Correcting a plan.
+   *
+   * A plan is a forecast, so it stays editable while it is still a forecast -
+   * DRAFT or SCHEDULED. Once it moves to IN_PROGRESS inspections are being
+   * raised against it and the planned quantity is the number actual procurement
+   * is measured against; editing it then would quietly rewrite the variance
+   * rather than record it. COMPLETED and CANCELLED are history.
+   */
   async updatePlan(id: string, dto: UpdateProcurementPlanDto) {
     const plan = await this.prisma.procurementPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Procurement plan not found');
 
-    const data: any = { ...dto };
-    if (dto.scheduledFrom) data.scheduledFrom = new Date(dto.scheduledFrom);
-    if (dto.scheduledTo) data.scheduledTo = new Date(dto.scheduledTo);
+    const EDITABLE: ProcurementPlanStatus[] = [
+      ProcurementPlanStatus.DRAFT,
+      ProcurementPlanStatus.SCHEDULED,
+    ];
+    if (!EDITABLE.includes(plan.status)) {
+      throw new BadRequestException(
+        `This plan is ${plan.status}, so its targets are fixed - the planned quantity is what ` +
+          `actual procurement is being measured against. Only DRAFT and SCHEDULED plans can be ` +
+          `edited.`,
+      );
+    }
 
-    if (data.scheduledTo && data.scheduledFrom && data.scheduledTo < data.scheduledFrom) {
+    const from = dto.scheduledFrom ? new Date(dto.scheduledFrom) : plan.scheduledFrom;
+    const to = dto.scheduledTo ? new Date(dto.scheduledTo) : plan.scheduledTo;
+    if (to < from) {
       throw new BadRequestException('scheduledTo cannot be earlier than scheduledFrom');
     }
 
-    return this.prisma.procurementPlan.update({ where: { id }, data });
+    return this.prisma.procurementPlan.update({
+      where: { id },
+      data: {
+        cropName: dto.cropName,
+        plannedQuantity: dto.plannedQuantity,
+        unit: dto.unit,
+        scheduledFrom: dto.scheduledFrom ? from : undefined,
+        scheduledTo: dto.scheduledTo ? to : undefined,
+        branchId: dto.branchId,
+        notes: dto.notes,
+      },
+      include: {
+        branch: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, fullName: true } },
+        _count: { select: { inspections: true } },
+      },
+    });
   }
 
-  async deletePlan(id: string) {
-    const plan = await this.prisma.procurementPlan.findUnique({ 
-      where: { id },
-      include: { _count: { select: { inspections: true } } }
-    });
+  async removePlan(id: string) {
+    const plan = await this.prisma.procurementPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Procurement plan not found');
 
-    if (plan._count.inspections > 0) {
-      throw new BadRequestException('Cannot delete a plan that has associated harvest inspections');
-    }
+    const inspections = await this.prisma.harvestInspection.count({
+      where: { procurementPlanId: id },
+    });
+    assertDeletable('Procurement plan', `${plan.cropName} plan`, { inspections });
 
-    return this.prisma.procurementPlan.delete({ where: { id } });
+    await this.prisma.procurementPlan.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
   // --- Harvest Inspection (FRD 13.2 - 13.5) --------------------------------
@@ -152,42 +202,6 @@ export class ProcurementService {
     return inspection;
   }
 
-  async updateInspection(id: string, dto: UpdateHarvestInspectionDto) {
-    const inspection = await this.prisma.harvestInspection.findUnique({ where: { id } });
-    if (!inspection) throw new NotFoundException('Harvest inspection not found');
-
-    if (dto.farmerId && dto.farmerId !== inspection.farmerId) {
-      const farmer = await this.prisma.farmer.findUnique({ where: { id: dto.farmerId } });
-      if (!farmer || farmer.status !== 'ACTIVE' || !farmer.farmerCode) {
-        throw new BadRequestException('Farmer must be approved and hold a traceability code');
-      }
-    }
-
-    const data: any = { ...dto };
-    if (dto.inspectionDate) {
-      data.inspectionDate = new Date(dto.inspectionDate);
-    }
-
-    return this.prisma.harvestInspection.update({
-      where: { id },
-      data,
-    });
-  }
-
-  async deleteInspection(id: string) {
-    const inspection = await this.prisma.harvestInspection.findUnique({ 
-      where: { id },
-      include: { collection: true }
-    });
-    if (!inspection) throw new NotFoundException('Harvest inspection not found');
-
-    if (inspection.collection) {
-      throw new BadRequestException('Cannot delete an inspection that has already been collected');
-    }
-
-    return this.prisma.harvestInspection.delete({ where: { id } });
-  }
-
   async addInspectionDocument(inspectionId: string, fileUrl: string, fileType: string) {
     const inspection = await this.prisma.harvestInspection.findUnique({
       where: { id: inspectionId },
@@ -197,5 +211,103 @@ export class ProcurementService {
     return this.prisma.harvestInspectionDocument.create({
       data: { inspectionId, fileUrl, fileType },
     });
+  }
+
+  /**
+   * Correcting an inspection.
+   *
+   * Locked once a collection has been recorded against it. The inspection's
+   * `result` is the gate that allowed that collection to happen at all, and its
+   * `cropName` is copied onto the collection and its batch - so an edit here
+   * would either retroactively justify a collection that should not have been
+   * allowed, or leave a batch labelled with a crop its inspection no longer
+   * mentions. Neither is discoverable afterwards.
+   *
+   * Before collection, everything is fair game: a moisture reading typed into
+   * the wrong field is exactly what this is for.
+   */
+  async updateInspection(id: string, dto: UpdateHarvestInspectionDto) {
+    const inspection = await this.prisma.harvestInspection.findUnique({
+      where: { id },
+      include: { collection: { select: { receiptNumber: true } } },
+    });
+    if (!inspection) throw new NotFoundException('Harvest inspection not found');
+
+    if (inspection.collection) {
+      throw new BadRequestException(
+        `This harvest was already collected on receipt ${inspection.collection.receiptNumber}. ` +
+          `The inspection result is what allowed that collection, and the crop name is carried ` +
+          `onto the batch, so neither can be changed now. Record a new inspection if the crop ` +
+          `was re-examined.`,
+      );
+    }
+
+    if (dto.agreementId) {
+      const agreement = await this.prisma.agreement.findUnique({ where: { id: dto.agreementId } });
+      if (!agreement) throw new NotFoundException('Agreement not found');
+      if (agreement.farmerId !== inspection.farmerId) {
+        throw new BadRequestException('Agreement does not belong to this farmer');
+      }
+    }
+
+    return this.prisma.harvestInspection.update({
+      where: { id },
+      data: {
+        agreementId: dto.agreementId,
+        procurementPlanId: dto.procurementPlanId,
+        cropName: dto.cropName,
+        inspectionDate: dto.inspectionDate ? new Date(dto.inspectionDate) : undefined,
+        moistureLevel: dto.moistureLevel,
+        foreignMatter: dto.foreignMatter,
+        grainSize: dto.grainSize,
+        grainColor: dto.grainColor,
+        smell: dto.smell,
+        physicalDamage: dto.physicalDamage,
+        result: dto.result,
+        remarks: dto.remarks,
+      },
+      include: {
+        farmer: { select: { id: true, fullName: true, farmerCode: true } },
+        inspectedBy: { select: { id: true, fullName: true } },
+        collection: { select: { id: true, receiptNumber: true } },
+      },
+    });
+  }
+
+  async removeInspection(id: string) {
+    const inspection = await this.prisma.harvestInspection.findUnique({
+      where: { id },
+      include: { collection: { select: { receiptNumber: true } } },
+    });
+    if (!inspection) throw new NotFoundException('Harvest inspection not found');
+
+    if (inspection.collection) {
+      throw new BadRequestException(
+        `This harvest was already collected on receipt ${inspection.collection.receiptNumber}, ` +
+          `and that collection's batch traces back through this inspection. Delete the ` +
+          `collection first if the whole thing was recorded in error.`,
+      );
+    }
+
+    // Photographs and quality certificates are attachments to the inspection,
+    // meaningless once it is gone.
+    await this.prisma.$transaction([
+      this.prisma.harvestInspectionDocument.deleteMany({ where: { inspectionId: id } }),
+      this.prisma.harvestInspection.delete({ where: { id } }),
+    ]);
+
+    return { id, deleted: true };
+  }
+
+  async removeInspectionDocument(inspectionId: string, documentId: string) {
+    const document = await this.prisma.harvestInspectionDocument.findUnique({
+      where: { id: documentId },
+    });
+    if (!document || document.inspectionId !== inspectionId) {
+      throw new NotFoundException('Document not found on this inspection');
+    }
+
+    await this.prisma.harvestInspectionDocument.delete({ where: { id: documentId } });
+    return this.findInspection(inspectionId);
   }
 }

@@ -7,6 +7,7 @@ import type {
   PaymentStatus,
   RawMaterialBatch,
   RawMaterialCollection,
+  UpdateCollectionInput,
 } from './types';
 
 export const collectionsApi = {
@@ -35,15 +36,6 @@ export const collectionsApi = {
     return unwrap<RawMaterialCollection>(response.data);
   },
 
-  async update(id: string, input: Partial<CreateCollectionInput>): Promise<RawMaterialCollection> {
-    const response = await api.patch<RawMaterialCollection>(`/collections/${id}`, pruneEmpty(input));
-    return unwrap<RawMaterialCollection>(response.data);
-  },
-
-  async delete(id: string): Promise<void> {
-    await api.delete(`/collections/${id}`);
-  },
-
   async setPaymentStatus(
     id: string,
     paymentStatus: PaymentStatus,
@@ -53,6 +45,25 @@ export const collectionsApi = {
       { paymentStatus },
     );
     return unwrap<RawMaterialCollection>(response.data);
+  },
+
+  /**
+   * Weights and rate only, and only while the batch is untouched. A net weight
+   * change reaches the batch quantity, the warehouse stock line and the
+   * movement ledger in one server-side transaction — which is why this is a
+   * single call rather than the screen doing three.
+   */
+  async update(id: string, input: UpdateCollectionInput): Promise<RawMaterialCollection> {
+    const response = await api.patch<RawMaterialCollection>(
+      `/collections/${id}`,
+      pruneEmpty(input),
+    );
+    return unwrap<RawMaterialCollection>(response.data);
+  },
+
+  /** Deletes the batch, its stock line and its receipt movement with it. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/collections/${id}`);
   },
 };
 

@@ -1,7 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../api/queryKeys';
 import { trainingApi } from '../api/training';
-import type { AddTrainingMaterialInput, CreateTrainingSessionInput } from '../api/types';
+import type {
+  AddTrainingMaterialInput,
+  CreateTrainingSessionInput,
+  UpdateTrainingSessionInput,
+} from '../api/types';
 
 export function useTrainingSessions(branchId?: string) {
   return useQuery({
@@ -49,6 +53,55 @@ export function useAddTrainingMaterial() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: AddTrainingMaterialInput }) =>
       trainingApi.addMaterial(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.training.all });
+    },
+  });
+}
+
+export function useUpdateTrainingSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateTrainingSessionInput }) =>
+      trainingApi.update(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.training.all });
+    },
+  });
+}
+
+export function useDeleteTrainingSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => trainingApi.remove(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.training.all });
+    },
+  });
+}
+
+export function useRemoveAttendance() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, farmerId }: { id: string; farmerId: string }) =>
+      trainingApi.removeAttendance(id, farmerId),
+    onSuccess: () => {
+      // The list carries an attendance count, so it goes stale too - not just
+      // the drawer the row was removed from.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.training.all });
+    },
+  });
+}
+
+export function useRemoveTrainingMaterial() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, materialId }: { id: string; materialId: string }) =>
+      trainingApi.removeMaterial(id, materialId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.training.all });
     },

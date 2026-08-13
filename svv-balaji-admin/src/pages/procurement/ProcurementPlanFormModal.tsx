@@ -1,16 +1,19 @@
 import { App as AntApp, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
+import type { ProcurementPlan } from '../../api/types';
 import { BranchSelect } from '../../components/pickers';
-import { useCreateProcurementPlan, useUpdateProcurementPlan } from '../../hooks/useProcurement';
+import {
+  useCreateProcurementPlan,
+  useUpdateProcurementPlan,
+} from '../../hooks/useProcurement';
 import { toIsoDate } from '../../utils/format';
 import { dateAfter, positiveNumber, required } from '../../validation/rules';
-import type { ProcurementPlan } from '../../api/types';
-import dayjs from 'dayjs';
 
 interface ProcurementPlanFormModalProps {
   open: boolean;
+  /** Present means edit; absent means create. */
   plan?: ProcurementPlan | null;
   onClose: () => void;
 }
@@ -35,34 +38,36 @@ export function ProcurementPlanFormModal({ open, plan, onClose }: ProcurementPla
 
   const isEdit = Boolean(plan);
 
-  const initialValues = plan ? {
-    cropName: plan.cropName,
-    plannedQuantity: plan.plannedQuantity,
-    unit: plan.unit,
-    scheduledFrom: dayjs(plan.scheduledFrom),
-    scheduledTo: dayjs(plan.scheduledTo),
-    branchId: plan.branchId,
-    notes: plan.notes ?? undefined,
-  } : { unit: 'KG' };
-
   useEffect(() => {
-    if (open && !plan) form.resetFields();
+    if (!open) return;
+    form.resetFields();
+    if (plan) {
+      form.setFieldsValue({
+        cropName: plan.cropName,
+        plannedQuantity: Number(plan.plannedQuantity),
+        unit: plan.unit,
+        scheduledFrom: dayjs(plan.scheduledFrom),
+        scheduledTo: dayjs(plan.scheduledTo),
+        branchId: plan.branchId,
+        notes: plan.notes ?? undefined,
+      });
+    }
   }, [open, plan, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
-    try {
-      const payload = {
-        cropName: values.cropName,
-        plannedQuantity: values.plannedQuantity,
-        unit: values.unit,
-        scheduledFrom: toIsoDate(values.scheduledFrom) as string,
-        scheduledTo: toIsoDate(values.scheduledTo) as string,
-        branchId: values.branchId,
-        notes: values.notes,
-      };
+    const payload = {
+      cropName: values.cropName,
+      plannedQuantity: values.plannedQuantity,
+      unit: values.unit,
+      scheduledFrom: toIsoDate(values.scheduledFrom) as string,
+      scheduledTo: toIsoDate(values.scheduledTo) as string,
+      branchId: values.branchId,
+      notes: values.notes,
+    };
 
-      if (isEdit && plan) {
+    try {
+      if (plan) {
         await updatePlan.mutateAsync({ id: plan.id, input: payload });
         message.success('Procurement plan updated');
       } else {
@@ -71,14 +76,14 @@ export function ProcurementPlanFormModal({ open, plan, onClose }: ProcurementPla
       }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'create'} the plan`));
+      message.error(apiErrorMessage(error, `Could not ${isEdit ? 'update' : 'create'} the plan`), 8);
     }
   };
 
   return (
     <Modal
       open={open}
-      title={isEdit ? 'Edit procurement plan' : 'New procurement plan'}
+      title={isEdit ? `Edit plan — ${plan?.cropName}` : 'New procurement plan'}
       okText={isEdit ? 'Save changes' : 'Create plan'}
       onOk={handleSubmit}
       onCancel={onClose}
@@ -91,7 +96,7 @@ export function ProcurementPlanFormModal({ open, plan, onClose }: ProcurementPla
         layout="vertical"
         requiredMark
         preserve={false}
-        initialValues={initialValues}
+        initialValues={{ unit: 'KG' }}
       >
         <Row gutter={16}>
           <Col xs={24} md={12}>

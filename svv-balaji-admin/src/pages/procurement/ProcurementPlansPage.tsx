@@ -13,9 +13,10 @@ import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
 import { BranchSelect } from '../../components/pickers';
-import { RowActions } from '../../components/RowActions';
-import { useProcurementPlans, useSetPlanStatus, useDeleteProcurementPlan } from '../../hooks/useProcurement';
+import { useProcurementPlans, useSetPlanStatus } from '../../hooks/useProcurement';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteProcurementPlan } from '../../hooks/useProcurement';
 import { ProcurementPlanFormModal } from './ProcurementPlanFormModal';
 
 const STATUS_COLOURS: Record<ProcurementPlanStatus, string> = {
@@ -37,14 +38,10 @@ export function ProcurementPlansPage() {
   }>({});
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProcurementPlan | null>(null);
-
-  const plans = useProcurementPlans(filters);
-  const setStatus = useSetPlanStatus();
   const remove = useDeleteProcurementPlan();
-  const canEdit = useCan('PROCUREMENT_PLAN_CREATE');
 
-  const openForm = (plan?: ProcurementPlan) => {
-    setEditing(plan ?? null);
+  const openEdit = (plan: ProcurementPlan) => {
+    setEditing(plan);
     setFormOpen(true);
   };
 
@@ -52,6 +49,10 @@ export function ProcurementPlansPage() {
     setFormOpen(false);
     setEditing(null);
   };
+
+  const plans = useProcurementPlans(filters);
+  const setStatus = useSetPlanStatus();
+  const canEdit = useCan('PROCUREMENT_PLAN_CREATE');
 
   const handleStatusChange = async (plan: ProcurementPlan, status: ProcurementPlanStatus) => {
     try {
@@ -133,22 +134,30 @@ export function ProcurementPlansPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       fixed: 'right',
-      render: (_, plan) => (
-        <RowActions
-          entity="plan"
-          label={`${plan.cropName} (${formatQuantity(plan.plannedQuantity, plan.unit)})`}
-          can="PROCUREMENT_PLAN_EDIT"
-          onEdit={() => openForm(plan)}
-          onDelete={() => remove.mutateAsync(plan.id)}
-          deleteBlockedReason={
-            (plan._count?.inspections ?? 0) > 0
-              ? 'Cannot delete because this plan has associated harvest inspections'
-              : undefined
-          }
-        />
-      ),
+      render: (_, plan) => {
+        // A plan stops being a forecast once it is IN_PROGRESS - the planned
+        // quantity is then the number actual intake is measured against.
+        const editable = plan.status === 'DRAFT' || plan.status === 'SCHEDULED';
+        const inspections = plan._count?.inspections ?? 0;
+
+        return (
+          <RowActions
+            entity="procurement plan"
+            label={`the ${plan.cropName} plan`}
+            can="PROCUREMENT_PLAN_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={editable ? () => openEdit(plan) : undefined}
+            onDelete={() => remove.mutateAsync(plan.id)}
+            deleteBlockedReason={
+              inspections > 0
+                ? `${inspections} harvest inspection${inspections === 1 ? '' : 's'} booked against this plan`
+                : undefined
+            }
+          />
+        );
+      },
     },
   ];
 
@@ -182,7 +191,7 @@ export function ProcurementPlansPage() {
         subtitle="What to buy, from where, and when (FRD 13.1). Harvest inspections can be booked against a plan so the intake is measurable against it."
         actions={
           <Can do="PROCUREMENT_PLAN_CREATE">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               New plan
             </Button>
           </Can>
@@ -201,11 +210,7 @@ export function ProcurementPlansPage() {
         emptyText="No procurement plans yet"
       />
 
-      <ProcurementPlanFormModal
-        open={formOpen}
-        plan={editing}
-        onClose={closeForm}
-      />
+      <ProcurementPlanFormModal open={formOpen} plan={editing} onClose={closeForm} />
     </Card>
   );
 }

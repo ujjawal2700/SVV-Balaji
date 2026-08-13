@@ -53,34 +53,37 @@ export const PERMISSIONS = {
   FARMER_DELETE: ['SUPER_ADMIN'],
 
   // --- Phase 1 (registered now so WS2.2 screens have them ready) ------------
-  /** POST /agreements - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
+  /** POST and PATCH /agreements - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
   AGREEMENT_CREATE: ['PROCUREMENT_MANAGER'],
-  /** POST /seed-distribution - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT), FRD 5.4 */
+  AGREEMENT_EDIT: ['PROCUREMENT_MANAGER'],
+  /** POST and PATCH /seed-distribution - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT), FRD 5.4 */
   SEED_DISTRIBUTION_CREATE: ['AGRICULTURE_EXPERT'],
-  /** POST /training-sessions - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT) */
+  SEED_DISTRIBUTION_EDIT: ['AGRICULTURE_EXPERT'],
+  /** POST and PATCH /training-sessions - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT) */
   TRAINING_CREATE: ['AGRICULTURE_EXPERT'],
-  /** POST /field-visits - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT) */
+  TRAINING_EDIT: ['AGRICULTURE_EXPERT'],
+  /** POST and PATCH /field-visits - @Roles(SUPER_ADMIN, AGRICULTURE_EXPERT) */
   FIELD_VISIT_CREATE: ['AGRICULTURE_EXPERT'],
+  FIELD_VISIT_EDIT: ['AGRICULTURE_EXPERT'],
+
+  /**
+   * Every DELETE added on 13 Aug is @Roles(SUPER_ADMIN) only, whatever roles
+   * may create the record. One permission covers them all, because the backend
+   * guards them identically - the per-record "can this actually be deleted"
+   * question is answered by the server, not here.
+   */
+  RECORD_DELETE: ['SUPER_ADMIN'],
 
   // --- Phase 2 --------------------------------------------------------------
-  /** POST /procurement-plans - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, BRANCH_MANAGER) */
+  /** POST and PATCH /procurement-plans - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, BRANCH_MANAGER) */
   PROCUREMENT_PLAN_CREATE: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER'],
-  /** PATCH /procurement-plans/:id - @Roles(SUPER_ADMIN) */
-  PROCUREMENT_PLAN_EDIT: ['SUPER_ADMIN'],
-  /** DELETE /procurement-plans/:id - @Roles(SUPER_ADMIN) */
-  PROCUREMENT_PLAN_DELETE: ['SUPER_ADMIN'],
-  /** POST /harvest-inspections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, QA_MANAGER) */
+  PROCUREMENT_PLAN_EDIT: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER'],
+  /** POST and PATCH /harvest-inspections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER, QA_MANAGER) */
   HARVEST_INSPECTION_CREATE: ['PROCUREMENT_MANAGER', 'QA_MANAGER'],
-  /** PATCH /harvest-inspections/:id - @Roles(SUPER_ADMIN) */
-  HARVEST_INSPECTION_EDIT: ['SUPER_ADMIN'],
-  /** DELETE /harvest-inspections/:id - @Roles(SUPER_ADMIN) */
-  HARVEST_INSPECTION_DELETE: ['SUPER_ADMIN'],
-  /** POST /collections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
+  HARVEST_INSPECTION_EDIT: ['PROCUREMENT_MANAGER', 'QA_MANAGER'],
+  /** POST and PATCH /collections - @Roles(SUPER_ADMIN, PROCUREMENT_MANAGER) */
   COLLECTION_CREATE: ['PROCUREMENT_MANAGER'],
-  /** PATCH /collections/:id - @Roles(SUPER_ADMIN) */
-  COLLECTION_EDIT: ['SUPER_ADMIN'],
-  /** DELETE /collections/:id - @Roles(SUPER_ADMIN) */
-  COLLECTION_DELETE: ['SUPER_ADMIN'],
+  COLLECTION_EDIT: ['PROCUREMENT_MANAGER'],
   /** POST /warehouses - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
   WAREHOUSE_CREATE: ['BRANCH_MANAGER'],
   /** PATCH /warehouses/:id and /active - @Roles(SUPER_ADMIN, BRANCH_MANAGER) */
@@ -100,10 +103,6 @@ export const PERMISSIONS = {
   CLEANING_GRADING_CREATE: ['PRODUCTION_MANAGER', 'QA_MANAGER'],
   /** POST /production-batches - @Roles(SUPER_ADMIN, PRODUCTION_MANAGER) */
   PRODUCTION_BATCH_CREATE: ['PRODUCTION_MANAGER'],
-  /** PATCH /production-batches/:id - @Roles(SUPER_ADMIN) */
-  PRODUCTION_BATCH_EDIT: ['SUPER_ADMIN'],
-  /** DELETE /production-batches/:id - @Roles(SUPER_ADMIN) */
-  PRODUCTION_BATCH_DELETE: ['SUPER_ADMIN'],
   /** POST /quality-inspections and the release gate - @Roles(SUPER_ADMIN, QA_MANAGER), FRD 21.5 */
   QUALITY_INSPECT: ['QA_MANAGER'],
   QUALITY_RELEASE: ['QA_MANAGER'],

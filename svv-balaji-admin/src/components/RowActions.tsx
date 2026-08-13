@@ -30,8 +30,16 @@ export interface RowActionsProps {
   /** The kind of record, lower case, e.g. "branch". */
   entity: string;
 
-  /** Permission required for all three actions. */
+  /** Permission required for edit and deactivate. */
   can?: Permission;
+
+  /**
+   * Permission required for delete, when it differs from `can`. Every DELETE
+   * route in this API is Super Admin only, while edit is usually open to the
+   * roles that create the record - so the two genuinely diverge and a single
+   * prop would hide Edit from people who have it.
+   */
+  canDelete?: Permission;
 
   /**
    * Set when this particular row must not be deleted, with the reason. The
@@ -68,6 +76,7 @@ export function RowActions({
   label,
   entity,
   can,
+  canDelete,
   deleteBlockedReason,
   extraItems,
   busy,
@@ -76,6 +85,7 @@ export function RowActions({
   const { message, modal } = AntApp.useApp();
   const canFn = useCanFn();
   const allowed = can ? canFn(can) : true;
+  const allowedToDelete = canDelete ? canFn(canDelete) : allowed;
 
   if (!allowed) {
     // Still render anything the caller passed - a read-only "View" button is
@@ -157,7 +167,7 @@ export function RowActions({
     items.push(...extraItems);
   }
 
-  if (onDelete) {
+  if (onDelete && allowedToDelete) {
     if (items.length) items.push({ type: 'divider' });
     items.push({
       key: 'delete',

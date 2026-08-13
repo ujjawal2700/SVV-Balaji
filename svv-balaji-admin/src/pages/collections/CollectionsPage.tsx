@@ -13,9 +13,11 @@ import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
 import { BranchSelect, FarmerSelect } from '../../components/pickers';
-import { RowActions } from '../../components/RowActions';
-import { useCollections, useSetPaymentStatus, useDeleteCollection } from '../../hooks/useCollections';
+import { useCollections, useSetPaymentStatus } from '../../hooks/useCollections';
 import { EM_DASH, formatCurrency, formatDate, formatQuantity } from '../../utils/format';
+import { RowActions } from '../../components/RowActions';
+import { useDeleteCollection } from '../../hooks/useCollections';
+import { CollectionCorrectionModal } from './CollectionCorrectionModal';
 import { CollectionFormModal } from './CollectionFormModal';
 
 const PAYMENT_COLOURS: Record<PaymentStatus, string> = {
@@ -30,22 +32,12 @@ export function CollectionsPage() {
   const { message } = AntApp.useApp();
   const [filters, setFilters] = useState<{ farmerId?: string; branchId?: string }>({});
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<RawMaterialCollection | null>(null);
+  const [correcting, setCorrecting] = useState<RawMaterialCollection | null>(null);
+  const remove = useDeleteCollection();
 
   const collections = useCollections(filters);
   const setPayment = useSetPaymentStatus();
-  const remove = useDeleteCollection();
   const canEdit = useCan('COLLECTION_CREATE');
-
-  const openForm = (collection?: RawMaterialCollection) => {
-    setEditing(collection ?? null);
-    setFormOpen(true);
-  };
-
-  const closeForm = () => {
-    setFormOpen(false);
-    setEditing(null);
-  };
 
   const handlePaymentChange = async (
     collection: RawMaterialCollection,
@@ -147,22 +139,34 @@ export function CollectionsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       fixed: 'right',
-      render: (_, row) => (
-        <RowActions
-          entity="collection"
-          label={row.receiptNumber}
-          can="COLLECTION_EDIT"
-          onEdit={() => openForm(row)}
-          onDelete={() => remove.mutateAsync(row.id)}
-          deleteBlockedReason={
-            row.batch?.status !== 'COLLECTED'
-              ? 'Cannot delete because this collection has subsequent stock movements'
-              : undefined
-          }
-        />
-      ),
+      render: (_, row) => {
+        // The server's own guards are stricter than anything the list can see -
+        // it also checks whether the batch has been cleaned, consumed or moved.
+        // These two are the ones the list already knows, so they are worth
+        // saying up front rather than after the confirm dialog.
+        const paid =
+          row.paymentStatus !== 'PENDING'
+            ? `The farmer has been paid against ${row.receiptNumber} — deleting it would leave the payment with nothing to reconcile against`
+            : undefined;
+        const inUse =
+          row.batch && row.batch.status !== 'COLLECTED' && row.batch.status !== 'STORED'
+            ? `Batch ${row.batch.batchNumber} is ${row.batch.status.toLowerCase().replace(/_/g, ' ')} — it has moved on into production`
+            : undefined;
+
+        return (
+          <RowActions
+            entity="collection"
+            label={row.receiptNumber}
+            can="COLLECTION_EDIT"
+            canDelete="RECORD_DELETE"
+            onEdit={() => setCorrecting(row)}
+            onDelete={() => remove.mutateAsync(row.id)}
+            deleteBlockedReason={paid ?? inUse}
+          />
+        );
+      },
     },
   ];
 
@@ -202,7 +206,7 @@ export function CollectionsPage() {
         }
         actions={
           <Can do="COLLECTION_CREATE">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               Record collection
             </Button>
           </Can>
@@ -221,11 +225,8 @@ export function CollectionsPage() {
         emptyText="Nothing collected yet"
       />
 
-      <CollectionFormModal
-        open={formOpen}
-        collection={editing}
-        onClose={closeForm}
-      />
+      <CollectionFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      <CollectionCorrectionModal collection={correcting} onClose={() => setCorrecting(null)} />
     </Card>
   );
 }
