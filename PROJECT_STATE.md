@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 14 August 2026 · **Updated by:** Raunak
+**Last updated:** 15 August 2026 · **Updated by:** Raunak
 **Programme week:** 2 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -73,10 +73,17 @@ Consequences for the build, so nobody designs the wrong thing:
   farmer notifications requiring an app install.
 - `TrainingSession`, `TrainingAttendance` and `TrainingMaterial` are **executive-entered**.
   Attendance is marked in bulk against a session (already implemented, idempotent via upsert).
-- The **Agriculture Expert mobile app (WS3.1) must work offline.** The executive is standing in a
-  field with poor connectivity. Capture locally, sync on return. This is why Flutter was chosen —
-  do not weaken this requirement.
-- Same pattern applies to field visits and crop monitoring: executive-captured, offline-first.
+- **WS3.1 changed on 15 Aug: no Flutter.** The Agriculture Expert interface is now a responsive web
+  panel in the existing React codebase (`/field`), with a phone layout that reads as an app —
+  bottom tabs, bottom sheets, card lists. One codebase, one set of validation rules, no app store,
+  works on whatever handset the executive already owns.
+- **This weakens the offline requirement, deliberately.** A website needs a connection. What it
+  serves is the workflow the client actually described — the executive returns to the branch and
+  writes the day up. Field capture with no signal would need a service worker plus an IndexedDB
+  queue: real work, but *this* codebase rather than a second one, and addable later without
+  rewriting the panel. **Worth confirming with the client rather than assuming either way.**
+- Same pattern applies to field visits and crop monitoring: executive-captured, written up on
+  return.
 
 ---
 
@@ -133,7 +140,7 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
 | WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete, multigrain live |
 | WS2.5 Zone 4 — sales | customers, price lists, orders | ⬜ Placeholders — held on A-13 |
 | WS2.6 Dashboards & reports | trace screen built; dashboards/MIS outstanding | 🟡 15% |
-| — Field executive | `/field` "My Field Work" — the Agriculture Expert landing screen, plus real photo upload replacing paste-a-URL everywhere | ✅ Complete (14 Aug) |
+| — Field executive (WS3.1, rescoped) | `/field` — Home, Visits, Seed, Training. Sider on desktop; bottom tabs, sheets and card lists on a phone. Real photo upload throughout | ✅ Complete (15 Aug) |
 
 Auth is real: boot-time session restore, single-flight token refresh, sign-out, role-filtered
 navigation and route-level role guards, all against the live API. Navigation and routing are both

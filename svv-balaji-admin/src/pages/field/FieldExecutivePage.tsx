@@ -33,11 +33,15 @@ import { TrainingFormModal } from '../training/TrainingFormModal';
  * own. A second field-visit form would be a second set of validation rules to
  * keep in step with the DTO, and they would not stay in step.
  *
- * Note what this screen is NOT: it is not the offline app. WS3.1 is a Flutter
- * app that captures with no signal and syncs on return, and it is still the
- * right answer for someone standing in a field. This is the portal half of the
- * workflow the client actually described — the executive returns to the branch
- * and writes up the day — and it works now.
+ * On a phone this sits inside FieldLayout, which swaps the sider for bottom
+ * tabs. WS3.1 was baselined as a native Flutter app; as of 15 Aug 2026 it is
+ * this instead — one codebase, one set of validation rules, no app store.
+ *
+ * What that trades away is offline capture. A website needs a connection, so
+ * this serves the workflow the client actually described: the executive
+ * returns to the branch and writes the day up. Capture with no signal would
+ * need a service worker and an IndexedDB queue — real work, but additive to
+ * this codebase rather than a second one.
  */
 export function FieldExecutivePage() {
   const navigate = useNavigate();

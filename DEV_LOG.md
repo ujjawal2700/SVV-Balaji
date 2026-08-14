@@ -16,6 +16,82 @@ how each side learns what the other did.
 
 ---
 
+## 2026-08-15 — Raunak
+
+**Did:** Built the Field Executive panel as a responsive web app. **Decision: no Flutter.** WS3.1 was
+baselined as a native offline-first mobile app; it is now the same React codebase, responsive, with
+a phone layout that reads as an app rather than a shrunken website.
+
+### The scope change, stated plainly
+
+`PROJECT_STATE` has carried this line since 11 Aug: *"The Agriculture Expert mobile app (WS3.1) must
+work offline. This is why Flutter was chosen — do not weaken this requirement."*
+
+**This weakens it, and that should be a conscious choice rather than a quiet one.** A website needs
+a connection. An executive standing in a field with no signal cannot use this. What they can do is
+what the client actually described — return to the branch and write the day up — and that is the
+workflow this serves.
+
+If offline capture is still wanted, the answer inside this stack is a service worker plus an
+IndexedDB queue: capture locally, sync on reconnect. It is real work, but it is *this* codebase
+rather than a second one, and it can be added later without rewriting any of what is below. Worth a
+line in the client conversation rather than an assumption either way.
+
+**What we gain:** one codebase instead of two, one set of validation rules instead of two that drift,
+no app store, no device provisioning, and it works on whatever handset the executive already owns.
+
+### Making a website feel like an app
+
+Six things, roughly in order of how much they matter:
+
+1. **Bottom tab bar, not a hamburger.** `FieldLayout` replaces the sider with four fixed tabs —
+   Home, Visits, Seed, Training. Four is the ceiling; five is cramped and six wants a "More" tab,
+   which is where app navigation starts feeling like a menu again. This single change is most of
+   the effect.
+2. **Forms rise from the bottom edge.** `Sheet` renders an antd `Modal` on desktop and a 95%-height
+   bottom `Drawer` on a phone, with full-width actions at the bottom where the thumb is. A centred
+   dialog with a small × is the most recognisable "this is a website" signal there is. The three
+   field forms now use it — no duplication, the same component both ways.
+3. **Cards, not tables.** A `DataTable` on a phone is a horizontal scroll nobody uses; columns past
+   the second are invisible. `FieldList` stacks cards, and the whole card is the tap target rather
+   than a 24px button at the far right.
+4. **`100dvh`, not `100vh`.** Mobile Safari's `vh` includes the browser chrome that hides on
+   scroll, which leaves a bar-height gap at the bottom of every page. This is the single most
+   common reason a responsive site looks broken on iOS.
+5. **16px inputs.** iOS zooms the viewport when a focused input's font is under 16px and does not
+   zoom back out. Second most common reason.
+6. **Safe-area insets.** `env(safe-area-inset-bottom)` keeps the tab bar clear of the iPhone home
+   indicator; without it the last tab sits half under the gesture bar. Plus momentum scrolling, no
+   tap-highlight flash, no text selection on cards, and skeletons instead of spinners so the layout
+   does not jump when data lands.
+
+### Structure
+
+`/field` is the only nested route tree in the app. `FieldLayout` renders the phone shell below
+768px and **`AppLayout` above it** — on a wide screen these screens sit in the ordinary chrome with
+the sider, because on a desktop that is simply better navigation and doing otherwise would be
+styling for its own sake.
+
+Every tab reuses the existing form modals and detail drawers. A second field-visit form would be a
+second set of validation rules to keep in step with the DTO, and they would not stay in step.
+
+**Contract changes:** none. No route, DTO or enum touched — this is entirely panel-side.
+
+**Other developer needs to know (Ujjawal):**
+
+- **`Sheet` and `useIsMobile` are general.** If any admin screen wants the same treatment later,
+  swapping `Modal` for `Sheet` is a one-line change per form.
+- **"Mine" filtering is client-side**, because `/field-visits`, `/seed-distribution` and
+  `/training-sessions` take `farmerId` only. Fine today, wrong the moment A-12 lands — filtering
+  one page rather than the whole set would silently under-report. **An `expertId` (or
+  `conductedById` / `distributedById`) filter on those three endpoints is the proper fix**, and it
+  is a small one.
+- Nothing to run or migrate.
+
+**Next:** WS2.5 — customers, price lists, orders — still wanting an A-13 answer.
+
+---
+
 ## 2026-08-14 (late) — Raunak
 
 **Did:** Started the field executive work — and to do it honestly I had to build the upload layer
