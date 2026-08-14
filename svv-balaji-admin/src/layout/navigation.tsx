@@ -8,28 +8,37 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
-import { USER_ROLES, type UserRole } from '../auth/types';
+import type { Permission } from '../auth/permissions';
 
 /**
- * The single source of truth for what exists in the panel and who may see it.
+ * The single source of truth for what exists in the panel.
  *
  * Both the sidebar menu and the router are generated from this list, so a
  * screen can never appear in one and be missing from the other.
  *
- * `roles` mirrors the backend's `@Roles()` decorators, widened where a role
- * plainly needs to *read* a screen it cannot write to (an Agriculture Expert
- * needs the farmer list even though only Procurement can register one). Super
- * Admin is granted everything implicitly by `hasRole` and is never listed.
+ * Each entry names the PERMISSION that opens it, not the roles. That changed on
+ * 16 August: who holds a permission is a row in the database that a Super Admin
+ * edits from Administration -> Roles & Permissions, so widening access to a
+ * screen no longer means editing this file and shipping a build.
  *
- * This is a usability layer. The API enforces the real boundary - hiding a menu
+ * The keys here must match src/auth/permissions/registry.ts in the backend, and
+ * they are the same key the endpoints behind the screen are guarded with - so a
+ * role that can see the menu entry can also load the data, and one that cannot
+ * gets neither. That agreement is the point; the previous arrangement had the
+ * menu and the API guarded by two lists maintained by hand.
+ *
+ * Still a usability layer. The API enforces the real boundary - hiding a menu
  * item is a courtesy, not a control.
  */
 export interface NavItem {
   key: string;
   path: string;
   label: string;
-  /** Who sees it. Super Admin is implicit. */
-  roles: readonly UserRole[];
+  /**
+   * The permission that opens this screen. Held by whichever roles a Super
+   * Admin has granted it to; Super Admin holds everything implicitly.
+   */
+  permission: Permission;
   /** Shown on the placeholder until the real screen lands. */
   description: string;
   /** Backend routes this screen will drive - handy while wiring WS2.2+. */
@@ -45,8 +54,6 @@ export interface NavSection {
   items: NavItem[];
 }
 
-const ALL_ROLES = USER_ROLES;
-
 export const NAV_SECTIONS: NavSection[] = [
   {
     key: 'overview',
@@ -57,7 +64,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'dashboard',
         path: '/',
         label: 'Dashboard',
-        roles: ALL_ROLES,
+        permission: 'DASHBOARD_VIEW',
         description: 'Operational summary across sourcing, procurement, production and sales.',
         endpoints: [],
         workstream: 'WS2.6',
@@ -65,22 +72,34 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         key: 'field-executive',
         path: '/field',
-        label: 'My Field Work',
-        // Read by the roles that actually do the field work. Everyone else has
-        // no "my visits" to show, so the screen would be an empty shell.
-        roles: ['AGRICULTURE_EXPERT', 'BRANCH_MANAGER'],
+        label: 'Field App',
+        permission: 'FIELD_PANEL',
         description:
-          'The Agriculture Expert landing screen — organised around the day rather than the ' +
-          'tables: log a visit, record a seed handout, run a session, and see what you have ' +
-          'done lately. Field capture with no signal is WS3.1.',
-        endpoints: ['GET /field-visits', 'GET /seed-distribution', 'GET /training-sessions'],
+          'The Agriculture Expert app is a separate build served at /field, with its own login, ' +
+          'its own session and its own icon on the phone home screen. This entry hands you over ' +
+          'to it; it is not a screen in this panel.',
+        endpoints: [],
+        workstream: 'WS3.1',
+      },
+      {
+        key: 'onboarding',
+        path: '/onboarding',
+        label: 'Farmer Onboarding',
+        // Default: the roles that register and approve farmers. An Agriculture
+        // Expert has their own panel at /field.
+        permission: 'ONBOARDING_PANEL',
+        description:
+          'The onboarding desk — register a farmer, complete their details, get them approved, ' +
+          'sign the agreement. Organised around the gate: approval is what issues the ' +
+          'traceability code, and until it happens a farmer cannot be inspected or collected from.',
+        endpoints: ['GET /farmers', 'POST /farmers', 'PATCH /farmers/:id/verify', 'GET /agreements'],
         workstream: 'WS2.2',
       },
       {
         key: 'trace',
         path: '/trace',
         label: 'Trace a Pack',
-        roles: ALL_ROLES,
+        permission: 'TRACE_VIEW',
         description:
           'Enter a finished-goods batch number (FG-YYYYMMDD-NNN) to resolve it back through ' +
           'the production run and raw material batches to the farmers who grew it.',
@@ -98,7 +117,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'farmers',
         path: '/farmers',
         label: 'Farmers',
-        roles: ['BRANCH_MANAGER', 'PROCUREMENT_MANAGER', 'AGRICULTURE_EXPERT'],
+        permission: 'FARMER_VIEW',
         description:
           'Farmer registry, verification workflow and traceability IDs. Approval is Super ' +
           'Admin only (FRD 5.1); the SVV-YYYY-NNNNNN code is issued on approval, never at ' +
@@ -115,7 +134,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'agreements',
         path: '/agreements',
         label: 'Agreements',
-        roles: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER'],
+        permission: 'AGREEMENT_VIEW',
         description: 'Pre-season rate, quality and quantity agreements per farmer.',
         endpoints: ['GET /agreements', 'POST /agreements', 'PATCH /agreements/:id/status'],
         workstream: 'WS2.2',
@@ -124,7 +143,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'seed-distribution',
         path: '/seed-distribution',
         label: 'Seed Distribution',
-        roles: ['AGRICULTURE_EXPERT', 'BRANCH_MANAGER'],
+        permission: 'SEED_DISTRIBUTION_VIEW',
         description: 'Certified seed and crop-input distribution log.',
         endpoints: ['GET /seed-distribution', 'POST /seed-distribution'],
         workstream: 'WS2.2',
@@ -133,7 +152,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'training',
         path: '/training',
         label: 'Training',
-        roles: ['AGRICULTURE_EXPERT', 'BRANCH_MANAGER'],
+        permission: 'TRAINING_VIEW',
         description:
           'Training sessions, bulk attendance and materials. Staff-facing: the executive runs ' +
           'the session at the farm and records it here afterwards. There is no farmer login.',
@@ -148,7 +167,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'field-visits',
         path: '/field-visits',
         label: 'Field Visits',
-        roles: ['AGRICULTURE_EXPERT', 'BRANCH_MANAGER'],
+        permission: 'FIELD_VISIT_VIEW',
         description:
           'Crop monitoring visits — growth stage, health, pest and disease observations, ' +
           'agronomic advice and yield prediction. Also captured offline in the field app (WS3.1).',
@@ -166,7 +185,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'procurement-plans',
         path: '/procurement-plans',
         label: 'Procurement Plans',
-        roles: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER'],
+        permission: 'PROCUREMENT_PLAN_VIEW',
         description: 'Crop, branch, quantity and schedule planning.',
         endpoints: ['GET /procurement-plans', 'POST /procurement-plans'],
         workstream: 'WS2.3',
@@ -175,7 +194,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'harvest-inspections',
         path: '/harvest-inspections',
         label: 'Harvest Inspections',
-        roles: ['PROCUREMENT_MANAGER', 'QA_MANAGER'],
+        permission: 'HARVEST_INSPECTION_VIEW',
         description:
           'Pre-harvest quality checklist. Only farmers who are approved and hold a ' +
           'traceability code can be inspected, and only an APPROVED inspection can be collected.',
@@ -186,7 +205,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'collections',
         path: '/collections',
         label: 'Collections',
-        roles: ['PROCUREMENT_MANAGER'],
+        permission: 'COLLECTION_VIEW',
         description:
           'Records collection of an approved harvest and mints its raw material batch ' +
           '(RM-YYYYMMDD-NNN) in one transaction. Rate falls back to the agreement rate.',
@@ -197,7 +216,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'batches',
         path: '/batches',
         label: 'Raw Material Batches',
-        roles: ['PROCUREMENT_MANAGER', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'PRODUCTION_MANAGER'],
+        permission: 'BATCH_VIEW',
         description: 'Batch register with status, warehouse and upstream trace.',
         endpoints: ['GET /batches', 'GET /batches/:batchNumber/trace'],
         workstream: 'WS2.3',
@@ -213,7 +232,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'warehouses',
         path: '/warehouses',
         label: 'Warehouses',
-        roles: ['WAREHOUSE_MANAGER', 'BRANCH_MANAGER'],
+        permission: 'WAREHOUSE_VIEW',
         description: 'Warehouse master with live occupancy against capacity.',
         endpoints: ['GET /warehouses', 'POST /warehouses', 'GET /warehouses/:id/status'],
         workstream: 'WS2.3',
@@ -222,7 +241,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'warehouse-stock',
         path: '/warehouse-stock',
         label: 'Stock',
-        roles: ['WAREHOUSE_MANAGER', 'BRANCH_MANAGER', 'PRODUCTION_MANAGER'],
+        permission: 'STOCK_VIEW',
         description:
           'Batch-wise stock, low-stock alerts, and the stock in / out / transfer / adjust ' +
           'actions. Every movement writes a ledger row — the two never move apart.',
@@ -238,7 +257,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'stock-movements',
         path: '/stock-movements',
         label: 'Movement Ledger',
-        roles: ['WAREHOUSE_MANAGER', 'BRANCH_MANAGER'],
+        permission: 'MOVEMENT_VIEW',
         description: 'Append-only audit trail of every inventory change.',
         endpoints: ['GET /warehouses/movements'],
         workstream: 'WS2.3',
@@ -254,7 +273,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'products',
         path: '/products',
         label: 'Products',
-        roles: ['BRANCH_MANAGER', 'PRODUCTION_MANAGER', 'SALES_TEAM'],
+        permission: 'PRODUCT_VIEW',
         description:
           'Product master. Note: products carry TWO prices, B2B and B2C. Rates are shown from ' +
           'the price list and are changed by superseding, never by editing in place.',
@@ -265,7 +284,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'recipes',
         path: '/recipes',
         label: 'Recipes',
-        roles: ['PRODUCTION_MANAGER', 'QA_MANAGER'],
+        permission: 'RECIPE_VIEW',
         description:
           'Versioned formulas with an approval gate — Super Admin only. Approving a version ' +
           'retires the previously approved one. Multigrain recipes need percentages totalling ' +
@@ -282,7 +301,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'cleaning-grading',
         path: '/cleaning-grading',
         label: 'Cleaning & Grading',
-        roles: ['PRODUCTION_MANAGER', 'QA_MANAGER'],
+        permission: 'CLEANING_GRADING_VIEW',
         description: 'Pre-production cleaning activities, grading parameters and QA sign-off.',
         endpoints: ['GET /cleaning-grading', 'POST /cleaning-grading'],
         workstream: 'WS2.4',
@@ -291,7 +310,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'production-batches',
         path: '/production-batches',
         label: 'Production Batches',
-        roles: ['PRODUCTION_MANAGER', 'BRANCH_MANAGER'],
+        permission: 'PRODUCTION_BATCH_VIEW',
         description:
           'Production runs (PB-YYYYMMDD-NNN) with raw material consumption, machine ' +
           'allocation and actual-vs-planned output. Recipe version is pinned at creation.',
@@ -306,7 +325,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'quality-inspections',
         path: '/quality-inspections',
         label: 'Quality Inspections',
-        roles: ['QA_MANAGER', 'PRODUCTION_MANAGER'],
+        permission: 'QUALITY_VIEW',
         description:
           'Raw-material, in-process and finished-goods inspections. These are HARD GATES, not ' +
           'annotations: a raw-material FAIL rejects the batch, a finished-goods FAIL withdraws ' +
@@ -322,7 +341,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'finished-goods',
         path: '/finished-goods',
         label: 'Finished Goods',
-        roles: ['PRODUCTION_MANAGER', 'WAREHOUSE_MANAGER'],
+        permission: 'PACKAGING_VIEW',
         description:
           'Packaging into FG batches, print-ready labels with QR and barcode, and finished ' +
           'goods stock. Only QA-released batches can be stocked.',
@@ -345,7 +364,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'customers',
         path: '/customers',
         label: 'Customers',
-        roles: ['SALES_TEAM', 'BRANCH_MANAGER'],
+        permission: 'CUSTOMER_VIEW',
         description:
           'One registry, two channels. Pick the channel FIRST — B2B needs a GSTIN, credit ' +
           'limit, payment terms and an executive; B2C gets none of those. Channel cannot be ' +
@@ -357,7 +376,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'price-lists',
         path: '/price-lists',
         label: 'Price Lists',
-        roles: ['BRANCH_MANAGER'],
+        permission: 'PRICE_VIEW',
         description:
           'Dated per-channel rates. A price is NEVER edited in place — use supersede, which ' +
           'closes the old rule and opens a new one. Render it as "change price from [date]".',
@@ -373,7 +392,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'orders',
         path: '/orders',
         label: 'Orders',
-        roles: ['SALES_TEAM', 'BRANCH_MANAGER', 'WAREHOUSE_MANAGER', 'LOGISTICS_TEAM'],
+        permission: 'ORDER_VIEW',
         description:
           'Channel-aware orders with a forward-only lifecycle. Allocation is a server action, ' +
           'not a form: it picks batches first-expiry-first-out from QA-released stock and ' +
@@ -397,7 +416,7 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'users',
         path: '/users',
         label: 'Users',
-        roles: ['BRANCH_MANAGER'],
+        permission: 'USER_VIEW',
         description: 'Staff accounts and roles. Creating a user is Super Admin only.',
         endpoints: ['GET /users', 'POST /users'],
         workstream: 'WS2.2',
@@ -406,9 +425,26 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'branches',
         path: '/branches',
         label: 'Branches',
-        roles: ['BRANCH_MANAGER'],
+        permission: 'BRANCH_VIEW',
         description: 'Branch master (FRD Section 6).',
         endpoints: ['GET /branches', 'POST /branches'],
+        workstream: 'WS2.2',
+      },
+      {
+        key: 'roles',
+        path: '/settings/roles',
+        label: 'Roles & Permissions',
+        permission: 'ROLES_VIEW',
+        description:
+          'What each role may see and do. Every screen and action in this panel appears here ' +
+          'as a switch. Changes take effect on the next request the affected users make - ' +
+          'nobody has to sign out and back in.',
+        endpoints: [
+          'GET /permissions',
+          'GET /permissions/matrix',
+          'PUT /permissions/roles/:role',
+          'POST /permissions/roles/:role/reset',
+        ],
         workstream: 'WS2.2',
       },
     ],

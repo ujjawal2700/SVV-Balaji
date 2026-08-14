@@ -2,7 +2,8 @@ import { LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-desig
 import { App as AntApp, Avatar, Button, Dropdown, Layout, Menu, Spin, Tag, Typography } from 'antd';
 import { Suspense, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { hasRole, ROLE_LABELS } from '../auth/types';
+import { ROLE_LABELS } from '../auth/types';
+import { useCanFn } from '../auth/useCan';
 import { useAuth } from '../auth/useAuth';
 import { NAV_SECTIONS } from './navigation';
 
@@ -15,15 +16,22 @@ export function AppLayout() {
   const { message } = AntApp.useApp();
   const [collapsed, setCollapsed] = useState(false);
 
+  const can = useCanFn();
+
   /**
-   * The menu is filtered by role, not merely disabled. A Warehouse Manager has
-   * no business seeing a "Price Lists" entry they cannot open — an empty
-   * section is removed entirely rather than left hanging.
+   * The menu is filtered by permission, not merely disabled. Someone with no
+   * access to Price Lists has no business seeing the entry — an empty section
+   * is removed entirely rather than left hanging.
+   *
+   * The permission on each entry is the same one the screen's list endpoint is
+   * guarded with, so the menu and the data agree by construction. Changing a
+   * role's permissions therefore reshapes this menu on the next reload, with
+   * nothing to redeploy.
    */
   const menuItems = useMemo(
     () =>
       NAV_SECTIONS.flatMap((section) => {
-        const visible = section.items.filter((item) => hasRole(user?.role, item.roles));
+        const visible = section.items.filter((item) => can(item.permission)); // filter by permission
         if (visible.length === 0) return [];
 
         return [
@@ -35,7 +43,7 @@ export function AppLayout() {
           },
         ];
       }),
-    [user?.role],
+    [can],
   );
 
   const openKeys = useMemo(

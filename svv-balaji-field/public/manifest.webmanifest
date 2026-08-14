@@ -1,0 +1,22 @@
+{
+  "name": "SVV Balaji Field",
+  "short_name": "SVV Field",
+  "description": "Agriculture Expert field app - farmer onboarding, land profiling, seed distribution, crop advisory, training and the harvest inspection gate.",
+  "id": "/field/",
+  "start_url": "/field/",
+  "scope": "/field/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1f7a3c",
+  "theme_color": "#1f7a3c",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/field/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/field/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/field/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Log a visit",  "url": "/field/visits",      "icons": [{ "src": "/field/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Harvest gate", "url": "/field/inspections", "icons": [{ "src": "/field/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

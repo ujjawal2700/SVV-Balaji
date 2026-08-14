@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      viewport-fit=cover lets the app paint under the notch and the home
+      indicator; the CSS then uses env(safe-area-inset-*) to keep content clear
+      of them. Without it a standalone PWA gets white bars top and bottom and
+      immediately reads as a web page in a frame.
+
+      user-scalable=no is deliberately NOT set. Pinch-zoom is an accessibility
+      feature, and the 16px input rule in styles.css already stops iOS zooming
+      on focus, which is the actual problem people disable zoom to fix.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>SVV Balaji Field</title>
+    <meta name="description" content="Agriculture Expert field app - SVV Balaji" />
+
+    <link rel="manifest" href="/field/manifest.webmanifest" />
+    <meta name="theme-color" content="#1f7a3c" />
+
+    <!-- iOS ignores the manifest for most of this and needs its own tags. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SVV Field" />
+    <link rel="apple-touch-icon" href="/field/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/field/favicon-32.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

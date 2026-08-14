@@ -93,7 +93,7 @@ export function SeedDistributionPage() {
           entity="distribution record"
           label={`the ${row.seedName} handout`}
           can="SEED_DISTRIBUTION_EDIT"
-          canDelete="RECORD_DELETE"
+          canDelete="SEED_DISTRIBUTION_DELETE"
           onEdit={() => openEdit(row)}
           onDelete={() => remove.mutateAsync(row.id)}
         />

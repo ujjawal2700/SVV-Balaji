@@ -5,6 +5,7 @@ import { CommonModule } from './common/common.module';
 import { CodesModule } from './codes/codes.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AuthModule } from './auth/auth.module';
+import { PermissionsModule } from './auth/permissions/permissions.module';
 import { UsersModule } from './users/users.module';
 import { BranchesModule } from './branches/branches.module';
 import { FarmersModule } from './farmers/farmers.module';
@@ -31,6 +32,7 @@ import { SalesModule } from './sales/sales.module';
     CommonModule, // global - shared sequence/document numbering
     CodesModule, // global - QR/barcode generation, reused by Phase 2/3 batch + packaging
     UploadsModule, // global - the one place a file enters the system (WS4.1 interim, see A-04)
+    PermissionsModule, // global - RBAC grants, seeded on boot, editable at runtime
     AuthModule,
     UsersModule,
     BranchesModule,

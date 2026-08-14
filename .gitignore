@@ -1,2 +1,72 @@
-# Added by code-review-graph
+# Repository-wide ignores.
+#
+# Each app also has its own .gitignore (svv-balaji-admin, svv-balaji-backend,
+# svv-balaji-field). This file is the backstop: a folder added later gets the
+# important rules without anyone remembering to copy them, which is exactly what
+# went wrong when svv-balaji-field was created without one and git offered to
+# commit ten thousand files from node_modules.
+
+# --- Dependencies and build output, anywhere in the tree -------------------
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+
+# --- Secrets ---------------------------------------------------------------
+# Never commit a real .env - the backend's holds the database URL, the JWT
+# secrets and the storage credentials. The .example files are the template and
+# are committed.
+.env
+.env.*
+!.env.example
+
+# --- Generated code --------------------------------------------------------
+# The Prisma client is regenerated from schema.prisma by `npx prisma generate`
+# on every machine. Committing it causes the exact "does not exist on type
+# PrismaService" confusion it is meant to prevent.
+.prisma/
+generated/
+
+# --- Logs, coverage, caches ------------------------------------------------
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+.cache/
+*.tsbuildinfo
+
+# --- Editors and OS --------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Office lock and temp files --------------------------------------------
+# LibreOffice and Excel leave these behind while a document is open. They are
+# per-machine and change constantly.
+.~lock.*#
+~$*
+*.tmp.pdf
+*.xlsx#
+
+# --- Local developer tooling -----------------------------------------------
+# Per-developer state from AI coding assistants. The instruction files at the
+# root (CLAUDE.md, AGENTS.md, GEMINI.md and friends) ARE committed on purpose -
+# they are shared project context. These directories are local caches and
+# session state, which are not.
+.claude/
+.codebuddy/
+.gemini/
+.kiro/
+.qoder/
 .code-review-graph/
+
+# --- Stray files that are not project sources ------------------------------
+# Installer scripts, screenshots and pasted images. Delete them if they are not
+# needed; ignoring keeps them out of the history either way.
+get-pip.py
+WhatsApp Image *.jpeg
+WhatsApp Image *.jpg

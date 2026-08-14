@@ -9,8 +9,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   StorageService,
   UPLOAD_FOLDERS,
@@ -22,7 +23,7 @@ const FOLDERS = Object.keys(UPLOAD_FOLDERS) as UploadFolder[];
 
 @ApiTags('uploads')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('uploads')
 export class UploadsController {
   constructor(private readonly storage: StorageService) {}
@@ -41,6 +42,7 @@ export class UploadsController {
    * none of them needed a migration.
    */
   @Post(':folder')
+  @RequirePermission('uploads.create')
   @ApiConsumes('multipart/form-data')
   @ApiParam({ name: 'folder', enum: FOLDERS })
   @ApiOperation({

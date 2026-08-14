@@ -160,7 +160,7 @@ export function CollectionsPage() {
             entity="collection"
             label={row.receiptNumber}
             can="COLLECTION_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="COLLECTION_DELETE"
             onEdit={() => setCorrecting(row)}
             onDelete={() => remove.mutateAsync(row.id)}
             deleteBlockedReason={paid ?? inUse}

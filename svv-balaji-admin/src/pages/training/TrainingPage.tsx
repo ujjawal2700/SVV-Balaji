@@ -110,7 +110,7 @@ export function TrainingPage() {
             entity="training session"
             label={session.title}
             can="TRAINING_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="TRAINING_DELETE"
             onEdit={() => openEdit(session)}
             onDelete={() => remove.mutateAsync(session.id)}
             deleteBlockedReason={

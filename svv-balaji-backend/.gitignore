@@ -4,9 +4,12 @@ node_modules/
 # Build output
 dist/
 
-# Env
+# Env — every variant is ignored, and the checked-in template is the one
+# exception. A new .env.staging or .env.production must never need a
+# .gitignore edit to be safe; the default is "ignored".
 .env
-.env.*.local
+.env.*
+!.env.example
 
 # Logs
 *.log

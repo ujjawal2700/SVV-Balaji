@@ -177,6 +177,8 @@ model User {
   rawMaterialCollections  RawMaterialCollection[] @relation("RawMaterialCollections")
   stockMovements          StockMovement[]         @relation("StockMovements")
 
+  farmPlotsCreated        FarmPlot[]              @relation("FarmPlotsCreated")
+
   // Phase 3 back-relations
   cleaningGradingRecords  CleaningGradingRecord[] @relation("CleaningGradingOperator")
   recipesCreated          Recipe[]                @relation("RecipesCreated")
@@ -276,6 +278,7 @@ model Farmer {
   seedDistributions  SeedDistribution[]
   trainingAttendances TrainingAttendance[]
   fieldVisits        FieldVisit[]
+  plots              FarmPlot[]
 
   // Phase 2 - the traceability chain from this farmer forward
   harvestInspections     HarvestInspection[]
@@ -1414,4 +1417,111 @@ model OrderAllocation {
   @@index([orderId])
   @@index([fgBatchId])
   @@map("order_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Role-based access control (WS2.x, 15 Aug)
+// ---------------------------------------------------------------------------
+
+/// One grant: this role holds this permission.
+///
+/// The row's existence IS the grant - there is no `allowed` boolean, because a
+/// row saying "denied" and no row at all would mean the same thing and would
+/// eventually disagree. Revoking deletes.
+///
+/// `permission` is a plain string rather than an enum on purpose. The
+/// authoritative list lives in src/auth/permissions/registry.ts, and writes are
+/// validated against it. Making it a Postgres enum would mean a migration every
+/// time a screen is added - which is the exact coupling this table exists to
+/// remove.
+///
+/// SUPER_ADMIN never appears here. PermissionsGuard short-circuits for it, so
+/// storing its grants would create a state where the last administrator can be
+/// locked out of the administration screen.
+model RolePermission {
+  id String @id @default(uuid())
+
+  role       UserRole
+  permission String
+
+  createdAt DateTime @default(now())
+
+  @@unique([role, permission])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+/// Marks a role as having been configured at least once.
+///
+/// Without this, "this role holds no permissions" and "this role has never been
+/// set up" are the same empty result, and the seeder could not tell whether an
+/// empty grant set was deliberate. A Super Admin who deliberately strips a role
+/// bare must not have the defaults handed back to it on the next restart.
+model RolePermissionState {
+  role UserRole @id
+
+  seededAt  DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  updatedById String?
+
+  @@map("role_permission_state")
+}
+
+// ---------------------------------------------------------------------------
+// Land profiling (WS3.1, 16 Aug)
+// ---------------------------------------------------------------------------
+
+/// One cultivable plot belonging to a farmer.
+///
+/// Farmers here rarely hold a single contiguous field - two or three scattered
+/// plots with different soil, irrigation and crops is the norm. The summary
+/// fields on `Farmer` (farmSizeAcres, landType, irrigationType, cropDetails)
+/// average all of that into one row, which is fine for a registry and useless
+/// for advisory work: an Agriculture Expert advising on irrigation needs to
+/// know WHICH plot is rain-fed.
+///
+/// Those Farmer fields are deliberately left in place. They are what the
+/// onboarding desk captures at registration and what every existing screen
+/// reads; plots are the detail the field executive adds afterwards. Removing
+/// them would be a migration across six screens for no gain.
+model FarmPlot {
+  id String @id @default(uuid())
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  /// What the farmer calls it, or the revenue survey number.
+  name         String
+  surveyNumber String?
+
+  areaAcres Decimal @db.Decimal(10, 2)
+
+  soilType       String?
+  irrigationType String?
+  waterSource    String?
+
+  /// What is growing on it now. Free text, because the crop list is not a
+  /// master in this system and inventing one here would fork it from the
+  /// crop names used on agreements and collections.
+  currentCrop    String?
+  sowingDate     DateTime?
+  expectedHarvest DateTime?
+
+  /// "lat,lng" captured on the plot, same format as Farmer.gpsLocation. Held
+  /// as text rather than two Decimals to match what is already stored and read
+  /// by the trace page - one format, one parser.
+  gpsLocation String?
+
+  notes String?
+
+  isActive Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("FarmPlotsCreated", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@map("farm_plots")
 }

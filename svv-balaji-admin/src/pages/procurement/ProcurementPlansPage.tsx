@@ -147,7 +147,7 @@ export function ProcurementPlansPage() {
             entity="procurement plan"
             label={`the ${plan.cropName} plan`}
             can="PROCUREMENT_PLAN_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="PROCUREMENT_PLAN_DELETE"
             onEdit={editable ? () => openEdit(plan) : undefined}
             onDelete={() => remove.mutateAsync(plan.id)}
             deleteBlockedReason={

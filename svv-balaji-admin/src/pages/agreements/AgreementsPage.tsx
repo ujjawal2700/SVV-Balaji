@@ -158,7 +158,7 @@ export function AgreementsPage() {
             entity="agreement"
             label={`the ${agreement.cropName} agreement`}
             can="AGREEMENT_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="AGREEMENT_DELETE"
             onEdit={locked ? undefined : () => openEdit(agreement)}
             onDelete={() => remove.mutateAsync(agreement.id)}
             deleteBlockedReason={locked}

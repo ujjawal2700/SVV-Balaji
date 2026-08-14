@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { OrderStatus, SalesChannel, UserRole } from '@prisma/client';
+import { OrderStatus, SalesChannel } from '@prisma/client';
 import { SalesService } from './sales.service';
 import {
   CancelOrderDto,
@@ -8,20 +8,20 @@ import {
   UpdatePaymentStatusDto,
 } from './dto/order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('sales')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('orders')
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('orders.create')
   @ApiOperation({
     summary: 'Place an order in the customer\'s channel (FRD Section 24)',
     description:
@@ -35,6 +35,7 @@ export class SalesController {
   }
 
   @Get()
+  @RequirePermission('orders.view')
   @ApiQuery({ name: 'channel', enum: SalesChannel, required: false })
   @ApiQuery({ name: 'status', enum: OrderStatus, required: false })
   @ApiQuery({ name: 'from', required: false, description: 'ISO date' })
@@ -58,11 +59,13 @@ export class SalesController {
   }
 
   @Get(':id')
+  @RequirePermission('orders.view')
   findOne(@Param('id') id: string) {
     return this.salesService.findOne(id);
   }
 
   @Get('number/:orderNumber/traceability')
+  @RequirePermission('trace.view')
   @ApiOperation({
     summary: 'Farm-to-fork trace for every batch on an order',
     description:
@@ -75,14 +78,14 @@ export class SalesController {
   }
 
   @Patch(':id/confirm')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('orders.confirm')
   @ApiOperation({ summary: 'Accept the order and commit to fulfilling it' })
   confirm(@Param('id') id: string) {
     return this.salesService.confirm(id);
   }
 
   @Post(':id/allocate')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_MANAGER, UserRole.BRANCH_MANAGER)
+  @RequirePermission('orders.allocate')
   @ApiOperation({
     summary: 'Batch-wise picking - assign and reserve finished goods (FRD 25)',
     description:
@@ -95,13 +98,13 @@ export class SalesController {
   }
 
   @Patch(':id/pack')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_MANAGER)
+  @RequirePermission('orders.pack')
   pack(@Param('id') id: string) {
     return this.salesService.advance(id, OrderStatus.PACKED);
   }
 
   @Patch(':id/dispatch')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_MANAGER, UserRole.LOGISTICS_TEAM)
+  @RequirePermission('orders.dispatch')
   @ApiOperation({
     summary: 'Dispatch the order',
     description:
@@ -113,20 +116,20 @@ export class SalesController {
   }
 
   @Patch(':id/deliver')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.LOGISTICS_TEAM)
+  @RequirePermission('orders.deliver')
   deliver(@Param('id') id: string) {
     return this.salesService.advance(id, OrderStatus.DELIVERED);
   }
 
   @Patch(':id/cancel')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('orders.cancel')
   @ApiOperation({ summary: 'Cancel the order and release every reservation it was holding' })
   cancel(@Param('id') id: string, @Body() dto: CancelOrderDto) {
     return this.salesService.cancel(id, dto);
   }
 
   @Patch(':id/payment-status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('orders.payment')
   setPaymentStatus(@Param('id') id: string, @Body() dto: UpdatePaymentStatusDto) {
     return this.salesService.setPaymentStatus(id, dto);
   }

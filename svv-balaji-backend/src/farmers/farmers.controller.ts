@@ -12,7 +12,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { FarmersService } from './farmers.service';
 import { CodesService } from '../codes/codes.service';
 import { CreateFarmerDto } from './dto/create-farmer.dto';
@@ -21,41 +20,46 @@ import { QueryFarmerDto } from './dto/query-farmer.dto';
 import { UpdateFarmerStatusDto } from './dto/update-farmer-status.dto';
 import { UpdateFarmerDto } from './dto/update-farmer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
+import { FarmPlotsService } from './farm-plots.service';
+import { CreateFarmPlotDto, UpdateFarmPlotDto } from './dto/farm-plot.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('farmers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('farmers')
 export class FarmersController {
   constructor(
+    private readonly farmPlots: FarmPlotsService,
     private readonly farmersService: FarmersService,
     private readonly codesService: CodesService,
   ) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.PROCUREMENT_MANAGER)
+  @RequirePermission('farmers.create')
   create(@Body() dto: CreateFarmerDto) {
     // FRD 7.1: "Procurement Managers or authorized branch staff" register farmers.
     return this.farmersService.create(dto);
   }
 
   @Get()
+  @RequirePermission('farmers.view')
   findAll(@Query() query: QueryFarmerDto) {
     // Open to any authenticated role - most modules downstream need farmer lookups.
     return this.farmersService.findAll(query);
   }
 
   @Get(':id')
+  @RequirePermission('farmers.view')
   findOne(@Param('id') id: string) {
     return this.farmersService.findOne(id);
   }
 
   @Patch(':id/verify')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('farmers.approve')
   verify(
     @Param('id') id: string,
     @Body() dto: VerifyFarmerDto,
@@ -66,13 +70,13 @@ export class FarmersController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('farmers.status')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateFarmerStatusDto) {
     return this.farmersService.updateStatus(id, dto.status);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.PROCUREMENT_MANAGER)
+  @RequirePermission('farmers.edit')
   @ApiOperation({
     summary: 'Correct farmer details',
     description:
@@ -85,7 +89,7 @@ export class FarmersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('farmers.delete')
   @ApiOperation({
     summary: 'Permanently delete an unapproved farmer',
     description:
@@ -114,6 +118,7 @@ export class FarmersController {
   }
 
   @Get(':id/codes')
+  @RequirePermission('farmers.codes')
   @ApiOperation({ summary: 'QR + barcode + traceability URL as JSON (FRD 8.2/8.3)' })
   async codes(@Param('id') id: string) {
     const farmerCode = await this.requireFarmerCode(id);
@@ -121,6 +126,7 @@ export class FarmersController {
   }
 
   @Get(':id/qr.svg')
+  @RequirePermission('farmers.codes')
   @Header('Content-Type', 'image/svg+xml')
   @ApiOperation({ summary: 'Farmer QR code as SVG - encodes the public traceability URL' })
   async qr(@Param('id') id: string) {
@@ -129,10 +135,73 @@ export class FarmersController {
   }
 
   @Get(':id/barcode.svg')
+  @RequirePermission('farmers.codes')
   @Header('Content-Type', 'image/svg+xml')
   @ApiOperation({ summary: 'Farmer barcode (Code 128) as SVG - for warehouse/procurement scanning' })
   async barcode(@Param('id') id: string) {
     const farmerCode = await this.requireFarmerCode(id);
     return this.codesService.barcodeSvg(farmerCode);
+  }
+
+  // --- Land profiling (WS3.1) ----------------------------------------------
+  //
+  // Nested under the farmer because a plot has no meaning without one, and
+  // because it means the existing farmer permissions govern it - a role that
+  // may edit a farmer may map their land, with no new switch to explain.
+
+  @Get(':id/plots')
+  @RequirePermission('farmers.view')
+  @ApiOperation({
+    summary: 'Plots belonging to a farmer',
+    description:
+      'Active plots by default. The summary fields on the farmer record (total acres, land type) ' +
+      'are what the onboarding desk captured; these are what the field executive measured.',
+  })
+  plots(@Param('id') id: string, @Query('includeInactive') includeInactive?: string) {
+    return this.farmPlots.findForFarmer(id, includeInactive === 'true');
+  }
+
+  @Get(':id/plots/summary')
+  @RequirePermission('farmers.view')
+  @ApiOperation({
+    summary: 'Mapped area against registered area',
+    description:
+      'Surfaces the gap between the holding size entered at registration and the plots actually ' +
+      'measured, plus how many plots are missing GPS or a current crop.',
+  })
+  plotSummary(@Param('id') id: string) {
+    return this.farmPlots.summary(id);
+  }
+
+  @Post(':id/plots')
+  @RequirePermission('farmers.plots')
+  addPlot(
+    @Param('id') id: string,
+    @Body() dto: CreateFarmPlotDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.farmPlots.create(id, dto, user.sub);
+  }
+
+  @Patch(':id/plots/:plotId')
+  @RequirePermission('farmers.plots')
+  updatePlot(
+    @Param('id') id: string,
+    @Param('plotId') plotId: string,
+    @Body() dto: UpdateFarmPlotDto,
+  ) {
+    return this.farmPlots.update(id, plotId, dto);
+  }
+
+  @Delete(':id/plots/:plotId')
+  @RequirePermission('farmers.plots')
+  @ApiOperation({
+    summary: 'Delete a plot',
+    description:
+      'Unguarded by dependants, unlike most deletes here: nothing downstream references a plot ' +
+      'yet. If a collection ever names the plot it came from, this needs assertDeletable.',
+  })
+  removePlot(@Param('id') id: string, @Param('plotId') plotId: string) {
+    return this.farmPlots.remove(id, plotId);
   }
 }

@@ -10,46 +10,47 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { AgreementsService } from './agreements.service';
 import { CreateAgreementDto } from './dto/create-agreement.dto';
 import { UpdateAgreementStatusDto } from './dto/update-agreement-status.dto';
 import { UpdateAgreementDto } from './dto/update-agreement.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 
 @ApiTags('agreements')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('agreements')
 export class AgreementsController {
   constructor(private readonly agreementsService: AgreementsService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER)
+  @RequirePermission('agreements.create')
   create(@Body() dto: CreateAgreementDto) {
     return this.agreementsService.create(dto);
   }
 
   @Get()
+  @RequirePermission('agreements.view')
   findAll(@Query('farmerId') farmerId?: string) {
     return this.agreementsService.findAll(farmerId);
   }
 
   @Get(':id')
+  @RequirePermission('agreements.view')
   findOne(@Param('id') id: string) {
     return this.agreementsService.findOne(id);
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER)
+  @RequirePermission('agreements.edit')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateAgreementStatusDto) {
     return this.agreementsService.updateStatus(id, dto.status);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER)
+  @RequirePermission('agreements.edit')
   @ApiOperation({
     summary: 'Correct an agreement',
     description:
@@ -62,7 +63,7 @@ export class AgreementsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('agreements.delete')
   @ApiOperation({
     summary: 'Delete an agreement',
     description: 'Only while no harvest inspection references it.',

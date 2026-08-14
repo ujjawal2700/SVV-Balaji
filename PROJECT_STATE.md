@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 15 August 2026 · **Updated by:** Raunak
+**Last updated:** 16 August 2026 · **Updated by:** Raunak
 **Programme week:** 2 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -70,7 +70,10 @@ Agriculture Expert travels to the farm
 Consequences for the build, so nobody designs the wrong thing:
 
 - Farmers are **data subjects, not users**. No farmer login, no farmer self-service, no
-  farmer notifications requiring an app install.
+  farmer notifications requiring an app install. Verified in the schema on 15 Aug: `Farmer` has no
+  password, email or refresh token, and there is no `FARMER` role in the enum — a farmer-facing
+  portal would be a schema change plus a mobile-OTP auth flow plus a new permission boundary, not a
+  screen. The staff-side equivalent is the onboarding desk at `/onboarding`.
 - `TrainingSession`, `TrainingAttendance` and `TrainingMaterial` are **executive-entered**.
   Attendance is marked in bulk against a session (already implemented, idempotent via upsert).
 - **WS3.1 changed on 15 Aug: no Flutter.** The Agriculture Expert interface is now a responsive web
@@ -128,7 +131,7 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
             └─ SVV-2026-000001   farmer — name, village, district, GPS
 ```
 
-### Admin panel — started 11 Aug (evening), **23 of 26 screens built as at 14 Aug**
+### Admin panel — started 11 Aug (evening), **24 of 27 screens built as at 15 Aug**
 
 `svv-balaji-admin/` — Vite + React + TypeScript + Ant Design.
 
@@ -139,8 +142,10 @@ FG-20260807-001   finished pack (QR on packaging → public trace URL)
 | WS2.3 Zone 2 — procurement & warehouse | procurement plans, harvest inspections, collections, raw material batches, warehouses, stock, movement ledger, trace | ✅ Complete |
 | WS2.4 Zone 3 — processing, QA & packaging | products, recipes, cleaning & grading, production batches, quality inspections, finished goods | ✅ Complete, multigrain live |
 | WS2.5 Zone 4 — sales | customers, price lists, orders | ⬜ Placeholders — held on A-13 |
+| — Roles & Permissions | `/settings/roles` — every screen and action as a switch, per role. Super Admin only | ✅ Complete (16 Aug) |
 | WS2.6 Dashboards & reports | trace screen built; dashboards/MIS outstanding | 🟡 15% |
 | — Field executive (WS3.1, rescoped) | `/field` — Home, Visits, Seed, Training. Sider on desktop; bottom tabs, sheets and card lists on a phone. Real photo upload throughout | ✅ Complete (15 Aug) |
+| — Farmer onboarding desk | `/onboarding` — Home, Farmers, Approvals, Agreements. Same shell. Built around the approval gate, with the bank-details and GPS gaps surfaced before they bite at harvest | ✅ Complete (15 Aug) |
 
 Auth is real: boot-time session restore, single-flight token refresh, sign-out, role-filtered
 navigation and route-level role guards, all against the live API. Navigation and routing are both
@@ -169,15 +174,67 @@ Standing conventions in the panel, worth knowing before adding to it:
   Answering A-04 with S3 or GCS is a new class in that folder and one line in that module — no
   screen, endpoint or DTO changes. The panel's counterpart is `FileUploadField`, used on every
   surface that takes an attachment.
+- **`src/layout/MobileShell.tsx`** is the app shell for both role-scoped panels (`/field`,
+  `/onboarding`). It renders `AppLayout` on a wide screen and takes over on a phone with a fixed
+  app bar, bottom tabs, `100dvh` sizing and safe-area insets. Add a third panel by giving it a tab
+  list, not by copying the shell.
+- **`src/components/Sheet.tsx`** renders an antd `Modal` on desktop and a bottom drawer on a phone.
+  Any form that should feel native on a handset uses it instead of `Modal`.
 - **`src/pages/production/BlendPlanner.tsx`** holds the multigrain worksheet and
   `BLEND_TOLERANCE_POINTS`, which mirrors the constant of the same name in the backend's
   `production.service.ts`. Change one, change the other — it decides both what the operator is
   shown and whether the server will accept the run.
+- **Access is data, not code, since 16 Aug.** `src/auth/permissions.ts` no longer contains a single
+  role — it maps the panel's readable names (`FARMER_APPROVE`) to the keys the API guards routes
+  with (`farmers.approve`). `useCan()` answers from the permission list `/auth/me` returns.
+  `navigation.tsx` entries carry a `permission`, not a `roles` array, and it is the same key the
+  screen's list endpoint checks — so the menu and the data can no longer disagree. Route guards are
+  `RequirePermission`; `RequireRole` is deprecated and unused. Changing who may open a screen is
+  now done at `/settings/roles`, not in this repo.
 - **`src/components/RowActions.tsx`** is the row action menu on every master screen — edit,
   deactivate/reactivate, delete. It shows the server's refusal message verbatim, because that
   message names what is blocking the delete and is the whole reason the user clicked.
 - **One modal per entity, used for both create and edit.** A separate edit form is how the two
   quietly drift apart until a field validated on create is accepted on edit.
+
+### Role-based access (rebuilt 16 Aug)
+
+Permissions used to be three hand-maintained lists that had to agree: `@Roles()` decorators, the
+panel's `navigation.tsx` role arrays, and `permissions.ts`. Widening access to a screen meant
+editing all three and shipping a build — a redeploy for what is really an administrative decision.
+
+Now:
+
+| Lives in | What |
+|---|---|
+| Code — `src/auth/permissions/registry.ts` | The permission keys, grouped by page, with the roles each defaults to. What **can** be granted |
+| Database — `role_permissions` | Which roles hold which keys. What **is** granted |
+| UI — `/settings/roles` | Where a Super Admin changes it |
+
+Routes carry `@RequirePermission('farmers.approve')` instead of `@Roles(...)`. `PermissionsGuard`
+replaced `RolesGuard` everywhere but still enforces `@Roles()`, so a route landed on a branch during
+the changeover stays locked rather than falling open.
+
+**The nine roles are unchanged** — `UserRole` is still a Prisma enum and `User.role` was not
+migrated. This was scoped to making permissions editable; arbitrary custom role names would mean
+migrating `User.role` off the enum and is a separate, larger change.
+
+Properties worth not undoing:
+
+- **Permissions are not in the JWT.** They are read per request from a 30-second per-role cache,
+  invalidated on write. A claim would be cheaper and would mean revoking access did nothing until
+  the token expired.
+- **Super Admin bypasses the check before any database read**, so an empty or broken
+  `role_permissions` table cannot lock out administration. Its own grants are not editable, and
+  `rolePermissions.manage` cannot be granted to any other role.
+- **A role stripped bare stays bare across restarts.** That is what `role_permission_state` is for —
+  otherwise "configured to hold nothing" and "never configured" look identical and the boot seeder
+  would undo the administrator every restart.
+- **Defaults reproduce the access of 15 August exactly.** Verified mechanically against the old
+  decorators, not by eye: all 87 previously-guarded routes grant the same roles.
+- **54 GET routes that were open to any signed-in user are now guarded.** Every read was previously
+  reachable by every account — a Logistics user could read the whole farmer registry. Menu
+  visibility and data access are now the same permission.
 
 ### Edit and delete semantics (agreed 13 Aug, completed 14 Aug)
 
@@ -263,7 +320,10 @@ must not be read as "nearly ready".
    and no `@Delete` route anywhere in the API. Masters got edit + deactivate + guarded delete;
    the transactional screens got edit-while-unconsumed. See DEV_LOG for the full contract and the
    per-record boundary table. Every form on every screen now opens pre-filled in edit mode.
-6. **Manual test pass on WS2.4 — next.** Suggested order, because each step feeds the next:
+6. **Role-based access made configurable — ✅ done 16 Aug.** 87 route decorators converted, two
+   new tables, a Roles & Permissions screen. **Requires `npx prisma migrate deploy` before the API
+   will start.** See DEV_LOG for the endpoint contract.
+7. **Manual test pass on WS2.4 — next.** Suggested order, because each step feeds the next:
    product → recipe → approve recipe → cleaning & grading → production batch → start → complete →
    quality inspection (in-process) → pack → finished-goods inspection → release → stock in → then
    open `/trace` with the `FG-` number and check the chain resolves back to the farmer.

@@ -16,6 +16,178 @@ how each side learns what the other did.
 
 ---
 
+## 2026-08-16 — Raunak
+
+**Did:** Made role-based access **configurable at runtime**. Who may see and do what is no longer
+compiled into either codebase — it is rows in the database, edited by a Super Admin from a new
+screen at `/settings/roles`. This touched 87 route decorators, 19 controllers, the panel's whole
+auth layer and added a migration, so read the contract section before pulling.
+
+**The problem it solves.** Adding a role to a screen used to mean editing `@Roles()` in a
+controller, editing `roles:` in `navigation.tsx`, editing `permissions.ts`, and shipping a build.
+Three lists maintained by hand that had to agree, and a redeploy for a decision that is really an
+administrative one. The client will change their mind about who does what long after we stop
+shipping weekly.
+
+**Shape of it.**
+
+```
+permission keys   -> in CODE   (src/auth/permissions/registry.ts) — what CAN be granted
+grants            -> in the DB (role_permissions)                 — what IS granted
+```
+
+A Super Admin decides which roles hold which keys. He cannot invent a key, because a key no route
+checks is a switch wired to nothing — it would look like it granted access and silently not. Adding
+a screen therefore still means adding a key and a `@RequirePermission()`; changing *who* may use an
+existing endpoint never means touching code again.
+
+**The nine roles are unchanged.** `UserRole` is still a Prisma enum with the same nine values and
+`User.role` is untouched — this was deliberately scoped to "make permissions editable", not "make
+roles arbitrary". Custom role names would mean migrating `User.role` off the enum, which is a much
+bigger change and was not needed to answer the actual request.
+
+**Why permissions are NOT in the JWT.** They would have been free to read. They would also have
+gone stale: revoking someone's access would do nothing until their access token expired — up to
+fifteen minutes of a person continuing to approve farmers after being told they no longer can. The
+guard reads from a per-role cache instead (30s TTL, invalidated immediately on a local write), so a
+change lands on the next request. Behind more than one API instance the worst case is 30 seconds;
+if we ever run several, replace the TTL with Redis pub/sub rather than shortening it.
+
+**Nobody's access changed.** Every `defaultRoles` list in the registry was read off the `@Roles()`
+decorator that used to guard that route, and I verified it mechanically rather than by eye: a script
+walks all 19 controllers in the pre-change tree, extracts the role list per handler, resolves the
+new permission key for the same handler, and compares against the registry defaults. **All 87
+previously-guarded routes grant exactly the same roles.** The seeder writes those defaults on first
+boot, so an existing database comes up behaving identically.
+
+**What DID change: 54 read routes are now guarded.** Every `GET` in the API was previously open to
+any signed-in user — a Logistics Team account could read the entire farmer registry. Those now
+carry a view permission, seeded to the roles that already had the screen in their menu (plus the
+roles whose forms read that data across module boundaries — QA needs `agreements.view` for the
+harvest-inspection picker, `batches.view` and `finishedGoods.view` for the quality form; Branch
+Manager needs `finishedGoods.view` because order allocation shows what was reserved). This is a
+tightening, and it is the point: menu visibility and data access are now the same permission, so
+they cannot disagree.
+
+**Locks that keep the system reachable.** Super Admin bypasses the check before any database read,
+so an empty or corrupt `role_permissions` table can never lock out administration. Super Admin's
+own grants cannot be edited at all. `rolePermissions.manage` cannot be granted to any other role —
+whoever holds it could give themselves everything else. A role deliberately stripped bare stays
+bare across restarts, which is what `role_permission_state` is for: without it "configured to hold
+nothing" and "never configured" are the same empty result and the seeder would undo the
+administrator's decision every boot.
+
+**The screen.** `/settings/roles` is organised by page, not by permission, because that is how the
+question arrives — "should Sales open Price Lists?" comes before "should they hold
+`priceLists.supersede`". One switch per page, the individual actions underneath, and actions are
+disabled while their page is off (an edit permission on a page nobody can open is a grant that
+reads as access and delivers none). Removing a page's view permission asks for confirmation naming
+the pages and how many users hold that role — it is a bigger action than one checkbox among eighty
+looks. There is a reset-to-defaults per role, which restores the 15 August access exactly.
+
+**Contract changes:**
+
+- **Migration `20260815090000_role_permissions`** — two new tables, `role_permissions` and
+  `role_permission_state`. **Run `npx prisma migrate deploy` (or `dev`) before starting the API**,
+  or `PermissionsService.onModuleInit` fails on boot.
+- **New endpoints** (all Super Admin): `GET /permissions` (the catalogue, grouped by page),
+  `GET /permissions/matrix` (grants + how many users hold each role),
+  `PUT /permissions/roles/:role` (replaces the whole set — send the full list, not a delta),
+  `POST /permissions/roles/:role/reset`.
+- **`GET /auth/me` and `POST /auth/login` now return `permissions: string[]`** on the user object.
+  Additive; nothing breaks if a client ignores it, but the panel needs it to render a menu.
+- **`@Roles()` is deprecated in favour of `@RequirePermission('key')`.** RolesGuard is replaced by
+  PermissionsGuard on every controller. **PermissionsGuard still enforces `@Roles()`** — so if you
+  land a new route on a branch using the old decorator it stays locked rather than falling open.
+  Convert it when you merge.
+- **54 GET routes that were open to any authenticated user now require a view permission.**
+
+**Other developer needs to know:** if you add an endpoint, it needs a key in
+`src/auth/permissions/registry.ts` and a `@RequirePermission()` on the route. A key the registry
+does not define makes the guard throw **500, not 403** — deliberately: a 403 would send an
+administrator hunting for a checkbox that cannot exist. Do not put permissions in the token. Do not
+add SUPER_ADMIN to a `defaultRoles` list.
+
+**Tests:** 20 new (13 for the service and registry, 7 for the guard) — including that the defaults
+reproduce the old `@Roles()` access, that revoking takes effect immediately, that Super Admin
+cannot be edited, and that a legacy `@Roles()` route is still enforced. I still cannot run the suite
+in this sandbox (npm registry blocked), so **please run `npm test` before trusting the count**.
+
+**Next:** WS2.5 — customers, price lists and orders. Their permission keys are already in the
+registry and seeded, so the three screens can be built straight against them. A-13 still needs an
+answer before the order screen.
+
+---
+
+## 2026-08-15 (later) — Raunak
+
+**Did:** Built the **farmer onboarding panel** at `/onboarding` — the sibling to the field panel,
+for the Procurement / Branch Manager whose job is farmers rather than crops. Same shell, four tabs:
+Home, Farmers, Approvals, Agreements.
+
+**First, a check worth recording.** "Farmer panel" could have meant a farmer-facing portal, so I
+verified before building: **the `Farmer` model has no password, no email and no refresh token, and
+there is no `FARMER` role in the enum.** A farmer literally cannot log in, which matches the client
+position in `PROJECT_STATE` — *farmers are data subjects, not users*. This panel is for the staff
+who onboard them. If a farmer-facing portal is ever wanted it is a schema change, an auth flow
+(mobile + OTP, since most have no email) and a whole new permission boundary — not a screen.
+
+**Organised around the gate, not the tables.** Onboarding is a funnel with one chokepoint:
+approval mints the `SVV-YYYY-NNNNNN` code, and until that happens the farmer cannot be inspected,
+cannot be collected from, and cannot appear on a consumer trace page. So Approvals is its own tab
+rather than a filter on Farmers — a queue nobody can see is a queue nobody clears — and the home
+screen counts things that are *stuck* rather than things that exist.
+
+**The approvals tab tells the truth about who can act.** Registering is open to Branch and
+Procurement Managers; **approving is Super Admin only** (`@Roles(SUPER_ADMIN)` on
+`PATCH /farmers/:id/verify`, FRD 5.1). So for most people opening that screen it is a worklist to
+prepare and hand on. It says exactly that, instead of showing a Verify button that returns 403.
+
+### `readiness.ts` — the two gaps that bite months later
+
+This is the part I would most want reviewed, because it is a judgement call rather than a rule the
+server enforces. Two fields are invisible at onboarding and expensive at harvest:
+
+- **No bank details.** `RawMaterialCollection` computes `totalAmount` and carries a
+  `paymentStatus`, but there is nowhere to send the money. The collection gets recorded, the farmer
+  is owed, and somebody chases an account number afterwards — usually with the farmer standing
+  there. Flagged as **blocking**.
+- **No GPS.** `GET /trace/:fgBatchNumber` returns `gpsLocation` for the consumer traceability page.
+  A blank one is a hole in the story the QR code exists to tell, and it cannot be filled in later
+  without another visit to the farm. Flagged as **advisory**.
+
+Plus no identity document and no farm size, both advisory (the second one means the farmer
+contributes nothing to procurement forecasting).
+
+**None of these block approval, deliberately.** The server does not require them, and inventing a
+rule the API does not enforce would mean a form refusing what the system would happily accept.
+They are surfaced with the consequence in a tooltip, and there is an "Incomplete" filter on the
+Farmers tab. **If you think bank details should be a hard requirement for approval, that is a
+server-side change and worth agreeing rather than me deciding it in the UI.**
+
+The home screen also counts **approved farmers with no agreement** — they can be collected from,
+but the weighbridge will have no agreed rate to fall back on if none is entered.
+
+**Refactor:** `MobileShell` extracted from `FieldLayout`. Both panels now share one implementation
+of the app bar, bottom tabs, safe-area handling and `100dvh` sizing. A second copy would have meant
+two places to fix the next safe-area bug, and only one of them would have got fixed.
+
+**Contract changes:** none. Every endpoint already existed; this is entirely panel-side.
+
+**Other developer needs to know (Ujjawal):**
+
+- **Nothing to run.** No migration, no new dependency, no env change.
+- **`GET /farmers` has no "incomplete" filter**, so that view is computed client-side from which
+  fields are blank. Same A-12 caveat as the field panel: once lists paginate, filtering a page
+  rather than the set will under-report.
+- **`GET /agreements` takes `farmerId` only**, so "approved farmers with no agreement" is worked out
+  by loading both lists and diffing them. Fine at today's volumes, worth an endpoint later.
+
+**Next:** WS2.5 — customers, price lists, orders. Still wants an A-13 answer before the order screen
+is designed.
+
+---
+
 ## 2026-08-15 — Raunak
 
 **Did:** Built the Field Executive panel as a responsive web app. **Decision: no Flutter.** WS3.1 was
