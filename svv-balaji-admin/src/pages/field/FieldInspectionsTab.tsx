@@ -16,7 +16,7 @@ import { MineToggle, useMineFilter } from './MineToggle';
 const RESULT_COLOUR: Record<InspectionResult, string> = {
   APPROVED: 'green',
   REJECTED: 'red',
-  CONDITIONAL: 'gold',
+  HOLD_FOR_REINSPECTION: 'gold',
 };
 
 type Filter = 'due' | 'mine' | 'all';
