@@ -102,7 +102,7 @@ export function FieldVisitsPage() {
           entity="field visit"
           label={`the visit to ${visit.farmer?.fullName ?? 'this farmer'}`}
           can="FIELD_VISIT_EDIT"
-          canDelete="RECORD_DELETE"
+          canDelete="FIELD_VISIT_DELETE"
           onEdit={() => openEdit(visit)}
           onDelete={() => remove.mutateAsync(visit.id)}
         >

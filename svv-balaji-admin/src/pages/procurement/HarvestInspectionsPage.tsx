@@ -139,7 +139,7 @@ export function HarvestInspectionsPage() {
             entity="inspection"
             label={`the ${row.cropName} inspection`}
             can="HARVEST_INSPECTION_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="HARVEST_INSPECTION_DELETE"
             onEdit={row.collection ? undefined : () => openEdit(row)}
             onDelete={() => remove.mutateAsync(row.id)}
             deleteBlockedReason={collected}

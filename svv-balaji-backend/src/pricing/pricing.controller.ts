@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { CustomerType, SalesChannel, UserRole } from '@prisma/client';
+import { CustomerType, SalesChannel } from '@prisma/client';
 import { PricingService } from './pricing.service';
 import {
   CreatePriceListDto,
@@ -8,20 +8,20 @@ import {
   SupersedePriceDto,
 } from './dto/pricing.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('pricing')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('price-lists')
 export class PricingController {
   constructor(private readonly pricingService: PricingService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('priceLists.create')
   @ApiOperation({
     summary: 'Define a price for one product in one channel (WS1.6)',
     description:
@@ -34,6 +34,7 @@ export class PricingController {
   }
 
   @Get()
+  @RequirePermission('priceLists.view')
   @ApiQuery({ name: 'channel', enum: SalesChannel, required: false })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
   findAll(
@@ -49,6 +50,7 @@ export class PricingController {
   }
 
   @Get('resolve')
+  @RequirePermission('priceLists.view')
   @ApiOperation({
     summary: 'Which price applies to this line, and why',
     description:
@@ -76,13 +78,14 @@ export class PricingController {
   }
 
   @Get('product/:productId/comparison')
+  @RequirePermission('priceLists.view')
   @ApiOperation({ summary: 'What this product costs in each channel today' })
   comparison(@Param('productId') productId: string) {
     return this.pricingService.channelComparison(productId);
   }
 
   @Post(':id/supersede')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('priceLists.supersede')
   @ApiOperation({
     summary: 'Replace a rate from a given date',
     description:
@@ -98,7 +101,7 @@ export class PricingController {
   }
 
   @Patch(':id/active')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('priceLists.status')
   setActive(@Param('id') id: string, @Body() dto: SetPriceListActiveDto) {
     return this.pricingService.setActive(id, dto);
   }

@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { InspectionResult, ProcurementPlanStatus, UserRole } from '@prisma/client';
+import { InspectionResult, ProcurementPlanStatus } from '@prisma/client';
 import { ProcurementService } from './procurement.service';
 import { CreateProcurementPlanDto } from './dto/create-procurement-plan.dto';
 import { CreateHarvestInspectionDto } from './dto/create-harvest-inspection.dto';
@@ -21,14 +21,14 @@ import {
 import { UpdatePlanStatusDto } from './dto/update-plan-status.dto';
 import { AddDocumentDto } from './dto/add-document.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('procurement')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class ProcurementController {
   constructor(private readonly procurementService: ProcurementService) {}
@@ -36,12 +36,13 @@ export class ProcurementController {
   // --- Procurement Plans (FRD 13.1) ----------------------------------------
 
   @Post('procurement-plans')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.BRANCH_MANAGER)
+  @RequirePermission('procurementPlans.create')
   createPlan(@Body() dto: CreateProcurementPlanDto, @CurrentUser() user: JwtPayload) {
     return this.procurementService.createPlan(dto, user.sub);
   }
 
   @Get('procurement-plans')
+  @RequirePermission('procurementPlans.view')
   findPlans(
     @Query('branchId') branchId?: string,
     @Query('status') status?: ProcurementPlanStatus,
@@ -50,7 +51,7 @@ export class ProcurementController {
   }
 
   @Patch('procurement-plans/:id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.BRANCH_MANAGER)
+  @RequirePermission('procurementPlans.edit')
   updatePlanStatus(@Param('id') id: string, @Body() dto: UpdatePlanStatusDto) {
     return this.procurementService.updatePlanStatus(id, dto.status);
   }
@@ -58,7 +59,7 @@ export class ProcurementController {
   // --- Harvest Inspections (FRD 13.2 - 13.5) -------------------------------
 
   @Post('harvest-inspections')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.QA_MANAGER)
+  @RequirePermission('harvestInspections.create')
   @ApiOperation({
     summary: 'Record a pre-harvest quality inspection',
     description:
@@ -69,6 +70,7 @@ export class ProcurementController {
   }
 
   @Get('harvest-inspections')
+  @RequirePermission('harvestInspections.view')
   findInspections(
     @Query('farmerId') farmerId?: string,
     @Query('result') result?: InspectionResult,
@@ -77,12 +79,13 @@ export class ProcurementController {
   }
 
   @Get('harvest-inspections/:id')
+  @RequirePermission('harvestInspections.view')
   findInspection(@Param('id') id: string) {
     return this.procurementService.findInspection(id);
   }
 
   @Post('harvest-inspections/:id/documents')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.QA_MANAGER)
+  @RequirePermission('harvestInspections.edit')
   addDocument(@Param('id') id: string, @Body() dto: AddDocumentDto) {
     return this.procurementService.addInspectionDocument(id, dto.fileUrl, dto.fileType);
   }
@@ -90,12 +93,13 @@ export class ProcurementController {
   // --- Plan maintenance ----------------------------------------------------
 
   @Get('procurement-plans/:id')
+  @RequirePermission('procurementPlans.view')
   findPlan(@Param('id') id: string) {
     return this.procurementService.findPlan(id);
   }
 
   @Patch('procurement-plans/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.BRANCH_MANAGER)
+  @RequirePermission('procurementPlans.edit')
   @ApiOperation({
     summary: 'Correct a procurement plan',
     description:
@@ -107,7 +111,7 @@ export class ProcurementController {
   }
 
   @Delete('procurement-plans/:id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('procurementPlans.delete')
   removePlan(@Param('id') id: string) {
     return this.procurementService.removePlan(id);
   }
@@ -115,7 +119,7 @@ export class ProcurementController {
   // --- Inspection maintenance ----------------------------------------------
 
   @Patch('harvest-inspections/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.QA_MANAGER)
+  @RequirePermission('harvestInspections.edit')
   @ApiOperation({
     summary: 'Correct a harvest inspection',
     description:
@@ -127,7 +131,7 @@ export class ProcurementController {
   }
 
   @Delete('harvest-inspections/:id/documents/:documentId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PROCUREMENT_MANAGER, UserRole.QA_MANAGER)
+  @RequirePermission('harvestInspections.edit')
   removeInspectionDocument(
     @Param('id') id: string,
     @Param('documentId') documentId: string,
@@ -136,7 +140,7 @@ export class ProcurementController {
   }
 
   @Delete('harvest-inspections/:id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('harvestInspections.delete')
   @ApiOperation({
     summary: 'Delete a harvest inspection',
     description: 'Refused once collected - delete the collection first.',

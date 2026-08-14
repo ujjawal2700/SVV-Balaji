@@ -1,6 +1,5 @@
 import { Alert, Card, Descriptions, Space, Tag, Typography } from 'antd';
 import { useLocation } from 'react-router-dom';
-import { ROLE_LABELS } from '../auth/types';
 import { findNavItem } from '../layout/navigation';
 
 /**
@@ -38,15 +37,8 @@ export function PlaceholderPage() {
 
       <Card size="small" title="Contract">
         <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="Visible to">
-            <Space size={[4, 4]} wrap>
-              <Tag color="blue">{ROLE_LABELS.SUPER_ADMIN}</Tag>
-              {item.roles
-                .filter((role) => role !== 'SUPER_ADMIN')
-                .map((role) => (
-                  <Tag key={role}>{ROLE_LABELS[role]}</Tag>
-                ))}
-            </Space>
+          <Descriptions.Item label="Required Permission">
+            <Tag color="purple">{item.permission}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="API routes">
             {item.endpoints.length === 0 ? (

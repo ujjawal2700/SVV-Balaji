@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
@@ -19,26 +19,26 @@ import {
   UpdateUserStatusDto,
 } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('users.create')
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('users.view')
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'status', required: false, enum: UserStatus })
   findAll(@Query('branchId') branchId?: string, @Query('status') status?: UserStatus) {
@@ -46,13 +46,13 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('users.view')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('users.edit')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
@@ -62,7 +62,7 @@ export class UsersController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('users.edit')
   @ApiOperation({
     summary: 'Activate, deactivate or suspend a user',
     description:
@@ -78,7 +78,7 @@ export class UsersController {
   }
 
   @Patch(':id/password')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('users.edit')
   @ApiOperation({
     summary: 'Administratively reset a password',
     description: 'Ends every session the user currently holds.',
@@ -88,7 +88,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('users.delete')
   @ApiOperation({
     summary: 'Permanently delete a user',
     description:

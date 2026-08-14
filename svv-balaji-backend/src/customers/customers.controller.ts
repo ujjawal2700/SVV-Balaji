@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { CustomerStatus, CustomerType, SalesChannel, UserRole } from '@prisma/client';
+import { CustomerStatus, CustomerType, SalesChannel } from '@prisma/client';
 import { CustomersService } from './customers.service';
 import {
   CreateCustomerDto,
@@ -8,18 +8,18 @@ import {
   UpdateCustomerStatusDto,
 } from './dto/customer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 
 @ApiTags('customers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('customers.create')
   @ApiOperation({
     summary: 'Register a customer in either sales channel (FRD Section 24)',
     description:
@@ -32,6 +32,7 @@ export class CustomersController {
   }
 
   @Get()
+  @RequirePermission('customers.view')
   @ApiQuery({ name: 'channel', enum: SalesChannel, required: false })
   @ApiQuery({ name: 'type', enum: CustomerType, required: false })
   @ApiQuery({ name: 'status', enum: CustomerStatus, required: false })
@@ -47,11 +48,13 @@ export class CustomersController {
   }
 
   @Get(':id')
+  @RequirePermission('customers.view')
   findOne(@Param('id') id: string) {
     return this.customersService.findOne(id);
   }
 
   @Get(':id/credit')
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'Credit limit, current exposure and headroom',
     description:
@@ -63,13 +66,13 @@ export class CustomersController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.SALES_TEAM)
+  @RequirePermission('customers.edit')
   update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.customersService.update(id, dto);
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('customers.status')
   @ApiOperation({ summary: 'Activate, deactivate or blacklist a customer' })
   setStatus(@Param('id') id: string, @Body() dto: UpdateCustomerStatusDto) {
     return this.customersService.setStatus(id, dto);

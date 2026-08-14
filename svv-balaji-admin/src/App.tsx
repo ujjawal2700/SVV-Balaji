@@ -1,9 +1,11 @@
-import { lazy, type ReactElement } from 'react';
+import { lazy, useEffect, useMemo, type ReactElement } from 'react';
+import { Button, Result, Spin, Typography } from 'antd';
 import { Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
-import { RequireRole } from './auth/RequireRole';
+import { PERMISSIONS } from './auth/permissions';
+import { RequirePermission } from './auth/RequirePermission';
 import { AppLayout } from './layout/AppLayout';
-import { FieldLayout } from './layout/FieldLayout';
+import { OnboardingLayout } from './layout/OnboardingLayout';
 import { NAV_ITEMS } from './layout/navigation';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 import { LoginPage } from './pages/LoginPage';
@@ -26,17 +28,23 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
  * other two are a few lines each and needed at unpredictable moments, where a
  * loading flicker would be worse than their weight.
  */
-const FieldExecutivePage = lazy(() =>
-  import('./pages/field/FieldExecutivePage').then((m) => ({ default: m.FieldExecutivePage })),
+const OnboardingHomePage = lazy(() =>
+  import('./pages/onboarding/OnboardingHomePage').then((m) => ({ default: m.OnboardingHomePage })),
 );
-const FieldVisitsTab = lazy(() =>
-  import('./pages/field/FieldVisitsTab').then((m) => ({ default: m.FieldVisitsTab })),
+const OnboardingFarmersTab = lazy(() =>
+  import('./pages/onboarding/OnboardingFarmersTab').then((m) => ({
+    default: m.OnboardingFarmersTab,
+  })),
 );
-const FieldSeedTab = lazy(() =>
-  import('./pages/field/FieldSeedTab').then((m) => ({ default: m.FieldSeedTab })),
+const OnboardingApprovalsTab = lazy(() =>
+  import('./pages/onboarding/OnboardingApprovalsTab').then((m) => ({
+    default: m.OnboardingApprovalsTab,
+  })),
 );
-const FieldTrainingTab = lazy(() =>
-  import('./pages/field/FieldTrainingTab').then((m) => ({ default: m.FieldTrainingTab })),
+const OnboardingAgreementsTab = lazy(() =>
+  import('./pages/onboarding/OnboardingAgreementsTab').then((m) => ({
+    default: m.OnboardingAgreementsTab,
+  })),
 );
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
@@ -116,6 +124,11 @@ const QualityInspectionsPage = lazy(() =>
 const FinishedGoodsPage = lazy(() =>
   import('./pages/packaging/FinishedGoodsPage').then((m) => ({ default: m.FinishedGoodsPage })),
 );
+const RolesPermissionsPage = lazy(() =>
+  import('./pages/settings/RolesPermissionsPage').then((m) => ({
+    default: m.RolesPermissionsPage,
+  })),
+);
 
 /**
  * Routes are generated from NAV_ITEMS rather than listed by hand, so the menu
@@ -125,8 +138,14 @@ const FinishedGoodsPage = lazy(() =>
  * Anything without an entry below renders the placeholder, which describes what
  * the screen will do and which API routes it drives.
  */
-/** Declared explicitly below rather than generated, so its children can nest. */
-const FIELD_ITEM = NAV_ITEMS.find((item) => item.path === '/field');
+/**
+ * The two role-scoped panels are declared explicitly below rather than
+ * generated, because they are the only routes with children. Everything else
+ * is flat and comes from NAV_ITEMS.
+ */
+const ONBOARDING_ITEM = NAV_ITEMS.find((item) => item.path === '/onboarding');
+const NESTED_PATHS = ['/field', '/onboarding'];  // '/field' stays listed so the
+// generated routes skip it — the redirect below owns that path now.
 
 const SCREENS: Record<string, ReactElement> = {
   '/': <DashboardPage />,
@@ -155,6 +174,8 @@ const SCREENS: Record<string, ReactElement> = {
   '/finished-goods': <FinishedGoodsPage />,
   // Farm-to-fork trace (FRD Section 30)
   '/trace': <TracePage />,
+  // Administration
+  '/settings/roles': <RolesPermissionsPage />,
 };
 
 export function App() {
@@ -163,18 +184,22 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<RequireAuth />}>
-        {/* The field executive routes get their own shell.
-            On a phone FieldLayout replaces the sider with bottom tabs; on a
-            desktop it renders AppLayout, so these screens sit in the ordinary
-            chrome. Declared separately from the generated routes below because
-            they are the only nested tree in the app. */}
-        {FIELD_ITEM ? (
-          <Route element={<RequireRole allowed={FIELD_ITEM.roles} />}>
-            <Route path="/field" element={<FieldLayout />}>
-              <Route index element={<FieldExecutivePage />} />
-              <Route path="visits" element={<FieldVisitsTab />} />
-              <Route path="seed" element={<FieldSeedTab />} />
-              <Route path="training" element={<FieldTrainingTab />} />
+        {/* The Agriculture Expert app moved out of this panel on 16 Aug 2026.
+            It is a separate build served at /field with its own login, its own
+            session key and its own icon on the phone home screen. This route
+            only exists to catch old bookmarks and hand them over — a hard
+            navigation, not a router link, because it is a different app. */}
+        <Route path="/field/*" element={<RedirectToFieldApp />} />
+
+        {ONBOARDING_ITEM ? (
+          <Route
+            element={<RequirePermission permission={PERMISSIONS[ONBOARDING_ITEM.permission]} />}
+          >
+            <Route path="/onboarding" element={<OnboardingLayout />}>
+              <Route index element={<OnboardingHomePage />} />
+              <Route path="farmers" element={<OnboardingFarmersTab />} />
+              <Route path="approvals" element={<OnboardingApprovalsTab />} />
+              <Route path="agreements" element={<OnboardingAgreementsTab />} />
             </Route>
           </Route>
         ) : null}
@@ -184,8 +209,11 @@ export function App() {
         <Route element={<AppLayout />}>
           <Route path="/forbidden" element={<ForbiddenPage />} />
 
-          {NAV_ITEMS.filter((item) => item.path !== '/field').map((item) => (
-            <Route key={item.key} element={<RequireRole allowed={item.roles} />}>
+          {NAV_ITEMS.filter((item) => !NESTED_PATHS.includes(item.path)).map((item) => (
+            <Route
+              key={item.key}
+              element={<RequirePermission permission={PERMISSIONS[item.permission]} />}
+            >
               <Route path={item.path} element={SCREENS[item.path] ?? <PlaceholderPage />} />
             </Route>
           ))}
@@ -194,5 +222,81 @@ export function App() {
         </Route>
       </Route>
     </Routes>
+  );
+}
+
+/**
+ * Hands an old /field bookmark over to the separate field app.
+ *
+ * `window.location` rather than `<Navigate>`: /field is a different build with
+ * its own bundle and its own session key, so this has to be a real page load.
+ * A router navigation would just render nothing.
+ */
+function RedirectToFieldApp() {
+  /**
+   * Where the field app actually lives.
+   *
+   * In production nginx serves it from /field on this same origin, so a bare
+   * path is right. In development it is a SEPARATE Vite server on 5174, and a
+   * bare path would point straight back at this dev server - which owns /field
+   * through its SPA fallback and would render this component again. That is an
+   * infinite reload loop, and it is what happens if you open
+   * localhost:5173/field.
+   *
+   * VITE_FIELD_APP_URL overrides both, for a deployment that puts the field app
+   * somewhere else entirely.
+   */
+  const target = useMemo(() => {
+    const configured = import.meta.env.VITE_FIELD_APP_URL as string | undefined;
+    const fallback = import.meta.env.DEV ? 'http://localhost:5174/field/' : '/field/';
+    return new URL(configured || fallback, window.location.origin).href;
+  }, []);
+
+  /**
+   * Belt and braces. If the target resolves to where we already are, redirecting
+   * would reload this same page forever. Better to stop and say so - a loop is
+   * far harder to diagnose than a message.
+   */
+  const wouldLoop = useMemo(() => {
+    const strip = (url: string) => url.replace(/\/+$/, '');
+    return strip(target) === strip(window.location.href);
+  }, [target]);
+
+  useEffect(() => {
+    if (!wouldLoop) window.location.replace(target);
+  }, [target, wouldLoop]);
+
+  if (wouldLoop) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', padding: 48 }}>
+        <Result
+          status="info"
+          title="The field app is a separate application"
+          subTitle={
+            <span>
+              It is not part of this panel. In development it runs on its own port:
+              <br />
+              <Typography.Text code copyable>
+                http://localhost:5174/field/
+              </Typography.Text>
+              <br />
+              Start it with <Typography.Text code>npm run dev</Typography.Text> inside{' '}
+              <Typography.Text code>svv-balaji-field</Typography.Text>.
+            </span>
+          }
+          extra={
+            <Button type="primary" onClick={() => window.location.assign('/')}>
+              Back to the panel
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', padding: 64 }}>
+      <Spin size="large" tip="Opening the field app…" />
+    </div>
   );
 }

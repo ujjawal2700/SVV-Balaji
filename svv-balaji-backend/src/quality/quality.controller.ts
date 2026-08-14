@@ -1,23 +1,23 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { InspectionStage, QualityResult, UserRole } from '@prisma/client';
+import { InspectionStage, QualityResult } from '@prisma/client';
 import { QualityService } from './quality.service';
 import { CreateQualityInspectionDto } from './dto/quality.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 @ApiTags('quality')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('quality-inspections')
 export class QualityController {
   constructor(private readonly qualityService: QualityService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.QA_MANAGER)
+  @RequirePermission('quality.create')
   @ApiOperation({
     summary: 'Record a quality inspection (FRD Section 21)',
     description:
@@ -29,17 +29,19 @@ export class QualityController {
   }
 
   @Get()
+  @RequirePermission('quality.view')
   findAll(@Query('stage') stage?: InspectionStage, @Query('result') result?: QualityResult) {
     return this.qualityService.findAll({ stage, result });
   }
 
   @Get(':id')
+  @RequirePermission('quality.view')
   findOne(@Param('id') id: string) {
     return this.qualityService.findOne(id);
   }
 
   @Patch('release/:fgBatchId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.QA_MANAGER)
+  @RequirePermission('quality.release')
   @ApiOperation({
     summary: 'Release a finished goods batch for stocking/dispatch (FRD 21.5)',
     description: 'Refuses unless the latest finished-goods inspection was a PASS.',

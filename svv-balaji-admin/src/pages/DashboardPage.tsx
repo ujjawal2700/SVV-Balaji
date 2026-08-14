@@ -1,6 +1,6 @@
 import { Alert, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
-import { hasRole } from '../auth/types';
 import { useAuth } from '../auth/useAuth';
+import { useCanFn } from '../auth/useCan';
 import { NAV_SECTIONS } from '../layout/navigation';
 
 /**
@@ -13,10 +13,11 @@ import { NAV_SECTIONS } from '../layout/navigation';
  */
 export function DashboardPage() {
   const { user } = useAuth();
+  const can = useCanFn();
 
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => hasRole(user?.role, item.roles)),
+    items: section.items.filter((item) => can(item.permission)),
   })).filter((section) => section.items.length > 0);
 
   const screenCount = visibleSections.reduce((sum, section) => sum + section.items.length, 0);

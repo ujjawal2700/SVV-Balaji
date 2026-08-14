@@ -23,13 +23,12 @@ import {
   PartialType,
 } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
-import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertDeletable } from '../common/dependants';
 import { SetActiveDto } from '../common/dto/set-active.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 
 export class CreateProductDto {
   @ApiProperty()
@@ -141,36 +140,38 @@ export class ProductsService {
 
 @ApiTags('products')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('products.create')
   create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
   }
 
   @Get()
+  @RequirePermission('products.view')
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAll(@Query('includeInactive') includeInactive?: string) {
     return this.productsService.findAll(includeInactive === 'true');
   }
 
   @Get(':id')
+  @RequirePermission('products.view')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('products.edit')
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(id, dto);
   }
 
   @Patch(':id/active')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('products.edit')
   @ApiOperation({
     summary: 'Discontinue or reinstate a product',
     description:
@@ -182,7 +183,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('products.delete')
   @ApiOperation({
     summary: 'Permanently delete a product',
     description:

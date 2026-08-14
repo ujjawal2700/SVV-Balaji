@@ -138,7 +138,7 @@ export function BatchesPage() {
             entity="batch"
             label={batch.batchNumber}
             can="COLLECTION_EDIT"
-            canDelete="RECORD_DELETE"
+            canDelete="COLLECTION_DELETE"
             onEdit={collection && !movedOn ? () => setCorrecting(collection) : undefined}
             onDelete={collection ? () => removeCollection.mutateAsync(collection.id) : undefined}
             deleteBlockedReason={movedOn ?? paid}

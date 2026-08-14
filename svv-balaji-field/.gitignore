@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Env - the field app's .env holds VITE_TOKEN_KEY and the API target.
+# .env.example is committed; the real one is not.
+.env
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Vite
+.vite/

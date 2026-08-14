@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { WarehouseService } from './warehouse.service';
 import {
   AdjustStockDto,
@@ -21,32 +20,27 @@ import {
   UpdateWarehouseDto,
 } from './dto/warehouse.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { SetActiveDto } from '../common/dto/set-active.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
-const STOCK_ROLES = [
-  UserRole.SUPER_ADMIN,
-  UserRole.WAREHOUSE_MANAGER,
-  UserRole.BRANCH_MANAGER,
-] as const;
-
 @ApiTags('warehouse')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('warehouses')
 export class WarehouseController {
   constructor(private readonly warehouseService: WarehouseService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('warehouses.create')
   create(@Body() dto: CreateWarehouseDto) {
     return this.warehouseService.create(dto);
   }
 
   @Get()
+  @RequirePermission('warehouses.view')
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAll(
@@ -57,50 +51,54 @@ export class WarehouseController {
   }
 
   @Get('stock')
+  @RequirePermission('stock.view')
   @ApiOperation({ summary: 'Batch-wise stock across warehouses (FRD 16.7)' })
   findStock(@Query('warehouseId') warehouseId?: string, @Query('batchId') batchId?: string) {
     return this.warehouseService.findStock(warehouseId, batchId);
   }
 
   @Get('stock/low')
+  @RequirePermission('stock.view')
   @ApiOperation({ summary: 'Batches at or below a quantity threshold (FRD 17.4)' })
   lowStock(@Query('threshold') threshold = '100', @Query('warehouseId') warehouseId?: string) {
     return this.warehouseService.lowStock(Number(threshold), warehouseId);
   }
 
   @Get('movements')
+  @RequirePermission('movements.view')
   @ApiOperation({ summary: 'Inventory movement audit trail (FRD 17.3/17.5)' })
   findMovements(@Query('batchId') batchId?: string, @Query('warehouseId') warehouseId?: string) {
     return this.warehouseService.findMovements(batchId, warehouseId);
   }
 
   @Get(':id/status')
+  @RequirePermission('warehouses.view')
   @ApiOperation({ summary: 'Live occupancy vs capacity (FRD 16.6)' })
   status(@Param('id') id: string) {
     return this.warehouseService.status(id);
   }
 
   @Post(':id/stock-in')
-  @Roles(...STOCK_ROLES)
+  @RequirePermission('stock.move')
   stockIn(@Param('id') id: string, @Body() dto: StockInDto, @CurrentUser() user: JwtPayload) {
     return this.warehouseService.stockIn(id, dto, user.sub);
   }
 
   @Post(':id/stock-out')
-  @Roles(...STOCK_ROLES)
+  @RequirePermission('stock.move')
   stockOut(@Param('id') id: string, @Body() dto: StockOutDto, @CurrentUser() user: JwtPayload) {
     return this.warehouseService.stockOut(id, dto, user.sub);
   }
 
   @Post(':id/adjust')
-  @Roles(...STOCK_ROLES)
+  @RequirePermission('stock.move')
   @ApiOperation({ summary: 'Reconcile to a physical count - reason is mandatory' })
   adjust(@Param('id') id: string, @Body() dto: AdjustStockDto, @CurrentUser() user: JwtPayload) {
     return this.warehouseService.adjust(id, dto, user.sub);
   }
 
   @Post('transfer')
-  @Roles(...STOCK_ROLES)
+  @RequirePermission('stock.move')
   @ApiOperation({ summary: 'Move stock between warehouses (FRD 16.4)' })
   transfer(@Body() dto: TransferStockDto, @CurrentUser() user: JwtPayload) {
     return this.warehouseService.transfer(dto, user.sub);
@@ -111,18 +109,19 @@ export class WarehouseController {
   // /warehouses/movements are never swallowed by the :id parameter.
 
   @Get(':id')
+  @RequirePermission('warehouses.view')
   findOne(@Param('id') id: string) {
     return this.warehouseService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('warehouses.edit')
   update(@Param('id') id: string, @Body() dto: UpdateWarehouseDto) {
     return this.warehouseService.update(id, dto);
   }
 
   @Patch(':id/active')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER)
+  @RequirePermission('warehouses.edit')
   @ApiOperation({
     summary: 'Close or reopen a warehouse',
     description:
@@ -134,7 +133,7 @@ export class WarehouseController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('warehouses.delete')
   @ApiOperation({
     summary: 'Permanently delete a warehouse',
     description:

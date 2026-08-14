@@ -77,8 +77,16 @@ describe('AuthService - session lifecycle', () => {
       },
     };
 
+    const mockPermissions = {
+      listFor: jest.fn().mockResolvedValue(['DASHBOARD_VIEW']),
+    };
+
     jwt = makeJwt();
-    service = new AuthService(prisma as unknown as PrismaService, jwt);
+    service = new AuthService(
+      prisma as unknown as PrismaService,
+      jwt,
+      mockPermissions as any,
+    );
   });
 
   const login = () => service.login({ email: 'admin@svvbalaji.com', password: 'ChangeMe@123' });

@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermissionsService } from './permissions/permissions.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
@@ -36,6 +37,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -105,8 +107,17 @@ export class AuthService {
   }
 
   /**
-   * The signed-in user's own profile. The panel calls this on boot to build
-   * role-based navigation, so it returns the branch as well as the role.
+   * The signed-in user's own profile, and everything they are permitted to do.
+   *
+   * The permission list is served from here rather than carried as a claim in
+   * the access token, and that is a deliberate cost. A claim would save this
+   * lookup, but it would also mean that revoking someone's access did nothing
+   * until their token expired - up to fifteen minutes of somebody continuing to
+   * approve farmers after being told they no longer can. Permissions are read
+   * per request from a cache the guard shares, so a change lands on the next
+   * call.
+   *
+   * The panel calls this on boot and after every refresh to build its menu.
    */
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -127,6 +138,7 @@ export class AuthService {
       branchId: user.branchId,
       branch: user.branch,
       createdAt: user.createdAt,
+      permissions: await this.permissions.listFor(user.role),
     };
   }
 
@@ -168,6 +180,9 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         branchId: user.branchId,
+        // Sent on login so the panel can render its menu on the first paint
+        // rather than flashing an empty sidebar while /auth/me is in flight.
+        permissions: await this.permissions.listFor(user.role),
       },
     };
   }

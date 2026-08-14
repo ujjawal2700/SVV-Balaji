@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { ProductionStatus, UserRole } from '@prisma/client';
+import { ProductionStatus } from '@prisma/client';
 import { IsEnum } from 'class-validator';
 import { ProductionService } from './production.service';
 import {
@@ -10,8 +10,8 @@ import {
 } from './dto/production.dto';
 import { UpdateProductionBatchDto } from './dto/update-production-batch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
@@ -23,7 +23,7 @@ export class SetProductionStatusDto {
 
 @ApiTags('production')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class ProductionController {
   constructor(private readonly productionService: ProductionService) {}
@@ -31,12 +31,13 @@ export class ProductionController {
   // --- Cleaning & Grading (FRD Section 18) ---------------------------------
 
   @Post('cleaning-grading')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PRODUCTION_MANAGER, UserRole.QA_MANAGER)
+  @RequirePermission('cleaning.create')
   recordCleaning(@Body() dto: CreateCleaningGradingDto, @CurrentUser() user: JwtPayload) {
     return this.productionService.recordCleaningGrading(dto, user.sub);
   }
 
   @Get('cleaning-grading')
+  @RequirePermission('cleaning.view')
   findCleaning(@Query('rawMaterialBatchId') rawMaterialBatchId?: string) {
     return this.productionService.findCleaningRecords(rawMaterialBatchId);
   }
@@ -44,7 +45,7 @@ export class ProductionController {
   // --- Production Batches (FRD Section 20) ---------------------------------
 
   @Post('production-batches')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PRODUCTION_MANAGER)
+  @RequirePermission('production.create')
   @ApiOperation({
     summary: 'Start a production batch, consuming raw material batches',
     description:
@@ -57,6 +58,7 @@ export class ProductionController {
   }
 
   @Get('production-batches')
+  @RequirePermission('production.view')
   findAll(
     @Query('status') status?: ProductionStatus,
     @Query('branchId') branchId?: string,
@@ -66,31 +68,32 @@ export class ProductionController {
   }
 
   @Get('production-batches/:id')
+  @RequirePermission('production.view')
   findOne(@Param('id') id: string) {
     return this.productionService.findOne(id);
   }
 
   @Patch('production-batches/:id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('production.edit')
   updateProductionBatch(@Param('id') id: string, @Body() dto: UpdateProductionBatchDto) {
     return this.productionService.updateProductionBatch(id, dto);
   }
 
   @Delete('production-batches/:id')
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('production.delete')
   deleteProductionBatch(@Param('id') id: string) {
     return this.productionService.deleteProductionBatch(id);
   }
 
   @Patch('production-batches/:id/complete')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PRODUCTION_MANAGER)
+  @RequirePermission('production.complete')
   @ApiOperation({ summary: 'Record actual output and derive process loss (FRD 20.5)' })
   complete(@Param('id') id: string, @Body() dto: CompleteProductionDto) {
     return this.productionService.completeProduction(id, dto);
   }
 
   @Patch('production-batches/:id/status')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.PRODUCTION_MANAGER)
+  @RequirePermission('production.status')
   setStatus(@Param('id') id: string, @Body() dto: SetProductionStatusDto) {
     return this.productionService.setStatus(id, dto.status);
   }
