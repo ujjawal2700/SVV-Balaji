@@ -44,19 +44,21 @@ export const queryKeys = {
 
   seedDistribution: {
     all: ['seed-distribution'] as const,
-    list: (farmerId?: string) =>
-      [...queryKeys.seedDistribution.all, 'list', farmerId ?? null] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      [...queryKeys.seedDistribution.all, 'list', filters] as const,
   },
 
   training: {
     all: ['training-sessions'] as const,
-    list: (branchId?: string) => [...queryKeys.training.all, 'list', branchId ?? null] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      [...queryKeys.training.all, 'list', filters] as const,
     detail: (id: string) => [...queryKeys.training.all, 'detail', id] as const,
   },
 
   fieldVisits: {
     all: ['field-visits'] as const,
-    list: (farmerId?: string) => [...queryKeys.fieldVisits.all, 'list', farmerId ?? null] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      [...queryKeys.fieldVisits.all, 'list', filters] as const,
     detail: (id: string) => [...queryKeys.fieldVisits.all, 'detail', id] as const,
   },
 

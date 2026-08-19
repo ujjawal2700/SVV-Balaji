@@ -6,10 +6,12 @@ import type {
   UpdateSeedDistributionInput,
 } from '../api/types';
 
-export function useSeedDistribution(farmerId?: string) {
+export function useSeedDistribution(
+  filters: { farmerId?: string; distributedById?: string } = {},
+) {
   return useQuery({
-    queryKey: queryKeys.seedDistribution.list(farmerId),
-    queryFn: () => seedDistributionApi.list(farmerId),
+    queryKey: queryKeys.seedDistribution.list(filters),
+    queryFn: () => seedDistributionApi.list(filters),
     placeholderData: keepPreviousData,
   });
 }

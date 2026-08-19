@@ -231,6 +231,28 @@ export class PackagingService {
                         collectionDate: true,
                         receiptNumber: true,
                         inspection: { select: { result: true, inspectionDate: true } },
+                        /**
+                         * The field itself. This is the finest-grained origin
+                         * the system knows: the farmer's GPS is where they
+                         * live, the plot's is where the crop actually grew,
+                         * and on a scattered smallholding those are different
+                         * places.
+                         */
+                        plot: {
+                          select: {
+                            id: true,
+                            name: true,
+                            surveyNumber: true,
+                            areaAcres: true,
+                            soilType: true,
+                            irrigationType: true,
+                            waterSource: true,
+                            currentCrop: true,
+                            sowingDate: true,
+                            expectedHarvest: true,
+                            gpsLocation: true,
+                          },
+                        },
                       },
                     },
                   },
@@ -256,6 +278,12 @@ export class PackagingService {
       rawBatchNumber: c.rawMaterialBatch.batchNumber,
       quantityUsed: c.quantityUsed,
       procuredOn: c.rawMaterialBatch.collection?.collectionDate ?? null,
+      /**
+       * Null for any harvest collected before plots existed, or from a farmer
+       * whose land was never mapped. The consumer page shows the farmer's
+       * village in that case - a coarser answer, not a broken one.
+       */
+      plot: c.rawMaterialBatch.collection?.plot ?? null,
     }));
 
     return {

@@ -1,28 +1,13 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useCanKey } from './useCan';
-
 /**
- * Route-level permission gate.
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
  *
- * Replaced RequireRole on 16 August. The difference is not cosmetic: the old
- * gate compared the user's role against a list written in navigation.tsx, so
- * changing who could open a screen meant editing and redeploying the panel.
- * This one asks whether the user holds the permission the server would check,
- * which a Super Admin controls from the Roles & Permissions screen.
+ * The definition now lives in `shared/auth/RequirePermission.tsx` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
  *
- * A screen with no `permission` is open to any signed-in user - that is how
- * /forbidden and the 404 stay reachable.
- *
- * Still a usability layer. The API enforces the same permission on every
- * endpoint behind the screen and would refuse the data regardless; the point
- * here is not to show someone a page that can only fill up with 403s.
+ * New code should import from `@shared/auth/RequirePermission` directly. This shim can go once
+ * nothing references it.
  */
-export function RequirePermission({ permission }: { permission?: string }) {
-  const canKey = useCanKey();
-
-  if (!canKey(permission)) {
-    return <Navigate to="/forbidden" replace />;
-  }
-
-  return <Outlet />;
-}
+export * from '../../../shared/auth/RequirePermission';

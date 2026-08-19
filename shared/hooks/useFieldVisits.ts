@@ -7,10 +7,10 @@ import type {
   UpdateFieldVisitInput,
 } from '../api/types';
 
-export function useFieldVisits(farmerId?: string) {
+export function useFieldVisits(filters: { farmerId?: string; expertId?: string } = {}) {
   return useQuery({
-    queryKey: queryKeys.fieldVisits.list(farmerId),
-    queryFn: () => fieldVisitsApi.list(farmerId),
+    queryKey: queryKeys.fieldVisits.list(filters),
+    queryFn: () => fieldVisitsApi.list(filters),
     placeholderData: keepPreviousData,
   });
 }

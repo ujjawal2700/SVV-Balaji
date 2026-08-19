@@ -65,6 +65,16 @@ export class CollectionService {
           farmerId: inspection.farmerId,
           branchId: dto.branchId,
           cropName: inspection.cropName,
+          /**
+           * Carried forward from the inspection rather than accepted as input.
+           * Which field a harvest came from was decided in the field, by the
+           * person standing in it - the weighbridge operator is in no position
+           * to know, and letting them override it would put a second, worse
+           * answer into the traceability chain.
+           *
+           * `dto.plotId` deliberately does not exist for this reason.
+           */
+          plotId: inspection.plotId,
           collectionDate,
           collectionLocation: dto.collectionLocation,
           grossWeight: dto.grossWeight,

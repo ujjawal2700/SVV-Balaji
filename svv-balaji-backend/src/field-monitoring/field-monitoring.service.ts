@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFieldVisitDto } from './dto/create-field-visit.dto';
 import { AddFieldVisitDocumentDto } from './dto/add-field-visit-document.dto';
-import { UpdateFieldVisitDto } from './dto/update-field-visit.dto';
 
 @Injectable()
 export class FieldMonitoringService {
@@ -29,9 +28,17 @@ export class FieldMonitoringService {
     });
   }
 
-  findAll(farmerId?: string) {
+  /**
+   * `expertId` exists so the field app can ask for "my visits" server-side.
+   *
+   * It used to filter in the browser, which is correct only while every row
+   * fits in one response. The moment this endpoint is paginated (A-12), a
+   * client-side filter would narrow ONE page and report three visits where the
+   * executive logged nine - wrong, and wrong quietly.
+   */
+  findAll(farmerId?: string, expertId?: string) {
     return this.prisma.fieldVisit.findMany({
-      where: farmerId ? { farmerId } : undefined,
+      where: farmerId || expertId ? { farmerId, expertId } : undefined,
       orderBy: { visitDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -64,59 +71,37 @@ export class FieldMonitoringService {
     });
   }
 
-  async updateVisit(id: string, dto: UpdateFieldVisitDto) {
-    await this.findOne(id);
+  async removeDocument(fieldVisitId: string, documentId: string) {
+    const doc = await this.prisma.fieldVisitDocument.findFirst({
+      where: { id: documentId, fieldVisitId },
+    });
+    if (!doc) throw new NotFoundException('Document not found for this field visit');
+
+    return this.prisma.fieldVisitDocument.delete({
+      where: { id: documentId },
+    });
+  }
+
+  async updateVisit(id: string, dto: import('./dto/update-field-visit.dto').UpdateFieldVisitDto) {
+    const visit = await this.prisma.fieldVisit.findUnique({ where: { id } });
+    if (!visit) throw new NotFoundException('Field visit not found');
 
     return this.prisma.fieldVisit.update({
       where: { id },
       data: {
-        farmerId: dto.farmerId,
-        branchId: dto.branchId,
+        ...dto,
         visitDate: dto.visitDate ? new Date(dto.visitDate) : undefined,
-        cropName: dto.cropName,
-        cropGrowthStage: dto.cropGrowthStage,
-        cropHealth: dto.cropHealth,
-        pestStatus: dto.pestStatus,
-        diseaseObservation: dto.diseaseObservation,
-        fertilizerAdvice: dto.fertilizerAdvice,
-        irrigationAdvice: dto.irrigationAdvice,
-        pestControlSuggestions: dto.pestControlSuggestions,
-        harvestPreparation: dto.harvestPreparation,
-        yieldPredictionQty: dto.yieldPredictionQty,
-      },
-      include: {
-        farmer: { select: { id: true, fullName: true, farmerCode: true } },
-        expert: { select: { id: true, fullName: true } },
-        branch: { select: { id: true, name: true } },
       },
     });
   }
 
-  /**
-   * Nothing references a field visit, so it deletes cleanly. Its attached
-   * photos and reports go with it - they are attachments to the observation,
-   * meaningless once the observation is gone.
-   */
   async removeVisit(id: string) {
-    await this.findOne(id);
+    const visit = await this.prisma.fieldVisit.findUnique({ where: { id } });
+    if (!visit) throw new NotFoundException('Field visit not found');
 
-    await this.prisma.$transaction([
-      this.prisma.fieldVisitDocument.deleteMany({ where: { fieldVisitId: id } }),
-      this.prisma.fieldVisit.delete({ where: { id } }),
-    ]);
-
-    return { id, deleted: true };
-  }
-
-  async removeDocument(fieldVisitId: string, documentId: string) {
-    const document = await this.prisma.fieldVisitDocument.findUnique({
-      where: { id: documentId },
+    return this.prisma.fieldVisit.delete({
+      where: { id },
     });
-    if (!document || document.fieldVisitId !== fieldVisitId) {
-      throw new NotFoundException('Document not found on this visit');
-    }
-
-    await this.prisma.fieldVisitDocument.delete({ where: { id: documentId } });
-    return this.findOne(fieldVisitId);
   }
 }
+

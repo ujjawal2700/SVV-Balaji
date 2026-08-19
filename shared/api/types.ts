@@ -530,6 +530,15 @@ export interface HarvestInspection {
   agreement?: Agreement | null;
   procurementPlanId: string | null;
 
+  /** Which of the farmer's plots this harvest came from. Optional throughout. */
+  plotId: string | null;
+  plot?: {
+    id: string;
+    name: string;
+    surveyNumber: string | null;
+    gpsLocation: string | null;
+  } | null;
+
   cropName: string;
   inspectionDate: string;
 
@@ -562,6 +571,8 @@ export interface CreateHarvestInspectionInput {
   farmerId: string;
   agreementId?: string;
   procurementPlanId?: string;
+  /** Optional - a farmer whose land is not mapped yet is still inspectable. */
+  plotId?: string;
   cropName: string;
   inspectionDate: string;
   moistureLevel?: number;
@@ -831,6 +842,32 @@ export interface TraceFarmer {
   rawBatchNumber: string;
   quantityUsed: string;
   procuredOn: string | null;
+
+  /**
+   * The specific field this crop grew in.
+   *
+   * Null for harvests collected before plots existed, or from a farmer whose
+   * land was never mapped - the page falls back to the village, which is a
+   * coarser answer rather than a broken one.
+   *
+   * Note the two GPS points mean different things: `gpsLocation` above is where
+   * the FARMER is, this one is where the CROP grew. On a scattered smallholding
+   * they can be kilometres apart, and it is this one a consumer is actually
+   * being shown.
+   */
+  plot: {
+    id: string;
+    name: string;
+    surveyNumber: string | null;
+    areaAcres: string;
+    soilType: string | null;
+    irrigationType: string | null;
+    waterSource: string | null;
+    currentCrop: string | null;
+    sowingDate: string | null;
+    expectedHarvest: string | null;
+    gpsLocation: string | null;
+  } | null;
 }
 
 // ===========================================================================

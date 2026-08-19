@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { TrainingService } from './training.service';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
@@ -36,8 +36,13 @@ export class TrainingController {
 
   @Get()
   @RequirePermission('training.view')
-  findAll(@Query('branchId') branchId?: string) {
-    return this.trainingService.findAll(branchId);
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'conductedById', required: false, description: 'Sessions run by one executive.' })
+  findAll(
+    @Query('branchId') branchId?: string,
+    @Query('conductedById') conductedById?: string,
+  ) {
+    return this.trainingService.findAll(branchId, conductedById);
   }
 
   @Get(':id')

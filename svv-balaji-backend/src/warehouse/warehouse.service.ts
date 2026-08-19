@@ -1,14 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertDeletable } from '../common/dependants';
 import {
   AdjustStockDto,
   CreateWarehouseDto,
   StockInDto,
   StockOutDto,
   TransferStockDto,
-  UpdateWarehouseDto,
 } from './dto/warehouse.dto';
 
 /**
@@ -29,14 +27,12 @@ export class WarehouseService {
     return this.prisma.warehouse.create({ data: dto });
   }
 
-  /**
-   * Active-only by default so pickers never offer a closed warehouse. The
-   * warehouse master screen passes `includeInactive`, without which a closed
-   * warehouse would be invisible to the only screen able to reopen it.
-   */
   findAll(branchId?: string, includeInactive = false) {
     return this.prisma.warehouse.findMany({
-      where: { branchId, isActive: includeInactive ? undefined : true },
+      where: {
+        branchId,
+        ...(includeInactive ? {} : { isActive: true }),
+      },
       orderBy: { name: 'asc' },
       include: { branch: { select: { id: true, name: true } } },
     });
@@ -51,36 +47,26 @@ export class WarehouseService {
     return warehouse;
   }
 
-  async update(id: string, dto: UpdateWarehouseDto) {
-    await this.findOne(id);
+  async update(id: string, dto: import('./dto/warehouse.dto').UpdateWarehouseDto) {
+    await this.assertWarehouse(id);
     return this.prisma.warehouse.update({
       where: { id },
       data: dto,
-      include: { branch: { select: { id: true, name: true } } },
     });
   }
 
-  /**
-   * Closing a warehouse. Refused while it still physically holds anything -
-   * a closed warehouse disappears from the transfer and stock-out pickers, so
-   * closing one with stock in it would strand that stock with no screen able
-   * to move it out.
-   */
   async setActive(id: string, isActive: boolean) {
-    const warehouse = await this.findOne(id);
-    if (warehouse.isActive === isActive) return warehouse;
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id },
+      include: { stock: true },
+    });
+    if (!warehouse) throw new NotFoundException('Warehouse not found');
 
     if (!isActive) {
-      const [raw, finished] = await this.prisma.$transaction([
-        this.prisma.warehouseStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
-        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
-      ]);
-      const holding = raw + finished;
-      if (holding > 0) {
+      const totalStock = warehouse.stock.reduce((sum, s) => sum + Number(s.quantity), 0);
+      if (totalStock > 0) {
         throw new BadRequestException(
-          `This warehouse still holds ${holding} stock line${holding === 1 ? '' : 's'}. ` +
-            `Transfer or issue the stock first - once the warehouse is closed it no longer ` +
-            `appears in the transfer picker, and the stock would be stranded.`,
+          `Cannot deactivate warehouse while it still holds stock (${totalStock} units across ${warehouse.stock.length} batches)`,
         );
       }
     }
@@ -88,35 +74,46 @@ export class WarehouseService {
     return this.prisma.warehouse.update({
       where: { id },
       data: { isActive },
-      include: { branch: { select: { id: true, name: true } } },
     });
   }
 
   async remove(id: string) {
-    const warehouse = await this.findOne(id);
-
-    const [batches, stock, movementsOut, movementsIn, finishedStock, orders, allocations] =
-      await this.prisma.$transaction([
-        this.prisma.rawMaterialBatch.count({ where: { warehouseId: id } }),
-        this.prisma.warehouseStock.count({ where: { warehouseId: id } }),
-        this.prisma.stockMovement.count({ where: { fromWarehouseId: id } }),
-        this.prisma.stockMovement.count({ where: { toWarehouseId: id } }),
-        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id } }),
-        this.prisma.order.count({ where: { warehouseId: id } }),
-        this.prisma.orderAllocation.count({ where: { warehouseId: id } }),
-      ]);
-
-    assertDeletable('Warehouse', warehouse.name, {
-      batches,
-      'stock lines': stock + finishedStock,
-      'stock movements': movementsOut + movementsIn,
-      orders,
-      allocations,
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id },
+      include: {
+        stock: true,
+        _count: {
+          select: {
+            movementsOutgoing: true,
+            movementsIncoming: true,
+            batches: true,
+          },
+        },
+      },
     });
+    if (!warehouse) throw new NotFoundException('Warehouse not found');
 
-    await this.prisma.warehouse.delete({ where: { id } });
-    return { id, deleted: true };
+    const totalStock = warehouse.stock.reduce((sum, s) => sum + Number(s.quantity), 0);
+    if (totalStock > 0) {
+      throw new BadRequestException('Cannot delete warehouse that holds stock');
+    }
+
+    if (
+      warehouse._count.movementsOutgoing > 0 ||
+      warehouse._count.movementsIncoming > 0 ||
+      warehouse._count.batches > 0
+    ) {
+      throw new BadRequestException(
+        'Cannot delete warehouse with existing inventory movements or batch history. Deactivate it instead.',
+      );
+    }
+
+    return this.prisma.warehouse.delete({
+      where: { id },
+    });
   }
+
+
 
   /** FRD 16.6 - live occupancy against capacity. */
   async status(warehouseId: string) {
@@ -163,6 +160,23 @@ export class WarehouseService {
   }
 
   /** FRD 17.4 - batches at or below the given threshold. */
+  /**
+   * FRD 17.4 - low stock alert.
+   *
+   * -----------------------------------------------------------------------
+   * Deliberately a QUERY, not a notification. Decided 16 Aug 2026.
+   *
+   * The FRD says the system "notifies warehouse managers". It does not, and
+   * that is a scoping decision rather than an omission: FRD Section 33
+   * describes one notification engine with in-app, SMS and email channels
+   * serving every module. Building a bespoke alert here would be the first of
+   * a dozen one-off notifiers to unpick when that engine lands.
+   *
+   * Also note `threshold` is a query parameter, not a configured minimum per
+   * product. A real minimum stock level belongs on the product master and
+   * should arrive with the notification work, not before it.
+   * -----------------------------------------------------------------------
+   */
   async lowStock(threshold: number, warehouseId?: string) {
     const rows = await this.prisma.warehouseStock.findMany({
       where: { warehouseId, quantity: { lte: threshold } },

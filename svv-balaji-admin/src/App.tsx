@@ -236,20 +236,21 @@ function RedirectToFieldApp() {
   /**
    * Where the field app actually lives.
    *
-   * In production nginx serves it from /field on this same origin, so a bare
-   * path is right. In development it is a SEPARATE Vite server on 5174, and a
-   * bare path would point straight back at this dev server - which owns /field
-   * through its SPA fallback and would render this component again. That is an
-   * infinite reload loop, and it is what happens if you open
-   * localhost:5173/field.
+   * Always /field on this origin. In production nginx serves it from there; in
+   * development this dev server proxies /field to the field app's own server on
+   * 5174 (see vite.config.ts), so the URL is the same in both and there is one
+   * address to remember.
    *
-   * VITE_FIELD_APP_URL overrides both, for a deployment that puts the field app
-   * somewhere else entirely.
+   * The loop guard below still matters: if the proxy is removed, or the field
+   * app's dev server is not running, a redirect to /field/ can land back here.
+   * Looping is far harder to diagnose than a message.
    */
   const target = useMemo(() => {
+    // Same path in both, now that the dev server proxies /field to the field
+    // app's own server (see vite.config.ts). VITE_FIELD_APP_URL overrides it
+    // for a deployment that puts the field app somewhere else entirely.
     const configured = import.meta.env.VITE_FIELD_APP_URL as string | undefined;
-    const fallback = import.meta.env.DEV ? 'http://localhost:5174/field/' : '/field/';
-    return new URL(configured || fallback, window.location.origin).href;
+    return new URL(configured || '/field/', window.location.origin).href;
   }, []);
 
   /**
@@ -274,14 +275,13 @@ function RedirectToFieldApp() {
           title="The field app is a separate application"
           subTitle={
             <span>
-              It is not part of this panel. In development it runs on its own port:
+              It is a separate build, served at <Typography.Text code>/field/</Typography.Text>.
+              In development that is proxied to its own dev server, so it has to be running:
               <br />
               <Typography.Text code copyable>
-                http://localhost:5174/field/
-              </Typography.Text>
-              <br />
-              Start it with <Typography.Text code>npm run dev</Typography.Text> inside{' '}
-              <Typography.Text code>svv-balaji-field</Typography.Text>.
+                npm run dev
+              </Typography.Text>{' '}
+              inside <Typography.Text code>svv-balaji-field</Typography.Text>.
             </span>
           }
           extra={

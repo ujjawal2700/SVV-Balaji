@@ -1,61 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { permissionsApi } from '../api/permissions';
-import { queryKeys } from '../api/queryKeys';
-import type { UserRole } from '../auth/types';
-import { useAuth } from '../auth/useAuth';
-
 /**
- * The catalogue of what can be granted. Effectively static for the lifetime of
- * a deployment - it changes when the application ships new screens, not when
- * an administrator ticks a box - so it is cached hard.
- */
-export function usePermissionRegistry() {
-  return useQuery({
-    queryKey: queryKeys.permissions.registry(),
-    queryFn: () => permissionsApi.registry(),
-    staleTime: Infinity,
-  });
-}
-
-/** What each role currently holds, plus how many people that affects. */
-export function usePermissionMatrix() {
-  return useQuery({
-    queryKey: queryKeys.permissions.matrix(),
-    queryFn: () => permissionsApi.matrix(),
-  });
-}
-
-/**
- * Saves a role's permissions.
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
  *
- * Reloads the signed-in user afterwards, always - not only when they edited
- * their own role. A Super Admin editing Sales Team does not change their own
- * access, but the reload costs one request and removes a whole class of
- * confusion where the sidebar disagrees with what was just saved.
+ * The definition now lives in `shared/hooks/usePermissions.ts` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
+ *
+ * New code should import from `@shared/hooks/usePermissions` directly. This shim can go once
+ * nothing references it.
  */
-export function useSetRolePermissions() {
-  const queryClient = useQueryClient();
-  const { reload } = useAuth();
-
-  return useMutation({
-    mutationFn: ({ role, permissions }: { role: UserRole; permissions: string[] }) =>
-      permissionsApi.setForRole(role, permissions),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.permissions.all });
-      await reload();
-    },
-  });
-}
-
-export function useResetRolePermissions() {
-  const queryClient = useQueryClient();
-  const { reload } = useAuth();
-
-  return useMutation({
-    mutationFn: (role: UserRole) => permissionsApi.resetRole(role),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.permissions.all });
-      await reload();
-    },
-  });
-}
+export * from '../../../shared/hooks/usePermissions';

@@ -1,51 +1,13 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '../api/queryKeys';
-import { seedDistributionApi } from '../api/seedDistribution';
-import type {
-  CreateSeedDistributionInput,
-  UpdateSeedDistributionInput,
-} from '../api/types';
-
-export function useSeedDistribution(farmerId?: string) {
-  return useQuery({
-    queryKey: queryKeys.seedDistribution.list(farmerId),
-    queryFn: () => seedDistributionApi.list(farmerId),
-    placeholderData: keepPreviousData,
-  });
-}
-
-export function useCreateSeedDistribution() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CreateSeedDistributionInput) => seedDistributionApi.create(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.seedDistribution.all });
-      // Also shown on the farmer profile.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
-    },
-  });
-}
-
-export function useUpdateSeedDistribution() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateSeedDistributionInput }) =>
-      seedDistributionApi.update(id, input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.seedDistribution.all });
-    },
-  });
-}
-
-export function useDeleteSeedDistribution() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => seedDistributionApi.remove(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.seedDistribution.all });
-    },
-  });
-}
+/**
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
+ *
+ * The definition now lives in `shared/hooks/useSeedDistribution.ts` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
+ *
+ * New code should import from `@shared/hooks/useSeedDistribution` directly. This shim can go once
+ * nothing references it.
+ */
+export * from '../../../shared/hooks/useSeedDistribution';

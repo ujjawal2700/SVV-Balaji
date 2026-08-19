@@ -10,9 +10,17 @@ import type {
 } from './types';
 
 export const fieldVisitsApi = {
-  async list(farmerId?: string): Promise<Paginated<FieldVisit>> {
+  /**
+   * `expertId` filters server-side, which is what the field app's "Mine"
+   * toggle uses. Filtering in the browser only works while every row fits in
+   * one response; once this endpoint is paginated it would narrow a single
+   * page and under-report.
+   */
+  async list(filters: { farmerId?: string; expertId?: string } = {}): Promise<
+    Paginated<FieldVisit>
+  > {
     const response = await api.get<FieldVisit[]>('/field-visits', {
-      params: pruneEmpty({ farmerId }),
+      params: pruneEmpty(filters),
     });
     return unwrapList<FieldVisit>(response.data);
   },

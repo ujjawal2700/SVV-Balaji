@@ -31,7 +31,7 @@ export function FieldVisitsPage() {
     setEditing(null);
   };
 
-  const visits = useFieldVisits(farmerId);
+  const visits = useFieldVisits({ farmerId });
 
   const columns: ColumnsType<FieldVisit> = [
     {
@@ -102,7 +102,7 @@ export function FieldVisitsPage() {
           entity="field visit"
           label={`the visit to ${visit.farmer?.fullName ?? 'this farmer'}`}
           can="FIELD_VISIT_EDIT"
-          canDelete="FIELD_VISIT_DELETE"
+          canDelete="RECORD_DELETE"
           onEdit={() => openEdit(visit)}
           onDelete={() => remove.mutateAsync(visit.id)}
         >
