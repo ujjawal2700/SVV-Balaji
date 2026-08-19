@@ -10,9 +10,12 @@ import type {
 } from './types';
 
 export const trainingApi = {
-  async list(branchId?: string): Promise<Paginated<TrainingSession>> {
+  /** `conductedById` filters server-side - see the note on fieldVisitsApi.list. */
+  async list(
+    filters: { branchId?: string; conductedById?: string } = {},
+  ): Promise<Paginated<TrainingSession>> {
     const response = await api.get<TrainingSession[]>('/training-sessions', {
-      params: pruneEmpty({ branchId }),
+      params: pruneEmpty(filters),
     });
     return unwrapList<TrainingSession>(response.data);
   },

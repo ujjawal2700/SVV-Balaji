@@ -1,7 +1,7 @@
 import { CalendarOutlined, ReadOutlined, TeamOutlined } from '@ant-design/icons';
 import { Badge, Button, Space, Tag } from 'antd';
 import dayjs from 'dayjs';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { TrainingSession } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
@@ -18,13 +18,13 @@ export function FieldTrainingTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const sessions = useTrainingSessions();
   const { mineOnly, setMineOnly } = useMineFilter();
 
-  const rows = useMemo(() => {
-    const all = sessions.data?.data ?? [];
-    return mineOnly && user ? all.filter((row) => row.conductedById === user.id) : all;
-  }, [sessions.data, mineOnly, user]);
+  // Server-side - see the note in VisitsTab.
+  const sessions = useTrainingSessions(mineOnly && user ? { conductedById: user.id } : {});
+  const everyone = useTrainingSessions();
+
+  const rows = sessions.data?.data ?? [];
 
   const closeForm = () => setFormOpen(false);
 
@@ -34,7 +34,7 @@ export function FieldTrainingTab() {
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}
-          total={sessions.data?.data?.length ?? 0}
+          total={everyone.data?.data?.length ?? 0}
           shown={rows.length}
         />
         {!isMobile ? (

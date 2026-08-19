@@ -86,6 +86,71 @@ export function TracePage() {
   );
 }
 
+/**
+ * Where the crop actually grew.
+ *
+ * Worth its own column rather than being folded into "Farm", because the two
+ * answer different questions and can disagree: the farmer's GPS is where they
+ * live, the plot's is where this crop stood. On a scattered smallholding they
+ * are kilometres apart, and it is the plot a consumer scanning a pack is really
+ * asking about.
+ *
+ * A null plot is expected, not an error - harvests collected before plots
+ * existed have none, and so does a farmer whose land was never mapped. Saying
+ * so plainly is better than an empty cell that reads as missing data.
+ */
+function PlotOrigin({ plot }: { plot: TraceFarmer['plot'] }) {
+  if (!plot) {
+    return (
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        Not recorded
+      </Typography.Text>
+    );
+  }
+
+  return (
+    <Space direction="vertical" size={2}>
+      <Space size={4} wrap>
+        <Typography.Text strong style={{ fontSize: 13 }}>
+          {plot.name}
+        </Typography.Text>
+        {plot.surveyNumber ? <Tag>#{plot.surveyNumber}</Tag> : null}
+      </Space>
+
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {plot.areaAcres} ac
+        {plot.soilType ? ` · ${plot.soilType}` : ''}
+        {plot.irrigationType ? ` · ${plot.irrigationType}` : ''}
+      </Typography.Text>
+
+      {plot.sowingDate ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Sown {formatDate(plot.sowingDate)}
+        </Typography.Text>
+      ) : null}
+
+      {plot.gpsLocation ? (
+        <Typography.Link
+          style={{ fontSize: 12 }}
+          // Opens the coordinates in whatever map app the device uses. The
+          // point of capturing GPS in the field is that somebody can go back
+          // to that spot; a string you have to copy out by hand does not
+          // deliver that.
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(plot.gpsLocation)}`}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <EnvironmentOutlined /> {plot.gpsLocation}
+        </Typography.Link>
+      ) : (
+        <Typography.Text type="warning" style={{ fontSize: 12 }}>
+          No location captured
+        </Typography.Text>
+      )}
+    </Space>
+  );
+}
+
 function TraceResult({ data }: { data: FinishedGoodsTrace }) {
   const farmerColumns = [
     {
@@ -116,6 +181,11 @@ function TraceResult({ data }: { data: FinishedGoodsTrace }) {
           ) : null}
         </Space>
       ),
+    },
+    {
+      title: 'Field',
+      key: 'plot',
+      render: (_: unknown, farmer: TraceFarmer) => <PlotOrigin plot={farmer.plot} />,
     },
     { title: 'Crop', dataIndex: 'crop', key: 'crop' },
     {

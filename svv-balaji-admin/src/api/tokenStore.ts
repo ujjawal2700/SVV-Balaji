@@ -1,59 +1,13 @@
-import { REFRESH_TOKEN_STORAGE_KEY } from '../config';
-
 /**
- * Where the session's tokens live.
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
  *
- * Access token: memory only. It expires in 15 minutes and is replaced often, so
- * persisting it buys nothing and widens the blast radius of an XSS bug.
+ * The definition now lives in `shared/api/tokenStore.ts` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
  *
- * Refresh token: localStorage. It has to survive a page reload, and this API
- * has no httpOnly cookie session to lean on. That is a known trade-off rather
- * than an oversight - if we later move refresh to a cookie, this module is the
- * only place that changes.
+ * New code should import from `@shared/api/tokenStore` directly. This shim can go once
+ * nothing references it.
  */
-let accessToken: string | null = null;
-
-/** Called when the session can no longer be recovered, so the app can redirect. */
-let sessionLostHandler: (() => void) | null = null;
-
-export const tokenStore = {
-  getAccessToken(): string | null {
-    return accessToken;
-  },
-
-  getRefreshToken(): string | null {
-    try {
-      return window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
-    } catch {
-      // Private browsing modes can throw on storage access. Losing the refresh
-      // token degrades to "log in again", which is survivable.
-      return null;
-    }
-  },
-
-  set(tokens: { accessToken: string; refreshToken: string }) {
-    accessToken = tokens.accessToken;
-    try {
-      window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refreshToken);
-    } catch {
-      /* see getRefreshToken */
-    }
-  },
-
-  clear() {
-    accessToken = null;
-    try {
-      window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
-    } catch {
-      /* see getRefreshToken */
-    }
-  },
-
-  onSessionLost(handler: () => void) {
-    sessionLostHandler = handler;
-  },
-
-  notifySessionLost() {
-    sessionLostHandler?.();
-  },
-};
+export * from '../../../shared/api/tokenStore';

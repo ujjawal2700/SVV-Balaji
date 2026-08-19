@@ -155,11 +155,14 @@ export class ProcurementService {
       }
     }
 
+    await this.assertPlotBelongsToFarmer(dto.plotId, dto.farmerId);
+
     return this.prisma.harvestInspection.create({
       data: {
         farmerId: dto.farmerId,
         agreementId: dto.agreementId,
         procurementPlanId: dto.procurementPlanId,
+        plotId: dto.plotId,
         cropName: dto.cropName,
         inspectionDate: new Date(dto.inspectionDate),
         moistureLevel: dto.moistureLevel,
@@ -181,6 +184,7 @@ export class ProcurementService {
       orderBy: { inspectionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
+        plot: { select: { id: true, name: true, surveyNumber: true, gpsLocation: true } },
         inspectedBy: { select: { id: true, fullName: true } },
         collection: { select: { id: true, receiptNumber: true } },
       },
@@ -192,6 +196,7 @@ export class ProcurementService {
       where: { id },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
+        plot: { select: { id: true, name: true, surveyNumber: true, gpsLocation: true } },
         inspectedBy: { select: { id: true, fullName: true } },
         agreement: true,
         documents: true,
@@ -250,11 +255,14 @@ export class ProcurementService {
       }
     }
 
+    await this.assertPlotBelongsToFarmer(dto.plotId, inspection.farmerId);
+
     return this.prisma.harvestInspection.update({
       where: { id },
       data: {
         agreementId: dto.agreementId,
         procurementPlanId: dto.procurementPlanId,
+        plotId: dto.plotId,
         cropName: dto.cropName,
         inspectionDate: dto.inspectionDate ? new Date(dto.inspectionDate) : undefined,
         moistureLevel: dto.moistureLevel,
@@ -268,6 +276,7 @@ export class ProcurementService {
       },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
+        plot: { select: { id: true, name: true, surveyNumber: true, gpsLocation: true } },
         inspectedBy: { select: { id: true, fullName: true } },
         collection: { select: { id: true, receiptNumber: true } },
       },
@@ -309,5 +318,30 @@ export class ProcurementService {
 
     await this.prisma.harvestInspectionDocument.delete({ where: { id: documentId } });
     return this.findInspection(inspectionId);
+  }
+
+  /**
+   * A plot must belong to the farmer being inspected.
+   *
+   * Without this the plot picker is only as trustworthy as the client that
+   * populated it, and a mis-sent id would attribute one farmer's harvest to
+   * another's field - which is precisely the claim the trace page makes to a
+   * consumer. Cheap check, and it is the whole value of the feature.
+   */
+  private async assertPlotBelongsToFarmer(plotId: string | undefined, farmerId: string) {
+    if (!plotId) return;
+
+    const plot = await this.prisma.farmPlot.findUnique({
+      where: { id: plotId },
+      select: { farmerId: true, name: true },
+    });
+
+    if (!plot) throw new NotFoundException('Plot not found');
+    if (plot.farmerId !== farmerId) {
+      throw new BadRequestException(
+        `Plot "${plot.name}" belongs to a different farmer. A harvest can only come from a plot ` +
+          'this farmer works.',
+      );
+    }
   }
 }

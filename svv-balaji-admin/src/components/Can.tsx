@@ -1,26 +1,13 @@
-import type { ReactNode } from 'react';
-import type { Permission } from '../auth/permissions';
-import { useCan } from '../auth/useCan';
-
-interface CanProps {
-  do: Permission;
-  children: ReactNode;
-  /** Rendered instead when the user lacks the permission. Usually nothing. */
-  fallback?: ReactNode;
-}
-
 /**
- * Renders its children only if the signed-in user holds the permission.
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
  *
- *   <Can do="FARMER_APPROVE">
- *     <Button onClick={approve}>Approve</Button>
- *   </Can>
+ * The definition now lives in `shared/components/Can.tsx` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
  *
- * Prefer hiding an action outright to disabling it. A disabled Approve button
- * tells a Procurement Manager the feature exists and that they are being
- * refused; an absent one simply is not their job.
+ * New code should import from `@shared/components/Can` directly. This shim can go once
+ * nothing references it.
  */
-export function Can({ do: permission, children, fallback = null }: CanProps) {
-  const allowed = useCan(permission);
-  return <>{allowed ? children : fallback}</>;
-}
+export * from '../../../shared/components/Can';

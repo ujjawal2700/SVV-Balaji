@@ -7,9 +7,12 @@ import type {
 } from './types';
 
 export const seedDistributionApi = {
-  async list(farmerId?: string): Promise<Paginated<SeedDistribution>> {
+  /** `distributedById` filters server-side - see the note on fieldVisitsApi.list. */
+  async list(
+    filters: { farmerId?: string; distributedById?: string } = {},
+  ): Promise<Paginated<SeedDistribution>> {
     const response = await api.get<SeedDistribution[]>('/seed-distribution', {
-      params: pruneEmpty({ farmerId }),
+      params: pruneEmpty(filters),
     });
     return unwrapList<SeedDistribution>(response.data);
   },

@@ -19,6 +19,7 @@ import { apiErrorMessage } from '../../api/client';
 import type { CreateHarvestInspectionInput, HarvestInspection } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
 import { useAgreements } from '../../hooks/useAgreements';
+import { useFarmPlots } from '../../hooks/useFarmPlots';
 import {
   useCreateHarvestInspection,
   useUpdateHarvestInspection,
@@ -67,12 +68,21 @@ export function HarvestInspectionFormModal({
   // Only this farmer's agreements can be linked, and the agreement is what
   // supplies the fallback purchase rate at collection.
   const agreements = useAgreements(farmerId);
+  const plots = useFarmPlots(farmerId);
+
+  /**
+   * A farmer with no mapped plots is normal, not an error - land profiling
+   * happens on a later visit than registration. The field says so rather than
+   * offering an empty dropdown, which reads as broken.
+   */
+  const plotsAvailable = (plots.data?.data?.length ?? 0) > 0;
 
   const initialValues = useMemo(() => {
     if (!inspection) return undefined;
     return {
       farmerId: inspection.farmerId,
       agreementId: inspection.agreementId ?? undefined,
+      plotId: inspection.plotId ?? undefined,
       procurementPlanId: inspection.procurementPlanId ?? undefined,
       cropName: inspection.cropName,
       inspectionDate: dayjs(inspection.inspectionDate),
@@ -146,6 +156,7 @@ export function HarvestInspectionFormModal({
         onValuesChange={(changedValues) => {
           if ('farmerId' in changedValues) {
             form.setFieldValue('agreementId', undefined);
+            form.setFieldValue('plotId', undefined);
           }
         }}
       >
@@ -193,6 +204,40 @@ export function HarvestInspectionFormModal({
                 options={(agreements.data?.data ?? []).map((agreement) => ({
                   value: agreement.id,
                   label: `${agreement.cropName}${agreement.variety ? ` (${agreement.variety})` : ''} — ₹${agreement.purchaseRate}/KG · ${agreement.status}`,
+                }))}
+              />
+            </Form.Item>
+          </Col>
+
+          <Col xs={24}>
+            <Form.Item
+              name="plotId"
+              label="Which field"
+              extra={
+                plotsAvailable
+                  ? 'Carried onto the collection and shown on the consumer trace page — this is the finest-grained answer to "where was this grown".'
+                  : 'This farmer has no plots mapped yet. You can map them from the Farmers tab; the inspection does not need one.'
+              }
+            >
+              <Select
+                allowClear
+                disabled={!farmerId || !plotsAvailable}
+                loading={plots.isFetching}
+                placeholder={
+                  !farmerId
+                    ? 'Select a farmer first'
+                    : plotsAvailable
+                      ? 'Optional'
+                      : 'No plots mapped for this farmer'
+                }
+                options={(plots.data?.data ?? []).map((plot) => ({
+                  value: plot.id,
+                  label:
+                    `${plot.name}` +
+                    (plot.surveyNumber ? ` · #${plot.surveyNumber}` : '') +
+                    ` · ${plot.areaAcres} ac` +
+                    (plot.currentCrop ? ` · ${plot.currentCrop}` : '') +
+                    (plot.gpsLocation ? '' : ' · no location'),
                 }))}
               />
             </Form.Item>

@@ -17,6 +17,15 @@ export class CreateHarvestInspectionDto {
   @IsString()
   procurementPlanId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Which of the farmer\'s plots this harvest came from. Optional - a farmer whose land is ' +
+      'not mapped yet is still inspectable, and every inspection predating plots has none.',
+  })
+  @IsOptional()
+  @IsString()
+  plotId?: string;
+
   @ApiProperty()
   @IsString()
   cropName: string;

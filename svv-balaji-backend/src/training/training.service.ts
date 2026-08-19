@@ -1,6 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertDeletable } from '../common/dependants';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
@@ -22,9 +21,10 @@ export class TrainingService {
     });
   }
 
-  findAll(branchId?: string) {
+  /** `conductedById` answers "sessions I ran" without pulling the branch's. */
+  findAll(branchId?: string, conductedById?: string) {
     return this.prisma.trainingSession.findMany({
-      where: branchId ? { branchId } : undefined,
+      where: branchId || conductedById ? { branchId, conductedById } : undefined,
       orderBy: { scheduledDate: 'desc' },
       include: {
         branch: { select: { id: true, name: true } },
@@ -74,38 +74,44 @@ export class TrainingService {
     });
   }
 
-  /**
-   * Correcting a session - a retitled topic, a moved date, the wrong branch.
-   * Always allowed: the session record describes an event, and attendance
-   * hangs off it by id rather than by any of these fields.
-   */
-  async updateSession(id: string, dto: UpdateTrainingSessionDto) {
-    await this.findOne(id);
+  async removeAttendance(sessionId: string, farmerId: string) {
+    const attendance = await this.prisma.trainingAttendance.findUnique({
+      where: { sessionId_farmerId: { sessionId, farmerId } },
+    });
+    if (!attendance) throw new NotFoundException('Attendance record not found');
+
+    return this.prisma.trainingAttendance.delete({
+      where: { sessionId_farmerId: { sessionId, farmerId } },
+    });
+  }
+
+  async removeMaterial(sessionId: string, materialId: string) {
+    const material = await this.prisma.trainingMaterial.findFirst({
+      where: { id: materialId, sessionId },
+    });
+    if (!material) throw new NotFoundException('Training material not found');
+
+    return this.prisma.trainingMaterial.delete({
+      where: { id: materialId },
+    });
+  }
+
+  async updateSession(
+    id: string,
+    dto: import('./dto/update-training-session.dto').UpdateTrainingSessionDto,
+  ) {
+    const session = await this.prisma.trainingSession.findUnique({ where: { id } });
+    if (!session) throw new NotFoundException('Training session not found');
 
     return this.prisma.trainingSession.update({
       where: { id },
       data: {
-        title: dto.title,
-        description: dto.description,
+        ...dto,
         scheduledDate: dto.scheduledDate ? new Date(dto.scheduledDate) : undefined,
-        branchId: dto.branchId,
-      },
-      include: {
-        branch: { select: { id: true, name: true } },
-        conductedBy: { select: { id: true, fullName: true } },
-        _count: { select: { attendances: true, materials: true } },
       },
     });
   }
 
-  /**
-   * Deleting a session.
-   *
-   * Blocked once attendance has been marked: that is the record of which
-   * farmers were trained, and FRD 11 treats it as evidence of the extension
-   * work the branch has done. Materials are not a blocker - they are
-   * attachments to the session and go with it.
-   */
   async removeSession(id: string) {
     const session = await this.prisma.trainingSession.findUnique({
       where: { id },
@@ -113,39 +119,20 @@ export class TrainingService {
     });
     if (!session) throw new NotFoundException('Training session not found');
 
-    assertDeletable('Training session', session.title, {
-      'attendance records': session._count.attendances,
-    });
-
-    await this.prisma.$transaction([
-      this.prisma.trainingMaterial.deleteMany({ where: { sessionId: id } }),
-      this.prisma.trainingSession.delete({ where: { id } }),
-    ]);
-
-    return { id, deleted: true };
-  }
-
-  /** Removing a farmer marked present by mistake. */
-  async removeAttendance(sessionId: string, farmerId: string) {
-    const attendance = await this.prisma.trainingAttendance.findUnique({
-      where: { sessionId_farmerId: { sessionId, farmerId } },
-    });
-    if (!attendance) throw new NotFoundException('That farmer is not on this session');
-
-    await this.prisma.trainingAttendance.delete({
-      where: { sessionId_farmerId: { sessionId, farmerId } },
-    });
-
-    return this.findOne(sessionId);
-  }
-
-  async removeMaterial(sessionId: string, materialId: string) {
-    const material = await this.prisma.trainingMaterial.findUnique({ where: { id: materialId } });
-    if (!material || material.sessionId !== sessionId) {
-      throw new NotFoundException('Material not found on this session');
+    if (session._count.attendances > 0) {
+      throw new BadRequestException(
+        'Cannot delete training session once attendance has been marked',
+      );
     }
 
-    await this.prisma.trainingMaterial.delete({ where: { id: materialId } });
-    return this.findOne(sessionId);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.trainingMaterial.deleteMany({
+        where: { sessionId: id },
+      });
+      return tx.trainingSession.delete({
+        where: { id },
+      });
+    });
   }
 }
+

@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { FieldMonitoringService } from './field-monitoring.service';
 import { CreateFieldVisitDto } from './dto/create-field-visit.dto';
 import { AddFieldVisitDocumentDto } from './dto/add-field-visit-document.dto';
@@ -35,8 +35,14 @@ export class FieldMonitoringController {
 
   @Get()
   @RequirePermission('fieldVisits.view')
-  findAll(@Query('farmerId') farmerId?: string) {
-    return this.fieldMonitoringService.findAll(farmerId);
+  @ApiQuery({ name: 'farmerId', required: false })
+  @ApiQuery({
+    name: 'expertId',
+    required: false,
+    description: 'Visits logged by one executive. The field app\'s "Mine" filter uses this.',
+  })
+  findAll(@Query('farmerId') farmerId?: string, @Query('expertId') expertId?: string) {
+    return this.fieldMonitoringService.findAll(farmerId, expertId);
   }
 
   @Get(':id')

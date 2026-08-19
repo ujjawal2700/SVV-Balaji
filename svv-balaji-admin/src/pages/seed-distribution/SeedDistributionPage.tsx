@@ -28,7 +28,7 @@ export function SeedDistributionPage() {
     setFormOpen(false);
     setEditing(null);
   };
-  const distributions = useSeedDistribution(farmerId);
+  const distributions = useSeedDistribution({ farmerId });
 
   const columns: ColumnsType<SeedDistribution> = [
     {
@@ -93,7 +93,7 @@ export function SeedDistributionPage() {
           entity="distribution record"
           label={`the ${row.seedName} handout`}
           can="SEED_DISTRIBUTION_EDIT"
-          canDelete="SEED_DISTRIBUTION_DELETE"
+          canDelete="RECORD_DELETE"
           onEdit={() => openEdit(row)}
           onDelete={() => remove.mutateAsync(row.id)}
         />

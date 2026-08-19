@@ -546,6 +546,15 @@ model HarvestInspection {
   procurementPlanId String?
   procurementPlan   ProcurementPlan? @relation(fields: [procurementPlanId], references: [id])
 
+  /// Which of the farmer's plots this harvest came from.
+  ///
+  /// Optional, and has to stay optional: every inspection recorded before
+  /// plots existed has none, and a farmer whose land has not been mapped yet
+  /// still needs to be inspectable. A missing plot is a gap in the trace, not
+  /// a reason to block procurement.
+  plotId String?
+  plot   FarmPlot? @relation("InspectedPlot", fields: [plotId], references: [id])
+
   cropName       String
   inspectionDate DateTime
 
@@ -571,6 +580,7 @@ model HarvestInspection {
 
   @@index([farmerId])
   @@index([result])
+  @@index([plotId])
   @@map("harvest_inspections")
 }
 
@@ -606,6 +616,13 @@ model RawMaterialCollection {
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
+  /// Copied from the inspection at collection time rather than read through
+  /// it. The collection is the row the batch and every downstream trace hangs
+  /// off, and denormalising one nullable id here saves a join on the hottest
+  /// read in the system - the consumer trace page.
+  plotId String?
+  plot   FarmPlot? @relation("HarvestedPlot", fields: [plotId], references: [id])
+
   cropName           String
   collectionDate     DateTime
   collectionLocation String?
@@ -633,6 +650,7 @@ model RawMaterialCollection {
 
   @@index([farmerId])
   @@index([branchId])
+  @@index([plotId])
   @@map("raw_material_collections")
 }
 
@@ -1518,6 +1536,11 @@ model FarmPlot {
 
   createdById String
   createdBy   User   @relation("FarmPlotsCreated", fields: [createdById], references: [id])
+
+  /// What has been harvested from this plot. These are what turn a plot from a
+  /// description into part of the traceability chain.
+  harvestInspections HarvestInspection[]     @relation("InspectedPlot")
+  collections        RawMaterialCollection[] @relation("HarvestedPlot")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

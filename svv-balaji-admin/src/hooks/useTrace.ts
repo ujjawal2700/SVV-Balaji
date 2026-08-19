@@ -1,19 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
-import { queryKeys } from '../api/queryKeys';
-import { traceApi } from '../api/trace';
-
 /**
- * Only runs once a batch number has actually been submitted — this is a lookup,
- * not a live filter, and firing a request per keystroke would mostly produce
- * 404s.
+ * Moved to `shared/` on 16 August 2026, when the Agriculture Expert app became
+ * a second front end.
+ *
+ * The definition now lives in `shared/hooks/useTrace.ts` and is compiled into both apps, so the
+ * API contract cannot drift between them. This file re-exports it rather than
+ * disappearing, so the many imports across this app did not all have to change
+ * in one commit.
+ *
+ * New code should import from `@shared/hooks/useTrace` directly. This shim can go once
+ * nothing references it.
  */
-export function useFinishedGoodsTrace(fgBatchNumber: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.trace.finishedGoods(fgBatchNumber ?? ''),
-    queryFn: () => traceApi.finishedGoods(fgBatchNumber as string),
-    enabled: Boolean(fgBatchNumber),
-    retry: false,
-    // A pack's history is immutable once made.
-    staleTime: Infinity,
-  });
-}
+export * from '../../../shared/hooks/useTrace';

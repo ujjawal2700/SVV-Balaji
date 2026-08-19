@@ -1,6 +1,6 @@
 import { CalendarOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import { Button, Space, Tag, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { FieldVisit } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
@@ -33,13 +33,23 @@ export function FieldVisitsTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const visits = useFieldVisits();
   const { mineOnly, setMineOnly } = useMineFilter();
 
-  const rows = useMemo(() => {
-    const all = visits.data?.data ?? [];
-    return mineOnly && user ? all.filter((visit) => visit.expertId === user.id) : all;
-  }, [visits.data, mineOnly, user]);
+  /**
+   * The filter goes to the server, not to the array.
+   *
+   * Filtering here in the browser was only ever correct while every row came
+   * back in one response. Once this endpoint is paginated it would narrow a
+   * single page - the executive would see three visits having logged nine, and
+   * nothing would look wrong.
+   */
+  const visits = useFieldVisits(mineOnly && user ? { expertId: user.id } : {});
+
+  // Total across everyone, for the "3 of 12" label. Cheap: the same query key
+  // machinery caches it, and it is the only way to say what is being hidden.
+  const everyone = useFieldVisits();
+
+  const rows = visits.data?.data ?? [];
 
   const closeForm = () => setFormOpen(false);
 
@@ -49,7 +59,7 @@ export function FieldVisitsTab() {
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}
-          total={visits.data?.data?.length ?? 0}
+          total={everyone.data?.data?.length ?? 0}
           shown={rows.length}
         />
         {!isMobile ? (

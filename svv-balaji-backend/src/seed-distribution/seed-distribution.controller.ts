@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SeedDistributionService } from './seed-distribution.service';
 import { CreateSeedDistributionDto } from './dto/create-seed-distribution.dto';
 import { UpdateSeedDistributionDto } from './dto/update-seed-distribution.dto';
@@ -35,8 +35,13 @@ export class SeedDistributionController {
 
   @Get()
   @RequirePermission('seed.view')
-  findAll(@Query('farmerId') farmerId?: string) {
-    return this.seedDistributionService.findAll(farmerId);
+  @ApiQuery({ name: 'farmerId', required: false })
+  @ApiQuery({ name: 'distributedById', required: false, description: 'Handouts made by one executive.' })
+  findAll(
+    @Query('farmerId') farmerId?: string,
+    @Query('distributedById') distributedById?: string,
+  ) {
+    return this.seedDistributionService.findAll(farmerId, distributedById);
   }
 
   @Get(':id')

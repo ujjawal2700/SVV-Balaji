@@ -1,6 +1,6 @@
 import { CalendarOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { Button, Space, Tag, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { SeedDistribution } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
@@ -16,13 +16,14 @@ export function FieldSeedTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SeedDistribution | null>(null);
 
-  const seed = useSeedDistribution();
   const { mineOnly, setMineOnly } = useMineFilter();
 
-  const rows = useMemo(() => {
-    const all = seed.data?.data ?? [];
-    return mineOnly && user ? all.filter((row) => row.distributedById === user.id) : all;
-  }, [seed.data, mineOnly, user]);
+  // Server-side - see the note in VisitsTab. A client-side filter breaks the
+  // moment this endpoint is paginated.
+  const seed = useSeedDistribution(mineOnly && user ? { distributedById: user.id } : {});
+  const everyone = useSeedDistribution();
+
+  const rows = seed.data?.data ?? [];
 
   const closeForm = () => {
     setFormOpen(false);
@@ -40,7 +41,7 @@ export function FieldSeedTab() {
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}
-          total={seed.data?.data?.length ?? 0}
+          total={everyone.data?.data?.length ?? 0}
           shown={rows.length}
         />
         {!isMobile ? (

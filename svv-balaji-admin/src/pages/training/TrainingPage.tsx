@@ -31,7 +31,7 @@ export function TrainingPage() {
     setEditing(null);
   };
 
-  const sessions = useTrainingSessions(branchId);
+  const sessions = useTrainingSessions({ branchId });
 
   const columns: ColumnsType<TrainingSession> = [
     {
@@ -110,7 +110,7 @@ export function TrainingPage() {
             entity="training session"
             label={session.title}
             can="TRAINING_EDIT"
-            canDelete="TRAINING_DELETE"
+            canDelete="RECORD_DELETE"
             onEdit={() => openEdit(session)}
             onDelete={() => remove.mutateAsync(session.id)}
             deleteBlockedReason={

@@ -7,10 +7,10 @@ import type {
   UpdateTrainingSessionInput,
 } from '../api/types';
 
-export function useTrainingSessions(branchId?: string) {
+export function useTrainingSessions(filters: { branchId?: string; conductedById?: string } = {}) {
   return useQuery({
-    queryKey: queryKeys.training.list(branchId),
-    queryFn: () => trainingApi.list(branchId),
+    queryKey: queryKeys.training.list(filters),
+    queryFn: () => trainingApi.list(filters),
     placeholderData: keepPreviousData,
   });
 }
