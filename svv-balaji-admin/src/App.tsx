@@ -124,6 +124,15 @@ const QualityInspectionsPage = lazy(() =>
 const FinishedGoodsPage = lazy(() =>
   import('./pages/packaging/FinishedGoodsPage').then((m) => ({ default: m.FinishedGoodsPage })),
 );
+const CustomersPage = lazy(() =>
+  import('./pages/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
+);
+const PriceListsPage = lazy(() =>
+  import('./pages/pricing/PriceListsPage').then((m) => ({ default: m.PriceListsPage })),
+);
+const OrdersPage = lazy(() =>
+  import('./pages/sales/OrdersPage').then((m) => ({ default: m.OrdersPage })),
+);
 const RolesPermissionsPage = lazy(() =>
   import('./pages/settings/RolesPermissionsPage').then((m) => ({
     default: m.RolesPermissionsPage,
@@ -172,6 +181,10 @@ const SCREENS: Record<string, ReactElement> = {
   '/production-batches': <ProductionBatchesPage />,
   '/quality-inspections': <QualityInspectionsPage />,
   '/finished-goods': <FinishedGoodsPage />,
+  // Zone 4 — Sales & Distribution (FRD Sections 24-28)
+  '/customers': <CustomersPage />,
+  '/price-lists': <PriceListsPage />,
+  '/orders': <OrdersPage />,
   // Farm-to-fork trace (FRD Section 30)
   '/trace': <TracePage />,
   // Administration

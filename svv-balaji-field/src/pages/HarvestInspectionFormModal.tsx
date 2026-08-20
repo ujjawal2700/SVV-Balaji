@@ -1,9 +1,17 @@
 import {
+  CheckCircleOutlined,
+  CompassOutlined,
+  ExperimentOutlined,
+  SafetyCertificateOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
+import {
   Alert,
   App as AntApp,
+  Button,
   Col,
   DatePicker,
-  Divider,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -11,7 +19,7 @@ import {
   Radio,
   Row,
   Select,
-  Space,
+  Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo } from 'react';
@@ -20,6 +28,7 @@ import type { CreateHarvestInspectionInput, HarvestInspection } from '@shared/ap
 import { FarmerSelect } from '@shared/components/pickers';
 import { useAgreements } from '@shared/hooks/useAgreements';
 import { useFarmPlots } from '@shared/hooks/useFarmPlots';
+import { useIsMobile } from '@shared/hooks/useIsMobile';
 import {
   useCreateHarvestInspection,
   useUpdateHarvestInspection,
@@ -38,23 +47,66 @@ interface InspectionForm extends Omit<CreateHarvestInspectionInput, 'inspectionD
   inspectionDate: Dayjs;
 }
 
-/**
- * Pre-harvest quality inspection (FRD 13.2 - 13.5).
- *
- * Two gates are visible in this form because the server enforces them:
- *
- *   - the farmer picker is restricted to APPROVED farmers. An unapproved farmer
- *     has no traceability code, so nothing collected from them could be traced
- *     downstream, and the API refuses the inspection outright.
- *   - the result decides whether this harvest can ever be collected. Only
- *     APPROVED passes the gate in collection.service.ts, so the choice is
- *     spelled out rather than left as a neutral dropdown.
- */
+interface SectionCardProps {
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}
+
+function FormSectionCard({ icon, iconBg, iconColor, title, subtitle, children }: SectionCardProps) {
+  return (
+    <div
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 12,
+        padding: '16px 18px',
+        marginBottom: 16,
+        boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: iconBg,
+            color: iconColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </div>
+        <div>
+          <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>
+            {title}
+          </Typography.Text>
+          {subtitle && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {subtitle}
+            </Typography.Text>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function HarvestInspectionFormModal({
   open,
   inspection,
   onClose,
 }: HarvestInspectionFormModalProps) {
+  const isMobile = useIsMobile();
   const [form] = Form.useForm<InspectionForm>();
   const { message } = AntApp.useApp();
   const createInspection = useCreateHarvestInspection();
@@ -65,16 +117,9 @@ export function HarvestInspectionFormModal({
   const farmerId = Form.useWatch('farmerId', form);
   const result = Form.useWatch('result', form);
 
-  // Only this farmer's agreements can be linked, and the agreement is what
-  // supplies the fallback purchase rate at collection.
   const agreements = useAgreements(farmerId);
   const plots = useFarmPlots(farmerId);
 
-  /**
-   * A farmer with no mapped plots is normal, not an error - land profiling
-   * happens on a later visit than registration. The field says so rather than
-   * offering an empty dropdown, which reads as broken.
-   */
   const plotsAvailable = (plots.data?.data?.length ?? 0) > 0;
 
   const initialValues = useMemo(() => {
@@ -101,31 +146,29 @@ export function HarvestInspectionFormModal({
 
   useEffect(() => {
     if (open) {
-      // Small timeout ensures the Modal and Form are fully mounted before reset
-      setTimeout(() => form.resetFields(), 0);
+      if (initialValues) {
+        form.setFieldsValue(initialValues);
+      } else {
+        form.resetFields();
+        form.setFieldValue('result', 'APPROVED');
+      }
     }
-  }, [open, form, initialValues]);
+  }, [open, initialValues, form]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
-    const payload = {
+    const payload: CreateHarvestInspectionInput = {
       ...values,
       inspectionDate: toIsoDate(values.inspectionDate) as string,
     };
 
     try {
       if (inspection) {
-        const { farmerId: _farmerId, ...editable } = payload;
-        void _farmerId;
-        await updateInspection.mutateAsync({ id: inspection.id, input: editable });
-        message.success('Inspection updated');
+        await updateInspection.mutateAsync({ id: inspection.id, input: payload });
+        message.success('Harvest inspection updated successfully');
       } else {
         await createInspection.mutateAsync(payload);
-        message.success(
-          values.result === 'APPROVED'
-            ? 'Inspection recorded — this harvest can now be collected'
-            : 'Inspection recorded',
-        );
+        message.success('Harvest inspection recorded successfully');
       }
       onClose();
     } catch (error) {
@@ -136,170 +179,202 @@ export function HarvestInspectionFormModal({
     }
   };
 
-  return (
-    <Modal
-      open={open}
-      title={isEdit ? `Edit inspection — ${inspection?.cropName}` : 'Record harvest inspection'}
-      okText={isEdit ? 'Save changes' : 'Record inspection'}
-      onOk={handleSubmit}
-      onCancel={onClose}
-      confirmLoading={createInspection.isPending || updateInspection.isPending}
-      width={760}
-      destroyOnClose
+  const formContent = (
+    <Form
+      form={form}
+      layout="vertical"
+      requiredMark
+      preserve={false}
+      initialValues={initialValues}
+      style={{ padding: isMobile ? 0 : '4px 0' }}
+      onValuesChange={(changedValues) => {
+        if ('farmerId' in changedValues) {
+          form.setFieldValue('agreementId', undefined);
+          form.setFieldValue('plotId', undefined);
+        }
+      }}
     >
-      <Form
-        form={form}
-        layout="vertical"
-        requiredMark
-        preserve={false}
-        initialValues={initialValues}
-        onValuesChange={(changedValues) => {
-          if ('farmerId' in changedValues) {
-            form.setFieldValue('agreementId', undefined);
-            form.setFieldValue('plotId', undefined);
-          }
-        }}
+      {/* Section 1: Farmer & Agreement Context */}
+      <FormSectionCard
+        icon={<SafetyCertificateOutlined />}
+        iconBg="#ecfdf5"
+        iconColor="#059669"
+        title="Harvest & Producer Details"
+        subtitle="Select approved farmer and link agreement/plot"
       >
-        <Row gutter={16}>
+        <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
             <Form.Item
               name="farmerId"
-              label="Farmer"
+              label="Approved Farmer"
               rules={[required('Farmer')]}
               extra={
                 isEdit
-                  ? 'Fixed. An APPROVED result must not become transferable to another farmer.'
-                  : 'Approved farmers only — an unapproved farmer has no traceability code.'
+                  ? 'Fixed. An APPROVED result must not become transferable.'
+                  : 'Approved farmers only with active traceability code.'
               }
             >
               <FarmerSelect approvedOnly disabled={isEdit} />
             </Form.Item>
           </Col>
           <Col xs={24} md={6}>
-            <Form.Item name="cropName" label="Crop" rules={[required('Crop')]}>
-              <Input placeholder="Wheat" />
+            <Form.Item name="cropName" label="Crop Name" rules={[required('Crop')]}>
+              <Input placeholder="e.g. Wheat" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={6}>
             <Form.Item
               name="inspectionDate"
-              label="Inspection date"
+              label="Inspection Date"
               rules={[required('Inspection date')]}
             >
-              <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+              <DatePicker style={{ width: '100%', borderRadius: 8 }} format="DD MMM YYYY" />
             </Form.Item>
           </Col>
 
-          <Col xs={24}>
+          <Col xs={24} md={12}>
             <Form.Item
               name="agreementId"
-              label="Against agreement"
-              extra="Optional, but linking one means the collection can fall back to the agreed rate instead of needing it typed in."
+              label="Against Agreement"
+              extra="Links fallback purchase rate at collection"
             >
               <Select
                 allowClear
                 disabled={!farmerId}
                 loading={agreements.isFetching}
-                placeholder={farmerId ? 'Optional' : 'Select a farmer first'}
-                options={(agreements.data?.data ?? []).map((agreement) => ({
+                placeholder={farmerId ? 'Optional agreement linkage' : 'Select farmer first'}
+                style={{ borderRadius: 8 }}
+                options={(agreements.data?.data ?? []).map((agreement: any) => ({
                   value: agreement.id,
-                  label: `${agreement.cropName}${agreement.variety ? ` (${agreement.variety})` : ''} — ₹${agreement.purchaseRate}/KG · ${agreement.status}`,
+                  label: `${agreement.cropName}${agreement.variety ? ` (${agreement.variety})` : ''} — ₹${agreement.purchaseRate}/KG`,
                 }))}
               />
             </Form.Item>
           </Col>
 
-          <Col xs={24}>
+          <Col xs={24} md={12}>
             <Form.Item
               name="plotId"
-              label="Which field"
-              extra={
-                plotsAvailable
-                  ? 'Carried onto the collection and shown on the consumer trace page — this is the finest-grained answer to "where was this grown".'
-                  : 'This farmer has no plots mapped yet. You can map them from the Farmers tab; the inspection does not need one.'
-              }
+              label="Originating Field / Plot"
+              extra={plotsAvailable ? 'Carried into downstream batch trace' : 'No plots mapped yet for farmer'}
             >
               <Select
                 allowClear
                 disabled={!farmerId || !plotsAvailable}
                 loading={plots.isFetching}
-                placeholder={
-                  !farmerId
-                    ? 'Select a farmer first'
-                    : plotsAvailable
-                      ? 'Optional'
-                      : 'No plots mapped for this farmer'
-                }
-                options={(plots.data?.data ?? []).map((plot) => ({
+                placeholder={!farmerId ? 'Select farmer first' : plotsAvailable ? 'Optional plot' : 'No plots mapped'}
+                style={{ borderRadius: 8 }}
+                options={(plots.data?.data ?? []).map((plot: any) => ({
                   value: plot.id,
-                  label:
-                    `${plot.name}` +
-                    (plot.surveyNumber ? ` · #${plot.surveyNumber}` : '') +
-                    ` · ${plot.areaAcres} ac` +
-                    (plot.currentCrop ? ` · ${plot.currentCrop}` : '') +
-                    (plot.gpsLocation ? '' : ' · no location'),
+                  label: `${plot.name} (${plot.areaAcres} ac) · ${plot.currentCrop || 'Plot'}`,
                 }))}
               />
             </Form.Item>
           </Col>
         </Row>
+      </FormSectionCard>
 
-        <Divider orientation="left" plain>
-          Quality checklist (FRD 13.2)
-        </Divider>
-
-        <Row gutter={16}>
+      {/* Section 2: Quality Inspection Checklist */}
+      <FormSectionCard
+        icon={<ExperimentOutlined />}
+        iconBg="#eff6ff"
+        iconColor="#2563eb"
+        title="Quality Checklist (FRD 13.2)"
+        subtitle="Physical parameters, grain structure, and moisture evaluation"
+      >
+        <Row gutter={[14, 0]}>
           <Col xs={12} md={6}>
             <Form.Item
               name="moistureLevel"
-              label="Moisture %"
+              label="Moisture (%)"
               rules={[positiveNumber('Moisture', true)]}
             >
-              <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.1} />
+              <InputNumber style={{ width: '100%', borderRadius: 8 }} min={0} max={100} step={0.1} placeholder="e.g. 11.5" />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
             <Form.Item
               name="foreignMatter"
-              label="Foreign matter %"
+              label="Foreign Matter (%)"
               rules={[positiveNumber('Foreign matter', true)]}
             >
-              <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.1} />
+              <InputNumber style={{ width: '100%', borderRadius: 8 }} min={0} max={100} step={0.1} placeholder="e.g. 0.8" />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
-            <Form.Item name="grainSize" label="Grain size">
-              <Input placeholder="e.g. Bold" />
+            <Form.Item name="grainSize" label="Grain Size">
+              <Input placeholder="e.g. Bold, Medium" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
-            <Form.Item name="grainColor" label="Colour">
-              <Input placeholder="e.g. Golden" />
+            <Form.Item name="grainColor" label="Grain Colour">
+              <Input placeholder="e.g. Golden, Lustrous" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
-            <Form.Item name="smell" label="Smell">
-              <Input placeholder="e.g. Normal" />
+            <Form.Item name="smell" label="Odor / Smell">
+              <Input placeholder="e.g. Natural, Normal" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={12} md={18}>
-            <Form.Item name="physicalDamage" label="Physical damage">
-              <Input placeholder="e.g. None observed" />
+            <Form.Item name="physicalDamage" label="Physical / Insect Damage">
+              <Input placeholder="e.g. None observed, minimal shriveled" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>
+      </FormSectionCard>
 
-        <Divider orientation="left" plain>
-          Decision (FRD 13.4)
-        </Divider>
-
-        <Form.Item name="result" label="Result" rules={[required('Result')]}>
-          <Radio.Group>
-            <Space direction="vertical">
-              <Radio value="APPROVED">Approved — this harvest may be collected</Radio>
-              <Radio value="REJECTED">Rejected — it may never be collected</Radio>
-              <Radio value="HOLD_FOR_REINSPECTION">Hold — re-inspect before deciding</Radio>
-            </Space>
+      {/* Section 3: Gate Decision */}
+      <FormSectionCard
+        icon={<CompassOutlined />}
+        iconBg="#fffbeb"
+        iconColor="#d97706"
+        title="Gate Decision & Clearance (FRD 13.4)"
+        subtitle="Authorise or hold procurement collection"
+      >
+        <Form.Item name="result" label="Inspection Verdict" rules={[required('Result')]}>
+          <Radio.Group style={{ width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
+              <Radio.Button
+                value="APPROVED"
+                style={{
+                  height: 'auto',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  textAlign: 'center',
+                  fontWeight: 600,
+                  color: result === 'APPROVED' ? '#047857' : undefined,
+                }}
+              >
+                <CheckCircleOutlined style={{ marginRight: 6 }} /> Approved for Collection
+              </Radio.Button>
+              <Radio.Button
+                value="HOLD_FOR_REINSPECTION"
+                style={{
+                  height: 'auto',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  textAlign: 'center',
+                  fontWeight: 600,
+                  color: result === 'HOLD_FOR_REINSPECTION' ? '#b45309' : undefined,
+                }}
+              >
+                <WarningOutlined style={{ marginRight: 6 }} /> Hold for Re-inspection
+              </Radio.Button>
+              <Radio.Button
+                value="REJECTED"
+                style={{
+                  height: 'auto',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  textAlign: 'center',
+                  fontWeight: 600,
+                  color: result === 'REJECTED' ? '#b91c1c' : undefined,
+                }}
+              >
+                Rejected (Blocked)
+              </Radio.Button>
+            </div>
           </Radio.Group>
         </Form.Item>
 
@@ -307,24 +382,181 @@ export function HarvestInspectionFormModal({
           <Alert
             type="warning"
             showIcon
-            style={{ marginBottom: 16 }}
-            message="This blocks collection"
-            description="Only an APPROVED inspection can be collected. A rejected or held harvest cannot be received into stock until a new inspection approves it."
+            style={{ marginBottom: 16, borderRadius: 10 }}
+            message="This blocks warehouse collection"
+            description="Only an APPROVED inspection permits procurement. A rejected or held harvest cannot be received until a re-inspection passes."
           />
         ) : null}
 
         <Form.Item
           name="remarks"
-          label="Remarks"
-          rules={
-            result === 'REJECTED'
-              ? [{ required: true, message: 'Give a reason for the rejection' }]
-              : undefined
-          }
+          label="Inspector Remarks & Feedback"
+          rules={result === 'REJECTED' ? [{ required: true, message: 'Reason required for rejection' }] : undefined}
         >
-          <Input.TextArea rows={2} placeholder="Optional for approval, required when rejecting" />
+          <Input.TextArea rows={2} placeholder="Optional for approval, mandatory when rejecting" style={{ borderRadius: 8 }} />
         </Form.Item>
-      </Form>
+      </FormSectionCard>
+    </Form>
+  );
+
+  const headerContent = (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 50%, #f7fee7 100%)',
+        margin: '-16px -24px -16px -24px',
+        padding: '18px 24px',
+        borderRadius: isMobile ? 0 : '14px 14px 0 0',
+        borderBottom: '1px solid #e2e8f0',
+      }}
+    >
+      <svg
+        viewBox="0 0 600 160"
+        preserveAspectRatio="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.45,
+          pointerEvents: 'none',
+        }}
+      >
+        <path d="M0,0 L600,0 L600,80 C480,140 420,20 320,110 C240,180 140,40 0,90 Z" fill="#d9f99d" />
+        <path d="M0,0 L600,0 L600,40 C490,90 390,-10 280,70 C190,130 90,20 0,60 Z" fill="#a7f3d0" />
+        <circle cx="50" cy="30" r="14" fill="none" stroke="#65a30d" strokeWidth="2" opacity="0.35" />
+      </svg>
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#059669',
+            fontSize: 20,
+            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.15)',
+            border: '1px solid #a7f3d0',
+            flexShrink: 0,
+          }}
+        >
+          <SafetyCertificateOutlined />
+        </div>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
+            {isEdit ? 'Edit Harvest Inspection' : 'Record Harvest Inspection'}
+          </Typography.Title>
+          <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2 }}>
+            Pre-procurement quality gate for traceability and batch intake
+          </Typography.Text>
+        </div>
+      </div>
+    </div>
+  );
+
+  const isPending = createInspection.isPending || updateInspection.isPending;
+
+  if (isMobile) {
+    return (
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title={headerContent}
+        placement="top"
+        height="100vh"
+        styles={{
+          body: { background: '#f8fafc', padding: '14px 14px 80px 14px' },
+          header: { borderBottom: '1px solid #e2e8f0' },
+        }}
+        footer={
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Button block style={{ height: 44, borderRadius: 10 }} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              block
+              type="primary"
+              loading={isPending}
+              onClick={handleSubmit}
+              style={{
+                height: 44,
+                borderRadius: 10,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
+              }}
+            >
+              {isEdit ? 'Save Changes' : 'Submit Inspection'}
+            </Button>
+          </div>
+        }
+        destroyOnClose
+      >
+        {formContent}
+      </Drawer>
+    );
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={headerContent}
+      onCancel={onClose}
+      width={760}
+      style={{ top: 24, paddingBottom: 24 }}
+      styles={{
+        body: {
+          background: '#f8fafc',
+          padding: '16px 20px',
+          maxHeight: 'calc(90vh - 130px)',
+          overflowY: 'auto',
+          margin: '0 -24px',
+          paddingInline: 24,
+        },
+        header: {
+          padding: '16px 24px',
+          borderBottom: '1px solid #e2e8f0',
+          marginBottom: 0,
+        },
+        footer: {
+          padding: '14px 24px',
+          borderTop: '1px solid #e2e8f0',
+          margin: 0,
+        },
+      }}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <Button style={{ height: 42, paddingInline: 20, borderRadius: 10 }} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="primary"
+            loading={isPending}
+            onClick={handleSubmit}
+            style={{
+              height: 42,
+              paddingInline: 24,
+              borderRadius: 10,
+              fontWeight: 600,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              boxShadow: '0 2px 10px 0 rgba(16, 185, 129, 0.35)',
+            }}
+          >
+            {isEdit ? 'Save Changes' : 'Submit Inspection'}
+          </Button>
+        </div>
+      }
+      destroyOnClose
+    >
+      {formContent}
     </Modal>
   );
 }

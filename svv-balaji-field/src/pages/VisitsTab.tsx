@@ -54,8 +54,20 @@ export function FieldVisitsTab() {
   const closeForm = () => setFormOpen(false);
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: '#fff',
+          padding: isMobile ? '12px' : '14px 18px',
+          borderRadius: 8,
+          border: '1px solid #e8eae8',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}

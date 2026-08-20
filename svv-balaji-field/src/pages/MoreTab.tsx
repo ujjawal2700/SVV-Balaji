@@ -1,9 +1,10 @@
 import {
   ExperimentOutlined,
+  InfoCircleOutlined,
   LogoutOutlined,
-  QuestionCircleOutlined,
   ReadOutlined,
   RightOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { App as AntApp, Avatar, Button, Card, List, Space, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
@@ -14,18 +15,6 @@ import { useCanFn } from '@shared/auth/useCan';
 import { useSeedDistribution } from '@shared/hooks/useSeedDistribution';
 import { useTrainingSessions } from '@shared/hooks/useTraining';
 
-/**
- * The two lower-frequency areas, plus the account.
- *
- * A "More" tab is where app navigation quietly turns back into a menu, so this
- * one earns its place by showing counts rather than only labels — an executive
- * glancing at it can see there are two sessions this month without opening
- * anything.
- *
- * An area the user cannot reach is hidden rather than shown disabled. Seed and
- * training are separate permissions, and a Branch Manager using this panel may
- * legitimately hold one and not the other.
- */
 export function FieldMoreTab() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -39,9 +28,11 @@ export function FieldMoreTab() {
     can('SEED_DISTRIBUTION_VIEW')
       ? {
           key: 'seed',
-          icon: <ExperimentOutlined style={{ fontSize: 20, color: '#389e0d' }} />,
-          title: 'Seed & agri-inputs',
-          description: 'Record what you handed out, to whom, and from which batch.',
+          icon: <ExperimentOutlined />,
+          iconBg: '#ecfdf5',
+          iconColor: '#059669',
+          title: 'Seed & Agri-Inputs',
+          description: 'Record input distributions, recipient farmers, and supplier batch numbers.',
           count: seed.data?.data?.length ?? 0,
           countLabel: 'handouts logged',
           path: '/more/seed',
@@ -50,9 +41,11 @@ export function FieldMoreTab() {
     can('TRAINING_VIEW')
       ? {
           key: 'training',
-          icon: <ReadOutlined style={{ fontSize: 20, color: '#1677ff' }} />,
-          title: 'Training sessions',
-          description: 'Run a session at the farm, then record attendance and materials here.',
+          icon: <ReadOutlined />,
+          iconBg: '#e0e7ff',
+          iconColor: '#4338ca',
+          title: 'Training Sessions',
+          description: 'Schedule farmer workshops, track attendance, and log curriculum notes.',
           count: training.data?.data?.length ?? 0,
           countLabel: 'sessions',
           path: '/more/training',
@@ -61,6 +54,8 @@ export function FieldMoreTab() {
   ].filter(Boolean) as Array<{
     key: string;
     icon: ReactNode;
+    iconBg: string;
+    iconColor: string;
     title: string;
     description: string;
     count: number;
@@ -70,86 +65,234 @@ export function FieldMoreTab() {
 
   const signOut = () => {
     modal.confirm({
-      title: 'Sign out?',
+      title: 'Sign out of Field Operations?',
       content:
-        'You will need your email and password to get back in. Anything you have already saved ' +
-        'is on the server, not on this phone.',
+        'You will need your email and password to log in again. All recorded data is securely synced to the server.',
       okText: 'Sign out',
+      okButtonProps: { danger: true },
       onOk: async () => {
         await logout();
-        message.success('Signed out');
-        // No navigate. Clearing the user is what swaps the router over to the
-        // login screen (see App.tsx) - pushing /login as well would race the
-        // re-render and can leave a blank frame on a slow phone.
+        message.success('Signed out successfully');
       },
     });
   };
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card styles={{ body: { padding: 0 } }}>
-        <List
-          itemLayout="horizontal"
-          dataSource={areas}
-          renderItem={(area) => (
-            <List.Item
-              onClick={() => navigate(area.path)}
-              style={{ padding: '14px 16px', cursor: 'pointer' }}
-              extra={<RightOutlined style={{ color: '#bfbfbf' }} />}
-            >
-              <List.Item.Meta
-                avatar={area.icon}
-                title={
-                  <Space size={8}>
-                    <Typography.Text strong>{area.title}</Typography.Text>
-                    <Tag>{`${area.count} ${area.countLabel}`}</Tag>
-                  </Space>
-                }
-                description={
-                  <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                    {area.description}
-                  </Typography.Text>
-                }
-              />
-            </List.Item>
-          )}
-        />
-      </Card>
+    <div style={{ maxWidth: 768, margin: '0 auto', width: '100%', paddingBottom: 24 }}>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        {/* Section Header */}
+        <div style={{ marginBottom: 4 }}>
+          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+            Operations & Settings
+          </Typography.Title>
+          <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
+            Manage agricultural input logs, training workshops, and your field session
+          </Typography.Text>
+        </div>
 
-      <Card size="small">
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Space size={12}>
-            <Avatar size={44}>{user?.fullName?.charAt(0).toUpperCase()}</Avatar>
-            <div>
-              <Typography.Text strong style={{ display: 'block' }}>
-                {user?.fullName}
-              </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                {user ? ROLE_LABELS[user.role] : ''}
-                {user?.branch ? ` · ${user.branch.name}` : ''}
-              </Typography.Text>
+        {/* Module Action Rows */}
+        <Card
+          styles={{ body: { padding: 0 } }}
+          style={{
+            borderRadius: 14,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+            overflow: 'hidden',
+          }}
+        >
+          <List
+            itemLayout="horizontal"
+            dataSource={areas}
+            renderItem={(area, index) => (
+              <List.Item
+                onClick={() => navigate(area.path)}
+                style={{
+                  padding: '16px 20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  borderBottom: index < areas.length - 1 ? '1px solid #f1f5f9' : 'none',
+                }}
+                className="hover:bg-slate-50"
+                extra={
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      background: '#f8fafc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#94a3b8',
+                      marginLeft: 12,
+                    }}
+                  >
+                    <RightOutlined style={{ fontSize: 12 }} />
+                  </div>
+                }
+              >
+                <List.Item.Meta
+                  avatar={
+                    <div
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 10,
+                        background: area.iconBg,
+                        color: area.iconColor,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 19,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {area.icon}
+                    </div>
+                  }
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <Typography.Text strong style={{ fontSize: 15, color: '#0f172a' }}>
+                        {area.title}
+                      </Typography.Text>
+                      <Tag
+                        style={{
+                          margin: 0,
+                          borderRadius: 999,
+                          border: 'none',
+                          background: '#f1f5f9',
+                          color: '#334155',
+                          fontWeight: 600,
+                          fontSize: 11,
+                          padding: '1px 10px',
+                        }}
+                      >
+                        {`${area.count} ${area.countLabel}`}
+                      </Tag>
+                    </div>
+                  }
+                  description={
+                    <Typography.Text style={{ color: '#64748b', fontSize: 13, display: 'block', marginTop: 2 }}>
+                      {area.description}
+                    </Typography.Text>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        </Card>
+
+        {/* User Profile & Account Actions */}
+        <Card
+          style={{
+            borderRadius: 14,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+          }}
+          styles={{ body: { padding: '18px 20px' } }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <Avatar
+                size={48}
+                style={{
+                  background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: 18,
+                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
+                }}
+              >
+                {user?.fullName?.charAt(0).toUpperCase() || <UserOutlined />}
+              </Avatar>
+              <div style={{ flex: 1 }}>
+                <Typography.Text strong style={{ fontSize: 15, color: '#0f172a', display: 'block' }}>
+                  {user?.fullName}
+                </Typography.Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                  <Tag
+                    color="blue"
+                    style={{
+                      margin: 0,
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '0 8px',
+                    }}
+                  >
+                    {user ? ROLE_LABELS[user.role] : ''}
+                  </Tag>
+                  {user?.branch && (
+                    <Typography.Text style={{ color: '#64748b', fontSize: 12 }}>
+                      {user.branch.name}
+                    </Typography.Text>
+                  )}
+                </div>
+              </div>
             </div>
-          </Space>
 
-          <Button block icon={<LogoutOutlined />} onClick={signOut}>
-            Sign out
-          </Button>
-        </Space>
-      </Card>
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+              <Button
+                block
+                icon={<LogoutOutlined />}
+                onClick={signOut}
+                style={{
+                  height: 40,
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  color: '#dc2626',
+                  background: '#fef2f2',
+                  border: '1px solid #fee2e2',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Sign out
+              </Button>
+            </div>
+          </div>
+        </Card>
 
-      <Card size="small">
-        <Space direction="vertical" size={6}>
-          <Typography.Text strong>
-            <QuestionCircleOutlined /> This needs a connection
-          </Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            Everything you record here is saved to the server as you save it — nothing is held on
-            the phone. If you are somewhere with no signal, write it down and enter it when you are
-            back in range. Offline capture is possible to add, but it is not built yet, and a form
-            that silently fails to save would be worse than one that tells you it cannot.
-          </Typography.Text>
-        </Space>
-      </Card>
-    </Space>
+        {/* Connectivity & Offline Notice Banner */}
+        <div
+          style={{
+            borderRadius: 14,
+            border: '1px solid #fef3c7',
+            background: 'linear-gradient(135deg, #fffbeb 0%, #fefce8 100%)',
+            padding: '16px 18px',
+            display: 'flex',
+            gap: 12,
+            alignItems: 'flex-start',
+            boxShadow: '0 1px 2px 0 rgba(217, 119, 6, 0.04)',
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: '#fde68a',
+              color: '#b45309',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              flexShrink: 0,
+              marginTop: 2,
+            }}
+          >
+            <InfoCircleOutlined />
+          </div>
+          <div>
+            <Typography.Text strong style={{ fontSize: 14, color: '#92400e', display: 'block', marginBottom: 2 }}>
+              Active Internet Connection Required
+            </Typography.Text>
+            <Typography.Text style={{ color: '#78350f', fontSize: 13, lineHeight: 1.5, display: 'block' }}>
+              All field inspections, seed handouts, and farmer onboarding logs are instantly synced to the central
+              cloud database. If you are operating in low-connectivity areas, keep written notes and submit the records once you are back in network range.
+            </Typography.Text>
+          </div>
+        </div>
+      </Space>
+    </div>
   );
 }

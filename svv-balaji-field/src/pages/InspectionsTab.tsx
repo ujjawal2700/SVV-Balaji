@@ -2,7 +2,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, SafetyCertificateOutlined } f
 import { Alert, Button, Segmented, Space, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
-import type { HarvestInspection, InspectionResult } from '@shared/api/types';
+import type { Agreement, HarvestInspection, InspectionResult } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
 import { useAuth } from '@shared/auth/useAuth';
 import { useAgreements } from '@shared/hooks/useAgreements';
@@ -16,7 +16,7 @@ import { MineToggle, useMineFilter } from './MineToggle';
 const RESULT_COLOUR: Record<InspectionResult, string> = {
   APPROVED: 'green',
   REJECTED: 'red',
-  CONDITIONAL: 'gold',
+  HOLD_FOR_REINSPECTION: 'gold',
 };
 
 type Filter = 'due' | 'mine' | 'all';
@@ -76,7 +76,7 @@ export function FieldInspectionsTab() {
   const history = mineOnly ? mine : all;
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Alert
         type="warning"
         showIcon
@@ -85,19 +85,29 @@ export function FieldInspectionsTab() {
         description="An APPROVED result is what allows procurement to collect this harvest and mint its raw material batch. A REJECTED one stops it. Once a collection has been recorded the inspection is fixed — the server refuses an edit, because that judgement has already been acted on."
       />
 
-      <Segmented<Filter>
-        block
-        value={filter}
-        onChange={setFilter}
-        options={[
-          { label: `Due (${due.length})`, value: 'due' },
-          { label: 'Done', value: 'mine' },
-          { label: 'All', value: 'all' },
-        ]}
-      />
+      <div
+        style={{
+          background: '#fff',
+          padding: isMobile ? '8px' : '10px 16px',
+          borderRadius: 8,
+          border: '1px solid #e8eae8',
+        }}
+      >
+        <Segmented<Filter>
+          block={isMobile}
+          size={isMobile ? 'middle' : 'middle'}
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { label: `Due (${due.length})`, value: 'due' },
+            { label: 'Done', value: 'mine' },
+            { label: 'All', value: 'all' },
+          ]}
+        />
+      </div>
 
       {filter === 'due' ? (
-        <FieldList
+        <FieldList<Agreement>
           rows={due}
           isLoading={agreements.isLoading || inspections.isLoading}
           error={agreements.error ?? inspections.error}

@@ -14,6 +14,20 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         // The contract layer, compiled into both apps. See shared/README.md.
         '@shared': fileURLToPath(new URL('../shared', import.meta.url)),
+        react: fileURLToPath(new URL('./node_modules/react', import.meta.url)),
+        'react-dom': fileURLToPath(new URL('./node_modules/react-dom', import.meta.url)),
+        'react-router-dom': fileURLToPath(
+          new URL('./node_modules/react-router-dom', import.meta.url),
+        ),
+        axios: fileURLToPath(new URL('./node_modules/axios', import.meta.url)),
+        antd: fileURLToPath(new URL('./node_modules/antd', import.meta.url)),
+        '@ant-design/icons': fileURLToPath(
+          new URL('./node_modules/@ant-design/icons', import.meta.url),
+        ),
+        '@tanstack/react-query': fileURLToPath(
+          new URL('./node_modules/@tanstack/react-query', import.meta.url),
+        ),
+        dayjs: fileURLToPath(new URL('./node_modules/dayjs', import.meta.url)),
       },
     },
     server: {

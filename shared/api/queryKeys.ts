@@ -1,4 +1,4 @@
-import type { FarmerQuery } from './types';
+import type { CustomerQuery, FarmerQuery, OrderQuery, PriceListQuery } from './types';
 
 /**
  * Every React Query key in the app, in one hierarchy.
@@ -172,5 +172,32 @@ export const queryKeys = {
     label: (id: string) => [...queryKeys.finishedGoods.all, 'label', id] as const,
     stock: (warehouseId?: string) =>
       [...queryKeys.finishedGoods.all, 'stock', warehouseId ?? null] as const,
+  },
+
+  // --- Zone 4 ---------------------------------------------------------------
+
+  customers: {
+    all: ['customers'] as const,
+    list: (query: CustomerQuery) => [...queryKeys.customers.all, 'list', query] as const,
+    detail: (id: string) => [...queryKeys.customers.all, 'detail', id] as const,
+    // Credit moves whenever an order is confirmed or paid, not only when the
+    // customer record is edited - so it is its own key and gets invalidated by
+    // order mutations too.
+    credit: (id: string) => [...queryKeys.customers.all, 'credit', id] as const,
+  },
+
+  priceLists: {
+    all: ['price-lists'] as const,
+    list: (query: PriceListQuery) => [...queryKeys.priceLists.all, 'list', query] as const,
+    comparison: (productId: string) =>
+      [...queryKeys.priceLists.all, 'comparison', productId] as const,
+  },
+
+  orders: {
+    all: ['orders'] as const,
+    list: (query: OrderQuery) => [...queryKeys.orders.all, 'list', query] as const,
+    detail: (id: string) => [...queryKeys.orders.all, 'detail', id] as const,
+    traceability: (orderNumber: string) =>
+      [...queryKeys.orders.all, 'traceability', orderNumber] as const,
   },
 } as const;

@@ -77,6 +77,19 @@ export class SalesController {
     return this.salesService.traceability(orderNumber);
   }
 
+  @Patch(':id/place')
+  @RequirePermission('orders.create')
+  @ApiOperation({
+    summary: 'Place a draft order',
+    description:
+      'Re-prices every line against today\'s price list before placing (A-13). A price that has ' +
+      'moved since the draft was saved is returned in `repriced` so the screen can show it back ' +
+      'rather than quietly charging a different total.',
+  })
+  place(@Param('id') id: string) {
+    return this.salesService.place(id);
+  }
+
   @Patch(':id/confirm')
   @RequirePermission('orders.confirm')
   @ApiOperation({ summary: 'Accept the order and commit to fulfilling it' })
@@ -99,8 +112,8 @@ export class SalesController {
 
   @Patch(':id/pack')
   @RequirePermission('orders.pack')
-  pack(@Param('id') id: string) {
-    return this.salesService.advance(id, OrderStatus.PACKED);
+  pack(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.salesService.advance(id, OrderStatus.PACKED, user.sub);
   }
 
   @Patch(':id/dispatch')
@@ -111,14 +124,14 @@ export class SalesController {
       'The point at which reserved stock actually leaves: held and on-hand quantities come down ' +
       'together, so a physical count and the system agree the moment the vehicle goes.',
   })
-  dispatch(@Param('id') id: string) {
-    return this.salesService.advance(id, OrderStatus.DISPATCHED);
+  dispatch(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.salesService.advance(id, OrderStatus.DISPATCHED, user.sub);
   }
 
   @Patch(':id/deliver')
   @RequirePermission('orders.deliver')
-  deliver(@Param('id') id: string) {
-    return this.salesService.advance(id, OrderStatus.DELIVERED);
+  deliver(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.salesService.advance(id, OrderStatus.DELIVERED, user.sub);
   }
 
   @Patch(':id/cancel')
