@@ -596,7 +596,9 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'recipes.view',
         label: 'View recipes and versions',
         description: 'Formulas, their versions, and which version is currently approved.',
-        defaultRoles: [PROD, QA],
+        // BM added for FRD 5.2 "Recipe Distribution" - a branch manager who
+        // cannot see the approved formula cannot distribute it.
+        defaultRoles: [PROD, QA, BM],
       },
       {
         key: 'recipes.create',
@@ -700,7 +702,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'quality.view',
         label: 'View quality inspections',
         description: 'All three stages - raw material, in-process and finished goods.',
-        defaultRoles: [QA, PROD],
+        // BM added for FRD 5.2 "Quality Monitoring".
+        defaultRoles: [QA, PROD, BM],
       },
       {
         key: 'quality.create',
@@ -901,21 +904,29 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Create a staff account',
         description:
           'Whoever holds this can choose the new account\'s role, so it is effectively the ' +
-          'power to grant any access this system has. Super Admin only by default.',
-        defaultRoles: [],
+          'power to grant any access this system has. Granted to Branch Manager for FRD 5.2 ' +
+          '"Branch Staff Management", and bounded in UsersService: anyone who is not a Super ' +
+          'Admin may only create accounts at their own branch, and only in roles below their ' +
+          'own - never a peer, never a Super Admin. Without that bound this key would be a ' +
+          'privilege-escalation route rather than a delegation.',
+        defaultRoles: [BM],
       },
       {
         key: 'users.edit',
         label: 'Edit, suspend or reset a staff account',
         description:
           'Covers details, status and password reset. Deactivating clears the refresh token, ' +
-          'so a live session stops working immediately.',
-        defaultRoles: [],
+          'so a live session stops working immediately. Bounded the same way as users.create - ' +
+          'a Branch Manager can edit their own branch\'s junior staff and nobody else.',
+        defaultRoles: [BM],
       },
       {
         key: 'users.delete',
         label: 'Delete a staff account',
-        description: 'Only while the account has never acted on anything.',
+        description:
+          'Only while the account has never acted on anything. Deliberately NOT granted to ' +
+          'Branch Manager: FRD 5.2 asks for staff management, which deactivation already ' +
+          'satisfies, and deletion is the one action here with no audit trail left behind.',
         defaultRoles: [],
       },
     ],

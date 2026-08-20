@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
@@ -22,9 +24,10 @@ export class TrainingService {
   }
 
   /** `conductedById` answers "sessions I ran" without pulling the branch's. */
-  findAll(branchId?: string, conductedById?: string) {
+  findAll(user: JwtPayload, branchId?: string, conductedById?: string) {
     return this.prisma.trainingSession.findMany({
-      where: branchId || conductedById ? { branchId, conductedById } : undefined,
+      // FRD 5.2 - the caller's branch wins over whatever was asked for.
+      where: { branchId: scopedBranchId(user, branchId), conductedById },
       orderBy: { scheduledDate: 'desc' },
       include: {
         branch: { select: { id: true, name: true } },
@@ -52,15 +55,31 @@ export class TrainingService {
     const session = await this.prisma.trainingSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Training session not found');
 
-    await this.prisma.$transaction(
-      dto.farmerIds.map((farmerId) =>
+    /**
+     * FRD 11.2 - this replaces the attendance list, it does not append to it.
+     *
+     * The screen is a "who attended" multi-select seeded from the current
+     * attendees, so deselecting somebody and saving plainly means "they were
+     * not there". The old upsert-only version added the ids it received and
+     * silently kept everyone omitted, reported success, and left a farmer
+     * marked present at a session they missed - which then counted towards
+     * their training history.
+     *
+     * Both halves run in one transaction: a moment where the list is empty
+     * would be a moment where the record is wrong.
+     */
+    await this.prisma.$transaction([
+      this.prisma.trainingAttendance.deleteMany({
+        where: { sessionId, farmerId: { notIn: dto.farmerIds } },
+      }),
+      ...dto.farmerIds.map((farmerId) =>
         this.prisma.trainingAttendance.upsert({
           where: { sessionId_farmerId: { sessionId, farmerId } },
           update: { attended: true },
           create: { sessionId, farmerId, attended: true },
         }),
       ),
-    );
+    ]);
 
     return this.findOne(sessionId);
   }

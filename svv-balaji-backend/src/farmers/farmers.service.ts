@@ -1,36 +1,63 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { FarmerVerificationAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { assertDeletable } from '../common/dependants';
 import { CreateFarmerDto } from './dto/create-farmer.dto';
 import { UpdateFarmerDto } from './dto/update-farmer.dto';
 import { VerifyFarmerDto } from './dto/verify-farmer.dto';
 import { QueryFarmerDto } from './dto/query-farmer.dto';
+import { FarmerPerformanceService } from './farmer-performance.service';
+import { assessRegistration, describeMissing } from './registration-completeness';
 
 @Injectable()
 export class FarmersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly performance: FarmerPerformanceService,
+  ) {}
 
-  create(dto: CreateFarmerDto) {
+  create(dto: CreateFarmerDto, createdById?: string) {
     // farmerCode is intentionally NOT set here - per FRD 8.1 it's generated
     // only on approval. Farmer enters as PENDING_VERIFICATION (schema default).
-    return this.prisma.farmer.create({ data: dto });
+    return this.prisma.farmer.create({
+      data: {
+        ...dto,
+        createdById: createdById ?? undefined,
+      },
+      include: {
+        branch: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, fullName: true, role: true, email: true } },
+      },
+    });
   }
 
-  async findAll(query: QueryFarmerDto) {
+  async findAll(query: QueryFarmerDto, user: JwtPayload) {
     const where: Prisma.FarmerWhereInput = {
       fullName: query.fullName ? { contains: query.fullName, mode: 'insensitive' } : undefined,
       village: query.village ? { contains: query.village, mode: 'insensitive' } : undefined,
       district: query.district ? { contains: query.district, mode: 'insensitive' } : undefined,
       state: query.state ? { contains: query.state, mode: 'insensitive' } : undefined,
-      branchId: query.branchId,
+      // FRD 5.2 - a branch user's own branch overrides whatever was asked for.
+      branchId: scopedBranchId(user, query.branchId),
       status: query.status,
+      // FRD 7.4 Crop. Crop details are free text, so this is a substring match
+      // rather than an equality test - "Wheat, Mustard" has to match "wheat".
+      cropDetails: query.crop ? { contains: query.crop, mode: 'insensitive' } : undefined,
+      // FRD 7.4 Quality Rating. `gte` on a nullable column excludes NULLs in
+      // Postgres, which is the behaviour we want: an unrated farmer has not
+      // met the bar, they simply have not been measured against it.
+      qualityRating: query.minRating === undefined ? undefined : { gte: query.minRating },
     };
 
     return this.prisma.farmer.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { branch: { select: { id: true, name: true } } },
+      include: {
+        branch: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, fullName: true, role: true, email: true } },
+      },
     });
   }
 
@@ -39,7 +66,11 @@ export class FarmersService {
       where: { id },
       include: {
         branch: { select: { id: true, name: true } },
-        verificationLogs: { orderBy: { createdAt: 'desc' } },
+        createdBy: { select: { id: true, fullName: true, role: true, email: true } },
+        verificationLogs: {
+          orderBy: { createdAt: 'desc' },
+          include: { verifiedBy: { select: { id: true, fullName: true, role: true } } },
+        },
         agreements: { orderBy: { createdAt: 'desc' } },
         seedDistributions: { orderBy: { createdAt: 'desc' } },
         fieldVisits: { orderBy: { visitDate: 'desc' } },
@@ -55,9 +86,55 @@ export class FarmersService {
    * sets status ACTIVE. REJECTED / DOCUMENTS_REQUESTED just log the action
    * and leave status as-is for now (branch staff follow up out-of-band).
    */
+  /**
+   * What is still missing before this farmer can be approved.
+   *
+   * Exists so the panel can show the gap on the profile and grey out Approve,
+   * rather than letting someone click it and read the refusal. Same function
+   * the gate uses, so the two can never disagree.
+   */
+  async readiness(id: string) {
+    const farmer = await this.prisma.farmer.findUnique({ where: { id } });
+    if (!farmer) throw new NotFoundException('Farmer not found');
+    return assessRegistration(farmer);
+  }
+
   async verify(farmerId: string, dto: VerifyFarmerDto, verifiedById: string) {
     const farmer = await this.prisma.farmer.findUnique({ where: { id: farmerId } });
     if (!farmer) throw new NotFoundException('Farmer not found');
+
+    if (dto.action === FarmerVerificationAction.APPROVED) {
+      /**
+       * FRD 7.1 completeness gate.
+       *
+       * Checked here rather than at registration on purpose - see the long note
+       * in registration-completeness.ts. Approval is the point the permanent
+       * traceability code is minted and the farmer becomes able to supply a
+       * harvest and be owed money, so it is the last moment a blank account
+       * number is still cheap to fix.
+       *
+       * Thrown before the transaction opens: nothing should be written on a
+       * refusal, not even a verification log entry.
+       */
+      const readiness = assessRegistration(farmer);
+      if (!readiness.canApprove) {
+        throw new BadRequestException(describeMissing(readiness.missingRequired));
+      }
+
+      /**
+       * A blacklisted or suspended farmer is not re-activated by re-running
+       * verification. Removing a blacklist is a separate, deliberate decision
+       * that belongs to status management (FRD 7.5) - letting it happen as a
+       * side effect of an approval click would make the blacklist advisory.
+       */
+      if (farmer.status === 'BLACKLISTED' || farmer.status === 'SUSPENDED') {
+        throw new BadRequestException(
+          `${farmer.fullName} is ${farmer.status.toLowerCase()}. Approving verification will not ` +
+            `reinstate them - change the status explicitly under farmer status management, so the ` +
+            `decision to lift a ${farmer.status.toLowerCase()} is recorded as its own act.`,
+        );
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       let farmerCode = farmer.farmerCode;

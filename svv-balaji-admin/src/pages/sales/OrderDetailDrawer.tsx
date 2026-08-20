@@ -8,6 +8,7 @@ import {
   Drawer,
   Empty,
   Input,
+  Select,
   Space,
   Spin,
   Table,
@@ -19,8 +20,18 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
-import type { OrderAllocation, OrderItem, PaymentStatus } from '@shared/api/types';
+import type {
+  AllocationShortfall,
+  OrderAllocation,
+  OrderItem,
+  PaymentStatus,
+} from '@shared/api/types';
 import { Can } from '@shared/components/Can';
+import {
+  PAYMENT_STATUS_COLOUR,
+  PAYMENT_STATUS_LABEL,
+  SETTABLE_PAYMENT_STATUSES,
+} from '@shared/utils/paymentStatus';
 import { useCan } from '@shared/auth/useCan';
 import {
   useAllocateOrder,
@@ -36,12 +47,6 @@ import {
 import { EM_DASH, formatCurrency, formatDate, formatDateTime } from '@shared/utils/format';
 import { CANCELLABLE, NEXT_STEP, ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from './orderStatus';
 
-const PAYMENT_COLOUR: Record<PaymentStatus, string> = {
-  PENDING: 'gold',
-  PARTIAL: 'orange',
-  PAID: 'green',
-};
-
 /**
  * One order, end to end.
  *
@@ -54,6 +59,15 @@ export function OrderDetailDrawer({ orderId, onClose }: { orderId: string | null
   const { message, modal } = AntApp.useApp();
   const [cancelReason, setCancelReason] = useState('');
   const [repriced, setRepriced] = useState<Array<{ orderItemId: string; from: number; to: number }>>([]);
+  /**
+   * Lines allocation could not fill (FRD 25.4).
+   *
+   * Held in state and shown until dismissed, because allocation now succeeds
+   * partially rather than refusing — and a partial success that scrolls past in
+   * a toast is exactly how an order ends up looking allocated and shipping
+   * short.
+   */
+  const [shortfalls, setShortfalls] = useState<AllocationShortfall[]>([]);
 
   const order = useOrder(orderId ?? undefined);
   const place = usePlaceOrder();
@@ -116,7 +130,18 @@ export function OrderDetailDrawer({ orderId, onClose }: { orderId: string | null
           break;
         case 'CONFIRMED': {
           const result = await allocate.mutateAsync(data.id);
-          message.success(`Allocated ${result.allocations.length} batch${result.allocations.length === 1 ? '' : 'es'}`);
+          setShortfalls(result.shortfalls ?? []);
+          if (result.complete) {
+            message.success(
+              `Allocated ${result.allocations.length} batch${result.allocations.length === 1 ? '' : 'es'}`,
+            );
+          } else {
+            message.warning(
+              `Partially allocated — ${result.shortfalls.length} line` +
+                `${result.shortfalls.length === 1 ? '' : 's'} could not be filled in full`,
+              8,
+            );
+          }
           break;
         }
         case 'ALLOCATED':
@@ -294,6 +319,7 @@ export function OrderDetailDrawer({ orderId, onClose }: { orderId: string | null
       open={Boolean(orderId)}
       onClose={() => {
         setRepriced([]);
+        setShortfalls([]);
         onClose();
       }}
       width={860}
@@ -340,6 +366,31 @@ export function OrderDetailDrawer({ orderId, onClose }: { orderId: string | null
         />
       ) : data ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          {shortfalls.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              closable
+              onClose={() => setShortfalls([])}
+              message="Allocated short"
+              description={
+                <Space direction="vertical" size={2}>
+                  <Typography.Text>
+                    There was not enough QA-released stock in this warehouse to fill every line.
+                    What exists has been reserved; the rest is outstanding.
+                  </Typography.Text>
+                  {shortfalls.map((line) => (
+                    <Typography.Text key={line.orderItemId}>
+                      • {line.productName}
+                      {line.sku ? ` (${line.sku})` : ''}: {line.requested} needed,{' '}
+                      <strong>{line.allocated} reserved</strong>, {line.short} short
+                    </Typography.Text>
+                  ))}
+                </Space>
+              }
+            />
+          ) : null}
+
           {repriced.length > 0 ? (
             <Alert
               type="warning"
@@ -421,32 +472,34 @@ export function OrderDetailDrawer({ orderId, onClose }: { orderId: string | null
             </Descriptions.Item>
             <Descriptions.Item label="Payment">
               <Space>
-                <Tag color={PAYMENT_COLOUR[data.paymentStatus]}>
-                  {data.paymentStatus}
+                <Tag color={PAYMENT_STATUS_COLOUR[data.paymentStatus]}>
+                  {PAYMENT_STATUS_LABEL[data.paymentStatus]}
                 </Tag>
                 <Can do="ORDER_PAYMENT">
-                  <>
-                    {data.paymentStatus !== 'PAID' ? (
-                      <Button
-                        size="small"
-                        loading={setPayment.isPending}
-                        onClick={() => handlePayment('PAID')}
-                      >
-                        Mark paid
-                      </Button>
-                    ) : null}
-                    {data.paymentStatus === 'PENDING' ? (
-                      <Button
-                        size="small"
-                        loading={setPayment.isPending}
-                        onClick={() => handlePayment('PARTIAL')}
-                      >
-                        Partial
-                      </Button>
-                    ) : null}
-                  </>
+                  <Select<PaymentStatus>
+                    size="small"
+                    style={{ width: 130 }}
+                    value={data.paymentStatus}
+                    loading={setPayment.isPending}
+                    onChange={handlePayment}
+                    // REFUNDED is deliberately not offered: a refund is a money
+                    // movement, and until there is a payment record to attach
+                    // it to (FRD 26.2) ticking it would assert something the
+                    // system cannot evidence.
+                    options={SETTABLE_PAYMENT_STATUSES.map((value) => ({
+                      value,
+                      label: PAYMENT_STATUS_LABEL[value],
+                    }))}
+                  />
                 </Can>
               </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label="Delivery address" span={2}>
+              {data.deliveryAddress ?? (
+                <Typography.Text type="secondary">
+                  Not recorded — this order predates delivery addresses being captured
+                </Typography.Text>
+              )}
             </Descriptions.Item>
             {data.notes ? (
               <Descriptions.Item label="Notes" span={2}>

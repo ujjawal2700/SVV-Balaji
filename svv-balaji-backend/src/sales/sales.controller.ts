@@ -41,6 +41,7 @@ export class SalesController {
   @ApiQuery({ name: 'from', required: false, description: 'ISO date' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO date' })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('channel') channel?: SalesChannel,
     @Query('status') status?: OrderStatus,
     @Query('customerId') customerId?: string,
@@ -48,7 +49,7 @@ export class SalesController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.salesService.findAll({
+    return this.salesService.findAll(user, {
       channel,
       status,
       customerId,

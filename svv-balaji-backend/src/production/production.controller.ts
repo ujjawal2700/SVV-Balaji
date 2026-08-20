@@ -60,11 +60,12 @@ export class ProductionController {
   @Get('production-batches')
   @RequirePermission('production.view')
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('status') status?: ProductionStatus,
     @Query('branchId') branchId?: string,
     @Query('productId') productId?: string,
   ) {
-    return this.productionService.findAll({ status, branchId, productId });
+    return this.productionService.findAll(user, { status, branchId, productId });
   }
 
   @Get('production-batches/:id')
@@ -83,6 +84,32 @@ export class ProductionController {
   @RequirePermission('production.delete')
   deleteProductionBatch(@Param('id') id: string) {
     return this.productionService.deleteProductionBatch(id);
+  }
+
+  @Patch('cleaning-grading/:id/verify')
+  @RequirePermission('quality.create')
+  @ApiOperation({
+    summary: 'QA verifies a cleaning and grading record (FRD 18.3)',
+    description:
+      'A second pair of eyes on cleaned material before it may be manufactured. Refuses the ' +
+      'operator who recorded the cleaning. Production will not accept a batch whose cleaning ' +
+      'record has not been verified.',
+  })
+  verifyCleaning(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.productionService.verifyCleaningRecord(id, user.sub);
+  }
+
+  @Patch('production-batches/:id/start')
+  @RequirePermission('production.create')
+  @ApiOperation({
+    summary: 'Start a planned run (FRD 20.1)',
+    description:
+      'Converts the raw material reservation into actual consumption: releases the reservation, ' +
+      'decrements the stock and writes a movement per batch, in one transaction. Only a PLANNED ' +
+      'run can be started.',
+  })
+  startProduction(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.productionService.startProduction(id, user.sub);
   }
 
   @Patch('production-batches/:id/complete')

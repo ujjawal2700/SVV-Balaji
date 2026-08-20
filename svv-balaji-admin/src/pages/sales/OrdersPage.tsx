@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Order, OrderQuery, OrderStatus, PaymentStatus, SalesChannel } from '@shared/api/types';
 import { ORDER_STATUSES, PAYMENT_STATUSES, SALES_CHANNELS } from '@shared/api/types';
 import { Can } from '@shared/components/Can';
+import { PAYMENT_STATUS_COLOUR, PAYMENT_STATUS_LABEL } from '@shared/utils/paymentStatus';
 import { DataTable } from '@shared/components/DataTable';
 import { PageHeader } from '@shared/components/PageHeader';
 import { CustomerSelect } from '@shared/components/pickers';
@@ -12,12 +13,6 @@ import { EM_DASH, formatCurrency, formatDate } from '@shared/utils/format';
 import { OrderDetailDrawer } from './OrderDetailDrawer';
 import { OrderFormModal } from './OrderFormModal';
 import { ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from './orderStatus';
-
-const PAYMENT_COLOUR: Record<PaymentStatus, string> = {
-  PENDING: 'gold',
-  PARTIAL: 'orange',
-  PAID: 'green',
-};
 
 /**
  * Sales orders (FRD Sections 26–28).
@@ -118,7 +113,9 @@ export function OrdersPage() {
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
       width: 110,
-      render: (status: PaymentStatus) => <Tag color={PAYMENT_COLOUR[status]}>{status}</Tag>,
+      render: (status: PaymentStatus) => (
+        <Tag color={PAYMENT_STATUS_COLOUR[status]}>{PAYMENT_STATUS_LABEL[status]}</Tag>
+      ),
     },
   ];
 
@@ -161,7 +158,7 @@ export function OrdersPage() {
           onChange={(value) => setPaymentStatus(value)}
           options={PAYMENT_STATUSES.map((value) => ({
             value,
-            label: value.charAt(0) + value.slice(1).toLowerCase(),
+            label: PAYMENT_STATUS_LABEL[value],
           }))}
         />
       </Col>

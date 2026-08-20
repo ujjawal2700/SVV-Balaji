@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { assertDeletable } from '../common/dependants';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetUserPasswordDto, UpdateUserDto } from './dto/update-user.dto';
@@ -17,7 +20,52 @@ const BRANCH_SELECT = { select: { id: true, name: true } };
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateUserDto) {
+
+  /**
+   * FRD 5.2 Branch Staff Management, without the privilege escalation.
+   *
+   * `users.create` is the power to choose a new account's role, which is
+   * effectively the power to grant any access this system has — the registry
+   * says so on the key itself. That is exactly why it defaulted to nobody, and
+   * why simply handing it to Branch Manager to satisfy FRD 5.2 would have been
+   * the wrong fix: a branch manager could mint a Super Admin and own the
+   * install.
+   *
+   * So the capability is granted and then bounded here. A Super Admin is
+   * unrestricted. Anyone else managing staff may only:
+   *
+   *   - act within their own branch, and
+   *   - create or edit accounts *below* their own authority — never a peer,
+   *     never a Super Admin.
+   *
+   * The check lives in the service rather than the guard because the guard
+   * answers "may you manage users at all", and this answers "may you manage
+   * *this* user" — a question that needs the target record.
+   */
+  private assertMayManage(
+    actor: JwtPayload,
+    target: { role: UserRole; branchId: string | null; fullName?: string },
+  ) {
+    if (actor.role === UserRole.SUPER_ADMIN) return;
+
+    if (target.role === UserRole.SUPER_ADMIN || target.role === actor.role) {
+      throw new ForbiddenException(
+        `You cannot create or manage a ${target.role.replace('_', ' ').toLowerCase()} account. ` +
+          `Branch staff management covers the roles that report to you, not your own level or ` +
+          `above — ask a Super Admin.`,
+      );
+    }
+
+    if (!actor.branchId || target.branchId !== actor.branchId) {
+      throw new ForbiddenException(
+        'You can only manage staff at your own branch.',
+      );
+    }
+  }
+
+  async create(dto: CreateUserDto, actor: JwtPayload) {
+    this.assertMayManage(actor, { role: dto.role, branchId: dto.branchId ?? null });
+
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('A user with this email already exists');
@@ -40,13 +88,18 @@ export class UsersService {
     return this.sanitize(user);
   }
 
-  async findAll(filters: { branchId?: string; status?: UserStatus } = {}) {
+  async findAll(user: JwtPayload, filters: { branchId?: string; status?: UserStatus } = {}) {
     const users = await this.prisma.user.findMany({
-      where: { branchId: filters.branchId, status: filters.status },
+      where: {
+        // FRD 5.2 - a Branch Manager manages their own branch's staff, not
+        // everyone's. Their own branch overrides the requested filter.
+        branchId: scopedBranchId(user, filters.branchId),
+        status: filters.status,
+      },
       orderBy: { createdAt: 'desc' },
       include: { branch: BRANCH_SELECT },
     });
-    return users.map((user) => this.sanitize(user));
+    return users.map((row) => this.sanitize(row));
   }
 
   async findOne(id: string) {
@@ -58,8 +111,19 @@ export class UsersService {
     return this.sanitize(user);
   }
 
-  async update(id: string, dto: UpdateUserDto, actingUserId: string) {
+  async update(id: string, dto: UpdateUserDto, actingUserId: string, actor: JwtPayload) {
     const user = await this.requireUser(id);
+
+    // Both the account as it stands and the account as it would become — so a
+    // branch manager cannot edit somebody into a role or branch they could not
+    // have created.
+    this.assertMayManage(actor, { role: user.role, branchId: user.branchId });
+    if (dto.role || dto.branchId) {
+      this.assertMayManage(actor, {
+        role: dto.role ?? user.role,
+        branchId: dto.branchId ?? user.branchId,
+      });
+    }
 
     if (dto.email && dto.email !== user.email) {
       const clash = await this.prisma.user.findUnique({ where: { email: dto.email } });

@@ -1,4 +1,5 @@
 import { Alert, Descriptions, Drawer, Empty, Space, Spin, Table, Tabs, Tag, Typography } from 'antd';
+import { FarmerPerformancePanel } from './FarmerPerformancePanel';
 import { apiErrorMessage } from '../../api/client';
 import type {
   FarmerAgreementSummary,
@@ -114,6 +115,11 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
                   </Descriptions>
                 </Space>
               ),
+            },
+            {
+              key: 'performance',
+              label: 'Performance',
+              children: farmerId ? <FarmerPerformancePanel farmerId={farmerId} /> : null,
             },
             {
               key: 'verification',

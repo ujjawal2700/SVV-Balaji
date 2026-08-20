@@ -1,8 +1,8 @@
-import { App as AntApp, Alert, Form, Input, Modal, Radio, Space, Typography } from 'antd';
+import { App as AntApp, Alert, Form, Input, List, Modal, Progress, Radio, Space, Typography } from 'antd';
 import { useEffect } from 'react';
-import { apiErrorMessage } from '../../api/client';
-import type { Farmer, FarmerVerificationAction } from '../../api/types';
-import { useVerifyFarmer } from '../../hooks/useFarmers';
+import { apiErrorMessage } from '@shared/api/client';
+import type { Farmer, FarmerVerificationAction } from '@shared/api/types';
+import { useFarmerReadiness, useVerifyFarmer } from '@shared/hooks/useFarmers';
 
 interface VerifyFarmerModalProps {
   farmer: Farmer | null;
@@ -27,6 +27,17 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
   const { message, modal } = AntApp.useApp();
   const verifyFarmer = useVerifyFarmer();
   const action = Form.useWatch('action', form);
+
+  /**
+   * What FRD 7.1 still wants before this farmer can be approved.
+   *
+   * Read up front so Approve can be disabled with the reasons on screen. The
+   * server applies the same check, so this is a courtesy rather than the
+   * control — but a courtesy worth having, because the alternative is someone
+   * clicking Approve and being told no.
+   */
+  const readiness = useFarmerReadiness(farmer?.id);
+  const blocked = action === 'APPROVED' && readiness.data?.canApprove === false;
 
   useEffect(() => {
     if (farmer) form.setFieldsValue({ action: 'APPROVED', remarks: undefined });
@@ -72,6 +83,7 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
       okText="Record decision"
       onOk={handleSubmit}
       onCancel={onClose}
+      okButtonProps={{ disabled: blocked }}
       confirmLoading={verifyFarmer.isPending}
       destroyOnClose
     >
@@ -86,13 +98,64 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
           </Radio.Group>
         </Form.Item>
 
-        {action === 'APPROVED' ? (
+        {blocked && readiness.data ? (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={`${readiness.data.missingRequired.length} required ${
+              readiness.data.missingRequired.length === 1 ? 'field is' : 'fields are'
+            } still blank`}
+            description={
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Progress
+                  percent={readiness.data.completenessPercent}
+                  size="small"
+                  status="active"
+                />
+                <Typography.Text>
+                  Approval mints the permanent traceability code and lets this farmer supply a
+                  harvest and be owed money, so the record has to be complete first. Edit the
+                  farmer to fill these in:
+                </Typography.Text>
+                <List
+                  size="small"
+                  dataSource={readiness.data.missingRequired}
+                  renderItem={(field) => (
+                    <List.Item style={{ padding: '4px 0', border: 'none' }}>
+                      <Space direction="vertical" size={0}>
+                        <Typography.Text strong>
+                          {field.group} — {field.label}
+                        </Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {field.reason}
+                        </Typography.Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              </Space>
+            }
+          />
+        ) : null}
+
+        {action === 'APPROVED' && !blocked ? (
           <Alert
             type="warning"
             showIcon
             style={{ marginBottom: 16 }}
             message="This issues a permanent traceability code"
             description="The SVV-YYYY-NNNNNN code is minted once and never reissued. Re-approving later will not change it."
+          />
+        ) : null}
+
+        {action === 'APPROVED' && readiness.data?.missingAdvisory.length ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Optional gaps — these do not block approval"
+            description={readiness.data.missingAdvisory.map((f) => f.label).join(', ')}
           />
         ) : null}
 

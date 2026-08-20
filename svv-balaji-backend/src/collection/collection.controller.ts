@@ -45,8 +45,12 @@ export class CollectionController {
 
   @Get('collections')
   @RequirePermission('collections.view')
-  findAll(@Query('farmerId') farmerId?: string, @Query('branchId') branchId?: string) {
-    return this.collectionService.findAll(farmerId, branchId);
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('farmerId') farmerId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.collectionService.findAll(user, farmerId, branchId);
   }
 
   @Get('collections/:id')

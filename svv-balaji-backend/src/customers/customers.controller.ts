@@ -38,13 +38,14 @@ export class CustomersController {
   @ApiQuery({ name: 'status', enum: CustomerStatus, required: false })
   @ApiQuery({ name: 'search', required: false, description: 'Name, code, phone or GSTIN' })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('channel') channel?: SalesChannel,
     @Query('type') type?: CustomerType,
     @Query('status') status?: CustomerStatus,
     @Query('branchId') branchId?: string,
     @Query('search') search?: string,
   ) {
-    return this.customersService.findAll({ channel, type, status, branchId, search });
+    return this.customersService.findAll(user, { channel, type, status, branchId, search });
   }
 
   @Get(':id')

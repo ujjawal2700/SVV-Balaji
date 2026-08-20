@@ -44,10 +44,11 @@ export class WarehouseController {
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'includeInactive', required: false, type: Boolean })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string,
     @Query('includeInactive') includeInactive?: string,
   ) {
-    return this.warehouseService.findAll(branchId, includeInactive === 'true');
+    return this.warehouseService.findAll(user, branchId, includeInactive === 'true');
   }
 
   @Get('stock')

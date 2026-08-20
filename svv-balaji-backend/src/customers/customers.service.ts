@@ -7,6 +7,8 @@ import {
   SalesChannel,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
 import {
   CreateCustomerDto,
@@ -145,7 +147,7 @@ export class CustomersService {
     }
   }
 
-  async findAll(filters: {
+  async findAll(user: JwtPayload, filters: {
     channel?: SalesChannel;
     type?: CustomerType;
     status?: CustomerStatus;
@@ -156,7 +158,8 @@ export class CustomersService {
       channel: filters.channel,
       type: filters.type,
       status: filters.status,
-      branchId: filters.branchId,
+      // FRD 5.2 - the caller's branch wins over whatever was asked for.
+      branchId: scopedBranchId(user, filters.branchId),
     };
 
     if (filters.search) {

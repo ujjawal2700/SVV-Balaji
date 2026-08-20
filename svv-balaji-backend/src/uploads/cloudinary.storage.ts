@@ -36,14 +36,47 @@ export function cloudinarySignature(
   return createHash('sha1').update(`${canonical}${apiSecret}`).digest('hex');
 }
 
-/** Images and PDFs only. */
+/**
+ * What FRD 35 says the repository accepts, plus what FRD 11.3 needs.
+ *
+ * This used to be images and PDF only, which silently broke two documented
+ * requirements: FRD 35 names Excel and Word explicitly, and FRD 11.3 requires
+ * presentations and videos as training material — while the training screen
+ * offered "presentation" and "video" in its type dropdown, so a trainer picked
+ * a type the uploader would then reject.
+ *
+ * Both the modern (OOXML) and legacy Office types are listed. A field office
+ * running Office 2007 sends `application/vnd.ms-excel`, and refusing it would
+ * be refusing the actual file the client has.
+ */
 const ALLOWED_MIME = new Set([
+  // Photographs — the bulk of what the field apps send.
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/heic',
   'image/heif',
+
+  // Documents and certificates.
   'application/pdf',
+
+  // FRD 35 — Word.
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+
+  // FRD 35 — Excel.
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
+  // FRD 11.3 — training presentations.
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+  // FRD 11.3 — training videos. Kept deliberately narrow: these are the two
+  // formats a phone actually produces, and video is the one category that can
+  // blow the size limit, so widening it is a decision not an oversight.
+  'video/mp4',
+  'video/quicktime',
 ]);
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
@@ -70,8 +103,8 @@ export class CloudinaryStorage extends StorageService {
 
     if (!ALLOWED_MIME.has(file.mimetype)) {
       throw new BadRequestException(
-        `${file.mimetype} files cannot be uploaded. Photographs (JPEG, PNG, WebP, HEIC) and ` +
-          `PDFs are accepted.`,
+        `${file.mimetype} files cannot be uploaded. Accepted: photographs (JPEG, PNG, WebP, ` +
+          `HEIC), PDF, Word, Excel, PowerPoint, and MP4 or MOV video.`,
       );
     }
 
@@ -133,9 +166,27 @@ export class CloudinaryStorage extends StorageService {
     };
   }
 
+  /**
+   * `resourceType` matters now that this account holds more than images.
+   *
+   * Cloudinary files an upload under `image`, `video` or `raw`, and destroy
+   * only works against the right one — deleting a Word document through
+   * `/image/destroy` returns "not found" and leaves the asset in place. Upload
+   * uses `auto`, which picks for us, so deletion has to try each bucket rather
+   * than assume. Cheap: it stops at the first success, and images are first
+   * because they are the overwhelming majority.
+   */
   async remove(key: string): Promise<void> {
     this.assertConfigured();
 
+    for (const resourceType of ['image', 'raw', 'video'] as const) {
+      if (await this.destroy(key, resourceType)) return;
+    }
+
+    this.logger.warn(`Could not delete ${key} from Cloudinary in any resource type`);
+  }
+
+  private async destroy(key: string, resourceType: string): Promise<boolean> {
     const timestamp = Math.floor(Date.now() / 1000);
     const form = new FormData();
     form.append('public_id', key);
@@ -145,17 +196,24 @@ export class CloudinaryStorage extends StorageService {
 
     try {
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${this.cloudName}/image/destroy`,
+        `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/destroy`,
         { method: 'POST', body: form },
       );
       if (!response.ok) {
-        this.logger.warn(`Could not delete ${key} from Cloudinary: HTTP ${response.status}`);
+        this.logger.warn(
+          `Could not delete ${key} from Cloudinary (${resourceType}): HTTP ${response.status}`,
+        );
+        return false;
       }
+      // Cloudinary answers 200 with { result: 'not found' } for the wrong bucket.
+      const body = (await response.json()) as { result?: string };
+      return body.result === 'ok';
     } catch (error) {
       // Deliberately swallowed. An orphaned asset costs a few kilobytes; a
       // throw here would stop the database row being deleted, which costs
       // correctness. See the note on StorageService.remove.
       this.logger.warn(`Could not delete ${key} from Cloudinary: ${String(error)}`);
+      return false;
     }
   }
 

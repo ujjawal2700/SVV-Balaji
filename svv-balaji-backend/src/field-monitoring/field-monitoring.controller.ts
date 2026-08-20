@@ -41,8 +41,12 @@ export class FieldMonitoringController {
     required: false,
     description: 'Visits logged by one executive. The field app\'s "Mine" filter uses this.',
   })
-  findAll(@Query('farmerId') farmerId?: string, @Query('expertId') expertId?: string) {
-    return this.fieldMonitoringService.findAll(farmerId, expertId);
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('farmerId') farmerId?: string,
+    @Query('expertId') expertId?: string,
+  ) {
+    return this.fieldMonitoringService.findAll(user, farmerId, expertId);
   }
 
   @Get(':id')

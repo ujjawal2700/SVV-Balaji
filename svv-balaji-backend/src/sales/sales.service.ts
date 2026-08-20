@@ -8,6 +8,8 @@ import {
   SalesChannel,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
 import {
@@ -113,17 +115,35 @@ export class SalesService {
     const paymentTerms =
       customer.channel === SalesChannel.B2C ? PaymentTerms.PREPAID : customer.paymentTerms;
 
-    if (paymentTerms !== PaymentTerms.PREPAID) {
-      await this.assertWithinCreditLimit(customer.id, total);
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      /**
+       * FRD 25 - the credit check has to be inside the transaction.
+       *
+       * It used to run just before `$transaction` opened, which made it
+       * advisory under load: two orders for the same customer could both read
+       * the outstanding balance, both find headroom, and both commit - jointly
+       * exceeding a limit neither had breached on its own. Reading it on the
+       * transaction client means the second one sees the first.
+       */
+      if (paymentTerms !== PaymentTerms.PREPAID) {
+        await this.assertWithinCreditLimit(customer.id, total, tx);
+      }
+
       const orderNumber = await this.sequence.next(tx, 'SO', orderDate);
 
       return tx.order.create({
         data: {
           orderNumber,
           channel: customer.channel,
+          /**
+           * FRD 24.2 - snapshot, not a lookup.
+           *
+           * Falls back to the customer's shipping address, then their billing
+           * address. Captured now so that editing the customer later cannot
+           * rewrite where this order was sent.
+           */
+          deliveryAddress:
+            dto.deliveryAddress ?? customer.shippingAddress ?? customer.billingAddress,
           customerId: customer.id,
           /**
            * A-13 (16 Aug): an order may be saved as a DRAFT.
@@ -163,8 +183,17 @@ export class SalesService {
    * terms with no limit recorded is refused outright rather than treated as
    * unlimited - the safer reading of a missing number.
    */
-  private async assertWithinCreditLimit(customerId: string, orderTotal: number) {
-    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+  /**
+   * @param client the transaction client when called inside one, so the read
+   *   sees the same snapshot as the write it is guarding. Falls back to the
+   *   base client for the one caller (`place`) that is not yet transactional.
+   */
+  private async assertWithinCreditLimit(
+    customerId: string,
+    orderTotal: number,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const customer = await client.customer.findUnique({ where: { id: customerId } });
     if (!customer) throw new NotFoundException('Customer not found');
 
     if (customer.creditLimit === null || customer.creditLimit === undefined) {
@@ -174,11 +203,19 @@ export class SalesService {
       );
     }
 
-    const openOrders = await this.prisma.order.findMany({
+    const openOrders = await client.order.findMany({
       where: {
         customerId,
         status: { not: OrderStatus.CANCELLED },
-        paymentStatus: { not: PaymentStatus.PAID },
+        /**
+         * What is actually owed.
+         *
+         * PAID is settled. REFUNDED is money returned, so it is not a
+         * receivable either - counting it would hold credit against a customer
+         * for an order they were paid back for. FAILED and PARTIAL both still
+         * represent exposure and stay in.
+         */
+        paymentStatus: { notIn: [PaymentStatus.PAID, PaymentStatus.REFUNDED] },
       },
       select: { total: true },
     });
@@ -195,7 +232,7 @@ export class SalesService {
     }
   }
 
-  async findAll(filters: {
+  async findAll(user: JwtPayload, filters: {
     channel?: SalesChannel;
     status?: OrderStatus;
     customerId?: string;
@@ -208,6 +245,8 @@ export class SalesService {
       status: filters.status,
       customerId: filters.customerId,
       warehouseId: filters.warehouseId,
+      // FRD 5.2 - a branch user sees their own branch's orders only.
+      branchId: scopedBranchId(user, undefined),
     };
     if (filters.from || filters.to) {
       where.orderDate = { gte: filters.from, lte: filters.to };
@@ -339,15 +378,19 @@ export class SalesService {
     const taxTotal = round2(repriced.reduce((sum, l) => sum + l.lineTax, 0));
     const total = round2(subtotal + taxTotal);
 
-    // Redone against the NEW total - a draft that was within the credit limit
-    // at the old price may not be at the new one.
-    if (order.paymentTerms !== PaymentTerms.PREPAID) {
-      await this.assertWithinCreditLimit(order.customerId, total);
-    }
-
     const changed = repriced.filter((l) => l.previousUnitPrice !== l.unitPrice);
 
     const placed = await this.prisma.$transaction(async (tx) => {
+      /**
+       * Redone against the NEW total - a draft that was within the credit
+       * limit at the old price may not be at the new one - and inside the
+       * transaction for the same reason as `create`: two drafts placed at once
+       * would otherwise both pass a check neither could pass second.
+       */
+      if (order.paymentTerms !== PaymentTerms.PREPAID) {
+        await this.assertWithinCreditLimit(order.customerId, total, tx);
+      }
+
       for (const line of repriced) {
         await tx.orderItem.update({
           where: { id: line.id },
@@ -433,6 +476,21 @@ export class SalesService {
         expiryDate: Date | null;
       }> = [];
 
+      /**
+       * Lines that could not be filled completely. Empty on a clean allocation.
+       * Returned rather than thrown so the warehouse can pick what exists while
+       * procurement chases the rest - see the note at the shortfall check.
+       */
+      const shortfalls: Array<{
+        orderItemId: string;
+        productId: string;
+        productName: string;
+        sku: string | null;
+        requested: number;
+        allocated: number;
+        short: number;
+      }> = [];
+
       for (const item of order.items) {
         const stock = await tx.finishedGoodsStock.findMany({
           where: {
@@ -456,19 +514,39 @@ export class SalesService {
           0,
         );
 
+        /**
+         * FRD 25.4 - "Partially Available" is a real outcome.
+         *
+         * This used to throw the moment one line was short, so an order for
+         * 100 packs with 90 in stock was refused outright and the warehouse
+         * could not start picking anything. That is not what the FRD
+         * describes, and it is not what a warehouse does: they pick what is
+         * there and chase the rest.
+         *
+         * So allocation now takes what exists and reports what it could not
+         * fill. The shortfall is returned explicitly rather than being left
+         * for the caller to derive from the numbers, because the failure mode
+         * this opens up is an order that *looks* allocated and quietly ships
+         * short - and the only defence against that is making the gap loud.
+         */
         if (availableTotal < item.quantity) {
           const product = await tx.product.findUnique({
             where: { id: item.productId },
             select: { name: true, sku: true },
           });
-          throw new BadRequestException(
-            `Not enough QA-released stock for ${product?.name ?? item.productId}` +
-              `${product ? ` (${product.sku})` : ''}: ${item.quantity} packs needed, ` +
-              `${availableTotal} available in this warehouse`,
-          );
+          shortfalls.push({
+            orderItemId: item.id,
+            productId: item.productId,
+            productName: product?.name ?? item.productId,
+            sku: product?.sku ?? null,
+            requested: item.quantity,
+            allocated: availableTotal,
+            short: item.quantity - availableTotal,
+          });
         }
 
-        let outstanding = item.quantity;
+        // Take whatever is there, up to what was asked for.
+        let outstanding = Math.min(item.quantity, availableTotal);
         for (const row of eligible) {
           if (outstanding === 0) break;
           const take = Math.min(outstanding, row.quantity - row.reservedQuantity);
@@ -501,12 +579,34 @@ export class SalesService {
         }
       }
 
+      /**
+       * Nothing at all is still a refusal.
+       *
+       * Partial is a workable state; zero is not. Moving an order to ALLOCATED
+       * having reserved nothing would produce a picking slip with no lines on
+       * it, and the status would be a lie rather than a partial truth.
+       */
+      if (created.length === 0) {
+        throw new BadRequestException(
+          `No QA-released stock is available in this warehouse for any line on this order. ` +
+            shortfalls
+              .map((f) => `${f.productName}: ${f.requested} needed, none available`)
+              .join('; '),
+        );
+      }
+
       const updated = await tx.order.update({
         where: { id },
         data: { status: OrderStatus.ALLOCATED },
       });
 
-      return { order: updated, allocations: created };
+      return {
+        order: updated,
+        allocations: created,
+        shortfalls,
+        /** True when every line was filled in full. */
+        complete: shortfalls.length === 0,
+      };
     });
   }
 

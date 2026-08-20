@@ -50,6 +50,16 @@ export class CreateOrderDto {
   @Type(() => OrderLineDto)
   items: OrderLineDto[];
 
+  @ApiPropertyOptional({
+    description:
+      'FRD 24.2. Defaults to the customer\'s shipping address, then their billing address. ' +
+      'Snapshotted onto the order, so editing the customer later does not rewrite where this ' +
+      'order was delivered.',
+  })
+  @IsOptional()
+  @IsString()
+  deliveryAddress?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -66,7 +66,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ConfigProvider theme={theme} locale={enGB}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          {/*
+            basename matches `base` in vite.config.ts so that the admin panel
+            is hosted under /admin/ (leaving / open for future main website/portal).
+          */}
+          <BrowserRouter basename="/admin">
             <AuthProvider>
               <App />
             </AuthProvider>

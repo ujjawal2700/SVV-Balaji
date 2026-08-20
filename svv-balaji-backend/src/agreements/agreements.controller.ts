@@ -33,8 +33,8 @@ export class AgreementsController {
 
   @Get()
   @RequirePermission('agreements.view')
-  findAll(@Query('farmerId') farmerId?: string) {
-    return this.agreementsService.findAll(farmerId);
+  findAll(@CurrentUser() user: JwtPayload, @Query('farmerId') farmerId?: string) {
+    return this.agreementsService.findAll(user, farmerId);
   }
 
   @Get(':id')

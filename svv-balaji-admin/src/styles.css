@@ -103,3 +103,43 @@ body {
   overflow-y: auto;
   flex: 1;
 }
+
+/* ---------------------------------------------------------------------------
+   Admin Data Table Enhancements
+   --------------------------------------------------------------------------- */
+.ant-table-wrapper {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.ant-table-thead > tr > th {
+  background: #fafbfc !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: #4b5563 !important;
+  padding: 14px 16px !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  white-space: nowrap !important;
+}
+
+.ant-table-tbody > tr > td {
+  padding: 13px 16px !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid #f3f4f6 !important;
+  font-size: 13px !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #fcfdfe !important;
+}
+
+.ant-table-cell-fix-right {
+  background: #ffffff !important;
+}
+
+.ant-table-tbody > tr:hover > td.ant-table-cell-fix-right {
+  background: #fcfdfe !important;
+}
+

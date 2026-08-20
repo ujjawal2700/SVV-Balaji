@@ -72,10 +72,11 @@ export class ProcurementController {
   @Get('harvest-inspections')
   @RequirePermission('harvestInspections.view')
   findInspections(
+    @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('result') result?: InspectionResult,
   ) {
-    return this.procurementService.findInspections(farmerId, result);
+    return this.procurementService.findInspections(user, farmerId, result);
   }
 
   @Get('harvest-inspections/:id')

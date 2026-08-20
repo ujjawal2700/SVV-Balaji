@@ -5,7 +5,9 @@ import type {
   Farmer,
   FarmerCodes,
   FarmerDetail,
+  FarmerPerformance,
   FarmerQuery,
+  RegistrationReadiness,
   SettableFarmerStatus,
   UpdateFarmerInput,
   VerifyFarmerInput,
@@ -65,5 +67,30 @@ export const farmersApi = {
   async codes(id: string): Promise<FarmerCodes> {
     const response = await api.get<FarmerCodes>(`/farmers/${id}/codes`);
     return unwrap<FarmerCodes>(response.data);
+  },
+
+  /**
+   * FRD 7.6 performance, recomputed live from the farmer's own records.
+   *
+   * Live rather than reading the stored columns on purpose: the stored rating
+   * exists so FRD 7.4 can filter in SQL, but the breakdown a person reads
+   * should never be a cached number they cannot reconcile against the
+   * inspections in front of them.
+   */
+  async performance(id: string): Promise<FarmerPerformance> {
+    const response = await api.get<FarmerPerformance>(`/farmers/${id}/performance`);
+    return unwrap<FarmerPerformance>(response.data);
+  },
+
+  /** What FRD 7.1 still wants before this farmer can be approved. */
+  async readiness(id: string): Promise<RegistrationReadiness> {
+    const response = await api.get<RegistrationReadiness>(`/farmers/${id}/readiness`);
+    return unwrap<RegistrationReadiness>(response.data);
+  },
+
+  /** Force a recalculation. For backfilling farmers whose records predate scoring. */
+  async recalculatePerformance(id: string): Promise<FarmerPerformance> {
+    const response = await api.post<FarmerPerformance>(`/farmers/${id}/performance/recalculate`);
+    return unwrap<FarmerPerformance>(response.data);
   },
 };

@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedByFarmerBranch } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateSeedDistributionDto } from './dto/create-seed-distribution.dto';
 import { UpdateSeedDistributionDto } from './dto/update-seed-distribution.dto';
 
@@ -23,9 +25,10 @@ export class SeedDistributionService {
   }
 
   /** `distributedById` answers "handouts I made". */
-  findAll(farmerId?: string, distributedById?: string) {
+  findAll(user: JwtPayload, farmerId?: string, distributedById?: string) {
     return this.prisma.seedDistribution.findMany({
-      where: farmerId || distributedById ? { farmerId, distributedById } : undefined,
+      // Scoped through the farmer - a distribution has no branch of its own.
+      where: { farmerId, distributedById, ...scopedByFarmerBranch(user) },
       orderBy: { distributionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },

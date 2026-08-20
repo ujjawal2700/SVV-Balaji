@@ -63,7 +63,22 @@ export class PackagingService {
       expiryDate.setDate(expiryDate.getDate() + dto.shelfLifeDays);
     }
 
-    if (expiryDate && expiryDate <= manufacturingDate) {
+    /**
+     * FRD 22.2 - a retail food label cannot go out without an expiry date.
+     *
+     * Either form is accepted, because both are how people actually think
+     * about it: a date if the QA sheet gives one, or a shelf life in days if
+     * the product has a standard one. What is not accepted is neither, which
+     * previously printed an em dash where the date belongs.
+     */
+    if (!expiryDate) {
+      throw new BadRequestException(
+        'An expiry date is required. Give expiryDate directly, or shelfLifeDays and it will be ' +
+          'derived from the manufacturing date. A pack cannot be labelled without one.',
+      );
+    }
+
+    if (expiryDate <= manufacturingDate) {
       throw new BadRequestException('expiryDate must be after manufacturingDate');
     }
 

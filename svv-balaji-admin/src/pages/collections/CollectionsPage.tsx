@@ -19,12 +19,7 @@ import { RowActions } from '../../components/RowActions';
 import { useDeleteCollection } from '../../hooks/useCollections';
 import { CollectionCorrectionModal } from './CollectionCorrectionModal';
 import { CollectionFormModal } from './CollectionFormModal';
-
-const PAYMENT_COLOURS: Record<PaymentStatus, string> = {
-  PENDING: 'red',
-  PARTIAL: 'gold',
-  PAID: 'green',
-};
+import { PAYMENT_STATUS_COLOUR } from '@shared/utils/paymentStatus';
 
 const label = (value: string) => value.charAt(0) + value.slice(1).toLowerCase();
 
@@ -133,7 +128,7 @@ export function CollectionsPage() {
             options={PAYMENT_STATUSES.map((value) => ({ value, label: label(value) }))}
           />
         ) : (
-          <Tag color={PAYMENT_COLOURS[status]}>{label(status)}</Tag>
+          <Tag color={PAYMENT_STATUS_COLOUR[status]}>{label(status)}</Tag>
         ),
     },
     {

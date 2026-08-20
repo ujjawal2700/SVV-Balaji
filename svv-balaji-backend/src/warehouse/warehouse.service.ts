@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
   AdjustStockDto,
   CreateWarehouseDto,
@@ -27,10 +29,11 @@ export class WarehouseService {
     return this.prisma.warehouse.create({ data: dto });
   }
 
-  findAll(branchId?: string, includeInactive = false) {
+  findAll(user: JwtPayload, branchId?: string, includeInactive = false) {
     return this.prisma.warehouse.findMany({
       where: {
-        branchId,
+        // FRD 5.2 - a branch user sees their own warehouses only.
+        branchId: scopedBranchId(user, branchId),
         ...(includeInactive ? {} : { isActive: true }),
       },
       orderBy: { name: 'asc' },

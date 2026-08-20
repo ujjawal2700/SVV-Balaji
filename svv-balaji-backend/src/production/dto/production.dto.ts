@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -70,10 +71,15 @@ export class CreateCleaningGradingDto {
   @Min(0)
   wastageQuantity?: number;
 
-  @ApiPropertyOptional({ description: 'QA sign-off (FRD 18.3)' })
-  @IsOptional()
-  @IsBoolean()
-  qaVerified?: boolean;
+  /**
+   * Deliberately absent: `qaVerified`.
+   *
+   * FRD 18.3 makes QA the approver of cleaned material. Accepting the flag on
+   * the record the operator submits made it a self-certification, and nothing
+   * read it anyway. It is now set only by `PATCH /cleaning-grading/:id/verify`,
+   * which requires `quality.create` and refuses the operator who wrote the
+   * record. Production refuses a batch whose cleaning record has not passed it.
+   */
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -106,6 +112,18 @@ export class CreateProductionBatchDto {
   @ApiProperty()
   @IsString()
   warehouseId: string;
+
+  @ApiPropertyOptional({
+    enum: ['PLANNED', 'IN_PROGRESS'],
+    default: 'IN_PROGRESS',
+    description:
+      'PLANNED reserves the raw material without consuming it (FRD 17.2/20.1) - the stock stays ' +
+      'on the shelf but no other run can commit it. Start it with PATCH :id/start. Defaults to ' +
+      'IN_PROGRESS, which consumes immediately and is the existing behaviour.',
+  })
+  @IsOptional()
+  @IsEnum(['PLANNED', 'IN_PROGRESS'])
+  status?: 'PLANNED' | 'IN_PROGRESS';
 
   @ApiProperty()
   @IsDateString()

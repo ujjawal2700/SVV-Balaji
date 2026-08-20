@@ -1,12 +1,37 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { SequenceService } from '../common/sequence.service';
+import { FarmerPerformanceService } from '../farmers/farmer-performance.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 
 @Injectable()
 export class CollectionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly farmerPerformance: FarmerPerformanceService,
+    private readonly sequence: SequenceService,
+  ) {}
+
+  /**
+   * Refresh the farmer's FRD 7.6 scores after their records changed.
+   *
+   * Deliberately outside the caller's transaction and deliberately swallowing
+   * its own errors: a rating is a derived convenience, and it must never be the
+   * reason a weighbridge entry rolls back. A score that is briefly stale is a
+   * far smaller problem than a collection that failed to save.
+   */
+  private async refreshPerformance(farmerId: string) {
+    try {
+      await this.farmerPerformance.recalculate(farmerId);
+    } catch {
+      // Left deliberately silent - see above. The nightly/manual recalculate
+      // endpoint is the backstop.
+    }
+  }
 
   /**
    * Records collection of an approved harvest and mints its raw material batch
@@ -55,7 +80,7 @@ export class CollectionService {
       if (!warehouse) throw new NotFoundException('Warehouse not found');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const receiptNumber = await this.generateReceiptNumber(tx, collectionDate);
       const batchNumber = await this.generateBatchNumber(tx, collectionDate);
 
@@ -128,6 +153,12 @@ export class CollectionService {
 
       return { ...collection, batch };
     });
+
+    // FRD 7.6: this collection changed the farmer's delivered quantity and
+    // timeliness. Refresh after the transaction commits, never inside it.
+    await this.refreshPerformance(created.farmerId);
+
+    return created;
   }
 
   /**
@@ -155,15 +186,22 @@ export class CollectionService {
   }
 
   /** Receipt numbers share the daily sequence space but carry an RC- prefix. */
-  private async generateReceiptNumber(
-    tx: Prisma.TransactionClient,
-    date: Date,
-  ): Promise<string> {
-    const dateKey = this.toDateKey(date);
-    const count = await tx.rawMaterialCollection.count({
-      where: { receiptNumber: { startsWith: `RC-${dateKey}-` } },
-    });
-    return `RC-${dateKey}-${String(count + 1).padStart(3, '0')}`;
+  /**
+   * FRD 14.4 - the receipt number.
+   *
+   * Issued from the atomic counter, like every other document number in the
+   * system. It used to count the day's existing receipts and add one, which
+   * had two consequences: two concurrent collections computed the same number
+   * and one of them died on the unique constraint, rolling back a real
+   * weighbridge entry; and deleting a receipt made the next collection reuse
+   * its number - two farmers, two payments, one receipt number, no way to tell
+   * them apart afterwards.
+   *
+   * `SequenceService` was sitting beside this doing it correctly for batch,
+   * production and finished-goods numbers the whole time.
+   */
+  private generateReceiptNumber(tx: Prisma.TransactionClient, date: Date): Promise<string> {
+    return this.sequence.next(tx, 'RC', date);
   }
 
   /** Date -> YYYYMMDD integer, using local date parts (not UTC). */
@@ -174,9 +212,10 @@ export class CollectionService {
     return Number(`${y}${m}${d}`);
   }
 
-  findAll(farmerId?: string, branchId?: string) {
+  findAll(user: JwtPayload, farmerId?: string, branchId?: string) {
     return this.prisma.rawMaterialCollection.findMany({
-      where: { farmerId, branchId },
+      // FRD 5.2 - the caller's branch wins over whatever was asked for.
+      where: { farmerId, branchId: scopedBranchId(user, branchId) },
       orderBy: { collectionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -312,7 +351,7 @@ export class CollectionService {
     const previousNet = Number(collection.netWeight);
     const delta = Number((netWeight - previousNet).toFixed(2));
 
-    return this.prisma.$transaction(async (tx) => {
+    const corrected = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.rawMaterialCollection.update({
         where: { id },
         data: {
@@ -373,6 +412,12 @@ export class CollectionService {
         },
       });
     });
+
+    // FRD 7.6: a net weight correction changes delivered quantity, so the
+    // farmer's procurement-quantity score has to move with it.
+    await this.refreshPerformance(corrected!.farmerId);
+
+    return corrected;
   }
 
   /**
@@ -382,13 +427,12 @@ export class CollectionService {
    * transaction - a batch without its collection has no farmer path and would
    * sit in the warehouse untraceable, which is worse than either record.
    *
-   * The receipt number is NOT reused. `generateReceiptNumber` counts existing
-   * receipts for the day, so deleting one makes the next collection reuse its
-   * number - two different farmers, two different payments, one receipt
-   * number, and no way to tell them apart afterwards. That is a real bug in
-   * the counter rather than in this method (`SequenceService` beside it does
-   * this correctly), so the deletion is refused when a later receipt exists
-   * for the same day until it is fixed.
+   * A deleted receipt number is retired, not reused. The counter only ever
+   * increments, so the gap in the series is permanent and visible - which is
+   * what you want in a payment document. This method used to refuse a deletion
+   * whenever a later receipt existed that day, working around a counter that
+   * derived the next number by counting rows; that counter is gone and so is
+   * the workaround.
    */
   async remove(id: string) {
     const collection = await this.prisma.rawMaterialCollection.findUnique({
@@ -409,20 +453,6 @@ export class CollectionService {
       await this.assertBatchUntouched(collection.batch.id, collection.batch.batchNumber);
     }
 
-    const datePart = collection.receiptNumber.split('-')[1];
-    const laterSameDay = await this.prisma.rawMaterialCollection.count({
-      where: {
-        receiptNumber: { startsWith: `RC-${datePart}-`, gt: collection.receiptNumber },
-      },
-    });
-    if (laterSameDay > 0) {
-      throw new BadRequestException(
-        `${laterSameDay} later collection${laterSameDay === 1 ? ' was' : 's were'} recorded on ` +
-          `the same day. Receipt numbers are issued by counting the day's receipts, so removing ` +
-          `${collection.receiptNumber} would make the next one reuse it. Cancel this collection ` +
-          `by other means, or ask for the receipt counter to be fixed first.`,
-      );
-    }
 
     const batchId = collection.batch?.id;
 
@@ -434,6 +464,9 @@ export class CollectionService {
       }
       await tx.rawMaterialCollection.delete({ where: { id } });
     });
+
+    // FRD 7.6: removing a collection changes the farmer's delivered quantity.
+    await this.refreshPerformance(collection.farmerId);
 
     return { id, deleted: true, batchDeleted: collection.batch?.batchNumber ?? null };
   }

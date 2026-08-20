@@ -92,10 +92,19 @@ enum BatchStatus {
   REJECTED
 }
 
+/// FRD 26.4. Shared by farmer collection payments and customer order payments -
+/// both can fail and both can be refunded, so the states belong to both.
 enum PaymentStatus {
   PENDING
   PARTIAL
   PAID
+  /// An attempted payment that did not go through. Distinct from PENDING:
+  /// pending means nobody has tried, failed means someone tried and it bounced,
+  /// and collapsing the two hides every failure in the "not yet paid" bucket.
+  FAILED
+  /// Money returned after being taken. Terminal - a refunded payment is not
+  /// pending again, and treating it as such would double-count the receivable.
+  REFUNDED
 }
 
 /// FRD 17.3 - every inventory change is one of these.
@@ -184,9 +193,11 @@ model User {
   stockMovements          StockMovement[]         @relation("StockMovements")
 
   farmPlotsCreated        FarmPlot[]              @relation("FarmPlotsCreated")
+  farmersCreated          Farmer[]                @relation("FarmersCreated")
 
   // Phase 3 back-relations
   cleaningGradingRecords  CleaningGradingRecord[] @relation("CleaningGradingOperator")
+  cleaningGradingVerified CleaningGradingRecord[] @relation("CleaningGradingVerifier")
   recipesCreated          Recipe[]                @relation("RecipesCreated")
   recipesApproved         Recipe[]                @relation("RecipesApproved")
   productionBatchesCreated ProductionBatch[]      @relation("ProductionBatchesCreated")
@@ -258,6 +269,15 @@ model Farmer {
   aadhaarNumber String?
   panNumber     String?
 
+  /// FRD 7.1 "Family Details" - free text.
+  ///
+  /// Deliberately one string rather than a related table. The FRD asks for it
+  /// under Personal Information alongside name and mobile, not as a structured
+  /// dependants list, and nothing downstream reads it. A `FarmerFamilyMember`
+  /// table would be a schema we then have to keep correct for data nobody
+  /// queries. Promote it if a requirement ever needs it row-wise.
+  familyDetails String?
+
   village     String
   district    String
   state       String
@@ -276,8 +296,35 @@ model Farmer {
 
   status FarmerStatus @default(PENDING_VERIFICATION)
 
+  // --- FRD 7.6 Farmer Performance -------------------------------------------
+  //
+  // Persisted rather than computed on read, for one concrete reason: FRD 7.4
+  // lists Quality Rating as a *search filter*. A score computed in application
+  // code cannot be filtered or sorted in SQL without loading every farmer, so
+  // the composite lands here and `FarmerPerformanceService` keeps it current.
+  //
+  // The component scores are stored beside it so the panel can explain a rating
+  // without recomputing it, and so a rating can be audited after the fact
+  // against the records that produced it.
+
+  /// Composite 0-100. NULL means unrated - no procurement history yet.
+  /// Null is not zero: a farmer who has never supplied is not a bad farmer.
+  qualityRating Decimal? @db.Decimal(5, 2)
+
+  /// FRD 7.6 components, each 0-100 and each NULL when it has no input.
+  cropQualityScore       Decimal? @db.Decimal(5, 2)
+  deliveryTimelinessScore Decimal? @db.Decimal(5, 2)
+  procurementQuantityScore Decimal? @db.Decimal(5, 2)
+
+  /// When the scores above were last recomputed. Stale values are a bug, so
+  /// this exists to make staleness visible rather than invisible.
+  performanceUpdatedAt DateTime?
+
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("FarmersCreated", fields: [createdById], references: [id])
 
   verificationLogs   FarmerVerificationLog[]
   agreements         Agreement[]
@@ -296,6 +343,8 @@ model Farmer {
 
   @@index([status])
   @@index([branchId])
+  /// FRD 7.4 filters and sorts farmers by Quality Rating.
+  @@index([qualityRating])
   @@map("farmers")
 }
 
@@ -823,7 +872,15 @@ model CleaningGradingRecord {
   wastageQuantity Decimal? @db.Decimal(12, 2)
 
   /// FRD 18.3 - QA sign-off before the batch is production-ready.
+  /// FRD 18.3. Set only through `PATCH /cleaning-grading/:id/verify`, which
+  /// requires `quality.create` - never by the operator submitting the record.
+  /// Production refuses a batch whose cleaning record is not verified.
   qaVerified Boolean @default(false)
+  /// Who verified, and when. A sign-off nobody is named against is not a sign-off.
+  qaVerifiedById String?
+  qaVerifiedBy   User?   @relation("CleaningGradingVerifier", fields: [qaVerifiedById], references: [id])
+  qaVerifiedAt   DateTime?
+
   remarks    String?
 
   operatorId String
@@ -948,6 +1005,18 @@ model ProductionBatch {
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// Warehouse the raw material is drawn from.
+  ///
+  /// Added with FRD 17.2 reservation. A PLANNED run holds a reservation against
+  /// stock rows in a specific warehouse, and the release has to find exactly
+  /// those rows again when the run starts or is cancelled - so the warehouse
+  /// stops being a create-time argument and becomes a property of the run.
+  ///
+  /// Nullable only because runs created before reservation existed have no
+  /// value to backfill; every new run sets it.
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
 
   createdById String
   createdBy   User   @relation("ProductionBatchesCreated", fields: [createdById], references: [id])
@@ -1182,6 +1251,9 @@ model Warehouse {
   orders           Order[]
   orderAllocations OrderAllocation[]
 
+  /// Runs drawing raw material from here (FRD 17.2 reservation).
+  productionBatches ProductionBatch[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1375,6 +1447,16 @@ model Order {
   /// placed themselves.
   placedById String?
   placedBy   User?   @relation("OrdersPlaced", fields: [placedById], references: [id])
+
+  /// Where this order was shipped, captured at the moment it was raised.
+  ///
+  /// A snapshot, not a lookup. It used to be inferred from the customer's
+  /// current `shippingAddress`, which meant editing a customer retroactively
+  /// rewrote where every past order had been delivered - the same class of
+  /// error the denormalised `channel` above already guards against. Defaults
+  /// from the customer at create time and can be overridden per order, which
+  /// is what a one-off delivery to a different site actually needs.
+  deliveryAddress String?
 
   notes           String?
   cancelledReason String?

@@ -304,7 +304,7 @@ function RedirectToFieldApp() {
             </span>
           }
           extra={
-            <Button type="primary" onClick={() => window.location.assign('/')}>
+            <Button type="primary" onClick={() => window.location.assign('/admin')}>
               Back to the panel
             </Button>
           }

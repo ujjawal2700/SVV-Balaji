@@ -24,6 +24,8 @@ export interface BranchRef {
 export interface UserRef {
   id: string;
   fullName: string;
+  role?: UserRole;
+  email?: string;
 }
 
 // --- Branch (FRD Section 6) -------------------------------------------------
@@ -120,6 +122,8 @@ export interface Farmer {
   mobile: string;
   aadhaarNumber: string | null;
   panNumber: string | null;
+  /** FRD 7.1 Family Details. Free text, advisory — never blocks approval. */
+  familyDetails: string | null;
 
   village: string;
   district: string;
@@ -141,8 +145,78 @@ export interface Farmer {
   branchId: string;
   branch?: BranchRef;
 
+  createdById?: string | null;
+  createdBy?: UserRef;
+
+  // --- FRD 7.6 Farmer Performance -------------------------------------------
+  // Persisted on the farmer so FRD 7.4 can filter and sort on the rating.
+  // Null everywhere means unrated, which is NOT the same as zero — a farmer who
+  // has never supplied has not been measured, and must not sort below one who
+  // supplies badly.
+
+  /** Composite 0–100, or null when there is no procurement history. */
+  qualityRating: string | null;
+  cropQualityScore: string | null;
+  deliveryTimelinessScore: string | null;
+  procurementQuantityScore: string | null;
+  performanceUpdatedAt: string | null;
+
   createdAt: string;
   updatedAt: string;
+}
+
+/** One FRD 7.6 parameter. `score` is null when nothing feeds it. */
+export interface PerformanceComponent {
+  score: number | null;
+  /** How many records produced the score. Zero means no basis. */
+  sampleSize: number;
+  /** Plain English — show this, never a bare number. */
+  explanation: string;
+}
+
+/**
+ * FRD 7.6 in full, recomputed live.
+ *
+ * `complaintRecords` is always unscored: FRD 32 does not exist, so it is
+ * excluded from the average rather than counted as clean. Showing it anyway is
+ * deliberate — a missing input the user can see is better than one they cannot.
+ */
+export interface FarmerPerformance {
+  farmerId: string;
+  cropQuality: PerformanceComponent;
+  deliveryTimeliness: PerformanceComponent;
+  procurementQuantity: PerformanceComponent;
+  complaintRecords: PerformanceComponent;
+  overallRating: number | null;
+  /** The same figure as 0–5, for display only. */
+  stars: number | null;
+  totalDelivered: string;
+  totalCollections: number;
+  computedAt: string;
+}
+
+/** A field FRD 7.1 asks for that this farmer has not supplied. */
+export interface MissingField {
+  key: string;
+  label: string;
+  group: 'Personal' | 'Address' | 'Farm' | 'Bank';
+  /** Why it matters — shown to whoever has to go and collect it. */
+  reason: string;
+}
+
+/**
+ * What still blocks approval (FRD 7.1).
+ *
+ * The same assessment the server's approval gate applies, exposed so the panel
+ * can show the gap up front instead of letting someone click Approve and read
+ * a refusal.
+ */
+export interface RegistrationReadiness {
+  canApprove: boolean;
+  missingRequired: MissingField[];
+  /** PAN, GPS and family details. Reported, never blocking. */
+  missingAdvisory: MissingField[];
+  completenessPercent: number;
 }
 
 export interface FarmerVerificationLog {
@@ -151,6 +225,7 @@ export interface FarmerVerificationLog {
   action: FarmerVerificationAction;
   remarks: string | null;
   verifiedById: string;
+  verifiedBy?: UserRef;
   createdAt: string;
 }
 
@@ -233,6 +308,13 @@ export interface FarmerQuery {
   state?: string;
   branchId?: string;
   status?: FarmerStatus;
+  /** FRD 7.4 Crop — substring match against the farmer's recorded crop details. */
+  crop?: string;
+  /**
+   * FRD 7.4 Quality Rating — farmers rated at or above this (0–100).
+   * Unrated farmers are excluded: "not measured" is not "meets your bar".
+   */
+  minRating?: number;
 }
 
 export interface VerifyFarmerInput {
@@ -592,7 +674,14 @@ export interface AddDocumentInput {
 
 // --- Raw material collection (FRD Section 14) -------------------------------
 
-export const PAYMENT_STATUSES = ['PENDING', 'PARTIAL', 'PAID'] as const;
+/**
+ * FRD 26.4. FAILED and REFUNDED added 20 Aug.
+ *
+ * FAILED is not PENDING: pending means nobody has tried, failed means someone
+ * tried and it bounced. REFUNDED is terminal — money returned is not a
+ * receivable, and the credit check excludes it for that reason.
+ */
+export const PAYMENT_STATUSES = ['PENDING', 'PARTIAL', 'PAID', 'FAILED', 'REFUNDED'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export interface RawMaterialCollection {
@@ -1519,6 +1608,8 @@ export interface Order {
   total: string;
   paymentStatus: PaymentStatus;
   paymentTerms: PaymentTerms;
+  /** FRD 24.2 — snapshotted at order time, not read from the customer now. */
+  deliveryAddress: string | null;
   notes: string | null;
   cancelledReason: string | null;
   cancelledAt: string | null;
@@ -1559,6 +1650,8 @@ export interface CreateOrderInput {
   orderDate?: string;
   requiredByDate?: string;
   items: Array<{ productId: string; quantity: number }>;
+  /** Defaults to the customer's shipping, then billing address. */
+  deliveryAddress?: string;
   notes?: string;
   /** DRAFT saves it without pricing being final. Defaults to PLACED. */
   status?: 'DRAFT' | 'PLACED';
@@ -1570,7 +1663,27 @@ export interface PlaceOrderResult {
   repriced: Array<{ orderItemId: string; from: number; to: number }>;
 }
 
+/** A line allocation could not fill completely (FRD 25.4). */
+export interface AllocationShortfall {
+  orderItemId: string;
+  productId: string;
+  productName: string;
+  sku: string | null;
+  requested: number;
+  allocated: number;
+  short: number;
+}
+
 export interface AllocationResult {
   order: Order;
   allocations: OrderAllocation[];
+  /**
+   * Lines that could not be filled in full. Empty on a clean allocation.
+   *
+   * Allocation takes what exists rather than refusing outright, so this is the
+   * only thing standing between a partially-filled order and one that looks
+   * allocated and quietly ships short. Show it.
+   */
+  shortfalls: AllocationShortfall[];
+  complete: boolean;
 }

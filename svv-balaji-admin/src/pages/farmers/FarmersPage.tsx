@@ -1,8 +1,7 @@
 import { PlusOutlined, QrcodeOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
-import { App as AntApp, Button, Card, Col, Input, Row, Select, Space, Tooltip, Typography } from 'antd';
+import { App as AntApp, Button, Card, Col, Input, Rate, Row, Select, Space, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
-import farmerIcon from '../../assets/farmer-icon.png';
 import { apiErrorMessage } from '../../api/client';
 import {
   FARMER_STATUSES,
@@ -104,6 +103,44 @@ export function FarmersPage() {
         render: (_, farmer) => farmer.branch?.name ?? '—',
       },
       {
+        /**
+         * FRD 7.6. Sortable and filterable because 7.4 lists Quality Rating as
+         * a search filter — which is the whole reason the score is stored on
+         * the farmer rather than computed on read.
+         */
+        title: 'Rating',
+        dataIndex: 'qualityRating',
+        key: 'qualityRating',
+        width: 130,
+        align: 'right',
+        sorter: (a, b) => Number(a.qualityRating ?? -1) - Number(b.qualityRating ?? -1),
+        render: (value: string | null) => {
+          if (value === null) {
+            // Not zero. A farmer who has never supplied has not been measured.
+            return (
+              <Tooltip title="No procurement history yet — nothing to score from">
+                <Typography.Text type="secondary">Unrated</Typography.Text>
+              </Tooltip>
+            );
+          }
+          const score = Number(value);
+          const colour = score >= 80 ? '#389e0d' : score >= 50 ? '#d48806' : '#cf1322';
+          return (
+            <Space direction="vertical" size={0} style={{ alignItems: 'flex-end' }}>
+              <Typography.Text strong style={{ color: colour }}>
+                {score.toFixed(1)}
+              </Typography.Text>
+              <Rate
+                disabled
+                allowHalf
+                value={Math.round((score / 20) * 2) / 2}
+                style={{ fontSize: 10 }}
+              />
+            </Space>
+          );
+        },
+      },
+      {
         title: 'Status',
         dataIndex: 'status',
         key: 'status',
@@ -194,117 +231,115 @@ export function FarmersPage() {
   ).length;
 
   const toolbar = (
-    <div style={{ padding: '16px 0 24px 0' }}>
-      <Row gutter={[16, 16]} align="middle">
-        <Col xs={24} md={8}>
-          <Input.Search
-            allowClear
-            size="large"
-            placeholder="Search by farmer name..."
-            onSearch={(value) => setQuery((q) => ({ ...q, fullName: value || undefined }))}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Input
-            allowClear
-            size="large"
-            placeholder="Village"
-            onChange={(event) =>
-              setQuery((q) => ({ ...q, village: event.target.value || undefined }))
-            }
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Input
-            allowClear
-            size="large"
-            placeholder="District"
-            onChange={(event) =>
-              setQuery((q) => ({ ...q, district: event.target.value || undefined }))
-            }
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select
-            allowClear
-            size="large"
-            style={{ width: '100%' }}
-            placeholder="Branch"
-            loading={branches.isLoading}
-            onChange={(value?: string) => setQuery((q) => ({ ...q, branchId: value }))}
-            options={(branches.data?.data ?? []).map((branch) => ({
-              value: branch.id,
-              label: branch.name,
-            }))}
-          />
-        </Col>
-        <Col xs={12} md={4}>
-          <Select<FarmerStatus>
-            allowClear
-            size="large"
-            style={{ width: '100%' }}
-            placeholder="Status"
-            onChange={(value?: FarmerStatus) => setQuery((q) => ({ ...q, status: value }))}
-            options={FARMER_STATUSES.map((value) => ({
-              value,
-              label: FARMER_STATUS_LABELS[value],
-            }))}
-          />
-        </Col>
-      </Row>
-    </div>
+    <Row gutter={[12, 12]}>
+      <Col xs={24} md={8}>
+        <Input.Search
+          allowClear
+          placeholder="Search by name"
+          onSearch={(value) => setQuery((q) => ({ ...q, fullName: value || undefined }))}
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Input
+          allowClear
+          placeholder="Village"
+          onChange={(event) =>
+            setQuery((q) => ({ ...q, village: event.target.value || undefined }))
+          }
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Input
+          allowClear
+          placeholder="District"
+          onChange={(event) =>
+            setQuery((q) => ({ ...q, district: event.target.value || undefined }))
+          }
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Select
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="Branch"
+          loading={branches.isLoading}
+          onChange={(value?: string) => setQuery((q) => ({ ...q, branchId: value }))}
+          options={(branches.data?.data ?? []).map((branch) => ({
+            value: branch.id,
+            label: branch.name,
+          }))}
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Select<FarmerStatus>
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="Status"
+          onChange={(value?: FarmerStatus) => setQuery((q) => ({ ...q, status: value }))}
+          options={FARMER_STATUSES.map((value) => ({
+            value,
+            label: FARMER_STATUS_LABELS[value],
+          }))}
+        />
+      </Col>
+      {/* FRD 7.4 lists eight filters. Crop and Quality Rating are the last two. */}
+      <Col xs={12} md={4}>
+        <Input
+          allowClear
+          placeholder="Crop"
+          onChange={(event) => setQuery((q) => ({ ...q, crop: event.target.value || undefined }))}
+        />
+      </Col>
+      <Col xs={12} md={4}>
+        <Select<number>
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="Min. rating"
+          onChange={(value?: number) => setQuery((q) => ({ ...q, minRating: value }))}
+          options={[
+            { value: 80, label: 'Rated 80+' },
+            { value: 60, label: 'Rated 60+' },
+            { value: 40, label: 'Rated 40+' },
+          ]}
+        />
+      </Col>
+    </Row>
   );
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 24 }}>
-      <Card
-        style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: 'none' }}
-        bodyStyle={{ padding: '32px' }}
-      >
-        <PageHeader
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <img src={farmerIcon} alt="" style={{ width: 36, height: 36, objectFit: 'contain' }} />
-              <Typography.Title level={3} style={{ margin: 0 }}>Farmers</Typography.Title>
-            </div>
-          }
-          subtitle={
-            pendingCount > 0 && canApprove ? (
-              <span style={{ color: '#faad14', fontWeight: 500 }}>
-                {pendingCount} awaiting verification. Approval issues the traceability code that the whole farm-to-fork chain hangs on.
-              </span>
-            ) : (
-              'Registry, verification and traceability codes (FRD Sections 7–8).'
-            )
-          }
-          actions={
-            <Can do="FARMER_CREATE">
-              <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
-                Register farmer
-              </Button>
-            </Can>
-          }
-        />
+    <Card>
+      <PageHeader
+        title="Farmers"
+        subtitle={
+          pendingCount > 0 && canApprove
+            ? `${pendingCount} awaiting verification. Approval issues the traceability code that the whole farm-to-fork chain hangs on.`
+            : 'Registry, verification and traceability codes (FRD Sections 7–8).'
+        }
+        actions={
+          <Can do="FARMER_CREATE">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
+              Register farmer
+            </Button>
+          </Can>
+        }
+      />
 
-        <div style={{ marginTop: 24 }}>
-          <DataTable<Farmer>
-            rows={farmers.data?.data}
-            columns={columns}
-            rowKey="id"
-            isLoading={farmers.isLoading}
-            isFetching={farmers.isFetching}
-            error={farmers.error}
-            onRetry={() => void farmers.refetch()}
-            toolbar={toolbar}
-            emptyText="No farmers match these filters"
-          />
-        </div>
+      <DataTable<Farmer>
+        rows={farmers.data?.data}
+        columns={columns}
+        rowKey="id"
+        isLoading={farmers.isLoading}
+        isFetching={farmers.isFetching}
+        error={farmers.error}
+        onRetry={() => void farmers.refetch()}
+        toolbar={toolbar}
+        emptyText="No farmers match these filters"
+      />
 
-        <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />
-        <FarmerDetailDrawer farmerId={detailId} onClose={() => setDetailId(null)} />
-        <VerifyFarmerModal farmer={verifying} onClose={() => setVerifying(null)} />
-        <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />
-      </Card>
-    </div>
+      <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />
+      <FarmerDetailDrawer farmerId={detailId} onClose={() => setDetailId(null)} />
+      <VerifyFarmerModal farmer={verifying} onClose={() => setVerifying(null)} />
+      <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />
+    </Card>
   );
 }
