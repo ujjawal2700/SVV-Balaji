@@ -9,18 +9,14 @@ body,
 #root {
   margin: 0;
   padding: 0;
-  /* 100dvh, not 100vh. On mobile Safari 100vh is the height with the address
-     bar HIDDEN, so a fixed bottom bar sits below the fold until the user
-     scrolls. dvh tracks the visible viewport. */
   min-height: 100dvh;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
-  background: #f5f7f5;
-  /* Stops the whole page rubber-banding when a list is scrolled to its end,
-     which is the clearest "this is a web page" tell on iOS. */
+  background: #f8fafc;
+  color: #0f172a;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -31,10 +27,25 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Custom scrollbar for modern dashboards */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 @media (max-width: 900px) {
   /* iOS zooms the viewport when a focused input has a font size below 16px, and
-     never zooms back out. Every other fix for this is worse than just meeting
-     the threshold. */
+     never zooms back out. */
   input,
   textarea,
   select,
@@ -45,9 +56,7 @@ body {
     font-size: 16px !important;
   }
 
-  /* Text selection on a card or button reads as a web page, and long-press is
-     a scroll gesture here rather than a selection one. Left on for actual
-     content, which people do copy. */
+  /* Text selection on a card or button reads as a web page */
   .ant-card,
   .ant-btn,
   .ant-tag,
@@ -55,15 +64,13 @@ body {
     user-select: none;
   }
 
-  /* Sheets rise from the bottom edge; keep their actions clear of the home
-     indicator. */
+  /* Sheets rise from the bottom edge */
   .field-sheet .ant-drawer-body {
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
 
-/* The standalone (installed) case: there is no browser chrome at all, so the
-   app itself has to leave room for the status bar and the home indicator. */
+/* The standalone (installed) case */
 @media (display-mode: standalone) {
   .field-appbar {
     padding-top: env(safe-area-inset-top);

@@ -146,7 +146,15 @@ export class PackagingService {
   // --- Finished goods warehouse (FRD Section 23) ---------------------------
 
   /** Only QA-released batches may be stocked (FRD 21.5). */
-  async stockIn(fgBatchId: string, dto: StockFinishedGoodsDto) {
+  /**
+   * Put a QA-released batch into finished goods stock.
+   *
+   * A-13 (16 Aug): this now writes a `StockMovement` row in the same
+   * transaction as the quantity change, so finished goods hold the invariant
+   * raw material always has - stock never moves without the ledger recording
+   * why. Before this, the only trace of a stock-in was the number changing.
+   */
+  async stockIn(fgBatchId: string, dto: StockFinishedGoodsDto, performedById: string) {
     const batch = await this.prisma.finishedGoodsBatch.findUnique({ where: { id: fgBatchId } });
     if (!batch) throw new NotFoundException('Finished goods batch not found');
 
@@ -159,18 +167,36 @@ export class PackagingService {
     const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
 
-    return this.prisma.finishedGoodsStock.upsert({
-      where: { warehouseId_fgBatchId: { warehouseId: dto.warehouseId, fgBatchId } },
-      update: {
-        quantity: { increment: dto.quantity },
-        storageLocation: dto.storageLocation,
-      },
-      create: {
-        warehouseId: dto.warehouseId,
-        fgBatchId,
-        quantity: dto.quantity,
-        storageLocation: dto.storageLocation,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const stock = await tx.finishedGoodsStock.upsert({
+        where: { warehouseId_fgBatchId: { warehouseId: dto.warehouseId, fgBatchId } },
+        update: {
+          quantity: { increment: dto.quantity },
+          storageLocation: dto.storageLocation,
+        },
+        create: {
+          warehouseId: dto.warehouseId,
+          fgBatchId,
+          quantity: dto.quantity,
+          storageLocation: dto.storageLocation,
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          fgBatchId,
+          toWarehouseId: dto.warehouseId,
+          movementType: 'STOCK_IN',
+          quantity: dto.quantity,
+          // Finished goods are counted in packs, not kilos - the same ledger
+          // carries both, so the unit has to say which.
+          unit: 'PACK',
+          reason: `Packed batch ${batch.fgBatchNumber} into stock`,
+          performedById,
+        },
+      });
+
+      return stock;
     });
   }
 

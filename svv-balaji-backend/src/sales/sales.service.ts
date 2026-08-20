@@ -125,7 +125,19 @@ export class SalesService {
           orderNumber,
           channel: customer.channel,
           customerId: customer.id,
-          status: OrderStatus.PLACED,
+          /**
+           * A-13 (16 Aug): an order may be saved as a DRAFT.
+           *
+           * A B2B order is a phone call with someone reading out a list, and
+           * staff need to save half of one. Defaults to PLACED so every
+           * existing caller is unaffected.
+           *
+           * Note what is NOT conditional: the prices above are resolved and
+           * frozen now, at creation. That is correct for a placed order and is
+           * revisited when a draft is placed - see `place()`. Freezing a
+           * draft's price would let somebody park an order to hold an old rate.
+           */
+          status: dto.status === 'DRAFT' ? OrderStatus.DRAFT : OrderStatus.PLACED,
           orderDate,
           requiredByDate: dto.requiredByDate ? new Date(dto.requiredByDate) : undefined,
           warehouseId: dto.warehouseId,
@@ -224,7 +236,14 @@ export class SalesService {
             priceList: { select: { id: true, effectiveFrom: true, minQuantity: true } },
           },
         },
+        /**
+         * Released allocations are included deliberately (A-13). The detail
+         * screen shows them struck through - "this order held FG-...-003 and
+         * gave it back on the 14th" is exactly the question the audit trail
+         * exists to answer. `releasedAt` is what tells the two apart.
+         */
         allocations: {
+          orderBy: { createdAt: 'asc' },
           include: {
             fgBatch: {
               select: { id: true, fgBatchNumber: true, expiryDate: true, qaReleased: true },
@@ -246,6 +265,122 @@ export class SalesService {
             : ' - this is a terminal state'),
       );
     }
+  }
+
+  /**
+   * Move a DRAFT to PLACED, re-pricing it as it goes (A-13).
+   *
+   * -------------------------------------------------------------------------
+   * The re-pricing is the whole point, not an optimisation.
+   *
+   * A draft is a working document: someone saved half an order on Monday. If
+   * the prices captured then were kept, a salesperson could park an order
+   * before a price rise and place it afterwards at the old rate. That is a
+   * commercial hole, and it would be invisible - the order would look
+   * perfectly ordinary.
+   *
+   * So every line is resolved again at placement, against today's price list,
+   * and the totals and credit check are redone with the new figures. The line
+   * also records WHICH price rule produced it, so an invoice dispute has an
+   * answer years later.
+   *
+   * A price that has moved is not an error. The caller sees the new total in
+   * the response; the screen shows it back before the order is confirmed.
+   * -------------------------------------------------------------------------
+   */
+  async place(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { items: true, customer: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.status !== OrderStatus.DRAFT) {
+      throw new BadRequestException(
+        `Only a DRAFT can be placed - this order is ${order.status}.`,
+      );
+    }
+
+    if (order.customer.status !== CustomerStatus.ACTIVE) {
+      throw new BadRequestException(
+        `Customer ${order.customer.customerCode} is ${order.customer.status} and cannot place orders`,
+      );
+    }
+
+    const placedOn = new Date();
+
+    const repriced = await Promise.all(
+      order.items.map(async (item) => {
+        const price = await this.pricing.resolve({
+          productId: item.productId,
+          channel: order.channel,
+          customerType: order.customer.type,
+          quantity: item.quantity,
+          on: placedOn,
+        });
+
+        const lineSubtotal = round2(price.unitPrice * item.quantity);
+        const lineTax = round2((lineSubtotal * price.gstRatePercent) / 100);
+
+        return {
+          id: item.id,
+          previousUnitPrice: Number(item.unitPrice),
+          unitPrice: price.unitPrice,
+          priceListId: price.priceListId,
+          gstRatePercent: price.gstRatePercent,
+          lineSubtotal,
+          lineTax,
+          lineTotal: round2(lineSubtotal + lineTax),
+        };
+      }),
+    );
+
+    const subtotal = round2(repriced.reduce((sum, l) => sum + l.lineSubtotal, 0));
+    const taxTotal = round2(repriced.reduce((sum, l) => sum + l.lineTax, 0));
+    const total = round2(subtotal + taxTotal);
+
+    // Redone against the NEW total - a draft that was within the credit limit
+    // at the old price may not be at the new one.
+    if (order.paymentTerms !== PaymentTerms.PREPAID) {
+      await this.assertWithinCreditLimit(order.customerId, total);
+    }
+
+    const changed = repriced.filter((l) => l.previousUnitPrice !== l.unitPrice);
+
+    const placed = await this.prisma.$transaction(async (tx) => {
+      for (const line of repriced) {
+        await tx.orderItem.update({
+          where: { id: line.id },
+          data: {
+            unitPrice: line.unitPrice,
+            priceListId: line.priceListId,
+            gstRatePercent: line.gstRatePercent,
+            lineSubtotal: line.lineSubtotal,
+            lineTax: line.lineTax,
+            lineTotal: line.lineTotal,
+          },
+        });
+      }
+
+      return tx.order.update({
+        where: { id },
+        data: { status: OrderStatus.PLACED, subtotal, taxTotal, total, orderDate: placedOn },
+        include: { items: true, customer: true },
+      });
+    });
+
+    return {
+      order: placed,
+      /**
+       * Surfaced rather than buried: if a price moved between drafting and
+       * placing, whoever placed it needs to see that before they confirm.
+       */
+      repriced: changed.map((l) => ({
+        orderItemId: l.id,
+        from: l.previousUnitPrice,
+        to: l.unitPrice,
+      })),
+    };
   }
 
   async confirm(id: string) {
@@ -274,7 +409,10 @@ export class SalesService {
   async allocate(id: string, allocatedById: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { items: true, allocations: true },
+      // Live only: a released allocation is history, not a current holding,
+      // and counting it would make an order that was cancelled and re-placed
+      // permanently un-allocatable.
+      include: { items: true, allocations: { where: { releasedAt: null } } },
     });
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, OrderStatus.ALLOCATED);
@@ -379,16 +517,21 @@ export class SalesService {
    * held quantity and the on-hand quantity come down together, so a warehouse
    * count and the system agree the moment the vehicle goes.
    */
-  async advance(id: string, to: OrderStatus) {
+  async advance(id: string, to: OrderStatus, performedById: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { allocations: true },
+      // Live allocations only. A released one has already had its reservation
+      // returned and must not be dispatched.
+      include: { allocations: { where: { releasedAt: null } } },
     });
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, to);
 
     if (to !== OrderStatus.DISPATCHED) {
-      return this.prisma.order.update({ where: { id }, data: { status: to } });
+      return this.prisma.order.update({
+        where: { id },
+        data: { status: to, ...this.stampFor(to) },
+      });
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -415,17 +558,62 @@ export class SalesService {
             reservedQuantity: { decrement: allocation.quantity },
           },
         });
+
+        /**
+         * A-13: finished goods stock now moves alongside a ledger row, the
+         * same invariant raw material has always held. Written inside the same
+         * transaction as the decrement - if the movement cannot be recorded,
+         * the stock does not move either.
+         */
+        await tx.stockMovement.create({
+          data: {
+            fgBatchId: allocation.fgBatchId,
+            fromWarehouseId: allocation.warehouseId,
+            movementType: 'STOCK_OUT',
+            quantity: allocation.quantity,
+            unit: 'PACK',
+            reason: `Dispatched on order ${order.orderNumber}`,
+            performedById,
+          },
+        });
       }
 
-      return tx.order.update({ where: { id }, data: { status: OrderStatus.DISPATCHED } });
+      return tx.order.update({
+        where: { id },
+        data: { status: OrderStatus.DISPATCHED, ...this.stampFor(OrderStatus.DISPATCHED) },
+      });
     });
+  }
+
+  /**
+   * The timestamp a transition leaves behind, if it leaves one.
+   *
+   * Only DISPATCHED and DELIVERED are stamped. The intermediate steps -
+   * confirmed, allocated, packed - are internal handling with no commitment
+   * attached to them, and `updatedAt` already covers "when did this last
+   * move". These two are different: they are the only points a promise to the
+   * customer was either kept or missed, which is what FRD 34's Delivery
+   * Reports actually measure.
+   *
+   * Stamped server-side rather than accepted from the client. A dispatch time
+   * a caller can choose is a dispatch time that gets backdated to hit a
+   * target, and the whole point of the column is that it is evidence.
+   */
+  private stampFor(to: OrderStatus): { dispatchedAt?: Date; deliveredAt?: Date } {
+    const now = new Date();
+    if (to === OrderStatus.DISPATCHED) return { dispatchedAt: now };
+    if (to === OrderStatus.DELIVERED) return { deliveredAt: now };
+    return {};
   }
 
   /** Cancelling releases every reservation the order was holding. */
   async cancel(id: string, dto: CancelOrderDto) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { allocations: true },
+      // Live allocations only - a previously released one has already had its
+      // reservation returned, and releasing it twice would decrement stock
+      // that was never held.
+      include: { allocations: { where: { releasedAt: null } } },
     });
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, OrderStatus.CANCELLED);
@@ -452,7 +640,15 @@ export class SalesService {
         }
       }
 
-      await tx.orderAllocation.deleteMany({ where: { orderId: id } });
+      /**
+       * Released, not deleted (A-13). The reservation is given back above;
+       * the row stays so the order can still answer which batches it was
+       * promised. Every read of live allocations filters `releasedAt: null`.
+       */
+      await tx.orderAllocation.updateMany({
+        where: { orderId: id, releasedAt: null },
+        data: { releasedAt: new Date(), releasedReason: dto.reason ?? 'Order cancelled' },
+      });
 
       return tx.order.update({
         where: { id },

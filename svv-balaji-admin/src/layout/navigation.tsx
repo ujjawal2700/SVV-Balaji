@@ -120,7 +120,7 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'FARMER_VIEW',
         description:
           'Farmer registry, verification workflow and traceability IDs. Approval is Super ' +
-          'Admin only (FRD 5.1); the SVV-YYYY-NNNNNN code is issued on approval, never at ' +
+          'Admin only ; the SVV-YYYY-NNNNNN code is issued on approval, never at ' +
           'registration.',
         endpoints: [
           'GET /farmers',

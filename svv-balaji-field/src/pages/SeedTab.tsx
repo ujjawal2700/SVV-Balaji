@@ -1,6 +1,7 @@
-import { CalendarOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CalendarOutlined, ExperimentOutlined } from '@ant-design/icons';
 import { Button, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { SeedDistribution } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
@@ -11,6 +12,7 @@ import { FieldCard, FieldFab, FieldList } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
 
 export function FieldSeedTab() {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const [formOpen, setFormOpen] = useState(false);
@@ -36,19 +38,73 @@ export function FieldSeedTab() {
   };
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {/* Page Navigation & Title Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Button
+            type="text"
+            shape="circle"
+            icon={<ArrowLeftOutlined style={{ fontSize: 16, color: '#0f172a' }} />}
+            onClick={() => navigate('/more')}
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+            }}
+          />
+          <div>
+            <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+              Seed & Agri-Input Handouts
+            </Typography.Title>
+            <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
+              Traceable record of certified seed and inputs distributed to farmers
+            </Typography.Text>
+          </div>
+        </div>
+
+        {!isMobile && (
+          <Button
+            type="primary"
+            icon={<ExperimentOutlined />}
+            onClick={() => setFormOpen(true)}
+            style={{
+              borderRadius: 10,
+              height: 40,
+              fontWeight: 600,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            Record Handout
+          </Button>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: '#fff',
+          padding: isMobile ? '12px 14px' : '14px 18px',
+          borderRadius: 12,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}
           total={everyone.data?.data?.length ?? 0}
           shown={rows.length}
         />
-        {!isMobile ? (
-          <Button type="primary" icon={<ExperimentOutlined />} onClick={() => setFormOpen(true)}>
-            Record a handout
-          </Button>
-        ) : null}
       </div>
 
       <FieldList<SeedDistribution>

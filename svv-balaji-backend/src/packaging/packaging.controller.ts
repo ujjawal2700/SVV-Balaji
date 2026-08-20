@@ -65,8 +65,12 @@ export class PackagingController {
   @Post('finished-goods/:id/stock')
   @RequirePermission('finishedGoods.stockIn')
   @ApiOperation({ summary: 'Move packed goods into the finished goods warehouse (FRD 23)' })
-  stockIn(@Param('id') id: string, @Body() dto: StockFinishedGoodsDto) {
-    return this.packagingService.stockIn(id, dto);
+  stockIn(
+    @Param('id') id: string,
+    @Body() dto: StockFinishedGoodsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.packagingService.stockIn(id, dto, user.sub);
   }
 
   @Get('finished-goods-stock')

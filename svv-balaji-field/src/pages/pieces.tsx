@@ -1,5 +1,5 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Empty, Skeleton, Space, Typography } from 'antd';
+import { Button, Card, Col, Empty, Row, Skeleton, Space, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
@@ -50,12 +50,10 @@ interface FieldListProps<T> {
 }
 
 /**
- * A card list, deliberately not a table.
+ * A responsive card list.
  *
- * A DataTable on a phone is a horizontal scroll that nobody uses — the columns
- * beyond the second are effectively invisible. Cards stack, so every field is
- * on screen, and a whole card is a comfortable tap target rather than a row
- * with a 24px action button at the far right.
+ * On mobile, cards stack comfortably in a single column for effortless thumb interaction.
+ * On tablets and desktop screens, cards flow into a clean 2 or 3-column website grid.
  *
  * Loading shows skeleton cards rather than a spinner: the layout does not jump
  * when the data arrives, which is most of what makes a list feel fast even when
@@ -87,13 +85,15 @@ export function FieldList<T>({
 
   if (isLoading) {
     return (
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        {[0, 1, 2].map((i) => (
-          <Card key={i} size="small">
-            <Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }} />
-          </Card>
+      <Row gutter={[12, 12]}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Col xs={24} sm={24} md={12} lg={12} xl={8} key={i}>
+            <Card size="small">
+              <Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }} />
+            </Card>
+          </Col>
         ))}
-      </Space>
+      </Row>
     );
   }
 
@@ -106,11 +106,13 @@ export function FieldList<T>({
   }
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <Row gutter={[12, 12]}>
       {rows.map((row) => (
-        <div key={keyOf(row)}>{renderCard(row)}</div>
+        <Col xs={24} sm={24} md={12} lg={12} xl={8} key={keyOf(row)}>
+          {renderCard(row)}
+        </Col>
       ))}
-    </Space>
+    </Row>
   );
 }
 
@@ -137,31 +139,54 @@ export function FieldCard({
   extra?: ReactNode;
 }) {
   return (
-    <Card
-      size="small"
-      hoverable={Boolean(onOpen)}
+    <div
       onClick={onOpen}
-      styles={{ body: { padding: 14 } }}
-      style={onOpen ? { cursor: 'pointer' } : undefined}
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 14,
+        padding: '16px 18px',
+        boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02)',
+        cursor: onOpen ? 'pointer' : 'default',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}
+      onMouseEnter={(e) => {
+        if (onOpen) {
+          e.currentTarget.style.borderColor = '#cbd5e1';
+          e.currentTarget.style.boxShadow = '0 8px 18px -4px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (onOpen) {
+          e.currentTarget.style.borderColor = '#e2e8f0';
+          e.currentTarget.style.boxShadow = '0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02)';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }
+      }}
     >
-      <Space direction="vertical" size={6} style={{ width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-          <Typography.Text strong style={{ fontSize: 15 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', fontWeight: 600 }}>
             {title}
           </Typography.Text>
           {extra}
         </div>
 
-        {tags ? <Space size={4} wrap>{tags}</Space> : null}
+        {tags ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{tags}</div> : null}
 
         {meta ? (
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
             {meta}
-          </Typography.Text>
+          </div>
         ) : null}
 
-        {children}
+        {children ? <div style={{ paddingTop: 4 }}>{children}</div> : null}
       </Space>
-    </Card>
+    </div>
   );
 }

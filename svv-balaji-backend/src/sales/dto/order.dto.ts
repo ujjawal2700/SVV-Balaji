@@ -54,6 +54,17 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    enum: ['DRAFT', 'PLACED'],
+    default: 'PLACED',
+    description:
+      'A-13: save an incomplete order as a DRAFT. Defaults to PLACED, so existing callers are ' +
+      'unaffected. Prices are frozen when the order is PLACED, not when a draft is saved.',
+  })
+  @IsOptional()
+  @IsEnum(['DRAFT', 'PLACED'])
+  status?: 'DRAFT' | 'PLACED';
 }
 
 export class CancelOrderDto {

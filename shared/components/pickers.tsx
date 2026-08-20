@@ -1,7 +1,10 @@
 import { Select } from 'antd';
 import type { CSSProperties } from 'react';
+import type { SalesChannel } from '../api/types';
 import { useBranches } from '../hooks/useBranches';
+import { useCustomers } from '../hooks/useCustomers';
 import { useFarmers } from '../hooks/useFarmers';
+import { useProducts } from '../hooks/useProduction';
 import { useWarehouses } from '../hooks/useWarehouses';
 
 interface PickerProps {
@@ -109,6 +112,66 @@ export function WarehouseSelect({ placeholder = 'Select a warehouse', ...props }
       options={(warehouses.data?.data ?? []).map((warehouse) => ({
         value: warehouse.id,
         label: `${warehouse.name} — ${warehouse.location}`,
+      }))}
+      style={{ width: '100%', ...props.style }}
+    />
+  );
+}
+
+/**
+ * Product picker.
+ *
+ * Active products only. An inactive product must not reach a new price rule or
+ * a new order line; the product master is where the full list lives.
+ */
+export function ProductSelect({ placeholder = 'Select a product', ...props }: PickerProps) {
+  const products = useProducts();
+
+  return (
+    <Select
+      {...props}
+      showSearch
+      optionFilterProp="label"
+      placeholder={products.isLoading ? 'Loading…' : placeholder}
+      loading={products.isLoading}
+      options={(products.data?.data ?? []).map((product) => ({
+        value: product.id,
+        label: `${product.name} — ${product.sku}`,
+      }))}
+      style={{ width: '100%', ...props.style }}
+    />
+  );
+}
+
+interface CustomerSelectProps extends PickerProps {
+  /** Restrict to one channel. Orders use this — a channel decides the price list. */
+  channel?: SalesChannel;
+}
+
+/**
+ * Customer picker.
+ *
+ * Filters to ACTIVE on purpose: an order cannot be raised against an inactive
+ * or blacklisted customer, and the server refuses it. Offering the name and
+ * then failing on submit is worse than not offering it.
+ */
+export function CustomerSelect({
+  channel,
+  placeholder = 'Select a customer',
+  ...props
+}: CustomerSelectProps) {
+  const customers = useCustomers({ status: 'ACTIVE', channel });
+
+  return (
+    <Select
+      {...props}
+      showSearch
+      optionFilterProp="label"
+      placeholder={customers.isLoading ? 'Loading…' : placeholder}
+      loading={customers.isLoading}
+      options={(customers.data?.data ?? []).map((customer) => ({
+        value: customer.id,
+        label: `${customer.name} — ${customer.customerCode} · ${customer.channel}`,
       }))}
       style={{ width: '100%', ...props.style }}
     />

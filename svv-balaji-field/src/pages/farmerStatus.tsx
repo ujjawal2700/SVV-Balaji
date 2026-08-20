@@ -1,4 +1,4 @@
-import { Tag, Tooltip, Typography } from 'antd';
+import { Tooltip, Typography } from 'antd';
 import type { FarmerStatus } from '@shared/api/types';
 
 export const FARMER_STATUS_LABELS: Record<FarmerStatus, string> = {
@@ -9,16 +9,33 @@ export const FARMER_STATUS_LABELS: Record<FarmerStatus, string> = {
   SUSPENDED: 'Suspended',
 };
 
-const FARMER_STATUS_COLOURS: Record<FarmerStatus, string> = {
-  PENDING_VERIFICATION: 'gold',
-  ACTIVE: 'green',
-  INACTIVE: 'default',
-  BLACKLISTED: 'red',
-  SUSPENDED: 'orange',
+const FARMER_STATUS_STYLES: Record<FarmerStatus, { bg: string; color: string; border: string }> = {
+  PENDING_VERIFICATION: { bg: '#fef3c7', color: '#b45309', border: '#fde68a' }, // Soft Amber
+  ACTIVE: { bg: '#d1fae5', color: '#047857', border: '#a7f3d0' }, // Light Green / Emerald
+  INACTIVE: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
+  BLACKLISTED: { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' },
+  SUSPENDED: { bg: '#ffedd5', color: '#c2410c', border: '#fed7aa' },
 };
 
 export function FarmerStatusTag({ status }: { status: FarmerStatus }) {
-  return <Tag color={FARMER_STATUS_COLOURS[status]}>{FARMER_STATUS_LABELS[status]}</Tag>;
+  const style = FARMER_STATUS_STYLES[status] || FARMER_STATUS_STYLES.INACTIVE;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '2px 8px',
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 600,
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+      }}
+    >
+      {FARMER_STATUS_LABELS[status]}
+    </span>
+  );
 }
 
 /**
@@ -35,7 +52,7 @@ export function FarmerCodeCell({ code }: { code: string | null }) {
   }
 
   return (
-    <Tooltip title="Issued automatically when the farmer is approved (FRD 8.1)">
+    <Tooltip title="Issued automatically when the farmer is approved ">
       <Typography.Text type="secondary">Not yet issued</Typography.Text>
     </Tooltip>
   );

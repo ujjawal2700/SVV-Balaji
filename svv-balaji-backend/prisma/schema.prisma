@@ -741,11 +741,27 @@ model WarehouseStock {
 }
 
 /// FRD 17.3/17.5 - append-only audit trail of every inventory change.
+/// Every change to stock, of either kind.
+///
+/// Raw material has always held the invariant that quantity is never mutated
+/// except alongside a row here. Finished goods did not - `FinishedGoodsStock`
+/// was decremented on dispatch and left no trace, so "why is the count wrong"
+/// had no answer. A-13 (16 Aug) closed that by widening this table rather than
+/// adding a second one: one ledger means one place to read, one report, one
+/// screen, instead of every inventory question being asked twice and joined.
+///
+/// Exactly one of `batchId` / `fgBatchId` is set. Enforced by a CHECK
+/// constraint in the migration, because Prisma cannot express it.
 model StockMovement {
   id String @id @default(uuid())
 
-  batchId String
-  batch   RawMaterialBatch @relation(fields: [batchId], references: [id])
+  /// Set for raw material movements.
+  batchId String?
+  batch   RawMaterialBatch? @relation(fields: [batchId], references: [id])
+
+  /// Set for finished goods movements.
+  fgBatchId String?
+  fgBatch   FinishedGoodsBatch? @relation(fields: [fgBatchId], references: [id])
 
   fromWarehouseId String?
   fromWarehouse   Warehouse? @relation("StockMovementFrom", fields: [fromWarehouseId], references: [id])
@@ -764,6 +780,7 @@ model StockMovement {
   createdAt DateTime @default(now())
 
   @@index([batchId])
+  @@index([fgBatchId])
   @@index([movementType])
   @@map("stock_movements")
 }
@@ -1058,6 +1075,8 @@ model FinishedGoodsBatch {
 
   qualityInspections QualityInspection[]
   stock              FinishedGoodsStock[]
+  /// Every stock-in, dispatch and adjustment of this batch (A-13).
+  stockMovements     StockMovement[]
 
   // Phase 4 - every allocation is a traceability link from an order line to a
   // specific pack batch, and through it back to the farmer.
@@ -1355,6 +1374,26 @@ model Order {
   cancelledReason String?
   cancelledAt     DateTime?
 
+  /// When the goods physically left the warehouse.
+  ///
+  /// Written by `advance()` at the DISPATCHED transition. Exists because
+  /// "Delayed Shipments" (FRD 34, Delivery Reports) compares this against
+  /// `requiredByDate`, and status alone cannot answer it - an order that is
+  /// DISPATCHED tells you it left, never when.
+  ///
+  /// It is also the only defensible start for the credit period: CREDIT_30 has
+  /// to count from something, and dispatch is the point the customer actually
+  /// received value. See SVV_Balaji_FRD34_Reporting_Gaps.md - the client has
+  /// not confirmed this yet.
+  dispatchedAt DateTime?
+
+  /// When the customer took delivery. Written by `advance()` at DELIVERED.
+  ///
+  /// The other half of "Delivery Performance". Deliberately separate from
+  /// `dispatchedAt` rather than derived from it: transit time is the number
+  /// worth watching, and it is the difference between the two.
+  deliveredAt DateTime?
+
   items       OrderItem[]
   allocations OrderAllocation[]
 
@@ -1365,6 +1404,9 @@ model Order {
   @@index([status])
   @@index([customerId])
   @@index([orderDate])
+  /// Every delivery report is a date-range scan over dispatches. Partial,
+  /// because an order that has not shipped is never in one of those answers.
+  @@index([dispatchedAt])
   @@map("orders")
 }
 
@@ -1429,6 +1471,21 @@ model OrderAllocation {
 
   allocatedById String
   allocatedBy   User   @relation("OrderAllocations", fields: [allocatedById], references: [id])
+
+  /// Set when the reservation is given back - cancelling the order, or a
+  /// re-allocation. The row is never deleted.
+  ///
+  /// A-13 (16 Aug): cancel() used to `deleteMany` these after releasing the
+  /// reservations. The stock was returned correctly, but the record of WHICH
+  /// batches were promised to this customer was destroyed - so "you allocated
+  /// me FG-20260812-003 and then cancelled" had no answer in the data. For a
+  /// traceability product that is a strange place to economise, and once
+  /// finished goods have movements the release would show as stock activity
+  /// with nothing to explain it.
+  ///
+  /// Every read of LIVE allocations filters `releasedAt: null`.
+  releasedAt     DateTime?
+  releasedReason String?
 
   createdAt DateTime @default(now())
 

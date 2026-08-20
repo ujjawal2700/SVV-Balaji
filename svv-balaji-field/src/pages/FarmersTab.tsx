@@ -2,9 +2,10 @@ import {
   EnvironmentOutlined,
   PlusOutlined,
   QrcodeOutlined,
+  SearchOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Button, Input, Segmented, Space, Tag, Typography } from 'antd';
+import { Button, Input, Segmented, Space } from 'antd';
 import { useState } from 'react';
 import type { Farmer, FarmerStatus } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
@@ -19,19 +20,6 @@ import { LandProfileSheet } from './LandProfileSheet';
 
 type Filter = 'all' | 'pending' | 'active' | 'unmapped';
 
-/**
- * Onboarding and land profiling, area 2 of the Agriculture Expert's six.
- *
- * Different emphasis from the onboarding desk at /onboarding, deliberately.
- * That screen is organised around the approval queue, because the desk's job is
- * to clear it. This one is organised around *land*, because the executive is
- * standing on it: the primary action on every card is "map the land", and the
- * filter that matters is which farmers have no plots recorded.
- *
- * Approval is not offered here at all. It is Super Admin only by default, and
- * offering a button that 403s to the person most likely to press it would be
- * worse than its absence.
- */
 export function FieldFarmersTab() {
   const isMobile = useIsMobile();
   const canRegister = useCan('FARMER_CREATE');
@@ -48,12 +36,6 @@ export function FieldFarmersTab() {
 
   const farmers = useFarmers({ fullName: search || undefined, status: statusForQuery });
 
-  /**
-   * "Unmapped" means no GPS on the farmer record. It is a proxy: knowing which
-   * farmers have zero plots would need a count on the list endpoint, and asking
-   * per farmer would be one request per row. Raised for Ujjawal — a
-   * `_count.plots` on GET /farmers makes this exact rather than approximate.
-   */
   const rows = (farmers.data?.data ?? []).filter((farmer) =>
     filter === 'unmapped' ? !farmer.gpsLocation : true,
   );
@@ -64,34 +46,95 @@ export function FieldFarmersTab() {
   };
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <Input.Search
-        allowClear
-        size={isMobile ? 'large' : 'middle'}
-        placeholder="Search by name"
-        onSearch={setSearch}
-        enterButton
-      />
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {/* --- Top Bar & Sleek Filters Toolbar --- */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 14,
+          flexWrap: 'wrap',
+          background: '#ffffff',
+          padding: isMobile ? '12px 14px' : '16px 20px',
+          borderRadius: 14,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+        }}
+      >
+        {/* Search Bar with inline icon - flexible width */}
+        <div style={{ flex: '1 1 280px', minWidth: isMobile ? '100%' : 220, maxWidth: isMobile ? '100%' : 420 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 16, marginRight: 6 }} />}
+            placeholder="Search by name, village, mobile..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              height: 42,
+              borderRadius: 10,
+              border: '1px solid #cbd5e1',
+              background: '#f8fafc',
+              fontSize: 14,
+            }}
+          />
+        </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <Segmented<Filter>
-          size="small"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { label: 'All', value: 'all' },
-            { label: 'Waiting', value: 'pending' },
-            { label: 'Approved', value: 'active' },
-            { label: 'No location', value: 'unmapped' },
-          ]}
-        />
-        {!isMobile && canRegister ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-            Register farmer
-          </Button>
-        ) : null}
+        {/* Action Controls & Segmented Filters */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            justifyContent: isMobile ? 'space-between' : 'flex-end',
+            flex: isMobile ? '1 1 100%' : '0 1 auto',
+          }}
+        >
+          <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
+            <Segmented<Filter>
+              value={filter}
+              onChange={setFilter}
+              style={{
+                background: '#f1f5f9',
+                padding: 3,
+                borderRadius: 10,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+              options={[
+                { label: 'All', value: 'all' },
+                { label: 'Waiting', value: 'pending' },
+                { label: 'Approved', value: 'active' },
+                { label: 'No location', value: 'unmapped' },
+              ]}
+            />
+          </div>
+
+          {!isMobile && canRegister ? (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setFormOpen(true)}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 10,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                boxShadow: '0 2px 10px 0 rgba(16, 185, 129, 0.35)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Register farmer
+            </Button>
+          ) : null}
+        </div>
       </div>
 
+      {/* --- Farmer Cards Grid --- */}
       <FieldList<Farmer>
         rows={rows}
         isLoading={farmers.isLoading}
@@ -114,54 +157,144 @@ export function FieldFarmersTab() {
               onOpen={() => setLandFor(farmer)}
               extra={
                 farmer.farmerCode ? (
-                  <Button
-                    size="small"
-                    icon={<QrcodeOutlined />}
+                  <button
+                    type="button"
+                    aria-label="Show QR Code"
                     onClick={(event) => {
                       event.stopPropagation();
                       setShowingCodes(farmer);
                     }}
-                  />
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      background: '#f1f5f9',
+                      border: '1px solid #e2e8f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#475569',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e2e8f0';
+                      e.currentTarget.style.color = '#0f172a';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f1f5f9';
+                      e.currentTarget.style.color = '#475569';
+                    }}
+                  >
+                    <QrcodeOutlined style={{ fontSize: 16 }} />
+                  </button>
                 ) : null
               }
               tags={
                 <>
                   <FarmerStatusTag status={farmer.status} />
-                  {farmer.farmSizeAcres ? <Tag>{farmer.farmSizeAcres} ac</Tag> : null}
-                  {!farmer.gpsLocation ? (
-                    <Tag color="orange" icon={<EnvironmentOutlined />}>
-                      No location
-                    </Tag>
+
+                  {farmer.farmSizeAcres ? (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        background: '#f1f5f9',
+                        color: '#475569',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      {farmer.farmSizeAcres} ac
+                    </span>
                   ) : null}
+
+                  {!farmer.gpsLocation ? (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        background: '#ffedd5',
+                        color: '#c2410c',
+                        border: '1px solid #fed7aa',
+                      }}
+                    >
+                      <EnvironmentOutlined style={{ fontSize: 11 }} /> No location
+                    </span>
+                  ) : null}
+
                   {blocking.map((gap) => (
-                    <Tag key={gap.key} color="red" icon={<WarningOutlined />}>
-                      {gap.label}
-                    </Tag>
+                    <span
+                      key={gap.key}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        border: '1px solid #fecaca',
+                      }}
+                    >
+                      <WarningOutlined style={{ fontSize: 11 }} /> {gap.label}
+                    </span>
                   ))}
                 </>
               }
               meta={
-                <>
-                  {farmer.farmerCode ? (
-                    <Typography.Text code style={{ fontSize: 12 }}>
-                      {farmer.farmerCode}
-                    </Typography.Text>
-                  ) : (
-                    <Typography.Text type="secondary">
-                      {FARMER_STATUS_LABELS[farmer.status]} — no traceability code yet
-                    </Typography.Text>
-                  )}
-                  <br />
-                  {farmer.mobile} · {farmer.village}, {farmer.district}
-                </>
+                <div>
+                  <div style={{ marginBottom: 4 }}>
+                    {farmer.farmerCode ? (
+                      <span
+                        style={{
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '2px 7px',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 6,
+                          color: '#0f172a',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {farmer.farmerCode}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                        {FARMER_STATUS_LABELS[farmer.status]} — no code yet
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ color: '#64748b', fontSize: 13 }}>
+                    {farmer.mobile} · {farmer.village}, {farmer.district}
+                  </span>
+                </div>
               }
             >
-              <Space size={8} style={{ width: '100%' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
                 <Button
                   block
-                  type="primary"
-                  ghost
-                  icon={<EnvironmentOutlined />}
+                  style={{
+                    color: '#059669',
+                    borderColor: '#a7f3d0',
+                    background: '#f0fdf4',
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    height: 38,
+                  }}
+                  icon={<EnvironmentOutlined style={{ color: '#059669' }} />}
                   onClick={(event) => {
                     event.stopPropagation();
                     setLandFor(farmer);
@@ -171,6 +304,14 @@ export function FieldFarmersTab() {
                 </Button>
                 <Button
                   block
+                  style={{
+                    color: '#334155',
+                    borderColor: '#e2e8f0',
+                    background: '#f8fafc',
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    height: 38,
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
                     setEditing(farmer);
@@ -179,13 +320,15 @@ export function FieldFarmersTab() {
                 >
                   Details
                 </Button>
-              </Space>
+              </div>
             </FieldCard>
           );
         }}
       />
 
-      {canRegister ? <FieldFab label="Register" onClick={() => setFormOpen(true)} /> : null}
+      {canRegister ? (
+        <FieldFab label="Register" onClick={() => setFormOpen(true)} />
+      ) : null}
 
       <FarmerFormModal open={formOpen} farmer={editing} onClose={closeForm} />
       <LandProfileSheet

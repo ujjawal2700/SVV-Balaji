@@ -1282,3 +1282,295 @@ export interface FarmerPlotCounts {
   plotCount?: number;
   mappedAcres?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Zone 4 — Sales (WS2.5)
+// ---------------------------------------------------------------------------
+
+export const SALES_CHANNELS = ['B2B', 'B2C'] as const;
+export type SalesChannel = (typeof SALES_CHANNELS)[number];
+
+export const CUSTOMER_TYPES = ['DISTRIBUTOR', 'RETAILER', 'INSTITUTIONAL', 'CONSUMER'] as const;
+export type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
+export const PAYMENT_TERMS = ['PREPAID', 'CREDIT_7', 'CREDIT_15', 'CREDIT_30', 'CREDIT_45'] as const;
+export type PaymentTerms = (typeof PAYMENT_TERMS)[number];
+
+export type CustomerStatus = 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
+
+/**
+ * One registry, two channels.
+ *
+ * The optional fields are not optional by accident: a B2C consumer has no
+ * GSTIN, no credit limit and no assigned executive, and asking for them would
+ * be asking for data that does not exist. Which fields apply is decided by
+ * `channel`, which is fixed at registration.
+ */
+export interface Customer {
+  id: string;
+  customerCode: string;
+  channel: SalesChannel;
+  type: CustomerType;
+
+  name: string;
+  contactName: string | null;
+  phone: string;
+  email: string | null;
+
+  /** B2B only. It is what goes on the tax invoice. */
+  gstin: string | null;
+
+  billingAddress: string;
+  shippingAddress: string | null;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  pincode: string | null;
+
+  /** B2B only. Null means no credit — everything is prepaid. */
+  creditLimit: string | null;
+  paymentTerms: PaymentTerms;
+
+  status: CustomerStatus;
+  branchId: string | null;
+  branch?: BranchRef | null;
+  assignedToId: string | null;
+  assignedTo?: UserRef | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerCredit {
+  customerId: string;
+  creditLimit: number | null;
+  /** Unpaid on confirmed-and-beyond orders. */
+  outstanding: number;
+  /** Null when there is no limit set. */
+  availableCredit: number | null;
+}
+
+export interface CustomerQuery {
+  channel?: SalesChannel;
+  type?: CustomerType;
+  status?: CustomerStatus;
+  /** One box across name, customer code, phone and GSTIN — the server decides which matched. */
+  search?: string;
+  branchId?: string;
+}
+
+export interface CreateCustomerInput {
+  channel: SalesChannel;
+  type: CustomerType;
+  name: string;
+  contactName?: string;
+  phone: string;
+  email?: string;
+  gstin?: string;
+  billingAddress: string;
+  shippingAddress?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  pincode?: string;
+  creditLimit?: number;
+  paymentTerms?: PaymentTerms;
+  branchId?: string;
+  assignedToId?: string;
+}
+
+/** Channel is absent on purpose — the server refuses to change it. */
+export type UpdateCustomerInput = Omit<Partial<CreateCustomerInput>, 'channel'>;
+
+// --- Pricing ---------------------------------------------------------------
+
+/**
+ * A dated price rule, not a price.
+ *
+ * `effectiveTo` null means "current". A rule is never edited: superseding closes
+ * the old one and opens a new one, so an invoice raised in June still resolves
+ * to June's rate years later.
+ */
+export interface PriceList {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string };
+  channel: SalesChannel;
+  /** Null means the rule applies to every customer type in the channel. */
+  customerType: CustomerType | null;
+  unitPrice: string;
+  currency: string;
+  gstRatePercent: string;
+  minQuantity: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isActive: boolean;
+  createdBy?: UserRef;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What GET /price-lists actually accepts. Nothing more.
+ *
+ * There is deliberately no `customerType` here: the endpoint does not take one,
+ * and a field the server ignores is worse than no field — the filter appears to
+ * work and quietly returns everything. The screen narrows by customer type in
+ * the browser instead, and says so.
+ */
+export interface PriceListQuery {
+  productId?: string;
+  channel?: SalesChannel;
+  activeOnly?: boolean;
+}
+
+export interface PriceComparison {
+  productId: string;
+  b2b: PriceList | null;
+  b2c: PriceList | null;
+}
+
+export interface CreatePriceListInput {
+  productId: string;
+  channel: SalesChannel;
+  customerType?: CustomerType;
+  unitPrice: number;
+  gstRatePercent?: number;
+  minQuantity?: number;
+  effectiveFrom: string;
+}
+
+/**
+ * Note what is absent: `minQuantity`.
+ *
+ * SupersedePriceDto does not accept it, and the API runs
+ * `forbidNonWhitelisted` — sending it is a 400, not a shrug. That is the right
+ * behaviour: the quantity break is part of which rule this IS. Changing it
+ * means opening a different rule, not re-rating this one.
+ */
+export interface SupersedePriceInput {
+  unitPrice: number;
+  effectiveFrom: string;
+  gstRatePercent?: number;
+}
+
+// --- Orders ----------------------------------------------------------------
+
+export const ORDER_STATUSES = [
+  'DRAFT',
+  'PLACED',
+  'CONFIRMED',
+  'ALLOCATED',
+  'PACKED',
+  'DISPATCHED',
+  'DELIVERED',
+  'CANCELLED',
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string };
+  quantity: number;
+  unitPrice: string;
+  /** Which price rule produced this line — the answer to an invoice dispute. */
+  priceListId: string | null;
+  priceList?: { id: string; effectiveFrom: string; minQuantity: number } | null;
+  gstRatePercent: string;
+  lineSubtotal: string;
+  lineTax: string;
+  lineTotal: string;
+}
+
+/**
+ * A batch reserved against an order line.
+ *
+ * `releasedAt` non-null means the reservation was given back — the order was
+ * cancelled or re-allocated. The row is kept deliberately (A-13): "you
+ * allocated me FG-...-003 and then cancelled" needs an answer in the data.
+ */
+export interface OrderAllocation {
+  id: string;
+  orderItemId: string;
+  fgBatchId: string;
+  fgBatch?: { id: string; fgBatchNumber: string; expiryDate: string | null; qaReleased: boolean };
+  warehouseId: string;
+  quantity: number;
+  releasedAt: string | null;
+  releasedReason: string | null;
+  createdAt: string;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  channel: SalesChannel;
+  customerId: string;
+  customer?: { id: string; customerCode: string; name: string; channel: SalesChannel };
+  status: OrderStatus;
+  orderDate: string;
+  requiredByDate: string | null;
+  warehouseId: string;
+  warehouse?: { id: string; name: string };
+  branchId: string | null;
+  subtotal: string;
+  taxTotal: string;
+  total: string;
+  paymentStatus: PaymentStatus;
+  paymentTerms: PaymentTerms;
+  notes: string | null;
+  cancelledReason: string | null;
+  cancelledAt: string | null;
+  /** Stamped server-side at the DISPATCHED transition. Null until then. */
+  dispatchedAt: string | null;
+  /** Stamped server-side at the DELIVERED transition. Null until then. */
+  deliveredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrderDetail extends Order {
+  items: OrderItem[];
+  /** Includes released rows — filter on `releasedAt` for the live ones. */
+  allocations: OrderAllocation[];
+}
+
+/**
+ * What GET /orders actually accepts.
+ *
+ * `paymentStatus` is absent for the same reason as above — the endpoint has no
+ * such parameter. The orders screen filters payment status client-side.
+ */
+export interface OrderQuery {
+  status?: OrderStatus;
+  channel?: SalesChannel;
+  customerId?: string;
+  warehouseId?: string;
+  /** ISO date. Order date on or after. */
+  from?: string;
+  /** ISO date. Order date on or before. */
+  to?: string;
+}
+
+export interface CreateOrderInput {
+  customerId: string;
+  warehouseId: string;
+  orderDate?: string;
+  requiredByDate?: string;
+  items: Array<{ productId: string; quantity: number }>;
+  notes?: string;
+  /** DRAFT saves it without pricing being final. Defaults to PLACED. */
+  status?: 'DRAFT' | 'PLACED';
+}
+
+export interface PlaceOrderResult {
+  order: OrderDetail;
+  /** Lines whose price moved between drafting and placing. Usually empty. */
+  repriced: Array<{ orderItemId: string; from: number; to: number }>;
+}
+
+export interface AllocationResult {
+  order: Order;
+  allocations: OrderAllocation[];
+}

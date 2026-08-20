@@ -4,11 +4,15 @@ import {
   App as AntApp,
   Button,
   Card,
+  Col,
   DatePicker,
+  Drawer,
   Empty,
   Form,
   Input,
   InputNumber,
+  Modal,
+  Row,
   Select,
   Space,
   Statistic,
@@ -29,6 +33,8 @@ import {
   useFarmPlots,
   useUpdateFarmPlot,
 } from '@shared/hooks/useFarmPlots';
+import { useIsMobile } from '@shared/hooks/useIsMobile';
+import { toIsoDate } from '@shared/utils/format';
 import { GpsField } from './GpsField';
 
 /**
@@ -237,6 +243,7 @@ function PlotFormSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const isMobile = useIsMobile();
   const { message, modal } = AntApp.useApp();
   const [form] = Form.useForm();
   const [gps, setGps] = useState<string | undefined>(undefined);
@@ -271,29 +278,34 @@ function PlotFormSheet({
   const submit = async () => {
     const values = await form.validateFields();
 
-    const input: FarmPlotInput = {
+    const payload: FarmPlotInput = {
       name: values.name,
-      surveyNumber: values.surveyNumber,
+      surveyNumber: values.surveyNumber || undefined,
       areaAcres: values.areaAcres,
-      soilType: values.soilType,
-      irrigationType: values.irrigationType,
-      waterSource: values.waterSource,
-      currentCrop: values.currentCrop,
-      sowingDate: values.sowingDate ? values.sowingDate.format('YYYY-MM-DD') : undefined,
-      expectedHarvest: values.expectedHarvest
-        ? values.expectedHarvest.format('YYYY-MM-DD')
-        : undefined,
       gpsLocation: gps || undefined,
-      notes: values.notes,
+      soilType: values.soilType || undefined,
+      irrigationType: values.irrigationType || undefined,
+      waterSource: values.waterSource || undefined,
+      currentCrop: values.currentCrop || undefined,
+      sowingDate: values.sowingDate ? (toIsoDate(values.sowingDate) as string) : undefined,
+      expectedHarvest: values.expectedHarvest
+        ? (toIsoDate(values.expectedHarvest) as string)
+        : undefined,
+      isActive: values.isActive ?? true,
+      notes: values.notes || undefined,
     };
 
     try {
-      if (plot) await update.mutateAsync({ plotId: plot.id, input });
-      else await create.mutateAsync(input);
-      message.success(plot ? 'Plot updated' : 'Plot added');
+      if (plot) {
+        await update.mutateAsync({ plotId: plot.id, input: payload });
+        message.success('Plot updated');
+      } else {
+        await create.mutateAsync(payload);
+        message.success('Plot added');
+      }
       onClose();
     } catch (error) {
-      message.error(apiErrorMessage(error, 'Could not save the plot'), 10);
+      message.error(apiErrorMessage(error, 'Could not save the plot'), 8);
     }
   };
 
@@ -319,96 +331,293 @@ function PlotFormSheet({
     });
   };
 
-  return (
-    <Sheet
-      open={open}
-      title={plot ? `Edit ${plot.name}` : 'Add a plot'}
-      onOk={submit}
-      onCancel={onClose}
-      confirmLoading={create.isPending || update.isPending}
-      okText={plot ? 'Save' : 'Add plot'}
+  const formContent = (
+    <Form form={form} layout="vertical" requiredMark="optional" style={{ padding: isMobile ? 0 : '4px 0' }}>
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          padding: '16px 18px',
+          marginBottom: 16,
+          boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
+        }}
+      >
+        <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block', marginBottom: 12 }}>
+          Plot Identification & Dimensions
+        </Typography.Text>
+        <Row gutter={[14, 0]}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="name"
+              label="Plot Name"
+              rules={[{ required: true, message: 'Give the plot a name' }]}
+            >
+              <Input placeholder="e.g. North Field" style={{ borderRadius: 8 }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name="surveyNumber" label="Survey Number">
+              <Input placeholder="e.g. 142/3B" style={{ borderRadius: 8 }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="areaAcres"
+              label="Area (Acres)"
+              rules={[{ required: true, message: 'Area is required' }]}
+            >
+              <InputNumber min={0.01} step={0.25} style={{ width: '100%', borderRadius: 8 }} placeholder="e.g. 3.5" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name="currentCrop" label="Current Standing Crop">
+              <Input placeholder="e.g. Wheat" style={{ borderRadius: 8 }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <Form.Item label="Plot GPS Coordinates">
+              <GpsField value={gps} onChange={setGps} />
+            </Form.Item>
+          </Col>
+        </Row>
+      </div>
+
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          padding: '16px 18px',
+          marginBottom: 16,
+          boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
+        }}
+      >
+        <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block', marginBottom: 12 }}>
+          Soil, Irrigation & Timeline
+        </Typography.Text>
+        <Row gutter={[14, 0]}>
+          <Col xs={24} md={8}>
+            <Form.Item name="soilType" label="Soil Type">
+              <Select
+                allowClear
+                showSearch
+                placeholder="Select soil"
+                style={{ borderRadius: 8 }}
+                options={SOIL_TYPES.map((value) => ({ value, label: value }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="irrigationType" label="Irrigation Method">
+              <Select
+                allowClear
+                showSearch
+                placeholder="Select irrigation"
+                style={{ borderRadius: 8 }}
+                options={IRRIGATION_TYPES.map((value) => ({ value, label: value }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="waterSource" label="Water Source">
+              <Select
+                allowClear
+                showSearch
+                placeholder="Select source"
+                style={{ borderRadius: 8 }}
+                options={WATER_SOURCES.map((value) => ({ value, label: value }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name="sowingDate" label="Sowing Date">
+              <DatePicker style={{ width: '100%', borderRadius: 8 }} format="DD MMM YYYY" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="expectedHarvest"
+              label="Expected Harvest Date"
+              extra="Drives pre-harvest gate schedule"
+            >
+              <DatePicker style={{ width: '100%', borderRadius: 8 }} format="DD MMM YYYY" />
+            </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <Form.Item name="notes" label="Additional Notes">
+              <Input.TextArea rows={2} maxLength={500} showCount placeholder="Optional soil health or boundary notes" style={{ borderRadius: 8 }} />
+            </Form.Item>
+          </Col>
+        </Row>
+      </div>
+
+      {plot ? (
+        <Button block danger icon={<DeleteOutlined />} onClick={confirmDelete} style={{ borderRadius: 8, height: 40, marginTop: 4 }}>
+          Delete this plot
+        </Button>
+      ) : null}
+    </Form>
+  );
+
+  const headerContent = (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 50%, #f7fee7 100%)',
+        margin: '-16px -24px -16px -24px',
+        padding: '18px 24px',
+        borderRadius: isMobile ? 0 : '14px 14px 0 0',
+        borderBottom: '1px solid #e2e8f0',
+      }}
     >
-      <Form form={form} layout="vertical" requiredMark="optional">
-        <Form.Item
-          name="name"
-          label="What the farmer calls it"
-          rules={[{ required: true, message: 'Give the plot a name you would recognise again' }]}
+      <svg
+        viewBox="0 0 600 160"
+        preserveAspectRatio="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.45,
+          pointerEvents: 'none',
+        }}
+      >
+        <path d="M0,0 L600,0 L600,80 C480,140 420,20 320,110 C240,180 140,40 0,90 Z" fill="#d9f99d" />
+        <path d="M0,0 L600,0 L600,40 C490,90 390,-10 280,70 C190,130 90,20 0,60 Z" fill="#a7f3d0" />
+        <circle cx="50" cy="30" r="14" fill="none" stroke="#65a30d" strokeWidth="2" opacity="0.35" />
+      </svg>
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#059669',
+            fontSize: 20,
+            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.15)',
+            border: '1px solid #a7f3d0',
+            flexShrink: 0,
+          }}
         >
-          <Input placeholder="North field" size="large" />
-        </Form.Item>
+          <EnvironmentOutlined />
+        </div>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
+            {plot ? `Edit Plot — ${plot.name}` : 'Map New Farm Plot'}
+          </Typography.Title>
+          <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2 }}>
+            Record boundary coordinates, acreage, standing crop, and soil profile
+          </Typography.Text>
+        </div>
+      </div>
+    </div>
+  );
 
-        <Form.Item name="surveyNumber" label="Survey number">
-          <Input placeholder="142/3B" size="large" />
-        </Form.Item>
+  const isPending = create.isPending || update.isPending;
 
-        <Form.Item
-          name="areaAcres"
-          label="Area (acres)"
-          rules={[{ required: true, message: 'Area is what makes the plot list add up' }]}
-        >
-          <InputNumber min={0.01} step={0.25} style={{ width: '100%' }} size="large" />
-        </Form.Item>
+  if (isMobile) {
+    return (
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title={headerContent}
+        placement="top"
+        height="100vh"
+        styles={{
+          body: { background: '#f8fafc', padding: '14px 14px 80px 14px' },
+          header: { borderBottom: '1px solid #e2e8f0' },
+        }}
+        footer={
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Button block style={{ height: 44, borderRadius: 10 }} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              block
+              type="primary"
+              loading={isPending}
+              onClick={submit}
+              style={{
+                height: 44,
+                borderRadius: 10,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                border: 'none',
+                boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
+              }}
+            >
+              {plot ? 'Save Changes' : 'Save Plot'}
+            </Button>
+          </div>
+        }
+        destroyOnClose
+      >
+        {formContent}
+      </Drawer>
+    );
+  }
 
-        <Form.Item label="Location on the plot">
-          <GpsField value={gps} onChange={setGps} />
-        </Form.Item>
-
-        <Form.Item name="currentCrop" label="Growing now">
-          <Input placeholder="Wheat" size="large" />
-        </Form.Item>
-
-        <Form.Item name="soilType" label="Soil">
-          <Select
-            allowClear
-            showSearch
-            size="large"
-            placeholder="Black cotton"
-            options={SOIL_TYPES.map((value) => ({ value, label: value }))}
-          />
-        </Form.Item>
-
-        <Form.Item name="irrigationType" label="Irrigation">
-          <Select
-            allowClear
-            showSearch
-            size="large"
-            placeholder="Rain-fed"
-            options={IRRIGATION_TYPES.map((value) => ({ value, label: value }))}
-          />
-        </Form.Item>
-
-        <Form.Item name="waterSource" label="Water source">
-          <Select
-            allowClear
-            showSearch
-            size="large"
-            placeholder="Borewell"
-            options={WATER_SOURCES.map((value) => ({ value, label: value }))}
-          />
-        </Form.Item>
-
-        <Form.Item name="sowingDate" label="Sown">
-          <DatePicker style={{ width: '100%' }} size="large" format="DD MMM YYYY" />
-        </Form.Item>
-
-        <Form.Item
-          name="expectedHarvest"
-          label="Harvest expected"
-          extra="Drives the harvest reminder on your home screen."
-        >
-          <DatePicker style={{ width: '100%' }} size="large" format="DD MMM YYYY" />
-        </Form.Item>
-
-        <Form.Item name="notes" label="Notes">
-          <Input.TextArea rows={2} maxLength={500} showCount />
-        </Form.Item>
-
-        {plot ? (
-          <Button block danger icon={<DeleteOutlined />} onClick={confirmDelete}>
-            Delete this plot
+  return (
+    <Modal
+      open={open}
+      title={headerContent}
+      onCancel={onClose}
+      width={680}
+      style={{ top: 24, paddingBottom: 24 }}
+      styles={{
+        body: {
+          background: '#f8fafc',
+          padding: '16px 20px',
+          maxHeight: 'calc(90vh - 130px)',
+          overflowY: 'auto',
+          margin: '0 -24px',
+          paddingInline: 24,
+        },
+        header: {
+          padding: '16px 24px',
+          borderBottom: '1px solid #e2e8f0',
+          marginBottom: 0,
+        },
+        footer: {
+          padding: '14px 24px',
+          borderTop: '1px solid #e2e8f0',
+          margin: 0,
+        },
+      }}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <Button style={{ height: 42, paddingInline: 20, borderRadius: 10 }} onClick={onClose}>
+            Cancel
           </Button>
-        ) : null}
-      </Form>
-    </Sheet>
+          <Button
+            type="primary"
+            loading={isPending}
+            onClick={submit}
+            style={{
+              height: 42,
+              paddingInline: 24,
+              borderRadius: 10,
+              fontWeight: 600,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              boxShadow: '0 2px 10px 0 rgba(16, 185, 129, 0.35)',
+            }}
+          >
+            {plot ? 'Save Changes' : 'Save Plot'}
+          </Button>
+        </div>
+      }
+      destroyOnClose
+    >
+      {formContent}
+    </Modal>
   );
 }
