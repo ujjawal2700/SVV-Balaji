@@ -24,6 +24,7 @@ import { PackagingModule } from './packaging/packaging.module';
 import { CustomersModule } from './customers/customers.module';
 import { PricingModule } from './pricing/pricing.module';
 import { SalesModule } from './sales/sales.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { SalesModule } from './sales/sales.module';
     CustomersModule,
     PricingModule,
     SalesModule,
+    DashboardModule,
     // Still to land: DispatchModule (vehicle, route, POD), InvoicingModule
     // (GST invoice + GSP e-invoicing), FeedbackModule.
   ],

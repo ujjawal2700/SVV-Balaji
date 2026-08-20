@@ -58,7 +58,15 @@ export interface AuthUser {
    * than the panel special-casing it, so both sides agree on one definition.
    */
   permissions: string[];
+  isTwoFactorEnabled?: boolean;
 }
+
+export interface TwoFactorChallengeResponse {
+  requiresTwoFactor: true;
+  twoFactorToken: string;
+}
+
+export type LoginResult = SessionResponse | TwoFactorChallengeResponse;
 
 /** Shape returned by POST /auth/login and POST /auth/refresh. */
 export interface SessionResponse {

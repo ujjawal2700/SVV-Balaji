@@ -165,6 +165,12 @@ model User {
 
   refreshTokenHash String?
 
+  // Phase 0 / 2FA & Security
+  isTwoFactorEnabled     Boolean  @default(false)
+  twoFactorSecret        String?  // AES-256-GCM encrypted
+  twoFactorTempSecret    String?  // AES-256-GCM encrypted (during setup)
+  twoFactorRecoveryCodes String[] @default([]) // Array of bcrypt-hashed recovery codes
+
   // Phase 1 back-relations
   farmerVerificationLogs FarmerVerificationLog[]
   seedDistributionsGiven SeedDistribution[]

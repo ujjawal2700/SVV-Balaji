@@ -70,18 +70,6 @@ export const NAV_SECTIONS: NavSection[] = [
         workstream: 'WS2.6',
       },
       {
-        key: 'field-executive',
-        path: '/field',
-        label: 'Field App',
-        permission: 'FIELD_PANEL',
-        description:
-          'The Agriculture Expert app is a separate build served at /field, with its own login, ' +
-          'its own session and its own icon on the phone home screen. This entry hands you over ' +
-          'to it; it is not a screen in this panel.',
-        endpoints: [],
-        workstream: 'WS3.1',
-      },
-      {
         key: 'onboarding',
         path: '/onboarding',
         label: 'Farmer Onboarding',

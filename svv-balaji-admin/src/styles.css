@@ -84,3 +84,22 @@ body {
   color: var(--sidebar-item-hover-color) !important;
   transform: translateX(6px);
 }
+
+/* ---------------------------------------------------------------------------
+   Global Modals (Admin Panel)
+   --------------------------------------------------------------------------- */
+.ant-modal {
+  top: 40px !important;
+  padding-bottom: 40px !important;
+}
+
+.ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+}
+
+.ant-modal-body {
+  overflow-y: auto;
+  flex: 1;
+}
