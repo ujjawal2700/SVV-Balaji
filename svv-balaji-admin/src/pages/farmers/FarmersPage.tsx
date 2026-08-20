@@ -2,6 +2,7 @@ import { PlusOutlined, QrcodeOutlined, SafetyCertificateOutlined } from '@ant-de
 import { App as AntApp, Button, Card, Col, Input, Row, Select, Space, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import farmerIcon from '../../assets/farmer-icon.png';
 import { apiErrorMessage } from '../../api/client';
 import {
   FARMER_STATUSES,
@@ -193,94 +194,117 @@ export function FarmersPage() {
   ).length;
 
   const toolbar = (
-    <Row gutter={[12, 12]}>
-      <Col xs={24} md={8}>
-        <Input.Search
-          allowClear
-          placeholder="Search by name"
-          onSearch={(value) => setQuery((q) => ({ ...q, fullName: value || undefined }))}
-        />
-      </Col>
-      <Col xs={12} md={4}>
-        <Input
-          allowClear
-          placeholder="Village"
-          onChange={(event) =>
-            setQuery((q) => ({ ...q, village: event.target.value || undefined }))
-          }
-        />
-      </Col>
-      <Col xs={12} md={4}>
-        <Input
-          allowClear
-          placeholder="District"
-          onChange={(event) =>
-            setQuery((q) => ({ ...q, district: event.target.value || undefined }))
-          }
-        />
-      </Col>
-      <Col xs={12} md={4}>
-        <Select
-          allowClear
-          style={{ width: '100%' }}
-          placeholder="Branch"
-          loading={branches.isLoading}
-          onChange={(value?: string) => setQuery((q) => ({ ...q, branchId: value }))}
-          options={(branches.data?.data ?? []).map((branch) => ({
-            value: branch.id,
-            label: branch.name,
-          }))}
-        />
-      </Col>
-      <Col xs={12} md={4}>
-        <Select<FarmerStatus>
-          allowClear
-          style={{ width: '100%' }}
-          placeholder="Status"
-          onChange={(value?: FarmerStatus) => setQuery((q) => ({ ...q, status: value }))}
-          options={FARMER_STATUSES.map((value) => ({
-            value,
-            label: FARMER_STATUS_LABELS[value],
-          }))}
-        />
-      </Col>
-    </Row>
+    <div style={{ padding: '16px 0 24px 0' }}>
+      <Row gutter={[16, 16]} align="middle">
+        <Col xs={24} md={8}>
+          <Input.Search
+            allowClear
+            size="large"
+            placeholder="Search by farmer name..."
+            onSearch={(value) => setQuery((q) => ({ ...q, fullName: value || undefined }))}
+          />
+        </Col>
+        <Col xs={12} md={4}>
+          <Input
+            allowClear
+            size="large"
+            placeholder="Village"
+            onChange={(event) =>
+              setQuery((q) => ({ ...q, village: event.target.value || undefined }))
+            }
+          />
+        </Col>
+        <Col xs={12} md={4}>
+          <Input
+            allowClear
+            size="large"
+            placeholder="District"
+            onChange={(event) =>
+              setQuery((q) => ({ ...q, district: event.target.value || undefined }))
+            }
+          />
+        </Col>
+        <Col xs={12} md={4}>
+          <Select
+            allowClear
+            size="large"
+            style={{ width: '100%' }}
+            placeholder="Branch"
+            loading={branches.isLoading}
+            onChange={(value?: string) => setQuery((q) => ({ ...q, branchId: value }))}
+            options={(branches.data?.data ?? []).map((branch) => ({
+              value: branch.id,
+              label: branch.name,
+            }))}
+          />
+        </Col>
+        <Col xs={12} md={4}>
+          <Select<FarmerStatus>
+            allowClear
+            size="large"
+            style={{ width: '100%' }}
+            placeholder="Status"
+            onChange={(value?: FarmerStatus) => setQuery((q) => ({ ...q, status: value }))}
+            options={FARMER_STATUSES.map((value) => ({
+              value,
+              label: FARMER_STATUS_LABELS[value],
+            }))}
+          />
+        </Col>
+      </Row>
+    </div>
   );
 
   return (
-    <Card>
-      <PageHeader
-        title="Farmers"
-        subtitle={
-          pendingCount > 0 && canApprove
-            ? `${pendingCount} awaiting verification. Approval issues the traceability code that the whole farm-to-fork chain hangs on.`
-            : 'Registry, verification and traceability codes (FRD Sections 7–8).'
-        }
-        actions={
-          <Can do="FARMER_CREATE">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
-              Register farmer
-            </Button>
-          </Can>
-        }
-      />
+    <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 24 }}>
+      <Card
+        style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: 'none' }}
+        bodyStyle={{ padding: '32px' }}
+      >
+        <PageHeader
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <img src={farmerIcon} alt="" style={{ width: 36, height: 36, objectFit: 'contain' }} />
+              <Typography.Title level={3} style={{ margin: 0 }}>Farmers</Typography.Title>
+            </div>
+          }
+          subtitle={
+            pendingCount > 0 && canApprove ? (
+              <span style={{ color: '#faad14', fontWeight: 500 }}>
+                {pendingCount} awaiting verification. Approval issues the traceability code that the whole farm-to-fork chain hangs on.
+              </span>
+            ) : (
+              'Registry, verification and traceability codes (FRD Sections 7–8).'
+            )
+          }
+          actions={
+            <Can do="FARMER_CREATE">
+              <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
+                Register farmer
+              </Button>
+            </Can>
+          }
+        />
 
-      <DataTable<Farmer>
-        rows={farmers.data?.data}
-        columns={columns}
-        rowKey="id"
-        isLoading={farmers.isLoading}
-        isFetching={farmers.isFetching}
-        error={farmers.error}
-        onRetry={() => void farmers.refetch()}
-        toolbar={toolbar}
-        emptyText="No farmers match these filters"
-      />
+        <div style={{ marginTop: 24 }}>
+          <DataTable<Farmer>
+            rows={farmers.data?.data}
+            columns={columns}
+            rowKey="id"
+            isLoading={farmers.isLoading}
+            isFetching={farmers.isFetching}
+            error={farmers.error}
+            onRetry={() => void farmers.refetch()}
+            toolbar={toolbar}
+            emptyText="No farmers match these filters"
+          />
+        </div>
 
-      <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />
-      <FarmerDetailDrawer farmerId={detailId} onClose={() => setDetailId(null)} />
-      <VerifyFarmerModal farmer={verifying} onClose={() => setVerifying(null)} />
-      <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />
-    </Card>
+        <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />
+        <FarmerDetailDrawer farmerId={detailId} onClose={() => setDetailId(null)} />
+        <VerifyFarmerModal farmer={verifying} onClose={() => setVerifying(null)} />
+        <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />
+      </Card>
+    </div>
   );
 }

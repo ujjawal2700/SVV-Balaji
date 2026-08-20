@@ -138,6 +138,9 @@ const RolesPermissionsPage = lazy(() =>
     default: m.RolesPermissionsPage,
   })),
 );
+const ProfilePage = lazy(() =>
+  import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+);
 
 /**
  * Routes are generated from NAV_ITEMS rather than listed by hand, so the menu
@@ -189,6 +192,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/trace': <TracePage />,
   // Administration
   '/settings/roles': <RolesPermissionsPage />,
+  '/profile': <ProfilePage />,
 };
 
 export function App() {
@@ -230,6 +234,8 @@ export function App() {
               <Route path={item.path} element={SCREENS[item.path] ?? <PlaceholderPage />} />
             </Route>
           ))}
+
+          <Route path="/profile" element={SCREENS['/profile']} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

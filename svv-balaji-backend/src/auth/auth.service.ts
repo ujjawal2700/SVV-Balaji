@@ -7,6 +7,16 @@ import { PermissionsService } from './permissions/permissions.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { VerifyTwoFactorLoginDto, EnableTwoFactorDto, DisableTwoFactorDto } from './dto/2fa.dto';
+import { UpdateProfileDto, ChangePasswordDto } from './dto/profile.dto';
+import { encryptSecret, decryptSecret } from './crypto.util';
+import {
+  generateBase32Secret,
+  generateOtpAuthUrl,
+  generateQrCodeDataUrl,
+  verifyTotp,
+  generateRecoveryCodes,
+} from './totp.util';
 
 /**
  * Session handling for every client of this API - the admin web panel and the
@@ -49,6 +59,73 @@ export class AuthService {
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.isTwoFactorEnabled) {
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        purpose: '2fa_login',
+      };
+      const twoFactorToken = await this.jwtService.signAsync(payload, {
+        secret: process.env.JWT_ACCESS_SECRET,
+        expiresIn: '5m',
+      });
+      return { requiresTwoFactor: true, twoFactorToken };
+    }
+
+    return this.issueSession(user);
+  }
+
+  /**
+   * Verifies a 2FA login challenge using the short-lived twoFactorToken.
+   */
+  async verifyTwoFactorLogin(dto: VerifyTwoFactorLoginDto) {
+    let payload: any;
+    try {
+      payload = await this.jwtService.verifyAsync(dto.twoFactorToken, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+    } catch {
+      throw new UnauthorizedException('2FA token is invalid or has expired');
+    }
+
+    if (payload.purpose !== '2fa_login') {
+      throw new UnauthorizedException('Invalid token purpose');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || user.status !== 'ACTIVE' || !user.isTwoFactorEnabled || !user.twoFactorSecret) {
+      throw new UnauthorizedException('2FA is not enabled or user is invalid');
+    }
+
+    const secret = decryptSecret(user.twoFactorSecret);
+    const code = dto.code.trim();
+    let isValid = false;
+
+    // Check if it's a 6-digit TOTP
+    if (code.length === 6 && /^\d+$/.test(code)) {
+      isValid = verifyTotp(code, secret);
+    } else {
+      // Check if it matches a recovery code
+      const codes = user.twoFactorRecoveryCodes || [];
+      for (let i = 0; i < codes.length; i++) {
+        const matches = await bcrypt.compare(code, codes[i]);
+        if (matches) {
+          isValid = true;
+          // Burn the recovery code
+          codes.splice(i, 1);
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { twoFactorRecoveryCodes: codes },
+          });
+          break;
+        }
+      }
+    }
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
     }
 
     return this.issueSession(user);
@@ -137,9 +214,142 @@ export class AuthService {
       status: user.status,
       branchId: user.branchId,
       branch: user.branch,
+      isTwoFactorEnabled: user.isTwoFactorEnabled,
       createdAt: user.createdAt,
       permissions: await this.permissions.listFor(user.role),
     };
+  }
+
+  // --- Profile & Password Management ---
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    // Check uniqueness if email changed
+    const existing = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing && existing.id !== userId) {
+      throw new UnauthorizedException('Email is already in use');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        fullName: dto.fullName,
+        email: normalizedEmail,
+        phone: dto.phone,
+      },
+      include: { branch: { select: { id: true, name: true, location: true } } },
+    });
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      fullName: updated.fullName,
+      phone: updated.phone,
+      role: updated.role,
+      status: updated.status,
+      branchId: updated.branchId,
+      branch: updated.branch,
+      isTwoFactorEnabled: updated.isTwoFactorEnabled,
+      createdAt: updated.createdAt,
+      permissions: await this.permissions.listFor(updated.role),
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const matches = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const isSame = await bcrypt.compare(dto.newPassword, user.passwordHash);
+    if (isSame) {
+      throw new UnauthorizedException('New password cannot be the same as the current password');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    // Update password and invalidate all existing sessions
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, refreshTokenHash: null },
+    });
+
+    return { success: true };
+  }
+
+  // --- Two-Factor Authentication (2FA) ---
+
+  async generateTwoFactorSetup(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const secret = generateBase32Secret();
+    const encryptedSecret = encryptSecret(secret);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorTempSecret: encryptedSecret },
+    });
+
+    const otpauthUrl = generateOtpAuthUrl(secret, user.email);
+    const qrCodeDataUrl = await generateQrCodeDataUrl(otpauthUrl);
+
+    return { secret, qrCodeDataUrl };
+  }
+
+  async enableTwoFactor(userId: string, dto: EnableTwoFactorDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.twoFactorTempSecret) {
+      throw new UnauthorizedException('2FA setup not initiated');
+    }
+
+    const secret = decryptSecret(user.twoFactorTempSecret);
+    const isValid = verifyTotp(dto.code, secret);
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+
+    const recoveryCodes = generateRecoveryCodes(10);
+    const hashedCodes = await Promise.all(recoveryCodes.map((c) => bcrypt.hash(c, 10)));
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isTwoFactorEnabled: true,
+        twoFactorSecret: user.twoFactorTempSecret,
+        twoFactorTempSecret: null,
+        twoFactorRecoveryCodes: hashedCodes,
+      },
+    });
+
+    return { recoveryCodes };
+  }
+
+  async disableTwoFactor(userId: string, dto: DisableTwoFactorDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const matches = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isTwoFactorEnabled: false,
+        twoFactorSecret: null,
+        twoFactorTempSecret: null,
+        twoFactorRecoveryCodes: [],
+      },
+    });
+
+    return { success: true };
   }
 
   /**

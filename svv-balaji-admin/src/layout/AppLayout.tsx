@@ -1,4 +1,4 @@
-import { LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined } from '@ant-design/icons';
 import { App as AntApp, Avatar, Button, Dropdown, Layout, Menu, Spin, Tag, Typography } from 'antd';
 import { Suspense, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -61,8 +61,16 @@ export function AppLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} trigger={null} width={232} theme="light" className="admin-sidebar">
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        trigger={null}
+        width={232}
+        theme="light"
+        className="admin-sidebar"
+        style={{ overflow: 'auto', height: '100vh' }}
+      >
         <div
           style={{
             height: 56,
@@ -71,6 +79,10 @@ export function AppLayout() {
             justifyContent: collapsed ? 'center' : 'flex-start',
             padding: collapsed ? 0 : '0 20px',
             borderBottom: '1px solid #f0f0f0',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            background: '#fff',
           }}
         >
           <Typography.Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
@@ -88,7 +100,7 @@ export function AppLayout() {
         />
       </Sider>
 
-      <Layout>
+      <Layout style={{ overflow: 'hidden' }}>
         <Header
           style={{
             padding: '0 16px 0 8px',
@@ -98,6 +110,8 @@ export function AppLayout() {
             borderBottom: '1px solid #f0f0f0',
             height: 56,
             lineHeight: '56px',
+            background: '#fff',
+            zIndex: 1,
           }}
         >
           <Button
@@ -115,6 +129,15 @@ export function AppLayout() {
               menu={{
                 items: [
                   {
+                    key: 'profile',
+                    icon: <UserOutlined />,
+                    label: 'Profile & Security',
+                    onClick: () => navigate('/profile'),
+                  },
+                  {
+                    type: 'divider',
+                  },
+                  {
                     key: 'logout',
                     icon: <LogoutOutlined />,
                     label: 'Sign out',
@@ -131,7 +154,7 @@ export function AppLayout() {
           </div>
         </Header>
 
-        <Content style={{ margin: 16 }}>
+        <Content style={{ margin: 16, overflow: 'auto', paddingRight: 8 }}>
           {/* Screens are code-split (see App.tsx). The boundary sits here rather
               than around the whole app so the sider and header stay on screen
               while a chunk loads — the page swaps, the shell does not blink. */}
