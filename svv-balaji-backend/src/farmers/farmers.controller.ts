@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { FarmPlotsService } from './farm-plots.service';
+import { FarmerPerformanceService } from './farmer-performance.service';
 import { CreateFarmPlotDto, UpdateFarmPlotDto } from './dto/farm-plot.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -36,20 +37,21 @@ export class FarmersController {
     private readonly farmPlots: FarmPlotsService,
     private readonly farmersService: FarmersService,
     private readonly codesService: CodesService,
+    private readonly performance: FarmerPerformanceService,
   ) {}
 
   @Post()
   @RequirePermission('farmers.create')
-  create(@Body() dto: CreateFarmerDto) {
+  create(@Body() dto: CreateFarmerDto, @CurrentUser() user: JwtPayload) {
     // FRD 7.1: "Procurement Managers or authorized branch staff" register farmers.
-    return this.farmersService.create(dto);
+    return this.farmersService.create(dto, user?.sub);
   }
 
   @Get()
   @RequirePermission('farmers.view')
-  findAll(@Query() query: QueryFarmerDto) {
+  findAll(@Query() query: QueryFarmerDto, @CurrentUser() user: JwtPayload) {
     // Open to any authenticated role - most modules downstream need farmer lookups.
-    return this.farmersService.findAll(query);
+    return this.farmersService.findAll(query, user);
   }
 
   @Get(':id')
@@ -203,5 +205,45 @@ export class FarmersController {
   })
   removePlot(@Param('id') id: string, @Param('plotId') plotId: string) {
     return this.farmPlots.remove(id, plotId);
+  }
+
+  @Get(':id/performance')
+  @RequirePermission('farmers.view')
+  @ApiOperation({
+    summary: 'FRD 7.6 - farmer performance, computed from their own records',
+    description:
+      'Crop quality, delivery timeliness and procurement quantity, each with the sample size ' +
+      'and a plain-English explanation, plus the weighted overall rating. Nothing here is ' +
+      'entered by hand. Complaint Records is reported as uncaptured because FRD 32 does not ' +
+      'exist yet, and is excluded from the average rather than scored as clean.',
+  })
+  performanceFor(@Param('id') id: string) {
+    return this.performance.forFarmer(id);
+  }
+
+  @Post(':id/performance/recalculate')
+  @RequirePermission('farmers.edit')
+  @ApiOperation({
+    summary: 'Force a recalculation and persist the result',
+    description:
+      'Scores refresh automatically whenever an inspection or collection changes. This exists ' +
+      'for backfilling farmers whose records predate the scoring, and for the rare case where ' +
+      'a stored rating is suspected of being stale.',
+  })
+  recalculatePerformance(@Param('id') id: string) {
+    return this.performance.recalculate(id);
+  }
+
+  @Get(':id/readiness')
+  @RequirePermission('farmers.view')
+  @ApiOperation({
+    summary: 'What is still missing before this farmer can be approved (FRD 7.1)',
+    description:
+      'The same check the approval gate applies. Returns the missing required fields grouped ' +
+      'the way the registration form is laid out, plus advisory gaps (PAN, GPS, family ' +
+      'details) that do not block.',
+  })
+  readiness(@Param('id') id: string) {
+    return this.farmersService.readiness(id);
   }
 }

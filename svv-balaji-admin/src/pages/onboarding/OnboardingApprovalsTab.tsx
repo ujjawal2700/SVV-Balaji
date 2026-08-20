@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { Farmer } from '../../api/types';
 import { useCan } from '../../auth/useCan';
 import { useFarmers } from '../../hooks/useFarmers';
-import { formatDate } from '../../utils/format';
+import { formatDateTime } from '../../utils/format';
 import { FarmerDetailDrawer } from '../farmers/FarmerDetailDrawer';
 import { VerifyFarmerModal } from '../farmers/VerifyFarmerModal';
 import { FieldCard, FieldList } from '../field/FieldPieces';
@@ -89,7 +89,8 @@ export function OnboardingApprovalsTab() {
                 <>
                   {farmer.mobile} · {farmer.village}, {farmer.district}
                   <br />
-                  Registered {formatDate(farmer.createdAt)}
+                  Registered {formatDateTime(farmer.createdAt)}
+                  {farmer.createdBy?.fullName ? ` by ${farmer.createdBy.fullName}` : ''}
                   {farmer.branch?.name ? ` · ${farmer.branch.name}` : ''}
                 </>
               }

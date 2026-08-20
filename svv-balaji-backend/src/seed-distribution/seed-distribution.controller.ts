@@ -38,10 +38,11 @@ export class SeedDistributionController {
   @ApiQuery({ name: 'farmerId', required: false })
   @ApiQuery({ name: 'distributedById', required: false, description: 'Handouts made by one executive.' })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('distributedById') distributedById?: string,
   ) {
-    return this.seedDistributionService.findAll(farmerId, distributedById);
+    return this.seedDistributionService.findAll(user, farmerId, distributedById);
   }
 
   @Get(':id')

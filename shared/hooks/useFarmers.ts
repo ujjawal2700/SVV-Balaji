@@ -116,3 +116,43 @@ export function useDeleteFarmer() {
     },
   });
 }
+
+/**
+ * FRD 7.6 performance for one farmer.
+ *
+ * Recomputed server-side on every read, so it cannot show a stale figure next
+ * to the inspections that produced it.
+ */
+export function useFarmerPerformance(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.farmers.performance(id ?? ''),
+    queryFn: () => farmersApi.performance(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+/**
+ * What still blocks approval (FRD 7.1).
+ *
+ * Read by the verify modal so Approve can be disabled with the reasons shown,
+ * rather than enabled and then refused.
+ */
+export function useFarmerReadiness(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.farmers.readiness(id ?? ''),
+    queryFn: () => farmersApi.readiness(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+/** Backfill for farmers whose records predate scoring. */
+export function useRecalculatePerformance() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => farmersApi.recalculatePerformance(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.farmers.all });
+    },
+  });
+}

@@ -50,6 +50,7 @@ export function OrderFormModal({ open, onClose }: { open: boolean; onClose: () =
         productId: item.productId,
         quantity: item.quantity,
       })),
+      deliveryAddress: values.deliveryAddress || undefined,
       notes: values.notes || undefined,
       status,
     };
@@ -186,6 +187,14 @@ export function OrderFormModal({ open, onClose }: { open: boolean; onClose: () =
             </Space>
           )}
         </Form.List>
+
+        <Form.Item
+          name="deliveryAddress"
+          label="Delivery address"
+          extra="Leave blank to use the customer's shipping address. Recorded on the order, so editing the customer later will not change it."
+        >
+          <Input.TextArea rows={2} placeholder="Optional — defaults to the customer's address" />
+        </Form.Item>
 
         <Form.Item name="notes" label="Notes">
           <Input.TextArea rows={2} placeholder="Optional — delivery instructions, PO reference" />

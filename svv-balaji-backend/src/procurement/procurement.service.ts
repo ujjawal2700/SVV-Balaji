@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InspectionResult, ProcurementPlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedByFarmerBranch } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { FarmerPerformanceService } from '../farmers/farmer-performance.service';
 import { CreateProcurementPlanDto } from './dto/create-procurement-plan.dto';
 import { CreateHarvestInspectionDto } from './dto/create-harvest-inspection.dto';
 import {
@@ -11,7 +14,25 @@ import { assertDeletable } from '../common/dependants';
 
 @Injectable()
 export class ProcurementService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly farmerPerformance: FarmerPerformanceService,
+  ) {}
+
+  /**
+   * Refresh the farmer's FRD 7.6 scores after an inspection changed.
+   *
+   * An inspection result is the single biggest input to crop quality, so this
+   * runs on create, update and delete. Errors are swallowed on purpose: a
+   * rating refresh must never be the reason an inspection fails to save.
+   */
+  private async refreshPerformance(farmerId: string) {
+    try {
+      await this.farmerPerformance.recalculate(farmerId);
+    } catch {
+      // Deliberately silent. `POST /farmers/:id/performance/recalculate` is the backstop.
+    }
+  }
 
   // --- Procurement Planning (FRD 13.1) -------------------------------------
 
@@ -127,6 +148,7 @@ export class ProcurementService {
     assertDeletable('Procurement plan', `${plan.cropName} plan`, { inspections });
 
     await this.prisma.procurementPlan.delete({ where: { id } });
+
     return { id, deleted: true };
   }
 
@@ -157,7 +179,9 @@ export class ProcurementService {
 
     await this.assertPlotBelongsToFarmer(dto.plotId, dto.farmerId);
 
-    return this.prisma.harvestInspection.create({
+    this.assertMeasurementsRecorded(dto.result, dto);
+
+    const inspection = await this.prisma.harvestInspection.create({
       data: {
         farmerId: dto.farmerId,
         agreementId: dto.agreementId,
@@ -176,11 +200,18 @@ export class ProcurementService {
         inspectedById,
       },
     });
+
+    // FRD 7.6: an inspection result is the largest single input to the
+    // farmer's crop-quality score.
+    await this.refreshPerformance(inspection.farmerId);
+
+    return inspection;
   }
 
-  findInspections(farmerId?: string, result?: InspectionResult) {
+  findInspections(user: JwtPayload, farmerId?: string, result?: InspectionResult) {
     return this.prisma.harvestInspection.findMany({
-      where: { farmerId, result },
+      // Scoped through the farmer - an inspection has no branch column.
+      where: { farmerId, result, ...scopedByFarmerBranch(user) },
       orderBy: { inspectionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -257,7 +288,12 @@ export class ProcurementService {
 
     await this.assertPlotBelongsToFarmer(dto.plotId, inspection.farmerId);
 
-    return this.prisma.harvestInspection.update({
+    this.assertMeasurementsRecorded(dto.result ?? inspection.result, {
+      moistureLevel: dto.moistureLevel ?? Number(inspection.moistureLevel ?? NaN),
+      foreignMatter: dto.foreignMatter ?? Number(inspection.foreignMatter ?? NaN),
+    });
+
+    const updated = await this.prisma.harvestInspection.update({
       where: { id },
       data: {
         agreementId: dto.agreementId,
@@ -281,6 +317,11 @@ export class ProcurementService {
         collection: { select: { id: true, receiptNumber: true } },
       },
     });
+
+    // FRD 7.6: correcting a result or a moisture reading moves the score.
+    await this.refreshPerformance(updated.farmerId);
+
+    return updated;
   }
 
   async removeInspection(id: string) {
@@ -304,6 +345,9 @@ export class ProcurementService {
       this.prisma.harvestInspectionDocument.deleteMany({ where: { inspectionId: id } }),
       this.prisma.harvestInspection.delete({ where: { id } }),
     ]);
+
+    // FRD 7.6: removing an inspection removes one of the farmer's quality data points.
+    await this.refreshPerformance(inspection.farmerId);
 
     return { id, deleted: true };
   }
@@ -341,6 +385,42 @@ export class ProcurementService {
       throw new BadRequestException(
         `Plot "${plot.name}" belongs to a different farmer. A harvest can only come from a plot ` +
           'this farmer works.',
+      );
+    }
+  }
+
+  /**
+   * FRD 13.2 / 13.5 - an approval has to rest on measurements.
+   *
+   * Every checklist field is optional on the DTO, which was right for a HOLD or
+   * a REJECT: an inspector who turns up and finds the crop obviously unfit
+   * should be able to say so without filling in a form. But APPROVED is the
+   * gate the whole procurement chain hangs off - 13.5 lets only approved
+   * harvests through to collection - and it was passable with a farmer id, a
+   * crop name and a date. No moisture, no foreign matter, no evidence.
+   *
+   * So the requirement attaches to the decision, not to the record: measure it
+   * or do not approve it.
+   */
+  private assertMeasurementsRecorded(
+    result: InspectionResult | string,
+    values: { moistureLevel?: number | null; foreignMatter?: number | null },
+  ) {
+    if (result !== 'APPROVED') return;
+
+    const missing: string[] = [];
+    if (values.moistureLevel === null || values.moistureLevel === undefined || Number.isNaN(values.moistureLevel)) {
+      missing.push('moisture level');
+    }
+    if (values.foreignMatter === null || values.foreignMatter === undefined || Number.isNaN(values.foreignMatter)) {
+      missing.push('foreign matter');
+    }
+
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `An inspection cannot be approved without recording ${missing.join(' and ')}. ` +
+          `Approval is what allows this harvest to be collected, so it has to rest on a ` +
+          `measurement. Record HOLD_FOR_REINSPECTION if the crop still needs checking.`,
       );
     }
   }

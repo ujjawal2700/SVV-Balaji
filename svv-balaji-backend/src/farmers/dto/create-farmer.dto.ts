@@ -20,6 +20,15 @@ export class CreateFarmerDto {
   @IsString()
   panNumber?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'FRD 7.1 Family Details - free text, e.g. "4 dependants; two sons farm with him". ' +
+      'Advisory only: it does not block approval.',
+  })
+  @IsOptional()
+  @IsString()
+  familyDetails?: string;
+
   @ApiProperty()
   @IsString()
   village: string;

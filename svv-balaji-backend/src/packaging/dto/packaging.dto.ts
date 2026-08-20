@@ -25,11 +25,14 @@ export class CreateFinishedGoodsBatchDto {
   @Min(1)
   packCount: number;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({
+    description:
+      'FRD 22.2 - mandatory on a retail label. Required: the system will not print a food ' +
+      'label with a blank MRP.',
+  })
   @IsNumber()
   @Min(0)
-  mrp?: number;
+  mrp: number;
 
   @ApiProperty()
   @IsDateString()

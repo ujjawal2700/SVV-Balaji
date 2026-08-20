@@ -33,16 +33,20 @@ export class UsersController {
 
   @Post()
   @RequirePermission('users.create')
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload) {
+    return this.usersService.create(dto, user);
   }
 
   @Get()
   @RequirePermission('users.view')
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'status', required: false, enum: UserStatus })
-  findAll(@Query('branchId') branchId?: string, @Query('status') status?: UserStatus) {
-    return this.usersService.findAll({ branchId, status });
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string,
+    @Query('status') status?: UserStatus,
+  ) {
+    return this.usersService.findAll(user, { branchId, status });
   }
 
   @Get(':id')
@@ -58,7 +62,7 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
     @CurrentUser() actor: JwtPayload,
   ) {
-    return this.usersService.update(id, dto, actor.sub);
+    return this.usersService.update(id, dto, actor.sub, actor);
   }
 
   @Patch(':id/status')

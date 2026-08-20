@@ -39,10 +39,11 @@ export class TrainingController {
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'conductedById', required: false, description: 'Sessions run by one executive.' })
   findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string,
     @Query('conductedById') conductedById?: string,
   ) {
-    return this.trainingService.findAll(branchId, conductedById);
+    return this.trainingService.findAll(user, branchId, conductedById);
   }
 
   @Get(':id')

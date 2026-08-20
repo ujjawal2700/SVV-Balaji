@@ -1,12 +1,44 @@
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+
+/**
+ * Redirects bare `/admin` to `/admin/` and `/` to `/admin/` during development.
+ *
+ * With `base: '/admin/'` Vite serves nothing at the slashless path.
+ * In dev, visiting root `/` will also redirect to `/admin/` until a dedicated
+ * landing page or main customer app is mounted at root `/`.
+ */
+function redirectBareBasePath(base: string): Plugin {
+  const bare = base.replace(/\/$/, '');
+
+  return {
+    name: 'svv-redirect-bare-base',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === bare || req.url === `${bare}?`) {
+          res.writeHead(301, { Location: base });
+          res.end();
+          return;
+        }
+        if (req.url === '/' || req.url === '/?') {
+          res.writeHead(302, { Location: base });
+          res.end();
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react()],
+    base: '/admin/',
+    plugins: [react(), redirectBareBasePath('/admin/')],
     resolve: {
       // Mirrors the "@/*" -> "src/*" paths mapping in tsconfig.json. Both have
       // to agree or imports resolve for the type checker but not the bundler.

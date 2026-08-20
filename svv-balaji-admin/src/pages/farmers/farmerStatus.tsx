@@ -18,7 +18,19 @@ const FARMER_STATUS_COLOURS: Record<FarmerStatus, string> = {
 };
 
 export function FarmerStatusTag({ status }: { status: FarmerStatus }) {
-  return <Tag color={FARMER_STATUS_COLOURS[status]}>{FARMER_STATUS_LABELS[status]}</Tag>;
+  return (
+    <Tag
+      color={FARMER_STATUS_COLOURS[status] ?? 'default'}
+      style={{
+        borderRadius: 12,
+        padding: '2px 10px',
+        fontWeight: 500,
+        fontSize: 12,
+      }}
+    >
+      {FARMER_STATUS_LABELS[status]}
+    </Tag>
+  );
 }
 
 /**
@@ -31,12 +43,38 @@ export function FarmerStatusTag({ status }: { status: FarmerStatus }) {
  */
 export function FarmerCodeCell({ code }: { code: string | null }) {
   if (code) {
-    return <Typography.Text code>{code}</Typography.Text>;
+    return (
+      <Typography.Text
+        code
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#1d39c4',
+          background: '#f0f5ff',
+          padding: '3px 8px',
+          borderRadius: 6,
+          border: '1px solid #d6e4ff',
+        }}
+      >
+        {code}
+      </Typography.Text>
+    );
   }
 
   return (
     <Tooltip title="Issued automatically when the farmer is approved (FRD 8.1)">
-      <Typography.Text type="secondary">Not yet issued</Typography.Text>
+      <Tag
+        style={{
+          borderRadius: 12,
+          color: '#8c8c8c',
+          background: '#fafafa',
+          border: '1px dashed #d9d9d9',
+          padding: '2px 8px',
+          fontSize: 12,
+        }}
+      >
+        Not yet issued
+      </Tag>
     </Tooltip>
   );
 }

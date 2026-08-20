@@ -34,6 +34,10 @@ export const queryKeys = {
     list: (query: FarmerQuery) => [...queryKeys.farmers.all, 'list', query] as const,
     detail: (id: string) => [...queryKeys.farmers.all, 'detail', id] as const,
     codes: (id: string) => [...queryKeys.farmers.all, 'codes', id] as const,
+    // FRD 7.6. Under the farmer tree so any farmer mutation refreshes the
+    // score too - an inspection or collection changes both.
+    performance: (id: string) => [...queryKeys.farmers.all, 'performance', id] as const,
+    readiness: (id: string) => [...queryKeys.farmers.all, 'readiness', id] as const,
   },
 
   agreements: {

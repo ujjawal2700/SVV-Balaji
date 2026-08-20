@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { scopedBranchId } from '../common/branch-scope';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateFieldVisitDto } from './dto/create-field-visit.dto';
 import { AddFieldVisitDocumentDto } from './dto/add-field-visit-document.dto';
 
@@ -36,9 +38,10 @@ export class FieldMonitoringService {
    * client-side filter would narrow ONE page and report three visits where the
    * executive logged nine - wrong, and wrong quietly.
    */
-  findAll(farmerId?: string, expertId?: string) {
+  findAll(user: JwtPayload, farmerId?: string, expertId?: string) {
     return this.prisma.fieldVisit.findMany({
-      where: farmerId || expertId ? { farmerId, expertId } : undefined,
+      // FieldVisit carries its own branch, so scope on the column directly.
+      where: { farmerId, expertId, branchId: scopedBranchId(user) },
       orderBy: { visitDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Farmer, FarmerStatus } from '../../api/types';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useFarmers } from '../../hooks/useFarmers';
+import { formatDateTime } from '../../utils/format';
 import { FarmerCodesModal } from '../farmers/FarmerCodesModal';
 import { FarmerDetailDrawer } from '../farmers/FarmerDetailDrawer';
 import { FarmerFormModal } from '../farmers/FarmerFormModal';
@@ -139,6 +140,9 @@ export function OnboardingFarmersTab() {
                   )}
                   <br />
                   {farmer.mobile} · {farmer.village}, {farmer.district}
+                  <br />
+                  Registered {formatDateTime(farmer.createdAt)}
+                  {farmer.createdBy?.fullName ? ` by ${farmer.createdBy.fullName}` : ''}
                 </>
               }
             >
