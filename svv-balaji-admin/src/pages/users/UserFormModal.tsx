@@ -4,7 +4,7 @@ import { apiErrorMessage } from '../../api/client';
 import type { CreateUserInput, StaffUser } from '../../api/types';
 import { ROLE_LABELS, USER_ROLES } from '../../auth/types';
 import { useAuth } from '../../auth/useAuth';
-import { useBranches } from '../../hooks/useBranches';
+import { BranchSelect } from '../../components/pickers';
 import { useCreateUser, useUpdateUser } from '../../hooks/useUsers';
 import { fieldRules, maxLength, required } from '../../validation/rules';
 
@@ -19,16 +19,29 @@ export function UserFormModal({ open, user, onClose }: UserFormModalProps) {
   const [form] = Form.useForm<CreateUserInput>();
   const { message } = AntApp.useApp();
   const { user: signedInUser } = useAuth();
-  const branches = useBranches(true);
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
 
   const isEdit = Boolean(user);
   const isSelf = Boolean(user && signedInUser && user.id === signedInUser.id);
 
+  // Watched rather than read once: picking a role changes whether a branch is
+  // required, and the rule has to move with the selection, not with the modal.
+  const selectedRole = Form.useWatch('role', form) ?? user?.role;
+  const isSuperAdmin = selectedRole === 'SUPER_ADMIN';
+
+  const initialValues = user
+    ? {
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone ?? undefined,
+        role: user.role,
+        branchId: user.branchId ?? undefined,
+      }
+    : undefined;
+
   useEffect(() => {
     if (!open) return;
-    form.resetFields();
     if (user) {
       form.setFieldsValue({
         fullName: user.fullName,
@@ -37,6 +50,8 @@ export function UserFormModal({ open, user, onClose }: UserFormModalProps) {
         role: user.role,
         branchId: user.branchId ?? undefined,
       });
+    } else {
+      form.resetFields();
     }
   }, [open, user, form]);
 
@@ -73,7 +88,14 @@ export function UserFormModal({ open, user, onClose }: UserFormModalProps) {
       confirmLoading={createUser.isPending || updateUser.isPending}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" requiredMark preserve={false}>
+      <Form
+        key={user ? user.id : 'new-user'}
+        form={form}
+        layout="vertical"
+        requiredMark
+        preserve={false}
+        initialValues={initialValues}
+      >
         {isSelf ? (
           <Alert
             type="info"
@@ -132,17 +154,32 @@ export function UserFormModal({ open, user, onClose }: UserFormModalProps) {
         <Form.Item
           name="branchId"
           label="Branch"
-          rules={[maxLength(64)]}
-          extra="Leave empty for organisation-wide access."
+          /**
+           * Required for every role except Super Admin.
+           *
+           * This used to read "leave empty for organisation-wide access", which
+           * was true until list endpoints started scoping by branch on 20 Aug.
+           * A blank branch now means the opposite: the account can sign in and
+           * is then refused by every screen. Making it required here is what
+           * stops an administrator creating that account by following the
+           * form's own advice.
+           */
+          rules={[
+            maxLength(64),
+            {
+              required: !isSuperAdmin,
+              message: 'Pick a branch — only a Super Admin can be organisation-wide',
+            },
+          ]}
+          extra={
+            isSuperAdmin
+              ? 'Super Admins are organisation-wide, so this is optional for them.'
+              : 'Records are scoped to this branch. Leaving it blank does not grant wider access — it leaves the account locked out of every screen.'
+          }
         >
-          <Select
+          <BranchSelect
             allowClear
-            placeholder="Optional"
-            loading={branches.isLoading}
-            options={(branches.data?.data ?? []).map((branch) => ({
-              value: branch.id,
-              label: `${branch.name} — ${branch.location}`,
-            }))}
+            placeholder={isSuperAdmin ? 'Optional' : 'Select a branch'}
           />
         </Form.Item>
       </Form>

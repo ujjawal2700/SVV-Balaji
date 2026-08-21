@@ -3,7 +3,6 @@ import {
   CompassOutlined,
   EnvironmentOutlined,
   IdcardOutlined,
-  UserAddOutlined,
 } from '@ant-design/icons';
 import {
   Alert,
@@ -19,6 +18,7 @@ import {
   Typography,
 } from 'antd';
 import { useEffect } from 'react';
+import farmerIcon from '../../assets/farmer-icon.png';
 import { apiErrorMessage } from '../../api/client';
 import type { Branch, CreateFarmerInput, Farmer } from '../../api/types';
 import { useCreateFarmer, useUpdateFarmer } from '../../hooks/useFarmers';
@@ -377,35 +377,43 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
         <circle cx="540" cy="110" r="8" fill="#a855f7" opacity="0.3" />
       </svg>
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div
+      {/* Decorative Farmer Illustration on the right side */}
+      <div
+        style={{
+          position: 'absolute',
+          right: 36,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: 68,
+          height: 68,
+          pointerEvents: 'none',
+          zIndex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img
+          src={farmerIcon}
+          alt="Farmer"
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#7c3aed',
-            fontSize: 20,
-            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.15)',
-            border: '1px solid #ddd6fe',
-            flexShrink: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 4px 12px rgba(124, 58, 237, 0.2))',
           }}
-        >
-          <UserAddOutlined />
-        </div>
-        <div>
-          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
-            {isEdit ? `Edit Farmer: ${farmer?.fullName}` : 'Register New Farmer'}
-          </Typography.Title>
-          <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2 }}>
-            {isEdit
-              ? 'Update personal, agricultural and payout details'
-              : 'Capture identification, location coordinates and farm details for onboarding'}
-          </Typography.Text>
-        </div>
+        />
+      </div>
+
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
+          {isEdit ? `Edit Farmer: ${farmer?.fullName}` : 'Register New Farmer'}
+        </Typography.Title>
+        <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2, maxWidth: 'calc(100% - 110px)' }}>
+          {isEdit
+            ? 'Update personal, agricultural and payout details'
+            : 'Capture identification, location coordinates and farm details for onboarding'}
+        </Typography.Text>
       </div>
     </div>
   );

@@ -43,6 +43,87 @@ body {
   background: #94a3b8;
 }
 
+/* ---------------------------------------------------------------------------
+   Global Modals (Field Panel)
+   Matches Admin Panel styling: fixed 40px margin top & bottom, centered,
+   pinned header and footer with internal scrollable body.
+   --------------------------------------------------------------------------- */
+.ant-modal {
+  top: 40px !important;
+  padding-bottom: 40px !important;
+  margin: 0 auto;
+}
+
+.ant-modal-content {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 80px) !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  padding: 0 !important;
+}
+
+.ant-modal-header {
+  flex-shrink: 0 !important;
+  margin-bottom: 0 !important;
+  padding: 16px 24px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+.ant-modal-body {
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+  padding: 20px 24px !important;
+  background: #f8fafc !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ant-modal-footer {
+  flex-shrink: 0 !important;
+  margin-top: 0 !important;
+  padding: 14px 24px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Global Mobile Sheet & Drawers (Field Panel)
+   Pinned header and footer with smooth internal scrolling and top clearance
+   --------------------------------------------------------------------------- */
+.ant-drawer-content-wrapper {
+  box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+}
+
+.field-sheet .ant-drawer-content,
+.ant-drawer-content {
+  border-radius: 16px 16px 0 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.ant-drawer-header {
+  flex-shrink: 0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+.ant-drawer-body {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  background: #f8fafc !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ant-drawer-footer {
+  flex-shrink: 0 !important;
+  border-top: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  padding: 12px 16px !important;
+}
+
 @media (max-width: 900px) {
   /* iOS zooms the viewport when a focused input has a font size below 16px, and
      never zooms back out. */

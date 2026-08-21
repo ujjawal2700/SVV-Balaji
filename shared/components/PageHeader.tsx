@@ -2,7 +2,7 @@ import { Space, Typography } from 'antd';
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
-  title: string;
+  title: ReactNode;
   subtitle?: ReactNode;
   /** Primary actions, right-aligned. Wrap role-gated ones in <Can>. */
   actions?: ReactNode;

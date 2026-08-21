@@ -306,8 +306,9 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'training.edit',
         label: 'Edit a session, mark attendance, manage materials',
         description:
-          'One permission because the server guards all four identically. Attendance is an ' +
-          'upsert, so marking it twice is harmless.',
+          'One permission because the server guards all four identically. Note attendance is a ' +
+          'REPLACE as of 20 Aug: submitting the list removes anyone left out of it, so this is ' +
+          'the authority to un-mark a farmer as present, not only to mark them.',
         defaultRoles: [AE],
       },
       {
@@ -956,6 +957,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Edit or deactivate a branch',
         description: 'A branch with active users cannot be deactivated.',
         defaultRoles: [],
+      },
+      {
+        key: 'branches.assignManager',
+        label: 'Assign a branch manager',
+        description:
+          'FRD 6.2. Names who is accountable for a branch. Super Admin only: a branch manager ' +
+          'appointing their own successor is not an appointment.',
+        defaultRoles: [],
+      },
+      {
+        key: 'branches.performance',
+        label: 'View branch performance and reports',
+        description:
+          'FRD 6.4/6.5. A Branch Manager sees their own branch; a Super Admin sees every branch ' +
+          'side by side. The scoping is enforced in the controller, not by this key.',
+        defaultRoles: [BM],
       },
       {
         key: 'branches.delete',

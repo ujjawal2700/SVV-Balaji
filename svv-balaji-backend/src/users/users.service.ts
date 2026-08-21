@@ -63,8 +63,36 @@ export class UsersService {
     }
   }
 
+
+  /**
+   * A non-Super-Admin account has to belong to a branch.
+   *
+   * This became a hard requirement on 20 August, when list endpoints started
+   * scoping by branch. Before that, a blank branch meant "sees everything" and
+   * the user form said so. Now it means the opposite: `branchScopeFor` refuses
+   * a user with no branch rather than showing them every branch's data, so a
+   * blank branch is not wide access, it is a locked-out account that can sign
+   * in and then be refused by every screen.
+   *
+   * Checked on create and on update, because an existing account can be edited
+   * into the broken state just as easily as it can be created in it. Super
+   * Admin is exempt: organisation-wide is genuinely what that role is.
+   */
+  private assertBranchAssigned(role: UserRole, branchId: string | null | undefined) {
+    if (role === UserRole.SUPER_ADMIN) return;
+    if (branchId) return;
+
+    throw new BadRequestException(
+      `A ${role.replace('_', ' ').toLowerCase()} must belong to a branch. Records are scoped to ` +
+        `the branch a user belongs to, so leaving this blank does not grant wide access - it ` +
+        `leaves the account able to sign in and refused by every screen. Only a Super Admin is ` +
+        `organisation-wide.`,
+    );
+  }
+
   async create(dto: CreateUserDto, actor: JwtPayload) {
     this.assertMayManage(actor, { role: dto.role, branchId: dto.branchId ?? null });
+    this.assertBranchAssigned(dto.role, dto.branchId);
 
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
@@ -142,6 +170,14 @@ export class UsersService {
     if (dto.role && dto.role !== user.role && user.role === UserRole.SUPER_ADMIN) {
       await this.assertNotLastSuperAdmin(id, 'change the role of');
     }
+
+    // Checked against the account as it would be after this edit, not as it is.
+    // `dto.branchId === null` is an explicit "clear it", which for a
+    // branch-scoped role is the very thing that strands the account.
+    this.assertBranchAssigned(
+      dto.role ?? user.role,
+      dto.branchId === undefined ? user.branchId : dto.branchId,
+    );
 
     const updated = await this.prisma.user.update({
       where: { id },

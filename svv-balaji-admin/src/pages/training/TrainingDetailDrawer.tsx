@@ -5,10 +5,11 @@ import {
   Button,
   Descriptions,
   Drawer,
-  Popconfirm,
   Empty,
   Form,
+  Image,
   List,
+  Popconfirm,
   Select,
   Space,
   Spin,
@@ -38,6 +39,14 @@ interface TrainingDetailDrawerProps {
 }
 
 const FILE_TYPES = ['pdf', 'image', 'presentation', 'video'];
+
+function inferFileType(url: string): 'pdf' | 'image' | 'presentation' | 'video' {
+  const lower = url.toLowerCase();
+  if (/\.(jpg|jpeg|png|webp|heic|heif|gif)($|\?)/i.test(lower) || lower.includes('/image/upload/')) return 'image';
+  if (/\.(mp4|mov|avi|mkv|webm)($|\?)/i.test(lower) || lower.includes('/video/upload/')) return 'video';
+  if (/\.(ppt|pptx)($|\?)/i.test(lower)) return 'presentation';
+  return 'pdf';
+}
 
 export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawerProps) {
   const { message } = AntApp.useApp();
@@ -71,6 +80,15 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
 
   const [selectedFarmers, setSelectedFarmers] = useState<string[]>([]);
   const [materialForm] = Form.useForm<{ fileUrl: string; fileType: string }>();
+  const uploadedUrl = Form.useWatch('fileUrl', materialForm);
+
+  // Auto-detect and set fileType when a file is uploaded
+  useEffect(() => {
+    if (uploadedUrl) {
+      const detected = inferFileType(uploadedUrl);
+      materialForm.setFieldValue('fileType', detected);
+    }
+  }, [uploadedUrl, materialForm]);
 
   // Seed the picker with whoever is already marked, so the control shows the
   // current state rather than an empty box over a populated list.
@@ -96,7 +114,7 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
     try {
       await addMaterial.mutateAsync({ id: sessionId, input: values });
       materialForm.resetFields();
-      message.success('Material added');
+      message.success('Material attached to session');
     } catch (error) {
       message.error(apiErrorMessage(error, 'Could not add the material'));
     }
@@ -248,81 +266,157 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
               label: `Materials (${data.materials.length})`,
               children: (
                 <Space direction="vertical" size={16} style={{ width: '100%' }}>
-
                   {canEdit ? (
-                    <Form form={materialForm} layout="vertical">
-                      <Form.Item
-                        name="fileUrl"
-                        rules={[{ required: true, message: 'Attach the material first' }]}
-                      >
-                        <FileUploadField
-                          folder="training"
-                          hint="A handout, slide deck or photograph from the session — JPEG, PNG, HEIC or PDF, up to 10 MB"
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        name="fileType"
-                        rules={[{ required: true, message: 'Pick a type' }]}
-                        initialValue="pdf"
-                      >
-                        <Select
-                          style={{ width: 140 }}
-                          options={FILE_TYPES.map((type) => ({ value: type, label: type }))}
-                        />
-                      </Form.Item>
-                      <Form.Item>
-                        <Button
-                          icon={<PlusOutlined />}
-                          loading={addMaterial.isPending}
-                          onClick={handleAddMaterial}
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        padding: 16,
+                      }}
+                    >
+                      <Typography.Text strong style={{ display: 'block', marginBottom: 12 }}>
+                        Upload & Attach New Material
+                      </Typography.Text>
+                      <Form form={materialForm} layout="vertical">
+                        <Form.Item
+                          name="fileUrl"
+                          rules={[{ required: true, message: 'Upload a material file first' }]}
                         >
-                          Add
-                        </Button>
-                      </Form.Item>
-                    </Form>
+                          <FileUploadField
+                            allowVideo
+                            folder="training"
+                            hint="Handout, slide deck, photograph or video — JPG, PNG, WEBP, PDF, PPTX up to 10 MB, or MP4/MOV video up to 20 MB"
+                          />
+                        </Form.Item>
+
+                        <Space align="center" style={{ width: '100%', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                          <Form.Item
+                            name="fileType"
+                            label="Material Type"
+                            rules={[{ required: true, message: 'Pick a type' }]}
+                            initialValue="image"
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Select
+                              style={{ width: 150 }}
+                              options={FILE_TYPES.map((type) => ({ value: type, label: type.toUpperCase() }))}
+                            />
+                          </Form.Item>
+
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            loading={addMaterial.isPending}
+                            disabled={!uploadedUrl}
+                            onClick={handleAddMaterial}
+                          >
+                            Add to Session
+                          </Button>
+                        </Space>
+                      </Form>
+                    </div>
                   ) : null}
+
+                  <Typography.Text strong style={{ fontSize: 14 }}>
+                    Attached Materials ({data.materials.length})
+                  </Typography.Text>
 
                   <List<TrainingMaterial>
                     size="small"
                     bordered
                     dataSource={data.materials}
-                    locale={{ emptyText: <Empty description="No materials attached" /> }}
-                    renderItem={(material) => (
-                      <List.Item
-                        actions={
-                          canEdit
-                            ? [
-                                <Popconfirm
-                                  key="remove"
-                                  title="Remove this material?"
-                                  okText="Remove"
-                                  okButtonProps={{ danger: true }}
-                                  onConfirm={() => void handleRemoveMaterial(material.id)}
-                                >
-                                  <Button
-                                    size="small"
-                                    type="text"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    aria-label="Remove material"
-                                  />
-                                </Popconfirm>,
-                              ]
-                            : undefined
-                        }
-                      >
-                        <Space>
-                          <Tag>{material.fileType}</Tag>
-                          <Typography.Link
-                            href={material.fileUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                          >
-                            <LinkOutlined /> {material.fileUrl}
-                          </Typography.Link>
-                        </Space>
-                      </List.Item>
-                    )}
+                    locale={{ emptyText: <Empty description="No materials attached yet" /> }}
+                    renderItem={(material) => {
+                      const isImg =
+                        material.fileType === 'image' ||
+                        /\.(jpg|jpeg|png|webp|heic|heif|gif)($|\?)/i.test(material.fileUrl) ||
+                        material.fileUrl.includes('/image/upload/');
+                      const isVid =
+                        material.fileType === 'video' ||
+                        /\.(mp4|mov|avi|mkv|webm)($|\?)/i.test(material.fileUrl) ||
+                        material.fileUrl.includes('/video/upload/');
+
+                      return (
+                        <List.Item
+                          actions={
+                            canEdit
+                              ? [
+                                  <Popconfirm
+                                    key="remove"
+                                    title="Remove this material?"
+                                    okText="Remove"
+                                    okButtonProps={{ danger: true }}
+                                    onConfirm={() => void handleRemoveMaterial(material.id)}
+                                  >
+                                    <Button
+                                      size="small"
+                                      type="text"
+                                      danger
+                                      icon={<DeleteOutlined />}
+                                      aria-label="Remove material"
+                                    >
+                                      Remove
+                                    </Button>
+                                  </Popconfirm>,
+                                ]
+                              : undefined
+                          }
+                        >
+                          <Space align="start" size={12} style={{ width: '100%' }}>
+                            {isImg ? (
+                              <Image
+                                src={material.fileUrl}
+                                alt="Training material"
+                                width={80}
+                                height={80}
+                                style={{
+                                  objectFit: 'cover',
+                                  borderRadius: 8,
+                                  border: '1px solid #e2e8f0',
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: 80,
+                                  height: 80,
+                                  borderRadius: 8,
+                                  background: isVid ? '#f3e8ff' : '#eff6ff',
+                                  color: isVid ? '#7e22ce' : '#2563eb',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  textTransform: 'uppercase',
+                                  border: '1px solid #e2e8f0',
+                                }}
+                              >
+                                {isVid ? '🎬 Video' : material.fileType === 'presentation' ? '📊 PPT' : '📄 Doc'}
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <Space>
+                                <Tag color={isImg ? 'green' : isVid ? 'purple' : 'blue'}>
+                                  {material.fileType.toUpperCase()}
+                                </Tag>
+                              </Space>
+                              <Typography.Link
+                                href={material.fileUrl}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                style={{ wordBreak: 'break-all', fontSize: 13 }}
+                              >
+                                <LinkOutlined /> Open full material in new tab
+                              </Typography.Link>
+                            </div>
+                          </Space>
+                        </List.Item>
+                      );
+                    }}
                   />
                 </Space>
               ),

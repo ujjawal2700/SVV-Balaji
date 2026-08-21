@@ -1,8 +1,9 @@
 import {
-  CalendarOutlined,
+  CameraOutlined,
   CompassOutlined,
   EnvironmentOutlined,
   ExperimentOutlined,
+  MedicineBoxOutlined,
 } from '@ant-design/icons';
 import {
   App as AntApp,
@@ -22,10 +23,20 @@ import { useEffect } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import type { FieldVisit } from '@shared/api/types';
 import { BranchSelect, FarmerSelect } from '@shared/components/pickers';
-import { useCreateFieldVisit, useUpdateFieldVisit } from '@shared/hooks/useFieldVisits';
+import {
+  useAddFieldVisitDocument,
+  useCreateFieldVisit,
+  useUpdateFieldVisit,
+} from '@shared/hooks/useFieldVisits';
+import { FileUploadField } from '@shared/components/FileUploadField';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { toIsoDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
+
+/** Label the attachment by what it plainly is, from the stored URL. */
+function fileTypeFor(url: string): string {
+  return /\.(mp4|mov)(\?|$)/i.test(url) ? 'video' : 'photo';
+}
 
 interface FieldVisitFormModalProps {
   open: boolean;
@@ -35,6 +46,8 @@ interface FieldVisitFormModalProps {
 }
 
 interface FieldVisitForm {
+  /** Set by FileUploadField once the file is stored. A URL, not a File. */
+  attachmentUrl?: string;
   farmerId: string;
   branchId: string;
   visitDate: Dayjs;
@@ -92,11 +105,11 @@ function FormSectionCard({ icon, iconBg, iconColor, title, subtitle, children }:
           <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>
             {title}
           </Typography.Text>
-          {subtitle && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {subtitle ? (
+            <Typography.Text style={{ fontSize: 12, color: '#64748b', display: 'block', marginTop: 2 }}>
               {subtitle}
             </Typography.Text>
-          )}
+          ) : null}
         </div>
       </div>
       {children}
@@ -105,11 +118,12 @@ function FormSectionCard({ icon, iconBg, iconColor, title, subtitle, children }:
 }
 
 export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModalProps) {
-  const isMobile = useIsMobile();
   const [form] = Form.useForm<FieldVisitForm>();
   const { message } = AntApp.useApp();
   const createVisit = useCreateFieldVisit();
   const updateVisit = useUpdateFieldVisit();
+  const addDocument = useAddFieldVisitDocument();
+  const isMobile = useIsMobile();
 
   const isEdit = Boolean(visit);
 
@@ -138,19 +152,38 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
+
+    const { attachmentUrl, ...rest } = values;
     const payload = {
-      ...values,
+      ...rest,
       visitDate: toIsoDate(values.visitDate) as string,
     };
 
     try {
-      if (visit) {
-        await updateVisit.mutateAsync({ id: visit.id, input: payload });
-        message.success('Field visit updated successfully');
-      } else {
-        await createVisit.mutateAsync(payload);
-        message.success('Field visit recorded successfully');
+      const saved = visit
+        ? await updateVisit.mutateAsync({ id: visit.id, input: payload })
+        : await createVisit.mutateAsync(payload);
+
+      if (attachmentUrl) {
+        try {
+          await addDocument.mutateAsync({
+            id: visit?.id ?? saved.id,
+            input: { fileUrl: attachmentUrl, fileType: fileTypeFor(attachmentUrl) },
+          });
+        } catch (error) {
+          message.warning(
+            apiErrorMessage(
+              error,
+              'The visit was saved but the attachment could not be linked. Add it again from the visit.',
+            ),
+            10,
+          );
+          onClose();
+          return;
+        }
       }
+
+      message.success(visit ? 'Field visit updated' : 'Field visit recorded');
       onClose();
     } catch (error) {
       message.error(apiErrorMessage(error, 'Could not record the visit'));
@@ -158,14 +191,14 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
   };
 
   const formContent = (
-    <Form form={form} layout="vertical" requiredMark preserve={false} style={{ padding: isMobile ? 0 : '4px 0' }}>
-      {/* Section 1: Farmer & Logistics */}
+    <Form form={form} layout="vertical" requiredMark preserve={false}>
+      {/* Section 1: Visit & Farmer Info */}
       <FormSectionCard
-        icon={<EnvironmentOutlined />}
+        icon={<CompassOutlined />}
         iconBg="#ecfdf5"
         iconColor="#059669"
-        title="Visit & Assignment Details"
-        subtitle="Specify farmer, SVV branch, and visit date"
+        title="Visit & Farmer Details"
+        subtitle="Specify farmer, operational branch, and visit date"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
@@ -188,81 +221,101 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
 
       {/* Section 2: Crop Observations */}
       <FormSectionCard
-        icon={<CompassOutlined />}
+        icon={<ExperimentOutlined />}
         iconBg="#eff6ff"
         iconColor="#2563eb"
-        title="Field Observations"
-        subtitle="Crop health, growth milestone, and pest inspection"
+        title="Field & Crop Observations"
+        subtitle="Document current crop growth stage, health status, and symptoms"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
             <Form.Item name="cropName" label="Crop Name">
-              <Input placeholder="e.g. Wheat, Cotton, Chilli" style={{ borderRadius: 8 }} />
+              <Input placeholder="e.g. Wheat, Mustard" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="cropGrowthStage" label="Growth Stage">
-              <Input placeholder="e.g. Vegetative, Flowering, Pod Development" style={{ borderRadius: 8 }} />
+              <Input placeholder="e.g. Vegetative, Tillering, Flowering" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="cropHealth" label="Crop Health Status">
-              <Input placeholder="e.g. Healthy, Mild Stress, Nitrogen Deficiency" style={{ borderRadius: 8 }} />
+            <Form.Item name="cropHealth" label="Crop Health Condition">
+              <Input placeholder="e.g. Good, Healthy, Stressed" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="pestStatus" label="Pest & Insect Status">
-              <Input placeholder="e.g. None seen, Aphids, Stem Borer" style={{ borderRadius: 8 }} />
+            <Form.Item name="pestStatus" label="Pest Status">
+              <Input placeholder="e.g. None detected, Mild Aphids" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24}>
-            <Form.Item name="diseaseObservation" label="Disease & Pathology Observations">
-              <Input.TextArea rows={2} placeholder="Optional notes on disease symptoms" style={{ borderRadius: 8 }} />
+            <Form.Item name="diseaseObservation" label="Disease & Weed Observations">
+              <Input.TextArea rows={2} placeholder="Note any visible fungal, bacterial, or weed symptoms..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>
       </FormSectionCard>
 
-      {/* Section 3: Recommendations & Yield Prediction */}
+      {/* Section 3: Expert Agronomy Advice */}
       <FormSectionCard
-        icon={<ExperimentOutlined />}
-        iconBg="#fffbeb"
+        icon={<MedicineBoxOutlined />}
+        iconBg="#fef3c7"
         iconColor="#d97706"
-        title="Agronomic Advice & Yield Prediction"
-        subtitle="Nutrient management, irrigation, and estimated output"
+        title="Expert Advice & Yield Forecast"
+        subtitle="Input actionable agronomy recommendations and expected harvest quantity"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
-            <Form.Item name="fertilizerAdvice" label="Fertiliser & Nutrient Advice">
-              <Input.TextArea rows={2} placeholder="e.g. Urea dosage, organic spray" style={{ borderRadius: 8 }} />
+            <Form.Item name="fertilizerAdvice" label="Fertiliser Recommendation">
+              <Input.TextArea rows={2} placeholder="e.g. Apply NPK 20-20-20 @ 5kg/acre..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="irrigationAdvice" label="Irrigation Schedule">
-              <Input.TextArea rows={2} placeholder="e.g. Next watering in 4 days" style={{ borderRadius: 8 }} />
+            <Form.Item name="irrigationAdvice" label="Irrigation Guidance">
+              <Input.TextArea rows={2} placeholder="e.g. Schedule light irrigation in 2 days..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="pestControlSuggestions" label="Pest Control / Spray Suggestions">
-              <Input.TextArea rows={2} placeholder="e.g. Neem oil spray 5ml/L" style={{ borderRadius: 8 }} />
+            <Form.Item name="pestControlSuggestions" label="Pest & Disease Control Advice">
+              <Input.TextArea rows={2} placeholder="e.g. Neem oil spray 5ml/Litre..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="harvestPreparation" label="Harvest Preparation">
-              <Input.TextArea rows={2} placeholder="e.g. Stop watering 10 days before cut" style={{ borderRadius: 8 }} />
+              <Input.TextArea rows={2} placeholder="e.g. Stop watering 7 days before harvest..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
-          <Col xs={24} md={12}>
+          <Col xs={24}>
             <Form.Item
               name="yieldPredictionQty"
               label="Predicted Yield (KG)"
               rules={[positiveNumber('Predicted yield')]}
-              extra="Feeds procurement supply planning"
+              extra="Estimated production volume for procurement planning"
             >
-              <InputNumber style={{ width: '100%', borderRadius: 8 }} min={0} step={100} placeholder="e.g. 5000" />
+              <InputNumber style={{ width: '100%', borderRadius: 8 }} min={0} step={100} placeholder="e.g. 2500" />
             </Form.Item>
           </Col>
         </Row>
+      </FormSectionCard>
+
+      {/* Section 4: Visual Evidence */}
+      <FormSectionCard
+        icon={<CameraOutlined />}
+        iconBg="#fdf4ff"
+        iconColor="#a855f7"
+        title="Field Evidence & Media"
+        subtitle="Capture photos or video footage of crops and field conditions"
+      >
+        <Form.Item
+          name="attachmentUrl"
+          extra="Upload photos or videos while visiting the field. Additional documents can also be attached later."
+        >
+          <FileUploadField
+            folder="field-visits"
+            allowVideo
+            hint="Photos are optimized before uploading; videos up to 20 MB are preserved in original quality."
+          />
+        </Form.Item>
       </FormSectionCard>
     </Form>
   );
@@ -314,14 +367,14 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
             flexShrink: 0,
           }}
         >
-          <CalendarOutlined />
+          <EnvironmentOutlined />
         </div>
         <div>
           <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
             {isEdit ? `Edit Field Visit — ${visit?.farmer?.fullName ?? ''}` : 'Record Field Visit'}
           </Typography.Title>
           <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2 }}>
-            {isEdit ? 'Update crop health status and agronomic guidance' : 'Log crop monitoring, pest observations, and farmer guidance'}
+            Capture crop health, pest diagnosis, actionable agronomy advice and yield estimates
           </Typography.Text>
         </div>
       </div>
@@ -336,11 +389,12 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
         open={open}
         onClose={onClose}
         title={headerContent}
-        placement="top"
-        height="100vh"
+        placement="bottom"
+        height="92%"
         styles={{
-          body: { background: '#f8fafc', padding: '14px 14px 80px 14px' },
+          body: { background: '#f8fafc', padding: '16px', overflowY: 'auto' },
           header: { borderBottom: '1px solid #e2e8f0' },
+          footer: { borderTop: '1px solid #e2e8f0', padding: '12px 16px', background: '#fff' },
         }}
         footer={
           <div style={{ display: 'flex', gap: 10 }}>
@@ -361,7 +415,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
                 boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
               }}
             >
-              {isEdit ? 'Save Changes' : 'Log Field Visit'}
+              {isEdit ? 'Save Changes' : 'Record Visit'}
             </Button>
           </div>
         }
@@ -378,12 +432,12 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
       title={headerContent}
       onCancel={onClose}
       width={760}
-      style={{ top: 24, paddingBottom: 24 }}
+      style={{ top: 40, paddingBottom: 40 }}
       styles={{
         body: {
           background: '#f8fafc',
           padding: '16px 20px',
-          maxHeight: 'calc(90vh - 130px)',
+          maxHeight: 'calc(100vh - 180px)',
           overflowY: 'auto',
           margin: '0 -24px',
           paddingInline: 24,
@@ -418,7 +472,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
               boxShadow: '0 2px 10px 0 rgba(16, 185, 129, 0.35)',
             }}
           >
-            {isEdit ? 'Save Changes' : 'Record Field Visit'}
+            {isEdit ? 'Save Changes' : 'Record Visit'}
           </Button>
         </div>
       }

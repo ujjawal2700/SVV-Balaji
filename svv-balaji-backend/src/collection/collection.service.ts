@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -240,9 +240,19 @@ export class CollectionService {
     return collection;
   }
 
-  async updatePaymentStatus(id: string, paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID') {
+  /**
+   * FRD 14.3 - what the farmer has been paid.
+   *
+   * Typed as the Prisma enum rather than a hand-written union. The union was
+   * `'PENDING' | 'PARTIAL' | 'PAID'`, which silently became a lie the moment
+   * FRD 26.4 added FAILED and REFUNDED: the DTO accepted five values and this
+   * accepted three, so the two disagreed about what a payment status is. A
+   * duplicated enum only stays correct until somebody extends the original.
+   */
+  async updatePaymentStatus(id: string, paymentStatus: PaymentStatus) {
     const collection = await this.prisma.rawMaterialCollection.findUnique({ where: { id } });
     if (!collection) throw new NotFoundException('Collection not found');
+
     return this.prisma.rawMaterialCollection.update({
       where: { id },
       data: { paymentStatus },

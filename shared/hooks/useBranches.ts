@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { branchesApi } from '../api/branches';
 import { queryKeys } from '../api/queryKeys';
-import type { CreateBranchInput, UpdateBranchInput } from '../api/types';
+import type { BranchPerformanceQuery, CreateBranchInput, UpdateBranchInput } from '../api/types';
 
 /**
  * `activeOnly` is part of the query key, so the picker's active-only list and
@@ -63,6 +63,44 @@ export function useDeleteBranch() {
       // Deleting a branch can only succeed when nothing referenced it, so
       // nothing else in the cache can be stale as a result.
       void queryClient.invalidateQueries({ queryKey: queryKeys.branches.all });
+    },
+  });
+}
+
+/** FRD 6.4/6.5 — one branch's numbers over a period. */
+export function useBranchPerformance(id: string | undefined, query: BranchPerformanceQuery = {}) {
+  return useQuery({
+    queryKey: queryKeys.branches.performance(id ?? '', query),
+    queryFn: () => branchesApi.performance(id as string, query),
+    enabled: Boolean(id),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** FRD 6.5 — every branch side by side, for the Super Admin. */
+export function useConsolidatedPerformance(query: BranchPerformanceQuery = {}) {
+  return useQuery({
+    queryKey: queryKeys.branches.consolidated(query),
+    queryFn: () => branchesApi.consolidated(query),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * FRD 6.2 — assign or vacate a branch manager.
+ *
+ * Invalidates users as well as branches: the assignment is a fact about the
+ * user too, and the users screen shows who manages what.
+ */
+export function useAssignBranchManager() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, managerId }: { id: string; managerId: string | null }) =>
+      branchesApi.assignManager(id, managerId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.branches.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
     },
   });
 }
