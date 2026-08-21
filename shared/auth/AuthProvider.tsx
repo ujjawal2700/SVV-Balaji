@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const result = await authApi.login(email, password);
 
-    if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
+    if ('requiresTwoFactor' in result) {
       throw new Error(
         'This account has two-factor authentication enabled, and this screen cannot complete ' +
           'that sign-in. Use the main panel to sign in.',

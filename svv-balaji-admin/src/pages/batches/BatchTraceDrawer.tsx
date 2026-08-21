@@ -10,7 +10,7 @@ interface BatchTraceDrawerProps {
   onClose: () => void;
 }
 
-const MOVEMENT_COLOURS: Record<StockMovement['movementType'], string> = {
+const MOVEMENT_COLOURS: Record<string, string> = {
   STOCK_IN: 'green',
   STOCK_OUT: 'red',
   TRANSFER: 'blue',

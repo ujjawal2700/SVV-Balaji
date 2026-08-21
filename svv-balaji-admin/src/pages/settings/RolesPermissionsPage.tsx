@@ -80,7 +80,7 @@ export function RolesPermissionsPage() {
   }, [role, roles]);
 
   const saved = useMemo(
-    () => new Set(role ? (matrix.data?.matrix[role] ?? []) : []),
+    () => new Set<string>(role ? (matrix.data?.matrix[role] ?? []) : []),
     [matrix.data, role],
   );
 

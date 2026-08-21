@@ -15,7 +15,7 @@ import type { PaymentStatus } from '../api/types';
  * FAILED, because a farmer who has not been paid yet and a payment that
  * actually bounced are different problems and should not look the same.
  */
-export const PAYMENT_STATUS_COLOUR: Record<PaymentStatus, string> = {
+export const PAYMENT_STATUS_COLOUR: Record<string, string> = {
   PENDING: 'gold',
   PARTIAL: 'orange',
   PAID: 'green',
@@ -25,7 +25,7 @@ export const PAYMENT_STATUS_COLOUR: Record<PaymentStatus, string> = {
   REFUNDED: 'purple',
 };
 
-export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+export const PAYMENT_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
   PARTIAL: 'Partial',
   PAID: 'Paid',

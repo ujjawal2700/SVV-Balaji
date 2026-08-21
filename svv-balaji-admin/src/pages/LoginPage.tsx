@@ -51,7 +51,7 @@ export function LoginPage() {
     try {
       const result = await authApi.login(values.email, values.password);
 
-      if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
+      if ('requiresTwoFactor' in result) {
         setRequiresTwoFactor(true);
         setTwoFactorToken(result.twoFactorToken);
         return;

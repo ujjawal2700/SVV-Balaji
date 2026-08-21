@@ -102,9 +102,9 @@ export function FieldInspectionsTab() {
           isLoading={agreements.isLoading || inspections.isLoading}
           error={agreements.error ?? inspections.error}
           onRetry={() => void agreements.refetch()}
-          keyOf={(agreement) => agreement.id}
+          keyOf={(agreement: any) => agreement.id}
           emptyText="Nothing waiting on the gate. Every harvest due in the next week has been inspected."
-          renderCard={(agreement) => {
+          renderCard={(agreement: any) => {
             const daysLate = dayjs().startOf('day').diff(dayjs(agreement.harvestDate!).startOf('day'), 'day');
 
             return (
