@@ -37,6 +37,8 @@ export const PERMISSIONS = {
   BRANCH_VIEW: 'branches.view',
   BRANCH_CREATE: 'branches.create',
   BRANCH_MANAGE: 'branches.edit',
+  BRANCH_ASSIGN_MANAGER: 'branches.assignManager',
+  BRANCH_PERFORMANCE: 'branches.performance',
   BRANCH_DELETE: 'branches.delete',
 
   // --- Roles & permissions (the screen that edits all of this) --------------

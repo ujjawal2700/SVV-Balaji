@@ -81,6 +81,18 @@ const ALLOWED_MIME = new Set([
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Video gets its own ceiling.
+ *
+ * One flat 10 MB limit was fine while this accepted photographs and PDFs. It
+ * stopped being fine the moment FRD 11.3 training videos were allowed through
+ * the type check: a two-minute clip from a phone is 30-60 MB, so every real
+ * video would have passed the MIME gate and then been refused by the size gate
+ * — allowed in principle, impossible in practice, which is the most annoying
+ * kind of "supported".
+ */
+const DEFAULT_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+
 @Injectable()
 export class CloudinaryStorage extends StorageService {
   private readonly logger = new Logger(CloudinaryStorage.name);
@@ -89,6 +101,14 @@ export class CloudinaryStorage extends StorageService {
   private readonly apiKey = process.env.CLOUDINARY_API_KEY ?? '';
   private readonly apiSecret = process.env.CLOUDINARY_API_SECRET ?? '';
   private readonly maxBytes = Number(process.env.MAX_UPLOAD_BYTES ?? DEFAULT_MAX_BYTES);
+  private readonly maxVideoBytes = Number(
+    process.env.MAX_VIDEO_UPLOAD_BYTES ?? DEFAULT_MAX_VIDEO_BYTES,
+  );
+
+  /** The ceiling that applies to this file. Video is the only exception. */
+  private limitFor(mimetype: string): number {
+    return mimetype.startsWith('video/') ? this.maxVideoBytes : this.maxBytes;
+  }
 
   /**
    * Uploads go browser -> our API -> Cloudinary, never browser -> Cloudinary.
@@ -108,12 +128,16 @@ export class CloudinaryStorage extends StorageService {
       );
     }
 
-    if (file.size > this.maxBytes) {
-      const limitMb = (this.maxBytes / 1024 / 1024).toFixed(0);
+    const limit = this.limitFor(file.mimetype);
+    if (file.size > limit) {
+      const limitMb = (limit / 1024 / 1024).toFixed(0);
       const actualMb = (file.size / 1024 / 1024).toFixed(1);
       throw new BadRequestException(
-        `${file.originalname} is ${actualMb} MB, over the ${limitMb} MB limit. ` +
-          `Most phone cameras can be set to a smaller photo size.`,
+        `${file.originalname} is ${actualMb} MB, over the ${limitMb} MB limit for ` +
+          `${file.mimetype.startsWith('video/') ? 'video' : 'this file type'}. ` +
+          (file.mimetype.startsWith('video/')
+            ? 'Record a shorter clip, or lower the recording quality in the camera settings.'
+            : 'Most phone cameras can be set to a smaller photo size.'),
       );
     }
 

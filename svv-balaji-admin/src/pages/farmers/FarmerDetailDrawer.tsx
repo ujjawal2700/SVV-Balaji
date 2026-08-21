@@ -78,8 +78,10 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
                       {data.aadhaarNumber ?? dash}
                     </Descriptions.Item>
                     <Descriptions.Item label="PAN">{data.panNumber ?? dash}</Descriptions.Item>
-                    <Descriptions.Item label="Registered" span={2}>
-                      {formatDate(data.createdAt)}
+                    <Descriptions.Item label="Added by" span={2}>
+                      {data.createdBy?.fullName
+                        ? `${data.createdBy.fullName} on ${formatDate(data.createdAt)}`
+                        : formatDate(data.createdAt)}
                     </Descriptions.Item>
                   </Descriptions>
 

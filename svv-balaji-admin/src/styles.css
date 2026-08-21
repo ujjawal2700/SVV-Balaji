@@ -60,11 +60,19 @@ body {
   --sidebar-bg-gradient: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);
   --sidebar-item-hover-bg: #f3ebfc;
   --sidebar-item-hover-color: #844FC1;
-  --sidebar-transition-duration: 0.3s;
+  --sidebar-transition-duration: 0.2s;
 }
 
 .admin-sidebar {
   background: var(--sidebar-bg-gradient) !important;
+  overflow-x: hidden !important;
+}
+
+.admin-sidebar .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-x: hidden;
 }
 
 .admin-sidebar .ant-menu,
@@ -72,17 +80,20 @@ body {
   background: transparent !important;
 }
 
-/* Smooth hover effect for menu items */
+/* Smooth hover effect for menu items without layout shift or jitter */
 .admin-sidebar .ant-menu-item,
 .admin-sidebar .ant-menu-submenu-title {
-  transition: all var(--sidebar-transition-duration) ease-in-out !important;
+  transition: background-color var(--sidebar-transition-duration) ease,
+              color var(--sidebar-transition-duration) ease !important;
+  border-radius: 8px !important;
+  margin-inline: 8px !important;
+  width: calc(100% - 16px) !important;
 }
 
 .admin-sidebar .ant-menu-item:hover,
 .admin-sidebar .ant-menu-submenu-title:hover {
   background-color: var(--sidebar-item-hover-bg) !important;
   color: var(--sidebar-item-hover-color) !important;
-  transform: translateX(6px);
 }
 
 /* ---------------------------------------------------------------------------

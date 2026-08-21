@@ -26,7 +26,7 @@ interface FieldVisitDetailDrawerProps {
   onClose: () => void;
 }
 
-const FILE_TYPES = ['photo', 'pdf', 'inspection_doc'];
+const FILE_TYPES = ['photo', 'video', 'pdf', 'inspection_doc'];
 
 export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDrawerProps) {
   const { message } = AntApp.useApp();
@@ -122,8 +122,9 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
                   rules={[{ required: true, message: 'Attach a photo or document first' }]}
                 >
                   <FileUploadField
+                    allowVideo
                     folder="field-visits"
-                    hint="Crop photographs, pest damage, an inspection report — JPEG, PNG, HEIC or PDF, up to 10 MB"
+                    hint="Crop photographs, pest damage, an inspection report — photos and documents up to 10 MB, or a short MP4/MOV clip up to 20 MB"
                   />
                 </Form.Item>
                 <Form.Item name="fileType" initialValue="photo" rules={[{ required: true }]}>

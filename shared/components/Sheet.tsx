@@ -65,6 +65,25 @@ export function Sheet({
         confirmLoading={confirmLoading}
         okButtonProps={okButtonProps}
         width={width}
+        style={{ top: 40, paddingBottom: 40 }}
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+            padding: '20px 24px',
+            background: '#f8fafc',
+          },
+          header: {
+            padding: '16px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            marginBottom: 0,
+          },
+          footer: {
+            padding: '14px 24px',
+            borderTop: '1px solid #e2e8f0',
+            marginTop: 0,
+          },
+        }}
         destroyOnClose={destroyOnClose}
       >
         {children}
@@ -78,10 +97,14 @@ export function Sheet({
       open={open}
       title={title}
       placement="bottom"
-      height="95%"
+      height="92%"
       onClose={onCancel}
       destroyOnClose={destroyOnClose}
-      styles={{ header: { paddingBlock: 12 }, body: { paddingTop: 16 } }}
+      styles={{
+        header: { padding: '14px 20px', borderBottom: '1px solid #e2e8f0', background: '#fff' },
+        body: { padding: '16px', background: '#f8fafc', overflowY: 'auto' },
+        footer: { borderTop: '1px solid #e2e8f0', padding: '12px 16px', background: '#fff' },
+      }}
       footer={
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
           <Button
@@ -90,11 +113,19 @@ export function Sheet({
             block
             loading={confirmLoading}
             onClick={onOk}
+            style={{
+              height: 44,
+              borderRadius: 10,
+              fontWeight: 600,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
+            }}
             {...okButtonProps}
           >
             {okText}
           </Button>
-          <Button size="large" block onClick={onCancel}>
+          <Button size="large" block style={{ height: 44, borderRadius: 10 }} onClick={onCancel}>
             {cancelText}
           </Button>
         </Space>

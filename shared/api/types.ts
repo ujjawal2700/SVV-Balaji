@@ -38,8 +38,89 @@ export interface Branch {
   contactName: string | null;
   contactPhone: string | null;
   isActive: boolean;
+  /** FRD 6.2 — who is accountable for this branch. Null between appointments. */
+  managerId: string | null;
+  manager?: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string | null;
+    status: UserStatus;
+  } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * FRD 6.4 / 6.5 — one branch's numbers for a period.
+ *
+ * Two things here are deliberately shaped to resist a misleading report.
+ * Quantities are grouped by unit rather than summed, because KG and QUINTAL do
+ * not add up; and `utilisationPercent` is null whenever a branch's stock spans
+ * more than one unit, rather than producing a ratio over incompatible numbers.
+ */
+export interface BranchPerformance {
+  branchId: string;
+  branchName: string;
+  managerName: string | null;
+  from: string;
+  to: string;
+
+  procurement: {
+    collections: number;
+    quantityByUnit: Record<string, number>;
+    totalValue: number;
+    farmersSupplying: number;
+    inspections: number;
+    inspectionsApproved: number;
+  };
+
+  production: {
+    batches: number;
+    completed: number;
+    plannedQuantity: number;
+    actualQuantity: number;
+    totalLoss: number;
+    yieldPercent: number | null;
+  };
+
+  sales: {
+    orders: number;
+    delivered: number;
+    cancelled: number;
+    revenue: number;
+    outstanding: number;
+  };
+
+  inventory: {
+    warehouses: number;
+    rawMaterialByUnit: Record<string, number>;
+    finishedGoodsPacks: number;
+    totalCapacity: number;
+    /** Null when the branch holds stock in more than one unit. */
+    utilisationPercent: number | null;
+  };
+
+  /**
+   * FRD 6.4 names "operational efficiency" without defining it, so it is
+   * defined as three rates the branch controls, each also returned separately
+   * so a poor composite can be explained rather than merely reported. A
+   * component with no data is excluded from the mean, not scored as zero.
+   */
+  efficiency: {
+    productionYieldPercent: number | null;
+    inspectionApprovalPercent: number | null;
+    /** Only measurable for orders delivered since 19 Aug, when the timestamps landed. */
+    onTimeDeliveryPercent: number | null;
+    overallPercent: number | null;
+  };
+}
+
+export interface BranchPerformanceQuery {
+  /** ISO date. Defaults to 30 days ago. */
+  from?: string;
+  /** ISO date. Defaults to today. */
+  to?: string;
 }
 
 /**

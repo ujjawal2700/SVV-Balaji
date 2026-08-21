@@ -402,18 +402,19 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
   const isPending = createFarmer.isPending || updateFarmer.isPending;
 
   // On Mobile: Render in a smooth sliding side/bottom drawer
-  // On Mobile: Render in a smooth sliding top drawer / full top sheet
+  // On Mobile: Render in a smooth sliding bottom sheet with top clearance
   if (isMobile) {
     return (
       <Drawer
         open={open}
         onClose={onClose}
         title={headerContent}
-        placement="top"
-        height="100vh"
+        placement="bottom"
+        height="92%"
         styles={{
-          body: { background: '#f8fafc', padding: '14px 14px 80px 14px' },
+          body: { background: '#f8fafc', padding: '16px', overflowY: 'auto' },
           header: { borderBottom: '1px solid #e2e8f0' },
+          footer: { borderTop: '1px solid #e2e8f0', padding: '12px 16px', background: '#fff' },
         }}
         footer={
           <div style={{ display: 'flex', gap: 10 }}>
@@ -445,19 +446,19 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
     );
   }
 
-  // On Desktop/Tablet: Render in an elevated modal positioned at the top of the viewport
+  // On Desktop/Tablet: Render in an elevated modal with fixed 40px top/bottom spacing
   return (
     <Modal
       open={open}
       title={headerContent}
       onCancel={onClose}
       width={760}
-      style={{ top: 24, paddingBottom: 24 }}
+      style={{ top: 40, paddingBottom: 40 }}
       styles={{
         body: {
           background: '#f8fafc',
           padding: '16px 20px',
-          maxHeight: 'calc(90vh - 130px)',
+          maxHeight: 'calc(100vh - 180px)',
           overflowY: 'auto',
           margin: '0 -24px',
           paddingInline: 24,

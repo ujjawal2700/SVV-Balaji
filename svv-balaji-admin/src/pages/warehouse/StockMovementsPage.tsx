@@ -83,8 +83,8 @@ export function StockMovementsPage() {
         const from = warehouseName(row.fromWarehouseId);
         const to = warehouseName(row.toWarehouseId);
         if (from && to) return `${from} → ${to}`;
-        if (to) return <Space size={4}>→ {to}</Space>;
-        if (from) return <Space size={4}>{from} →</Space>;
+        if (to) return `→ ${to}`;
+        if (from) return `${from} →`;
         return EM_DASH;
       },
     },

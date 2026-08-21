@@ -475,11 +475,18 @@ export class ProductionService {
 
     return this.prisma.$transaction(async (tx) => {
       for (const consumption of production.consumptions) {
-        const key = {
+        /**
+         * Prisma addresses a compound unique by its generated name, so the
+         * `where` is `{ warehouseId_batchId: { … } }` — the wrapper is the key,
+         * not decoration. Written inline rather than hoisted into a variable
+         * because hoisting it is what makes it easy to pass the inner object by
+         * mistake, which type-checks as an object and fails as a query.
+         */
+        const where = {
           warehouseId_batchId: { warehouseId, batchId: consumption.rawMaterialBatchId },
         };
 
-        const stockRow = await tx.warehouseStock.findUnique({ where: key.warehouseId_batchId });
+        const stockRow = await tx.warehouseStock.findUnique({ where });
         if (!stockRow) {
           throw new BadRequestException(
             'The reserved stock row has gone missing - investigate before starting this run.',
@@ -489,7 +496,7 @@ export class ProductionService {
         // Release and consume together. Order matters only to the check
         // constraint (reserved <= quantity), which both orders satisfy.
         await tx.warehouseStock.update({
-          where: key.warehouseId_batchId,
+          where,
           data: {
             reservedQuantity: { decrement: consumption.quantityUsed },
             quantity: { decrement: consumption.quantityUsed },

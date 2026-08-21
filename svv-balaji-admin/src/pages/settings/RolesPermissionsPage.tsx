@@ -85,7 +85,7 @@ export function RolesPermissionsPage() {
   );
 
   useEffect(() => {
-    setDraft(new Set(saved));
+    setDraft(new Set<string>(saved));
   }, [saved]);
 
   const groups = registry.data?.groups ?? [];
@@ -308,7 +308,7 @@ export function RolesPermissionsPage() {
                 <Button icon={<UndoOutlined />} onClick={onReset} disabled={!canManage}>
                   Reset to defaults
                 </Button>
-                <Button onClick={() => setDraft(new Set(saved))} disabled={!dirty}>
+                <Button onClick={() => setDraft(new Set<string>(saved))} disabled={!dirty}>
                   Discard
                 </Button>
                 <Button

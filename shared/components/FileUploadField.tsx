@@ -3,6 +3,7 @@ import {
   FolderOpenOutlined,
   InboxOutlined,
   PaperClipOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { Alert, App as AntApp, Button, Progress, Space, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
@@ -13,9 +14,32 @@ import { uploadsApi, type UploadFolder } from '../api/uploads';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { compressImage, formatBytes } from '../utils/image';
 
-/** Mirrors the ALLOWED_MIME set in the backend's cloudinary.storage.ts. */
-const ACCEPT = '.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf';
+/**
+ * Mirrors the ALLOWED_MIME set in the backend's cloudinary.storage.ts.
+ *
+ * It had drifted. The server was widened on 20 August to take Word, Excel,
+ * PowerPoint and video for FRD 35 and FRD 11.3, and this was left at images and
+ * PDF — so the file picker filtered out the very files the server had just
+ * started accepting, and a video could not be chosen at all. A training screen
+ * offering "video" as a material type while the picker refused to show any was
+ * the visible half of that.
+ */
+const ACCEPT = [
+  '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif',
+  '.pdf',
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.mp4', '.mov',
+].join(',');
+
 const MAX_MB = 10;
+
+/**
+ * Video gets its own ceiling (20 MB), matching limitFor() on the server.
+ */
+const MAX_VIDEO_MB = 20;
+
+const isVideo = (file: File) => file.type.startsWith('video/');
+const isImage = (file: File) => file.type.startsWith('image/');
 
 export interface FileUploadFieldProps {
   folder: UploadFolder;
@@ -23,6 +47,12 @@ export interface FileUploadFieldProps {
   value?: string;
   onChange?: (url: string | undefined) => void;
   hint?: string;
+  /**
+   * Offer "Record a video" on a phone. Off by default: most attachment points
+   * want a photo or a document, and a video upload is not something to put in
+   * front of someone on rural mobile data unless the screen actually wants it.
+   */
+  allowVideo?: boolean;
   disabled?: boolean;
 }
 
@@ -52,6 +82,7 @@ export function FileUploadField({
   value,
   onChange,
   hint,
+  allowVideo = false,
   disabled,
 }: FileUploadFieldProps) {
   const { message } = AntApp.useApp();
@@ -62,6 +93,7 @@ export function FileUploadField({
   const [savedNote, setSavedNote] = useState<string | null>(null);
 
   const cameraInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const busy = progress !== null;
@@ -80,13 +112,21 @@ export function FileUploadField({
     setProgress(0);
 
     try {
+      // A no-op for anything that is not an image, so a video or a slide deck
+      // passes through untouched.
       const result = await compressImage(file);
 
-      if (result.bytes > MAX_MB * 1024 * 1024) {
+      const limitMb = isVideo(file) ? MAX_VIDEO_MB : MAX_MB;
+      if (result.bytes > limitMb * 1024 * 1024) {
         message.error(
-          `${file.name} is ${formatBytes(result.bytes)}, over the ${MAX_MB} MB limit` +
-            (result.compressed ? '' : ` and ${result.reason}`) +
-            '. Try a photo taken at a lower resolution.',
+          `${file.name} is ${formatBytes(result.bytes)}, over the ${limitMb} MB limit` +
+            (result.compressed || !isImage(file) ? '' : ` and ${result.reason}`) +
+            '. ' +
+            (isVideo(file)
+              ? 'Record a shorter clip, or lower the recording quality in the camera settings.'
+              : isImage(file)
+                ? 'Try a photo taken at a lower resolution.'
+                : 'Try a smaller file.'),
           10,
         );
         setProgress(null);
@@ -100,7 +140,7 @@ export function FileUploadField({
 
       const stored = await uploadsApi.upload(folder, result.file, setProgress);
       onChange?.(stored.url);
-      message.success('Photo attached');
+      message.success(isVideo(file) ? 'Video attached' : isImage(file) ? 'Photo attached' : 'File attached');
     } catch (error) {
       setFileName(null);
       message.error(apiErrorMessage(error, 'Could not upload the file'), 8);
@@ -174,6 +214,17 @@ export function FileUploadField({
           hidden
           onChange={onPicked}
         />
+        {/* A third input, for the same reason as the second: `capture` with
+            `accept="video/*"` opens the camera in video mode, and that cannot
+            be switched on the element after the fact. */}
+        <input
+          ref={videoInput}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          hidden
+          onChange={onPicked}
+        />
         <input ref={fileInput} type="file" accept={ACCEPT} hidden onChange={onPicked} />
 
         <Button
@@ -188,6 +239,18 @@ export function FileUploadField({
           Take a photo
         </Button>
 
+        {allowVideo ? (
+          <Button
+            block
+            icon={<VideoCameraOutlined />}
+            disabled={disabled}
+            onClick={() => videoInput.current?.click()}
+            style={{ height: 46 }}
+          >
+            Record a video
+          </Button>
+        ) : null}
+
         <Button
           block
           icon={<FolderOpenOutlined />}
@@ -198,7 +261,10 @@ export function FileUploadField({
         </Button>
 
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {hint ?? 'Photos are resized before sending, so this works on a weak signal.'}
+          {hint ??
+            `Photos are resized before sending, so this works on a weak signal.${
+              allowVideo ? ` Video up to ${MAX_VIDEO_MB} MB is sent as-is.` : ''
+            }`}
         </Typography.Text>
       </Space>
     );
@@ -220,9 +286,12 @@ export function FileUploadField({
       <p className="ant-upload-drag-icon" style={{ marginBottom: 4 }}>
         <InboxOutlined />
       </p>
-      <p className="ant-upload-text">Drop a photo or PDF here, or click to choose</p>
+      <p className="ant-upload-text">Drop a file here, or click to choose</p>
       <p className="ant-upload-hint" style={{ marginBottom: 0 }}>
-        {hint ?? `JPEG, PNG, WebP, HEIC or PDF · up to ${MAX_MB} MB, resized automatically`}
+        {hint ??
+          `Photos, PDF, Word, Excel or PowerPoint up to ${MAX_MB} MB${
+            allowVideo ? `, or MP4/MOV video up to ${MAX_VIDEO_MB} MB` : ''
+          } · photos are resized automatically`}
       </p>
     </Upload.Dragger>
   );

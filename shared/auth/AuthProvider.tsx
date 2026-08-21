@@ -76,11 +76,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /**
+   * The one-step sign-in.
+   *
+   * `POST /auth/login` stopped returning a single shape when two-factor landed:
+   * it now answers with either a session or a challenge. This helper handles
+   * only the first, and says so loudly rather than reading `accessToken` off a
+   * challenge — which would store `undefined`, call `/auth/me`, get a 401, and
+   * leave the user staring at a login form that appeared to accept them.
+   *
+   * A caller that needs to support 2FA drives the flow itself: post to
+   * `authApi.login`, branch on `requiresTwoFactor`, then `tokenStore.set` and
+   * `reload()`. The admin login page is the worked example.
+   */
   const login = useCallback(async (email: string, password: string) => {
-    const session = await authApi.login(email, password);
+    const result = await authApi.login(email, password);
+
+    if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
+      throw new Error(
+        'This account has two-factor authentication enabled, and this screen cannot complete ' +
+          'that sign-in. Use the main panel to sign in.',
+      );
+    }
+
     tokenStore.set({
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     });
     // /auth/me rather than the login payload: it carries branch and status,
     // which the navigation needs and login does not return.

@@ -7,6 +7,7 @@ import {
   Drawer,
   Empty,
   Form,
+  Image,
   List,
   Select,
   Space,
@@ -26,7 +27,7 @@ interface FieldVisitDetailDrawerProps {
   onClose: () => void;
 }
 
-const FILE_TYPES = ['photo', 'pdf', 'inspection_doc'];
+const FILE_TYPES = ['photo', 'video', 'pdf', 'inspection_doc'];
 
 export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDrawerProps) {
   const { message } = AntApp.useApp();
@@ -122,8 +123,9 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
                   rules={[{ required: true, message: 'Attach a photo or document first' }]}
                 >
                   <FileUploadField
+                    allowVideo
                     folder="field-visits"
-                    hint="Crop photographs, pest damage, an inspection report — JPEG, PNG, HEIC or PDF, up to 10 MB"
+                    hint="Crop photographs, pest damage, an inspection report — photos and documents up to 10 MB, or a short MP4/MOV clip up to 20 MB"
                   />
                 </Form.Item>
                 <Form.Item name="fileType" initialValue="photo" rules={[{ required: true }]}>
@@ -149,20 +151,71 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
               bordered
               dataSource={data.documents}
               locale={{ emptyText: <Empty description="Nothing attached" /> }}
-              renderItem={(document) => (
-                <List.Item>
-                  <Space>
-                    <Tag>{document.fileType}</Tag>
-                    <Typography.Link
-                      href={document.fileUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      <LinkOutlined /> {document.fileUrl}
-                    </Typography.Link>
-                  </Space>
-                </List.Item>
-              )}
+              renderItem={(document) => {
+                const isImg =
+                  document.fileType === 'photo' ||
+                  /\.(jpg|jpeg|png|webp|heic|heif|gif)($|\?)/i.test(document.fileUrl) ||
+                  document.fileUrl.includes('/image/upload/');
+                const isVid =
+                  document.fileType === 'video' ||
+                  /\.(mp4|mov|avi|mkv|webm)($|\?)/i.test(document.fileUrl) ||
+                  document.fileUrl.includes('/video/upload/');
+
+                return (
+                  <List.Item>
+                    <Space align="start" size={12}>
+                      {isImg ? (
+                        <Image
+                          src={document.fileUrl}
+                          alt="Visit document"
+                          width={72}
+                          height={72}
+                          style={{
+                            objectFit: 'cover',
+                            borderRadius: 8,
+                            border: '1px solid #e2e8f0',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 8,
+                            background: isVid ? '#f3e8ff' : '#eff6ff',
+                            color: isVid ? '#7e22ce' : '#2563eb',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          {isVid ? '🎬 Video' : '📄 Doc'}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <Space>
+                          <Tag color={isImg ? 'green' : isVid ? 'purple' : 'blue'}>
+                            {document.fileType.toUpperCase()}
+                          </Tag>
+                        </Space>
+                        <Typography.Link
+                          href={document.fileUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          style={{ wordBreak: 'break-all', fontSize: 13 }}
+                        >
+                          <LinkOutlined /> Open full file in new tab
+                        </Typography.Link>
+                      </div>
+                    </Space>
+                  </List.Item>
+                );
+              }}
             />
           </div>
         </Space>

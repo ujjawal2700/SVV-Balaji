@@ -69,7 +69,7 @@ export function AppLayout() {
         width={232}
         theme="light"
         className="admin-sidebar"
-        style={{ overflow: 'auto', height: '100vh' }}
+        style={{ overflowY: 'auto', overflowX: 'hidden', height: '100vh' }}
       >
         <div
           style={{

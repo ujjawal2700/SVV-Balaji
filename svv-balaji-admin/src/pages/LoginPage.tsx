@@ -5,6 +5,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '../api/client';
 import { authApi } from '@shared/api/auth';
 import { useAuth } from '../auth/useAuth';
+import { tokenStore } from '../api/tokenStore';
 
 interface LoginForm {
   email: string;
@@ -12,9 +13,12 @@ interface LoginForm {
 }
 
 export function LoginPage() {
-  const { user, initialising, login, reload } = useAuth();
+  const { user, initialising, reload } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   // 2FA state
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
@@ -28,20 +32,39 @@ export function LoginPage() {
     return <Navigate to={from} replace />;
   }
 
+  /**
+   * Sign in, which is now two shapes rather than one.
+   *
+   * `POST /auth/login` either returns a session or a 2FA challenge, so this page
+   * owns the whole flow and finishes it itself: store the tokens, then `reload()`
+   * to fetch the profile.
+   *
+   * It deliberately does NOT call the context's `login()` afterwards. That
+   * helper posts to `/auth/login` itself, so calling it here sent the
+   * credentials a second time — issuing a second session, orphaning the first
+   * refresh token, and (on a 2FA account) getting back a challenge where a
+   * session was expected.
+   */
   const onFinish = async (values: LoginForm) => {
     setSubmitting(true);
     setError(null);
     try {
-      // Direct call to authApi to check if 2FA is needed
-      const res = await authApi.login(values.email, values.password);
-      if ('requiresTwoFactor' in res && res.requiresTwoFactor) {
+      const result = await authApi.login(values.email, values.password);
+
+      if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
         setRequiresTwoFactor(true);
-        setTwoFactorToken(res.twoFactorToken);
-      } else {
-        // Normal login completion handled by context
-        await login(values.email, values.password); // Using the context's login directly doesn't handle the multi-step return cleanly, let's adjust this!
-        navigate(from, { replace: true });
+        setTwoFactorToken(result.twoFactorToken);
+        return;
       }
+
+      tokenStore.set({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+      // /auth/me rather than the login payload: it carries branch and status,
+      // which the navigation needs and login does not return.
+      await reload();
+      navigate(from, { replace: true });
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not sign in'));
     } finally {
@@ -55,7 +78,6 @@ export function LoginPage() {
     setError(null);
     try {
       const session = await authApi.verifyTwoFactorLogin(twoFactorToken, twoFactorCode);
-      const { tokenStore } = await import('../api/tokenStore');
       tokenStore.set({ accessToken: session.accessToken, refreshToken: session.refreshToken });
       await reload();
       navigate(from, { replace: true });
@@ -112,8 +134,19 @@ export function LoginPage() {
               Verify & Sign In
             </Button>
             <div style={{ marginTop: 16, textAlign: 'center' }}>
-              <Button type="link" onClick={() => setRequiresTwoFactor(false)}>
-                Back to Login
+              <Button
+                type="link"
+                onClick={() => {
+                  // Clear the challenge as well as the flag: the token is
+                  // single-use and tied to that attempt, so keeping it would
+                  // mean retrying with something the server has finished with.
+                  setRequiresTwoFactor(false);
+                  setTwoFactorToken(null);
+                  setTwoFactorCode('');
+                  setError(null);
+                }}
+              >
+                Back to sign in
               </Button>
             </div>
           </div>

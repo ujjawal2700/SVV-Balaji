@@ -196,6 +196,10 @@ model User {
   farmersCreated          Farmer[]                @relation("FarmersCreated")
 
   // Phase 3 back-relations
+  /// FRD 6.2 - the branch this user is the assigned manager of, if any.
+  /// Distinct from `branch` above, which is where they work.
+  managedBranch           Branch?                 @relation("BranchManager")
+
   cleaningGradingRecords  CleaningGradingRecord[] @relation("CleaningGradingOperator")
   cleaningGradingVerified CleaningGradingRecord[] @relation("CleaningGradingVerifier")
   recipesCreated          Recipe[]                @relation("RecipesCreated")
@@ -230,6 +234,19 @@ model Branch {
   contactName String?
   contactPhone String?
   isActive    Boolean @default(true)
+
+  /// FRD 6.2 - the Branch Manager assigned to run this branch.
+  ///
+  /// The relationship was previously only inferable backwards: find the users
+  /// whose `branchId` is this branch and whose role happens to be
+  /// BRANCH_MANAGER. That answers "who works here", not "who is accountable
+  /// for this branch" - two managers at one site made the question unanswerable,
+  /// and a branch with none looked identical to a branch with one.
+  ///
+  /// Unique because a manager runs one branch: they carry a single `branchId`,
+  /// so managing a second would mean being assigned somewhere they do not work.
+  managerId String? @unique
+  manager   User?   @relation("BranchManager", fields: [managerId], references: [id])
 
   users      User[]
   farmers    Farmer[]

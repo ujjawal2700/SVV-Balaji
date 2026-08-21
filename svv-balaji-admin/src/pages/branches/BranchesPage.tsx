@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { BarChartOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { Button, Card, Switch, Space, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
@@ -9,11 +9,17 @@ import { PageHeader } from '../../components/PageHeader';
 import { RowActions } from '../../components/RowActions';
 import { useBranches, useDeleteBranch, useSetBranchActive } from '../../hooks/useBranches';
 import { BranchFormModal } from './BranchFormModal';
+import { AssignManagerModal } from './AssignManagerModal';
+import { BranchPerformanceDrawer } from './BranchPerformanceDrawer';
+import { BranchComparisonDrawer } from './BranchComparisonDrawer';
 
 export function BranchesPage() {
   const [editing, setEditing] = useState<Branch | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [showInactive, setShowInactive] = useState(true);
+  const [assigning, setAssigning] = useState<Branch | null>(null);
+  const [performanceOf, setPerformanceOf] = useState<Branch | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   // The master screen always fetches every branch; the toggle filters the rows
   // already in hand rather than refetching, so flipping it is instant.
@@ -69,6 +75,25 @@ export function BranchesPage() {
         ),
     },
     {
+      /**
+       * FRD 6.2. Blank is a real answer here, not missing data — a branch sits
+       * between appointments — so it reads "Not assigned" rather than a dash.
+       */
+      title: 'Branch manager',
+      key: 'manager',
+      render: (_, branch) =>
+        branch.manager ? (
+          <Space direction="vertical" size={0}>
+            <Typography.Text>{branch.manager.fullName}</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {branch.manager.email}
+            </Typography.Text>
+          </Space>
+        ) : (
+          <Typography.Text type="secondary">Not assigned</Typography.Text>
+        ),
+    },
+    {
       title: 'Status',
       dataIndex: 'isActive',
       key: 'isActive',
@@ -79,9 +104,24 @@ export function BranchesPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 150,
+      width: 320,
       fixed: 'right',
       render: (_, branch) => (
+        <Space size={4}>
+        <Can do="BRANCH_PERFORMANCE">
+          <Button
+            size="small"
+            icon={<BarChartOutlined />}
+            onClick={() => setPerformanceOf(branch)}
+          >
+            Performance
+          </Button>
+        </Can>
+        <Can do="BRANCH_ASSIGN_MANAGER">
+          <Button size="small" icon={<UserOutlined />} onClick={() => setAssigning(branch)}>
+            Manager
+          </Button>
+        </Can>
         <RowActions
           entity="branch"
           label={branch.name}
@@ -91,6 +131,7 @@ export function BranchesPage() {
           onSetActive={(isActive) => setActive.mutateAsync({ id: branch.id, isActive })}
           onDelete={() => remove.mutateAsync(branch.id)}
         />
+        </Space>
       ),
     },
   ];
@@ -116,11 +157,18 @@ export function BranchesPage() {
         title="Branches"
         subtitle="Operating locations. Every farmer, warehouse and user belongs to one (FRD Section 6)."
         actions={
+          <>
+          <Can do="BRANCH_PERFORMANCE">
+            <Button icon={<BarChartOutlined />} onClick={() => setComparing(true)}>
+              Compare branches
+            </Button>
+          </Can>
           <Can do="BRANCH_CREATE">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
               New branch
             </Button>
           </Can>
+          </>
         }
       />
 
@@ -135,6 +183,10 @@ export function BranchesPage() {
         toolbar={toolbar}
         emptyText="No branches yet. Create one before registering farmers."
       />
+
+      <BranchComparisonDrawer open={comparing} onClose={() => setComparing(false)} />
+      <AssignManagerModal branch={assigning} onClose={() => setAssigning(null)} />
+      <BranchPerformanceDrawer branch={performanceOf} onClose={() => setPerformanceOf(null)} />
 
       <BranchFormModal open={formOpen} branch={editing} onClose={closeForm} />
     </Card>

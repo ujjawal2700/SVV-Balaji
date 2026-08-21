@@ -23,6 +23,8 @@ import { FarmerDetailDrawer } from './FarmerDetailDrawer';
 import { FarmerFormModal } from './FarmerFormModal';
 import { FARMER_STATUS_LABELS, FarmerCodeCell, FarmerStatusTag } from './farmerStatus';
 import { VerifyFarmerModal } from './VerifyFarmerModal';
+import farmerIcon from '../../assets/farmer-icon.png';
+import { formatDate } from '../../utils/format';
 
 export function FarmersPage() {
   const { message } = AntApp.useApp();
@@ -164,6 +166,22 @@ export function FarmersPage() {
           ) : (
             <FarmerStatusTag status={status} />
           ),
+      },
+      {
+        title: 'Added by',
+        key: 'createdBy',
+        width: 170,
+        sorter: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        render: (_, farmer) => (
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong style={{ fontSize: 13 }}>
+              {farmer.createdBy?.fullName ?? '—'}
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {formatDate(farmer.createdAt)}
+            </Typography.Text>
+          </Space>
+        ),
       },
       {
         title: 'Actions',
@@ -309,7 +327,21 @@ export function FarmersPage() {
   return (
     <Card>
       <PageHeader
-        title="Farmers"
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <img
+              src={farmerIcon}
+              alt="Farmer Icon"
+              style={{
+                width: 32,
+                height: 32,
+                objectFit: 'contain',
+                verticalAlign: 'middle',
+              }}
+            />
+            Farmers
+          </span>
+        }
         subtitle={
           pendingCount > 0 && canApprove
             ? `${pendingCount} awaiting verification. Approval issues the traceability code that the whole farm-to-fork chain hangs on.`
