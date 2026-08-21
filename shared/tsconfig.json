@@ -3,7 +3,7 @@
     "target": "ES2021",
     "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "resolveJsonModule": true,
@@ -12,15 +12,10 @@
     "noEmit": true,
     "strict": false,
     "noImplicitAny": false,
-    "strictNullChecks": false,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./*"],
-      "*": ["../svv-balaji-admin/node_modules/*"]
-    },
-    "typeRoots": [
-      "../svv-balaji-admin/node_modules/@types"
-    ]
+      "@shared/*": ["./*"]
+    }
   },
   "include": ["**/*"]
 }
