@@ -121,7 +121,7 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
                 <List
                   size="small"
                   dataSource={readiness.data.missingRequired}
-                  renderItem={(field) => (
+                  renderItem={(field: any) => (
                     <List.Item style={{ padding: '4px 0', border: 'none' }}>
                       <Space direction="vertical" size={0}>
                         <Typography.Text strong>

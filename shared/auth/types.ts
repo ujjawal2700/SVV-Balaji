@@ -23,7 +23,7 @@ export const USER_ROLES = [
 export type UserRole = (typeof USER_ROLES)[number];
 
 /** Human-readable role names, for the header and any user-facing copy. */
-export const ROLE_LABELS: Record<UserRole, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
   BRANCH_MANAGER: 'Branch Manager',
   PROCUREMENT_MANAGER: 'Procurement Manager',

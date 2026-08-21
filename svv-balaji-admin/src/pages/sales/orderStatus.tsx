@@ -1,7 +1,7 @@
 import type { Permission } from '@shared/auth/permissions';
 import type { OrderStatus } from '@shared/api/types';
 
-export const ORDER_STATUS_COLOUR: Record<OrderStatus, string> = {
+export const ORDER_STATUS_COLOUR: Record<string, string> = {
   DRAFT: 'default',
   PLACED: 'blue',
   CONFIRMED: 'cyan',
@@ -12,7 +12,7 @@ export const ORDER_STATUS_COLOUR: Record<OrderStatus, string> = {
   CANCELLED: 'red',
 };
 
-export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+export const ORDER_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
   PLACED: 'Placed',
   CONFIRMED: 'Confirmed',
@@ -43,7 +43,7 @@ export interface NextStep {
  * Forward only. There is no un-confirm and no un-dispatch; the way back is
  * cancel, which releases the reservations and leaves the trail intact.
  */
-export const NEXT_STEP: Partial<Record<OrderStatus, NextStep>> = {
+export const NEXT_STEP: Record<string, NextStep | undefined> = {
   DRAFT: {
     label: 'Place order',
     effect:

@@ -20,9 +20,9 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.branches.all, 'detail', id] as const,
     // FRD 6.4/6.5. The period is part of the key: two date ranges are two
     // different answers and must not overwrite each other in the cache.
-    performance: (id: string, query: Record<string, unknown>) =>
+    performance: (id: string, query: object = {}) =>
       [...queryKeys.branches.all, 'performance', id, query] as const,
-    consolidated: (query: Record<string, unknown>) =>
+    consolidated: (query: object = {}) =>
       [...queryKeys.branches.all, 'performance', 'all', query] as const,
   },
 

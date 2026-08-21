@@ -9,7 +9,7 @@ interface RecipeVersionsDrawerProps {
   onClose: () => void;
 }
 
-const STATUS_COLOURS: Record<Recipe['status'], string> = {
+const STATUS_COLOURS: Record<string, string> = {
   DRAFT: 'default',
   PENDING_APPROVAL: 'gold',
   APPROVED: 'green',
