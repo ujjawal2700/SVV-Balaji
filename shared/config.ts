@@ -5,8 +5,18 @@
  * (`/api/v1` -> localhost:3000), so either app runs with no .env at all on a
  * developer machine.
  */
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (!envUrl) return '/api/v1';
+  const cleanUrl = envUrl.replace(/\/+$/, '');
+  if (cleanUrl.endsWith('/api/v1')) {
+    return cleanUrl;
+  }
+  return `${cleanUrl}/api/v1`;
+}
+
 export const config = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  apiBaseUrl: getApiBaseUrl(),
 } as const;
 
 /**
