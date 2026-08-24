@@ -35,10 +35,14 @@ function redirectBareBasePath(base: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const basePath = env.VITE_BASE_PATH || '/';
 
   return {
-    base: '/admin/',
-    plugins: [react(), redirectBareBasePath('/admin/')],
+    base: basePath,
+    plugins: [
+      react(),
+      ...(basePath !== '/' ? [redirectBareBasePath(basePath)] : []),
+    ],
     resolve: {
       // Mirrors the "@/*" -> "src/*" paths mapping in tsconfig.json. Both have
       // to agree or imports resolve for the type checker but not the bundler.

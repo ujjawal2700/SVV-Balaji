@@ -13,8 +13,10 @@ export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
 
   window.addEventListener('load', () => {
+    const swUrl = import.meta.env.BASE_URL === '/' ? '/sw.js' : `${import.meta.env.BASE_URL.replace(/\/$/, '')}/sw.js`;
+    const scope = import.meta.env.BASE_URL;
     navigator.serviceWorker
-      .register('/field/sw.js', { scope: '/field/' })
+      .register(swUrl, { scope })
       .then((registration) => {
         // A new build is waiting behind the tab the user has open. Rather than
         // leaving them on yesterday's code until every tab closes, activate it
