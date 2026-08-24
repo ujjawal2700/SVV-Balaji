@@ -64,12 +64,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ConfigProvider theme={theme} locale={enGB}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
-          {/*
-            basename must match `base` in vite.config.ts. The app is served from
-            /field, so without this every route resolves against the domain root
-            and lands on the admin panel instead.
-          */}
-          <BrowserRouter basename="/field">
+          <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASE || (import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, ''))}>
             <AuthProvider>
               <App />
             </AuthProvider>
