@@ -52,10 +52,14 @@ export function NotAuthorisedPage() {
                 type="primary"
                 block
                 size="large"
-                href="/"
+                href="/admin"
                 // Leaves this app entirely — the admin panel is a separate
-                // build at the domain root, so this is a real navigation and
-                // not a router link.
+                // build, so this is a real navigation and not a router link.
+                //
+                // It is NOT "/" any more. The domain root now serves the
+                // customer storefront (svv-balaji-customer), so the old link
+                // would have sent a warehouse manager looking for their
+                // screens into a shop.
               >
                 Open the main panel
               </Button>

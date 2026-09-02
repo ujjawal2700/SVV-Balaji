@@ -1,23 +1,10 @@
-import { LinkOutlined, PlusOutlined } from '@ant-design/icons';
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Descriptions,
-  Drawer,
-  Empty,
-  Form,
-  List,
-  Select,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { Alert, App as AntApp, Button, Descriptions, Drawer, Empty, Form, List, Select, Space, Spin, Typography } from 'antd';
 import { apiErrorMessage } from '@shared/api/client';
 import type { FieldVisitDocument } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
 import { FileUploadField } from '@shared/components/FileUploadField';
+import { AttachmentPreview } from '@shared/components/AttachmentPreview';
 import { useAddFieldVisitDocument, useFieldVisit } from '@shared/hooks/useFieldVisits';
 import { EM_DASH, formatDate, formatQuantity } from '@shared/utils/format';
 
@@ -124,7 +111,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
                   <FileUploadField
                     allowVideo
                     folder="field-visits"
-                    hint="Crop photographs, pest damage, an inspection report — photos and documents up to 10 MB, or a short MP4/MOV clip up to 20 MB"
+                    hint="Crop photographs, pest damage, an inspection report — photos and documents up to 10 MB, or a short MP4/MOV clip up to 100 MB"
                   />
                 </Form.Item>
                 <Form.Item name="fileType" initialValue="photo" rules={[{ required: true }]}>
@@ -152,16 +139,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
               locale={{ emptyText: <Empty description="Nothing attached" /> }}
               renderItem={(document) => (
                 <List.Item>
-                  <Space>
-                    <Tag>{document.fileType}</Tag>
-                    <Typography.Link
-                      href={document.fileUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      <LinkOutlined /> {document.fileUrl}
-                    </Typography.Link>
-                  </Space>
+                  <AttachmentPreview url={document.fileUrl} fileType={document.fileType} />
                 </List.Item>
               )}
             />

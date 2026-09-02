@@ -1,0 +1,19 @@
+# The storefront is meant to be indexed. The staff apps are not.
+#
+# /admin and /field are separate builds served from the same origin, so this
+# file — served from the root — is the only robots.txt any crawler will read for
+# all three. Disallowing them here is what keeps a login screen out of search
+# results.
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /field
+Disallow: /checkout
+Disallow: /cart
+Disallow: /orders
+
+# Pack history pages are the point of the site and should be indexable.
+Allow: /trace
+
+Sitemap: https://svvbalaji.com/sitemap.xml

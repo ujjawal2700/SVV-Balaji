@@ -16,6 +16,33 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-02 — Raunak
+
+**Did:** Built the `svv-balaji-customer` home screen as a retailer B2B ordering surface (greeting
+header, search + barcode scan, quick actions, category rail, schemes carousel, buy-again, popular
+products with an add-to-cart/quantity stepper, and an outstanding/credit-limit summary card),
+matching a reference mobile-app screenshot the client shared. Added a fixed bottom tab bar
+(Home/Categories/Cart/Orders/Profile) to `StoreShell` and a new `/profile` route. Everything reads
+from a new `src/mock/homeMockData.ts` — **no backend calls**, since WS2.5 sales/pricing isn't built
+yet. Verified in a real headless-Chrome pass (add-to-cart → stepper → cart badge updates, no
+console errors) rather than just typechecking.
+
+**Contract changes:** none — frontend only, mock data.
+
+**Other developer needs to know:** `StoreShell` now conditionally renders its generic top header
+(hidden on `/` — `HomePage` renders its own greeting header instead) and swaps the footer for the
+new `BottomNav` on the five tab routes (`/`, `/products`, `/cart`, `/orders`, `/profile`); other
+routes (trace, login, checkout, product detail, order tracking) are unchanged. `/orders` and
+`/profile` still route through the existing `RequireAccount`/no-auth logic as before — I did not
+touch auth. When real sales/pricing endpoints land, replace `mock/homeMockData.ts` with real
+queries; the component layout shouldn't need to change shape to do it.
+
+**Next:** ProductsPage, CartPage, CheckoutPage, OrdersPage are still the WS3.5 placeholders —
+worth the same mock-data treatment once there's a next screenshot/spec for them, or building for
+real once WS2.5 (customers/pricing/orders) and a customer identity model exist.
+
+---
+
 ## 2026-08-16 — Raunak
 
 **Did:** Made role-based access **configurable at runtime**. Who may see and do what is no longer

@@ -8,15 +8,14 @@ import { BrowserRouter } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
 import { AuthProvider } from '@shared/auth/AuthProvider';
 import { App } from './App';
-import { registerServiceWorker } from './pwa';
+import { CartProvider } from './cart/CartProvider';
 import { theme } from './theme';
 import './styles.css';
 
 /**
  * A 401 is already handled by the API client, which refreshes the token and
- * retries, or clears the session and sends the user to the login screen.
- * Surfacing it again would show an alarming error for something the app
- * recovered from on its own.
+ * retries, or clears the session. Surfacing it again would show an alarming
+ * error for something the app recovered from on its own.
  */
 function isHandledElsewhere(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 401;
@@ -27,15 +26,17 @@ const queryClient = new QueryClient({
     queries: {
       retry: false,
       refetchOnWindowFocus: false,
-      staleTime: 30_000,
       /**
-       * Refetch when the phone comes back online.
+       * Longer than the staff apps' 30 seconds.
        *
-       * Different from the admin panel on purpose. A desktop browser is either
-       * connected or the user knows it is not; a phone in a field drops and
-       * regains signal constantly, and a screen full of stale rows with no
-       * indication is how somebody acts on yesterday's data.
+       * A shopper browsing a catalogue is not watching live operational data —
+       * a price or a stock figure that is two minutes old is fine, and refetching
+       * on every navigation would make the shop feel slower than it is on a
+       * rural connection. Screens that genuinely need freshness (checkout stock
+       * check, order tracking) override this per query rather than the whole app
+       * paying for them.
        */
+      staleTime: 120_000,
       refetchOnReconnect: true,
     },
   },
@@ -44,7 +45,7 @@ const queryClient = new QueryClient({
     onError: (error, query) => {
       if (isHandledElsewhere(error)) return;
       if (query.state.data === undefined) return;
-      staticMessage.error(apiErrorMessage(error, 'Could not refresh this data'));
+      staticMessage.error(apiErrorMessage(error, 'Could not refresh this'));
     },
   }),
 
@@ -52,12 +53,10 @@ const queryClient = new QueryClient({
     onError: (error, _variables, _context, mutation) => {
       if (isHandledElsewhere(error)) return;
       if (mutation.options.onError) return;
-      staticMessage.error(apiErrorMessage(error, 'That did not save — check your signal and try again'));
+      staticMessage.error(apiErrorMessage(error, 'That did not go through — please try again'));
     },
   }),
 });
-
-registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
@@ -65,15 +64,23 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <AntApp>
         <QueryClientProvider client={queryClient}>
           {/*
-            basename must match `base` in vite.config.ts. The app is served from
-            /field, so without this every route resolves against the domain root
-            — which is the customer storefront (svv-balaji-customer), not this
-            app and not the admin panel. The staff panel is at /admin.
+            No `basename`, unlike the other two apps.
+
+            This build is served from the domain root (`base: '/'` in
+            vite.config.ts), so routes are bare paths. Adding a basename here
+            would break the printed QR URL, which is the one URL in this project
+            that cannot be changed after the fact.
+
+            CartProvider sits outside AuthProvider on purpose: the cart belongs
+            to the browser, not to a session, and must survive signing in. See
+            cart/CartProvider.tsx.
           */}
-          <BrowserRouter basename="/field">
-            <AuthProvider>
-              <App />
-            </AuthProvider>
+          <BrowserRouter>
+            <CartProvider>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </CartProvider>
           </BrowserRouter>
         </QueryClientProvider>
       </AntApp>
