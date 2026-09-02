@@ -26,6 +26,7 @@
   "include": [
     "shared/**/*",
     "svv-balaji-admin/src/**/*",
-    "svv-balaji-field/src/**/*"
+    "svv-balaji-field/src/**/*",
+    "svv-balaji-customer/src/**/*"
   ]
 }

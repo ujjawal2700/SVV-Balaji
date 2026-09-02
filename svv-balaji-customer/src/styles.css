@@ -1,0 +1,66 @@
+/*
+ * Storefront base styles.
+ *
+ * Ant Design supplies almost everything; this file only covers what a theme
+ * token cannot reach. Keep it short — anything that can be a token should be
+ * one, in theme.ts, so the two stay in one place.
+ */
+
+:root {
+  /* Read by the shell for the sticky header offset. Changing the header height
+     without changing this leaves the first card tucked under it. */
+  --store-header-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: #fafaf9;
+}
+
+/*
+ * iOS zooms the whole page when a focused input's font is under 16px, and the
+ * page never zooms back out. Ant Design's default input font is 15px, so this
+ * is not hypothetical.
+ */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* Paint under the notch and the home indicator; content is kept clear of both
+   with env() padding in the shell. */
+.store-safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.store-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* One content column, centred, with a readable maximum. Product grids and prose
+   both live inside this. */
+.store-container {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+/* Used by the trace page, which is the one screen a customer may reach with no
+   prior context at all — from a QR code, in a shop. It gets more air. */
+.store-container--narrow {
+  max-width: 720px;
+}

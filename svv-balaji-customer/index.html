@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      The only one of the three front ends a member of the public opens, and
+      most of them will open it from a QR code on a pack, on a phone, holding
+      the pack in the other hand. Phone-first is not a nice-to-have here.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>Desi Tokri — Farm to Fork</title>
+    <meta
+      name="description"
+      content="Traceable millet and grain products from Desi Tokri. Scan the pack to see the farm it came from."
+    />
+    <meta name="theme-color" content="#059669" />
+
+    <!--
+      Paths are absolute from the root because this app IS the root. The admin
+      and field builds prefix theirs with /admin/ and /field/; do not copy those
+      here or every asset 404s one directory deep.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
