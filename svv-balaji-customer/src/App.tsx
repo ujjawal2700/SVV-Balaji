@@ -31,6 +31,9 @@ const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m
 const ProductsPage = lazy(() =>
   import('./pages/ProductsPage').then((m) => ({ default: m.ProductsPage })),
 );
+const CategoriesPage = lazy(() =>
+  import('./pages/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
+);
 const ProductDetailPage = lazy(() =>
   import('./pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })),
 );
@@ -42,6 +45,9 @@ const OrdersPage = lazy(() => import('./pages/OrdersPage').then((m) => ({ defaul
 const OrderTrackingPage = lazy(() =>
   import('./pages/OrderTrackingPage').then((m) => ({ default: m.OrderTrackingPage })),
 );
+const AddressesPage = lazy(() => import('./pages/AddressesPage').then((m) => ({ default: m.AddressesPage })));
+const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
+const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -60,8 +66,9 @@ export function App() {
       <Route element={<StoreShell />}>
         {/* --- Public ------------------------------------------------------ */}
         <Route index element={<HomePage />} />
-        <Route path="products" element={<ProductsPage />} />
-        <Route path="products/:productId" element={<ProductDetailPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="products/:categoryId" element={<ProductsPage />} />
+        <Route path="product-detail/:productId" element={<ProductDetailPage />} />
         <Route path="cart" element={<CartPage />} />
 
         {/*
@@ -92,22 +99,11 @@ export function App() {
             </RequireAccount>
           }
         />
-        <Route
-          path="orders"
-          element={
-            <RequireAccount>
-              <OrdersPage />
-            </RequireAccount>
-          }
-        />
-        <Route
-          path="orders/:orderId"
-          element={
-            <RequireAccount>
-              <OrderTrackingPage />
-            </RequireAccount>
-          }
-        />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/:orderId" element={<OrderTrackingPage />} />
+        <Route path="addresses" element={<AddressesPage />} />
+        <Route path="wishlist" element={<WishlistPage />} />
+        <Route path="wallet" element={<WalletPage />} />
 
         {/*
           A real 404, not a redirect home. This app is public and reached from

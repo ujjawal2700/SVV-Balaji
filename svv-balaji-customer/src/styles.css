@@ -64,3 +64,12 @@ select {
 .store-container--narrow {
   max-width: 720px;
 }
+
+/* Hide scrollbars on horizontal scroll containers */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

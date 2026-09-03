@@ -30,35 +30,44 @@ const CART_VERSION = 1;
 interface StoredCart {
   version: number;
   lines: CartLine[];
+  deliveryPincode?: string | null;
+  deliveryInfo?: { mode: 'QUICK' | 'STANDARD', eta: string, charge: number } | null;
 }
 
-function readStoredCart(): CartLine[] {
+function readStoredCart(): StoredCart {
   try {
     const raw = window.localStorage.getItem(CART_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return { version: CART_VERSION, lines: [] };
     const parsed = JSON.parse(raw) as StoredCart;
-    if (parsed?.version !== CART_VERSION || !Array.isArray(parsed.lines)) return [];
-    return parsed.lines.filter((line) => line && line.productId && line.quantity > 0);
+    if (parsed?.version !== CART_VERSION || !Array.isArray(parsed.lines)) return { version: CART_VERSION, lines: [] };
+    return {
+      version: CART_VERSION,
+      lines: parsed.lines.filter((line) => line && line.productId && line.quantity > 0),
+      deliveryPincode: parsed.deliveryPincode,
+      deliveryInfo: parsed.deliveryInfo
+    };
   } catch {
     // Private browsing can throw on storage; malformed JSON can throw on parse.
     // Either way an empty cart is the correct recovery.
-    return [];
+    return { version: CART_VERSION, lines: [] };
   }
 }
 
 export const CartContext = createContext<CartApi | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [lines, setLines] = useState<CartLine[]>(readStoredCart);
+  const [lines, setLines] = useState<CartLine[]>(() => readStoredCart().lines);
+  const [deliveryPincode, setDeliveryPincode] = useState<string | null | undefined>(() => readStoredCart().deliveryPincode);
+  const [deliveryInfo, setDeliveryInfoState] = useState<{ mode: 'QUICK' | 'STANDARD', eta: string, charge: number } | null | undefined>(() => readStoredCart().deliveryInfo);
 
   useEffect(() => {
     try {
-      const payload: StoredCart = { version: CART_VERSION, lines };
+      const payload: StoredCart = { version: CART_VERSION, lines, deliveryPincode, deliveryInfo };
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(payload));
     } catch {
       /* see readStoredCart — a cart that cannot persist still works this visit */
     }
-  }, [lines]);
+  }, [lines, deliveryPincode, deliveryInfo]);
 
   const add = useCallback((line: Omit<CartLine, 'quantity'>, quantity = 1) => {
     if (quantity <= 0) return;
@@ -87,6 +96,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => setLines([]), []);
 
+  const setDelivery = useCallback((pincode: string | null, info: { mode: 'QUICK' | 'STANDARD', eta: string, charge: number } | null) => {
+    setDeliveryPincode(pincode);
+    setDeliveryInfoState(info);
+  }, []);
+
   const value = useMemo<CartApi>(() => {
     const count = lines.reduce((sum, l) => sum + l.quantity, 0);
     const priced = lines.every((l) => typeof l.displayUnitPrice === 'number');
@@ -94,8 +108,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       ? lines.reduce((sum, l) => sum + (l.displayUnitPrice as number) * l.quantity, 0)
       : null;
 
-    return { lines, add, setQuantity, remove, clear, count, indicativeTotal };
-  }, [lines, add, setQuantity, remove, clear]);
+    return { lines, add, setQuantity, remove, clear, count, indicativeTotal, deliveryPincode, deliveryInfo, setDelivery };
+  }, [lines, add, setQuantity, remove, clear, deliveryPincode, deliveryInfo, setDelivery]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
