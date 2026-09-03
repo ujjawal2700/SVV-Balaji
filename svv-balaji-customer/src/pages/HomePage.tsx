@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import { Badge, Button, Input, InputNumber, Typography, Carousel } from 'antd';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
 import {
   buyAgainProducts,
@@ -60,6 +60,7 @@ function formatInr(value: number): string {
 
 export function HomePage() {
   const cart = useCart();
+  const navigate = useNavigate();
 
   return (
     <div>
@@ -151,12 +152,12 @@ export function HomePage() {
 
         {/* Shop by category */}
         <section>
-          <SectionHeader title="Shop by Category" to="/products" />
-          <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
+          <SectionHeader title="Shop by Category" to="/categories" />
+          <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
             {categories.map((category) => (
               <Link
                 key={category.id}
-                to="/products"
+                to={`/products/${category.id}`}
                 style={{
                   flex: '0 0 auto',
                   width: 84,
@@ -197,7 +198,7 @@ export function HomePage() {
               Today&apos;s Schemes
             </Typography.Title>
           </div>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
             {schemes.map((scheme) => (
               <div
                 key={scheme.id}
@@ -259,7 +260,7 @@ export function HomePage() {
               <RightOutlined style={{ fontSize: 12, color: '#1c1917' }} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
             {bestOfBasics.map((product) => (
               <div
                 key={product.id}
@@ -273,15 +274,17 @@ export function HomePage() {
                   flexDirection: 'column',
                 }}
               >
-                <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                </div>
-                <Typography.Text style={{ fontSize: 11, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                  {product.name}
-                </Typography.Text>
-                <Typography.Text style={{ fontSize: 10, color: '#78716c', marginTop: 2 }}>
-                  {product.weight}
-                </Typography.Text>
+                <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                    <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                  </div>
+                  <Typography.Text style={{ fontSize: 11, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {product.name}
+                  </Typography.Text>
+                  <Typography.Text style={{ fontSize: 10, color: '#78716c', marginTop: 2 }}>
+                    {product.weight}
+                  </Typography.Text>
+                </Link>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                   <Typography.Text style={{ fontSize: 13, fontWeight: 900, color: '#1c1917' }}>
                     {formatInr(product.price)}
@@ -304,6 +307,8 @@ export function HomePage() {
                         productName: product.name,
                         unit: product.weight,
                         displayUnitPrice: product.price,
+                        imageUrl: product.image,
+                        mrp: product.mrp,
                       })
                     }
                   >
@@ -334,24 +339,26 @@ export function HomePage() {
                     background: '#ffffff',
                   }}
                 >
-                  <ProductThumb image={product.image} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Typography.Text strong style={{ display: 'block' }}>
-                      {product.name}
-                    </Typography.Text>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      Last ordered: {product.lastOrdered}
-                    </Typography.Text>
-                    <div>
-                      <Typography.Text strong style={{ fontSize: 15 }}>
-                        {formatInr(product.price)}
+                  <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                    <ProductThumb image={product.image} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Typography.Text strong style={{ display: 'block' }}>
+                        {product.name}
                       </Typography.Text>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {' '}
-                        / {product.unit}
+                        Last ordered: {product.lastOrdered}
                       </Typography.Text>
+                      <div>
+                        <Typography.Text strong style={{ fontSize: 15 }}>
+                          {formatInr(product.price)}
+                        </Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {' '}
+                          / {product.unit}
+                        </Typography.Text>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                   <Button
                     type="primary"
                     style={{ background: '#1d4ed8', borderColor: '#1d4ed8' }}
@@ -362,6 +369,8 @@ export function HomePage() {
                           productName: product.name,
                           unit: product.unit,
                           displayUnitPrice: product.price,
+                          imageUrl: product.image,
+                          mrp: product.mrp,
                         },
                         cartLine ? 0 : 1,
                       )
@@ -378,7 +387,7 @@ export function HomePage() {
 
         {/* Popular products */}
         <section>
-          <SectionHeader title="Popular Products" to="/products" />
+          <SectionHeader title="Popular Products" to="/products/atta-flour" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {popularProducts.map((product) => {
               const cartLine = cart.lines.find((line) => line.productId === product.id);
@@ -392,49 +401,51 @@ export function HomePage() {
                     overflow: 'hidden',
                   }}
                 >
-                  <div style={{ position: 'relative' }}>
-                    <ProductThumb image={product.image} square />
-                    {product.badge && (
-                      <Typography.Text
-                        style={{
-                          position: 'absolute',
-                          top: 8,
-                          left: 8,
-                          background: '#dcfce7',
-                          color: '#166534',
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                        }}
-                      >
-                        {product.badge}
-                      </Typography.Text>
-                    )}
-                  </div>
-                  <div style={{ padding: 12 }}>
-                    <Typography.Text strong style={{ display: 'block', fontSize: 14 }}>
-                      {product.name}
-                    </Typography.Text>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {product.variant}
-                    </Typography.Text>
-                    <div style={{ margin: '4px 0 10px' }}>
-                      <Typography.Text strong style={{ fontSize: 15 }}>
-                        {formatInr(product.price)}
-                      </Typography.Text>
-                      {product.mrp && (
+                  <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ position: 'relative' }}>
+                      <ProductThumb image={product.image} square />
+                      {product.badge && (
                         <Typography.Text
-                          delete
-                          type="secondary"
-                          style={{ fontSize: 12, marginLeft: 6 }}
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            background: '#dcfce7',
+                            color: '#166534',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                          }}
                         >
-                          {formatInr(product.mrp)}
+                          {product.badge}
                         </Typography.Text>
                       )}
                     </div>
-
-                    {cartLine ? (
+                    <div style={{ padding: '12px 12px 0' }}>
+                      <Typography.Text strong style={{ display: 'block', fontSize: 14 }}>
+                        {product.name}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {product.variant}
+                      </Typography.Text>
+                      <div style={{ margin: '4px 0 10px' }}>
+                        <Typography.Text strong style={{ fontSize: 15 }}>
+                          {formatInr(product.price)}
+                        </Typography.Text>
+                        {product.mrp && (
+                          <Typography.Text
+                            delete
+                            type="secondary"
+                            style={{ fontSize: 12, marginLeft: 6 }}
+                          >
+                            {formatInr(product.mrp)}
+                          </Typography.Text>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                  <div style={{ padding: '0 12px 12px' }}>                    {cartLine ? (
                       <div
                         style={{
                           display: 'flex',
@@ -476,6 +487,8 @@ export function HomePage() {
                             productName: product.name,
                             unit: product.variant,
                             displayUnitPrice: product.price,
+                            imageUrl: product.image,
+                            mrp: product.mrp,
                           })
                         }
                       >
@@ -488,6 +501,39 @@ export function HomePage() {
             })}
           </div>
         </section>
+
+        {/* Price Range Banners */}
+        <div style={{ marginBottom: 4, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
+            {[
+              { label: 'Starting from', price: 25, sub: 'Salt, Spices & more', bg: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', emoji: '🧂' },
+              { label: 'Starting from', price: 79, sub: 'Namkeens & Snacks', bg: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', emoji: '🍟' },
+              { label: 'Starting from', price: 199, sub: 'Atta & Staples', bg: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', emoji: '🌾' },
+              { label: 'Starting from', price: 499, sub: 'Premium Range', bg: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', emoji: '⭐' },
+            ].map(({ label, price, sub, bg, emoji }) => (
+              <div
+                key={price}
+                onClick={() => navigate(`/products/atta-flour?maxPrice=${price * 10}`)}
+                style={{
+                  flex: '0 0 auto',
+                  width: 150,
+                  background: bg,
+                  borderRadius: 14,
+                  padding: '14px 14px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ position: 'absolute', bottom: -12, right: -12, fontSize: 52, opacity: 0.18 }}>{emoji}</div>
+                <Typography.Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', display: 'block', marginBottom: 2 }}>{label}</Typography.Text>
+                <Typography.Text strong style={{ fontSize: 22, color: '#fff', display: 'block', lineHeight: 1.1 }}>₹{price}</Typography.Text>
+                <Typography.Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', display: 'block', marginTop: 6 }}>{sub}</Typography.Text>
+              </div>
+            ))}
+          </div>
+        </div>
+
 
         {/* Retailer account summary */}
         <div

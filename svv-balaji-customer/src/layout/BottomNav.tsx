@@ -21,7 +21,7 @@ import { useCart } from '../cart/useCart';
  */
 const TABS = [
   { path: '/', label: 'Home', icon: HomeOutlined, activeIcon: HomeFilled, end: true },
-  { path: '/products', label: 'Categories', icon: AppstoreOutlined, activeIcon: AppstoreOutlined, end: false },
+  { path: '/categories', label: 'Categories', icon: AppstoreOutlined, activeIcon: AppstoreOutlined, end: false },
   { path: '/cart', label: 'Cart', icon: ShoppingCartOutlined, activeIcon: ShoppingCartOutlined, end: false },
   { path: '/orders', label: 'Orders', icon: FileTextOutlined, activeIcon: FileTextOutlined, end: false },
   { path: '/profile', label: 'Profile', icon: UserOutlined, activeIcon: UserOutlined, end: false },

@@ -16,6 +16,7 @@ export interface CartLine {
   unit: string;
   packSize?: string | null;
   imageUrl?: string | null;
+  mrp?: number | null;
 
   quantity: number;
 
@@ -32,6 +33,8 @@ export interface CartLine {
 
 export interface CartState {
   lines: CartLine[];
+  deliveryPincode?: string | null;
+  deliveryInfo?: { mode: 'QUICK' | 'STANDARD', eta: string, charge: number } | null;
 }
 
 export interface CartApi extends CartState {
@@ -39,6 +42,7 @@ export interface CartApi extends CartState {
   setQuantity(productId: string, quantity: number): void;
   remove(productId: string): void;
   clear(): void;
+  setDelivery(pincode: string | null, info: { mode: 'QUICK' | 'STANDARD', eta: string, charge: number } | null): void;
 
   /** Total units, for the header badge. */
   count: number;
