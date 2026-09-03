@@ -35,22 +35,14 @@ function redirectBareBasePath(base: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const basePath = env.VITE_BASE_PATH || '/';
 
   return {
-    /**
-     * Served from a sub-path, not the domain root.
-     *
-     * nginx puts this build at svvbalaji.com/field, so every asset URL the
-     * bundle emits has to be prefixed. Without this the app loads and then
-     * requests /assets/index-abc.js from the root, which is the admin panel's
-     * territory and returns its index.html - a white screen and a confusing
-     * "Unexpected token '<'" in the console.
-     *
-     * React Router needs the matching `basename="/field"`; see main.tsx.
-     */
-    base: '/field/',
-
-    plugins: [react(), redirectBareBasePath('/field/')],
+    base: basePath,
+    plugins: [
+      react(),
+      ...(basePath !== '/' ? [redirectBareBasePath(basePath)] : []),
+    ],
 
     resolve: {
       alias: {
