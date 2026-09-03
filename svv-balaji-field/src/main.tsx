@@ -65,12 +65,34 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <AntApp>
         <QueryClientProvider client={queryClient}>
           {/*
-            basename must match `base` in vite.config.ts. The app is served from
-            /field, so without this every route resolves against the domain root
-            — which is the customer storefront (svv-balaji-customer), not this
-            app and not the admin panel. The staff panel is at /admin.
+            The router base is derived from the build's `base`, not hardcoded.
+
+            Two deployment shapes are in play and this line has to serve both:
+
+              one origin (nginx)   svvbalaji.com/field     base '/field/'
+              per-app (Vercel)     svv-field.vercel.app    base '/'
+
+            `VITE_BASE_PATH` in this app's .env sets `base` in vite.config.ts,
+            and `BASE_URL` is what Vite exposes it as at runtime, so the two can
+            never drift apart the way a literal "/field" and a literal '/field/'
+            silently did. `undefined` at root is deliberate — React Router
+            rejects an empty-string basename.
+
+            `VITE_ROUTER_BASE` is the escape hatch for a host that serves the
+            build from a path different from the one it was built for.
+
+            Whichever shape you pick, this app's index.html and public/sw.js
+            still hardcode /field/ paths for the manifest and icons. Those do
+            NOT follow BASE_URL. See DEPLOY.md.
           */}
-          <BrowserRouter basename="/field">
+          <BrowserRouter
+            basename={
+              import.meta.env.VITE_ROUTER_BASE ||
+              (import.meta.env.BASE_URL === '/'
+                ? undefined
+                : import.meta.env.BASE_URL.replace(/\/$/, ''))
+            }
+          >
             <AuthProvider>
               <App />
             </AuthProvider>

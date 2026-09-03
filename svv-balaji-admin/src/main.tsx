@@ -67,10 +67,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <AntApp>
         <QueryClientProvider client={queryClient}>
           {/*
-            basename matches `base` in vite.config.ts so that the admin panel
-            is hosted under /admin/ (leaving / open for future main website/portal).
+            basename matches `base` in vite.config.ts. If hosted at root domain (e.g. Vercel),
+            it operates at root; if hosted on /admin/, it operates with /admin basename.
           */}
-          <BrowserRouter basename="/admin">
+          <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASE || (import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, ''))}>
             <AuthProvider>
               <App />
             </AuthProvider>
