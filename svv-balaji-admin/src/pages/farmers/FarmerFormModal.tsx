@@ -24,6 +24,7 @@ import type { Branch, CreateFarmerInput, Farmer } from '../../api/types';
 import { useCreateFarmer, useUpdateFarmer } from '../../hooks/useFarmers';
 import { useBranches } from '../../hooks/useBranches';
 import { fieldRules, maxLength, required } from '../../validation/rules';
+import { INDIAN_STATES, DISTRICTS_BY_STATE } from '../../../../shared/utils/locations';
 
 interface FarmerFormModalProps {
   open: boolean;
@@ -94,6 +95,10 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
   const updateFarmer = useUpdateFarmer();
 
   const isEdit = Boolean(farmer);
+  const selectedState = Form.useWatch('state', form);
+  const districtOptions = selectedState && DISTRICTS_BY_STATE[selectedState] 
+    ? DISTRICTS_BY_STATE[selectedState].map(d => ({ label: d, value: d })) 
+    : [];
 
   const initialValues = farmer
     ? {
@@ -169,7 +174,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
         iconBg="#eff6ff"
         iconColor="#2563eb"
         title="Identity & Personal Information"
-        subtitle="Basic farmer identification for agreements & traceability"
+        subtitle="Basic farmer / supplier identification for agreements & traceability"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
@@ -223,13 +228,23 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
-            <Form.Item name="district" label="District" rules={fieldRules.district}>
-              <Input placeholder="e.g. Nizamabad" style={{ borderRadius: 8 }} />
+            <Form.Item name="state" label="State" rules={fieldRules.state}>
+              <Select
+                showSearch
+                placeholder="Select State"
+                options={INDIAN_STATES.map(s => ({ label: s, value: s }))}
+                onChange={() => form.setFieldValue('district', undefined)}
+              />
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
-            <Form.Item name="state" label="State" rules={fieldRules.state}>
-              <Input placeholder="e.g. Telangana" style={{ borderRadius: 8 }} />
+            <Form.Item name="district" label="District" rules={fieldRules.district}>
+              <Select
+                showSearch
+                placeholder="Select District"
+                disabled={!selectedState}
+                options={districtOptions}
+              />
             </Form.Item>
           </Col>
           <Col xs={24}>
@@ -407,7 +422,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
 
       <div style={{ position: 'relative', zIndex: 2 }}>
         <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
-          {isEdit ? `Edit Farmer: ${farmer?.fullName}` : 'Register New Farmer'}
+          {isEdit ? `Edit Farmer / Supplier: ${farmer?.fullName}` : 'Register New Farmer / Supplier'}
         </Typography.Title>
         <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2, maxWidth: 'calc(100% - 110px)' }}>
           {isEdit
@@ -463,7 +478,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
               boxShadow: '0 2px 10px 0 rgba(124, 58, 237, 0.35)',
             }}
           >
-            {isEdit ? 'Save Changes' : 'Register Farmer'}
+            {isEdit ? 'Save Changes' : 'Register Farmer / Supplier'}
           </Button>
         </div>
       }

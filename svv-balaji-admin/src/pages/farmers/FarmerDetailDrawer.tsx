@@ -48,7 +48,7 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
             <FarmerStatusTag status={data.status} />
           </Space>
         ) : (
-          'Farmer'
+          'Farmer / Supplier'
         )
       }
     >
@@ -163,6 +163,21 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
                     { title: 'Expected qty', dataIndex: 'expectedQuantity' },
                     { title: 'Rate', dataIndex: 'purchaseRate' },
                     { title: 'Agreed', dataIndex: 'agreementDate', render: formatDate },
+                    {
+                      title: 'Remarks / Terms',
+                      dataIndex: 'qualityStandards',
+                      render: (v: string | null) =>
+                        v ? (
+                          <Typography.Paragraph
+                            ellipsis={{ rows: 2, tooltip: v }}
+                            style={{ marginBottom: 0, maxWidth: 160, fontSize: 12 }}
+                          >
+                            {v}
+                          </Typography.Paragraph>
+                        ) : (
+                          '—'
+                        ),
+                    },
                     { title: 'Status', dataIndex: 'status', render: (s: string) => <Tag>{s}</Tag> },
                   ]}
                 />
@@ -187,6 +202,12 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
                       render: (_, row) => `${row.quantity} ${row.unit}`,
                     },
                     { title: 'Date', dataIndex: 'distributionDate', render: formatDate },
+                    {
+                      title: 'Supplier Batch / Remarks',
+                      dataIndex: 'batchNumber',
+                      render: (v: string | null) =>
+                        v ? <Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text> : '—',
+                    },
                   ]}
                 />
               ),
@@ -202,10 +223,32 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
                   pagination={false}
                   locale={{ emptyText: <Empty description="No field visits recorded" /> }}
                   columns={[
-                    { title: 'Date', dataIndex: 'visitDate', render: formatDate, width: 130 },
+                    { title: 'Date', dataIndex: 'visitDate', render: formatDate, width: 110 },
                     { title: 'Crop', dataIndex: 'cropName', render: (v: string | null) => v ?? '—' },
                     { title: 'Stage', dataIndex: 'cropGrowthStage', render: (v: string | null) => v ?? '—' },
                     { title: 'Health', dataIndex: 'cropHealth', render: (v: string | null) => v ?? '—' },
+                    {
+                      title: 'Remarks / Observations',
+                      key: 'remarks',
+                      render: (_, row) => {
+                        const remark =
+                          row.diseaseObservation ||
+                          row.harvestPreparation ||
+                          row.fertilizerAdvice ||
+                          row.pestControlSuggestions ||
+                          row.irrigationAdvice;
+                        return remark ? (
+                          <Typography.Paragraph
+                            ellipsis={{ rows: 2, tooltip: remark }}
+                            style={{ marginBottom: 0, maxWidth: 160, fontSize: 12 }}
+                          >
+                            {remark}
+                          </Typography.Paragraph>
+                        ) : (
+                          '—'
+                        );
+                      },
+                    },
                     {
                       title: 'Predicted yield',
                       dataIndex: 'yieldPredictionQty',

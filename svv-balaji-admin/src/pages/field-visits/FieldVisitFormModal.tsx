@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import {
   App as AntApp,
+  AutoComplete,
   Button,
   Col,
   DatePicker,
@@ -15,10 +16,11 @@ import {
   InputNumber,
   Modal,
   Row,
+  Tag,
   Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { apiErrorMessage } from '../../api/client';
 import type { FieldVisit } from '../../api/types';
 import { BranchSelect, FarmerSelect } from '../../components/pickers';
@@ -27,9 +29,37 @@ import {
   useCreateFieldVisit,
   useUpdateFieldVisit,
 } from '../../hooks/useFieldVisits';
+import { useFarmer } from '../../hooks/useFarmers';
 import { FileUploadField } from '../../components/FileUploadField';
 import { toIsoDate } from '../../utils/format';
 import { positiveNumber, required } from '../../validation/rules';
+
+const GROWTH_STAGE_OPTIONS = [
+  { value: 'Germination' },
+  { value: 'Vegetative' },
+  { value: 'Tillering' },
+  { value: 'Flowering / Pollination' },
+  { value: 'Pod / Grain Formation' },
+  { value: 'Ripening / Maturation' },
+  { value: 'Harvest Ready' },
+];
+
+const HEALTH_OPTIONS = [
+  { value: 'Good / Healthy' },
+  { value: 'Excellent' },
+  { value: 'Normal Growth' },
+  { value: 'Moisture Stressed' },
+  { value: 'Nutrient Deficient' },
+  { value: 'Diseased / Pest Damaged' },
+];
+
+const PEST_STATUS_OPTIONS = [
+  { value: 'No pests detected' },
+  { value: 'Mild Aphids / Insects' },
+  { value: 'Moderate Infestation' },
+  { value: 'Severe Infestation' },
+  { value: 'Treated & Under Control' },
+];
 
 /** Label the attachment by what it plainly is, from the stored URL. */
 function fileTypeFor(url: string): string {
@@ -147,6 +177,78 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
     }
   }, [open, visit, form]);
 
+  const selectedFarmerId = Form.useWatch('farmerId', form);
+  const { data: farmer } = useFarmer(selectedFarmerId);
+
+  // Extract all unique crops associated with this farmer
+  const farmerCropOptions = useMemo(() => {
+    if (!farmer) return [];
+    const crops = new Set<string>();
+
+    if (farmer.cropDetails) {
+      farmer.cropDetails
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .forEach((c) => crops.add(c));
+    }
+    (farmer.agreements ?? []).forEach((a) => {
+      if (a.cropName?.trim()) crops.add(a.cropName.trim());
+    });
+    (farmer.seedDistributions ?? []).forEach((s) => {
+      if (s.seedName?.trim()) crops.add(s.seedName.trim());
+    });
+    (farmer.fieldVisits ?? []).forEach((v) => {
+      if (v.cropName?.trim()) crops.add(v.cropName.trim());
+    });
+
+    return Array.from(crops).map((crop) => ({ value: crop, label: crop }));
+  }, [farmer]);
+
+  useEffect(() => {
+    if (isEdit || !farmer) return;
+
+    // 1. Auto-fill branchId
+    if (!form.isFieldTouched('branchId') || !form.getFieldValue('branchId')) {
+      if (farmer.branchId) {
+        form.setFieldValue('branchId', farmer.branchId);
+      }
+    }
+
+    // 2. Auto-fill cropName
+    if (!form.isFieldTouched('cropName') || !form.getFieldValue('cropName')) {
+      const pastAgreements = farmer.agreements;
+      const pastSeedDists = farmer.seedDistributions;
+      const pastVisits = farmer.fieldVisits;
+
+      if (pastAgreements && pastAgreements.length > 0 && pastAgreements[0].cropName) {
+        form.setFieldValue('cropName', pastAgreements[0].cropName);
+      } else if (pastSeedDists && pastSeedDists.length > 0 && pastSeedDists[0].seedName) {
+        form.setFieldValue('cropName', pastSeedDists[0].seedName);
+      } else if (pastVisits && pastVisits.length > 0 && pastVisits[0].cropName) {
+        form.setFieldValue('cropName', pastVisits[0].cropName);
+      } else if (farmer.cropDetails) {
+        const crops = farmer.cropDetails
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+        if (crops.length > 0) {
+          form.setFieldValue('cropName', crops[0]);
+        }
+      }
+    }
+
+    // 3. Auto-fill yield prediction from latest agreement expectedQuantity
+    if (!form.isFieldTouched('yieldPredictionQty') || !form.getFieldValue('yieldPredictionQty')) {
+      if (farmer.agreements && farmer.agreements.length > 0) {
+        const qty = Number(farmer.agreements[0].expectedQuantity);
+        if (qty > 0) {
+          form.setFieldValue('yieldPredictionQty', qty);
+        }
+      }
+    }
+  }, [farmer, form, isEdit]);
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
 
@@ -194,14 +296,22 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
         icon={<CompassOutlined />}
         iconBg="#ecfdf5"
         iconColor="#059669"
-        title="Visit & Farmer Details"
-        subtitle="Specify farmer, operational branch, and visit date"
+        title="Visit & Farmer / Supplier Details"
+        subtitle="Specify farmer / supplier, operational branch, and visit date"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
-            <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
+            <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
               <FarmerSelect />
             </Form.Item>
+            {farmer ? (
+              <div style={{ marginTop: -8, marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {farmer.farmSizeAcres ? <Tag color="blue">Holding: {farmer.farmSizeAcres} Acres</Tag> : null}
+                {farmer.irrigationType ? <Tag color="cyan">Irrigation: {farmer.irrigationType}</Tag> : null}
+                {farmer.landType ? <Tag color="gold">Soil: {farmer.landType}</Tag> : null}
+                {farmer.village ? <Tag color="green">Village: {farmer.village}</Tag> : null}
+              </div>
+            ) : null}
           </Col>
           <Col xs={24} md={6}>
             <Form.Item name="branchId" label="Branch" rules={[required('Branch')]}>
@@ -226,28 +336,60 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
-            <Form.Item name="cropName" label="Crop Name">
-              <Input placeholder="e.g. Wheat, Mustard" style={{ borderRadius: 8 }} />
+            <Form.Item
+              name="cropName"
+              label="Crop Name"
+              extra={farmerCropOptions.length > 0 ? 'Select from registered crops or type a new one' : undefined}
+            >
+              <AutoComplete
+                options={farmerCropOptions.length > 0 ? farmerCropOptions : undefined}
+                placeholder="e.g. Wheat, Mustard"
+                style={{ width: '100%', borderRadius: 8 }}
+                filterOption={(inputValue, option) =>
+                  (option?.value?.toUpperCase() ?? '').includes(inputValue.toUpperCase())
+                }
+              />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="cropGrowthStage" label="Growth Stage">
-              <Input placeholder="e.g. Vegetative, Tillering, Flowering" style={{ borderRadius: 8 }} />
+              <AutoComplete
+                options={GROWTH_STAGE_OPTIONS}
+                placeholder="e.g. Vegetative, Tillering, Flowering"
+                style={{ width: '100%', borderRadius: 8 }}
+                filterOption={(inputValue, option) =>
+                  (option?.value?.toUpperCase() ?? '').includes(inputValue.toUpperCase())
+                }
+              />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="cropHealth" label="Crop Health Condition">
-              <Input placeholder="e.g. Good, Healthy, Stressed" style={{ borderRadius: 8 }} />
+              <AutoComplete
+                options={HEALTH_OPTIONS}
+                placeholder="e.g. Good / Healthy, Stressed"
+                style={{ width: '100%', borderRadius: 8 }}
+                filterOption={(inputValue, option) =>
+                  (option?.value?.toUpperCase() ?? '').includes(inputValue.toUpperCase())
+                }
+              />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="pestStatus" label="Pest Status">
-              <Input placeholder="e.g. None detected, Mild Aphids" style={{ borderRadius: 8 }} />
+              <AutoComplete
+                options={PEST_STATUS_OPTIONS}
+                placeholder="e.g. No pests detected, Mild Aphids"
+                style={{ width: '100%', borderRadius: 8 }}
+                filterOption={(inputValue, option) =>
+                  (option?.value?.toUpperCase() ?? '').includes(inputValue.toUpperCase())
+                }
+              />
             </Form.Item>
           </Col>
           <Col xs={24}>
-            <Form.Item name="diseaseObservation" label="Disease & Weed Observations">
-              <Input.TextArea rows={2} placeholder="Note any visible fungal, bacterial, or weed symptoms..." style={{ borderRadius: 8 }} />
+            <Form.Item name="diseaseObservation" label="Disease, Weed & Crop Remarks">
+              <Input.TextArea rows={2} placeholder="Note any visible fungal, bacterial, pest symptoms, weed pressure or crop health remarks..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>
@@ -278,8 +420,8 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="harvestPreparation" label="Harvest Preparation">
-              <Input.TextArea rows={2} placeholder="e.g. Stop watering 7 days before harvest..." style={{ borderRadius: 8 }} />
+            <Form.Item name="harvestPreparation" label="Harvest Preparation & General Remarks">
+              <Input.TextArea rows={2} placeholder="e.g. Stop watering 7 days before harvest, field readiness remarks..." style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24}>

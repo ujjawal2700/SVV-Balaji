@@ -96,7 +96,7 @@ export function CollectionCorrectionModal({
       {collection ? (
         <>
           <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="Farmer">
+            <Descriptions.Item label="Farmer / Supplier">
               {collection.farmer?.fullName ?? EM_DASH}
             </Descriptions.Item>
             <Descriptions.Item label="Batch">
@@ -195,8 +195,8 @@ export function CollectionCorrectionModal({
               </Col>
 
               <Col xs={24}>
-                <Form.Item name="collectionLocation" label="Collection location">
-                  <Input placeholder="Optional — where the crop was weighed" />
+                <Form.Item name="collectionLocation" label="Collection Location / Remarks">
+                  <Input placeholder="e.g. Rampur village center, Gate #2 weighbridge notes" />
                 </Form.Item>
               </Col>
 

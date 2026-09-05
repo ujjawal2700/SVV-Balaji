@@ -102,7 +102,7 @@ export function DashboardPage() {
             <Row gutter={[24, 24]}>
               <Col xs={24} sm={12} lg={6}>
                 {renderMetricCard(
-                  'Active Farmers',
+                  'Active Farmers / Suppliers',
                   summary?.metrics.activeFarmers || 0,
                   <TeamOutlined />,
                   '#1890ff',
@@ -182,7 +182,7 @@ export function DashboardPage() {
                       style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                       onClick={() => navigate('/farmers')}
                     >
-                      <span>Manage Farmers</span>
+                      <span>Manage Farmers / Suppliers</span>
                       <RightOutlined style={{ color: '#bfbfbf' }} />
                     </Button>
                     <Button

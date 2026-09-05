@@ -135,7 +135,7 @@ export function TrainingDetailDrawer({ sessionId, onClose }: TrainingDetailDrawe
                   <Descriptions.Item label="Conducted by">
                     {data.conductedBy?.fullName ?? EM_DASH}
                   </Descriptions.Item>
-                  <Descriptions.Item label="What was covered">
+                  <Descriptions.Item label="Session Description & Remarks">
                     {data.description ?? EM_DASH}
                   </Descriptions.Item>
                 </Descriptions>

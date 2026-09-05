@@ -172,10 +172,10 @@ export function TrainingFormModal({ open, session, onClose }: TrainingFormModalP
       >
         <Form.Item
           name="description"
-          label="Topics Covered / Description"
-          extra="Recorded for reporting and internal curriculum logs"
+          label="Session Description & Remarks"
+          extra="Recorded for reporting, internal curriculum logs, and session remarks"
         >
-          <Input.TextArea rows={3} placeholder="e.g. Organic bio-fertilizer usage, drip irrigation maintenance..." style={{ borderRadius: 8 }} />
+          <Input.TextArea rows={3} placeholder="e.g. Organic bio-fertilizer usage, drip irrigation maintenance, farmer questions & remarks..." style={{ borderRadius: 8 }} />
         </Form.Item>
       </FormSectionCard>
     </Form>

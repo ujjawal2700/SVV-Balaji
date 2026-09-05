@@ -128,7 +128,7 @@ export function FieldFarmersTab() {
                 whiteSpace: 'nowrap',
               }}
             >
-              Register farmer
+              Register farmer / supplier
             </Button>
           ) : null}
         </div>
@@ -143,10 +143,10 @@ export function FieldFarmersTab() {
         keyOf={(farmer) => farmer.id}
         emptyText={
           filter === 'unmapped'
-            ? 'Every farmer has a location recorded'
+            ? 'Every farmer / supplier has a location recorded'
             : search
-              ? `No farmer matching "${search}"`
-              : 'No farmers yet — register the first one from the button below'
+              ? `No farmer / supplier matching "${search}"`
+              : 'No farmers / suppliers yet — register the first one from the button below'
         }
         renderCard={(farmer) => {
           const blocking = farmerGaps(farmer).filter((gap) => gap.severity === 'blocking');

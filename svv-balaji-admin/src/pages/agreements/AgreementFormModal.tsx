@@ -15,6 +15,7 @@ import { apiErrorMessage } from '../../api/client';
 import type { Agreement } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
 import { useCreateAgreement, useUpdateAgreement } from '../../hooks/useAgreements';
+import { useFarmer } from '../../hooks/useFarmers';
 import { toIsoDate } from '../../utils/format';
 import { dateAfter, positiveNumber, required } from '../../validation/rules';
 
@@ -73,6 +74,35 @@ export function AgreementFormModal({ open, agreement, onClose }: AgreementFormMo
     }
   }, [open, agreement, form]);
 
+  const selectedFarmerId = Form.useWatch('farmerId', form);
+  const { data: farmer } = useFarmer(selectedFarmerId);
+
+  useEffect(() => {
+    if (isEdit || !farmer) return;
+
+    const cropNameTouched = form.isFieldTouched('cropName');
+    const currentCrop = form.getFieldValue('cropName');
+
+    if (!cropNameTouched || !currentCrop) {
+      const pastAgreements = farmer.agreements;
+      if (pastAgreements && pastAgreements.length > 0) {
+        const latest = pastAgreements[0];
+        form.setFieldsValue({
+          cropName: latest.cropName,
+          variety: latest.variety ?? undefined,
+        });
+      } else if (farmer.cropDetails) {
+        const crops = farmer.cropDetails.split(',').map(c => c.trim()).filter(Boolean);
+        if (crops.length > 0) {
+          form.setFieldsValue({
+            cropName: crops[0],
+            variety: undefined,
+          });
+        }
+      }
+    }
+  }, [farmer, form, isEdit]);
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
     const payload = {
@@ -124,7 +154,7 @@ export function AgreementFormModal({ open, agreement, onClose }: AgreementFormMo
           />
         ) : null}
 
-        <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
+        <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
           <FarmerSelect disabled={isEdit} />
         </Form.Item>
 
@@ -183,10 +213,10 @@ export function AgreementFormModal({ open, agreement, onClose }: AgreementFormMo
 
         <Form.Item
           name="qualityStandards"
-          label="Quality standards"
-          extra="What the crop has to meet at inspection — moisture ceiling, foreign matter, grain size."
+          label="Quality Standards & Remarks / Special Terms"
+          extra="What the crop has to meet at inspection — moisture ceiling, foreign matter, payment terms, or general remarks."
         >
-          <Input.TextArea rows={3} placeholder="Optional" />
+          <Input.TextArea rows={3} placeholder="Enter quality standards, terms, payment notes, or general remarks..." />
         </Form.Item>
       </Form>
     </Modal>

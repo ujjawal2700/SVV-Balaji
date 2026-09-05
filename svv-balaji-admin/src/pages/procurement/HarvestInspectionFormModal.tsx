@@ -164,12 +164,12 @@ export function HarvestInspectionFormModal({
           <Col xs={24} md={12}>
             <Form.Item
               name="farmerId"
-              label="Farmer"
-              rules={[required('Farmer')]}
+              label="Farmer / Supplier"
+              rules={[required('Farmer / Supplier')]}
               extra={
                 isEdit
-                  ? 'Fixed. An APPROVED result must not become transferable to another farmer.'
-                  : 'Approved farmers only — an unapproved farmer has no traceability code.'
+                  ? 'Fixed. An APPROVED result must not become transferable to another farmer / supplier.'
+                  : 'Approved farmers / suppliers only — an unapproved farmer has no traceability code.'
               }
             >
               <FarmerSelect approvedOnly disabled={isEdit} />

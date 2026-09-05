@@ -65,7 +65,7 @@ interface FarmerSelectProps extends PickerProps {
  */
 export function FarmerSelect({
   approvedOnly = false,
-  placeholder = 'Select a farmer',
+  placeholder = 'Select a farmer / supplier',
   ...props
 }: FarmerSelectProps) {
   const farmers = useFarmers(approvedOnly ? { status: 'ACTIVE' } : {});
@@ -86,7 +86,7 @@ export function FarmerSelect({
       loading={farmers.isLoading}
       notFoundContent={
         approvedOnly && !farmers.isLoading && rows.length === 0
-          ? 'No approved farmers yet — approve one first'
+          ? 'No approved farmers / suppliers yet — approve one first'
           : undefined
       }
       options={rows.map((farmer) => ({

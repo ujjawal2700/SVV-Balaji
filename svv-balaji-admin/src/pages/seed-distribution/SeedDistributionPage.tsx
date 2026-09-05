@@ -40,7 +40,7 @@ export function SeedDistributionPage() {
       sorter: (a, b) => a.distributionDate.localeCompare(b.distributionDate),
     },
     {
-      title: 'Farmer',
+      title: 'Farmer / Supplier',
       key: 'farmer',
       render: (_, row) => (
         <div>
@@ -72,7 +72,7 @@ export function SeedDistributionPage() {
       render: (_, row) => formatQuantity(row.quantity, row.unit),
     },
     {
-      title: 'Supplier batch',
+      title: 'Supplier Batch / Remarks',
       dataIndex: 'batchNumber',
       key: 'batchNumber',
       render: (value: string | null) =>
@@ -106,7 +106,7 @@ export function SeedDistributionPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer"
+          placeholder="Filter by farmer / supplier"
           value={farmerId}
           onChange={setFarmerId}
         />

@@ -76,7 +76,7 @@ export function OnboardingFarmersTab() {
         />
         {!isMobile ? (
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-            Register farmer
+            Register farmer / supplier
           </Button>
         ) : null}
       </div>
@@ -89,10 +89,10 @@ export function OnboardingFarmersTab() {
         keyOf={(farmer) => farmer.id}
         emptyText={
           filter === 'incomplete'
-            ? 'Every farmer has bank details — nothing blocking payment'
+            ? 'Every farmer / supplier has bank details — nothing blocking payment'
             : search
-              ? `No farmer matching "${search}"`
-              : 'No farmers registered yet'
+              ? `No farmer / supplier matching "${search}"`
+              : 'No farmers / suppliers registered yet'
         }
         renderCard={(farmer) => {
           const blocking = farmerGaps(farmer).filter((gap) => gap.severity === 'blocking');
