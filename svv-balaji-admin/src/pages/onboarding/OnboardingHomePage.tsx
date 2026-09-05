@@ -70,7 +70,7 @@ export function OnboardingHomePage() {
       <Card styles={{ body: { padding: isMobile ? 14 : 24 } }}>
         <PageHeader
           title={`Good day, ${firstName}`}
-          subtitle="Register farmers, complete their details, and get them approved — approval is what issues the traceability code (FRD 7–9)."
+          subtitle="Register farmers / suppliers, complete their details, and get them approved — approval is what issues the traceability code (FRD 7–9)."
         />
 
         <Row gutter={[12, 12]}>
@@ -83,7 +83,7 @@ export function OnboardingHomePage() {
               onClick={() => setFarmerOpen(true)}
               style={{ height: isMobile ? 56 : 64 }}
             >
-              Register a farmer
+              Register a farmer / supplier
             </Button>
           </Col>
           <Col xs={24} md={12}>
@@ -105,7 +105,7 @@ export function OnboardingHomePage() {
           type="warning"
           showIcon
           icon={<SafetyCertificateOutlined />}
-          message={`${stats.pending} farmer${stats.pending === 1 ? '' : 's'} waiting for approval`}
+          message={`${stats.pending} farmer / supplier${stats.pending === 1 ? '' : 's'} waiting for approval`}
           description={
             canApprove
               ? 'Until approved, none of them can be inspected or collected from.'
@@ -124,7 +124,7 @@ export function OnboardingHomePage() {
           type="error"
           showIcon
           icon={<WarningOutlined />}
-          message={`${stats.incomplete} farmer${stats.incomplete === 1 ? '' : 's'} without bank details`}
+          message={`${stats.incomplete} farmer / supplier${stats.incomplete === 1 ? '' : 's'} without bank details`}
           description="A collection from these farmers will work out what they are owed with nowhere to send it. Much easier to capture now than at the weighbridge."
           action={
             <Button size="small" onClick={() => navigate('/onboarding/farmers')}>
@@ -142,7 +142,7 @@ export function OnboardingHomePage() {
               status={stats.pending > 0 ? 'active' : 'success'}
             />
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {stats.approved} of {stats.total} registered farmers hold a traceability code
+              {stats.approved} of {stats.total} registered farmers / suppliers hold a traceability code
             </Typography.Text>
           </div>
 

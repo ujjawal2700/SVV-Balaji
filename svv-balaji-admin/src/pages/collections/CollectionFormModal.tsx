@@ -161,7 +161,7 @@ export function CollectionFormModal({ open, collection, onClose }: CollectionFor
 
         {selected ? (
           <Descriptions size="small" bordered column={2} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="Farmer">{selected.farmer?.fullName}</Descriptions.Item>
+            <Descriptions.Item label="Farmer / Supplier">{selected.farmer?.fullName}</Descriptions.Item>
             <Descriptions.Item label="Code">
               <Typography.Text code>{selected.farmer?.farmerCode}</Typography.Text>
             </Descriptions.Item>
@@ -240,8 +240,8 @@ export function CollectionFormModal({ open, collection, onClose }: CollectionFor
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="collectionLocation" label="Collected at">
-              <Input placeholder="Optional — village collection point" />
+            <Form.Item name="collectionLocation" label="Collection Location / Remarks">
+              <Input placeholder="e.g. Rampur village center, Gate #2 weighbridge notes" />
             </Form.Item>
           </Col>
 

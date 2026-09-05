@@ -44,7 +44,7 @@ export function FarmerCodesModal({ farmer, onClose }: FarmerCodesModalProps) {
     }
 
     printWindow.document.write(
-      `<html><head><title>${farmer?.farmerCode ?? 'Farmer codes'}</title>` +
+      `<html><head><title>${farmer?.farmerCode ?? 'Farmer / Supplier codes'}</title>` +
         '<style>body{font-family:sans-serif;text-align:center;padding:24px}' +
         'svg{max-width:260px;height:auto}</style></head>' +
         `<body>${markup}</body></html>`,
@@ -57,7 +57,7 @@ export function FarmerCodesModal({ farmer, onClose }: FarmerCodesModalProps) {
   return (
     <Modal
       open={Boolean(farmer)}
-      title={farmer ? `Codes — ${farmer.fullName}` : 'Farmer codes'}
+      title={farmer ? `Codes — ${farmer.fullName}` : 'Farmer / Supplier codes'}
       onCancel={onClose}
       footer={[
         <Button key="copy" icon={<CopyOutlined />} onClick={handleCopy} disabled={!codes.data}>

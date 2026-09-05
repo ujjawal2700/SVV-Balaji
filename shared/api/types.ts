@@ -319,6 +319,7 @@ export interface FarmerAgreementSummary {
   agreementDate: string;
   harvestDate: string | null;
   status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  qualityStandards?: string | null;
 }
 
 export interface FarmerSeedDistributionSummary {
@@ -328,6 +329,7 @@ export interface FarmerSeedDistributionSummary {
   quantity: string;
   unit: string;
   distributionDate: string;
+  batchNumber?: string | null;
 }
 
 export interface FarmerFieldVisitSummary {
@@ -337,6 +339,11 @@ export interface FarmerFieldVisitSummary {
   cropHealth: string | null;
   cropGrowthStage: string | null;
   yieldPredictionQty: string | null;
+  diseaseObservation?: string | null;
+  harvestPreparation?: string | null;
+  fertilizerAdvice?: string | null;
+  pestControlSuggestions?: string | null;
+  irrigationAdvice?: string | null;
 }
 
 /** GET /farmers/:id - the profile, with the Phase 1 history the service includes. */

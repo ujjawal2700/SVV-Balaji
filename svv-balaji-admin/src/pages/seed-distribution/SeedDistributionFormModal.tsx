@@ -9,6 +9,7 @@ import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
 } from '../../hooks/useSeedDistribution';
+import { useFarmer } from '../../hooks/useFarmers';
 import { toIsoDate } from '../../utils/format';
 import { positiveNumber, required } from '../../validation/rules';
 
@@ -66,6 +67,43 @@ export function SeedDistributionFormModal({
     }
   }, [open, record, form]);
 
+  const selectedFarmerId = Form.useWatch('farmerId', form);
+  const { data: farmer } = useFarmer(selectedFarmerId);
+
+  useEffect(() => {
+    if (isEdit || !farmer) return;
+
+    const seedNameTouched = form.isFieldTouched('seedName');
+    const currentSeedName = form.getFieldValue('seedName');
+
+    if (!seedNameTouched || !currentSeedName) {
+      const pastSeedDists = farmer.seedDistributions;
+      const pastAgreements = farmer.agreements;
+
+      if (pastSeedDists && pastSeedDists.length > 0) {
+        const latest = pastSeedDists[0];
+        form.setFieldsValue({
+          seedName: latest.seedName,
+          seedVariety: latest.seedVariety ?? undefined,
+        });
+      } else if (pastAgreements && pastAgreements.length > 0) {
+        const latestAgreement = pastAgreements[0];
+        form.setFieldsValue({
+          seedName: latestAgreement.cropName,
+          seedVariety: latestAgreement.variety ?? undefined,
+        });
+      } else if (farmer.cropDetails) {
+        const crops = farmer.cropDetails.split(',').map((c: string) => c.trim()).filter(Boolean);
+        if (crops.length > 0) {
+          form.setFieldsValue({
+            seedName: crops[0],
+            seedVariety: undefined,
+          });
+        }
+      }
+    }
+  }, [farmer, form, isEdit]);
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
     const payload = {
@@ -113,7 +151,7 @@ export function SeedDistributionFormModal({
         preserve={false}
         initialValues={{ unit: 'KG' }}
       >
-        <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
+        <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
           <FarmerSelect />
         </Form.Item>
 
@@ -156,10 +194,10 @@ export function SeedDistributionFormModal({
           <Col xs={24}>
             <Form.Item
               name="batchNumber"
-              label="Supplier batch number"
-              extra="The seed supplier's own lot number, if the packaging carries one. Worth capturing — it is the only link back if a batch of seed turns out to be bad."
+              label="Supplier Batch Number / Lot Remarks"
+              extra="Printed on seed packaging or special notes (e.g. LOT-2026-WHT-0482 · Certified Grade-A seed). Helps trace distribution batches."
             >
-              <Input placeholder="Optional" />
+              <Input placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A seed" />
             </Form.Item>
           </Col>
         </Row>

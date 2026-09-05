@@ -43,7 +43,7 @@ export function FieldVisitsPage() {
       sorter: (a, b) => a.visitDate.localeCompare(b.visitDate),
     },
     {
-      title: 'Farmer',
+      title: 'Farmer / Supplier',
       key: 'farmer',
       render: (_, visit) => (
         <div>
@@ -88,6 +88,28 @@ export function FieldVisitsPage() {
       render: (value: string | null) => formatQuantity(value, 'KG'),
     },
     {
+      title: 'Remarks / Observations',
+      key: 'remarks',
+      render: (_, visit) => {
+        const remark =
+          visit.diseaseObservation ||
+          visit.harvestPreparation ||
+          visit.fertilizerAdvice ||
+          visit.pestControlSuggestions ||
+          visit.irrigationAdvice;
+        return remark ? (
+          <Typography.Paragraph
+            ellipsis={{ rows: 2, tooltip: remark }}
+            style={{ marginBottom: 0, maxWidth: 220, fontSize: 13 }}
+          >
+            {remark}
+          </Typography.Paragraph>
+        ) : (
+          EM_DASH
+        );
+      },
+    },
+    {
       title: 'Visited by',
       key: 'expert',
       render: (_, visit) => visit.expert?.fullName ?? EM_DASH,
@@ -119,7 +141,7 @@ export function FieldVisitsPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer"
+          placeholder="Filter by farmer / supplier"
           value={farmerId}
           onChange={setFarmerId}
         />

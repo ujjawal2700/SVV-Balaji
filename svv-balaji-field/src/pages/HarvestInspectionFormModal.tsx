@@ -200,18 +200,18 @@ export function HarvestInspectionFormModal({
         iconBg="#ecfdf5"
         iconColor="#059669"
         title="Harvest & Producer Details"
-        subtitle="Select approved farmer and link agreement/plot"
+        subtitle="Select approved farmer / supplier and link agreement/plot"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
             <Form.Item
               name="farmerId"
-              label="Approved Farmer"
-              rules={[required('Farmer')]}
+              label="Approved Farmer / Supplier"
+              rules={[required('Farmer / Supplier')]}
               extra={
                 isEdit
                   ? 'Fixed. An APPROVED result must not become transferable.'
-                  : 'Approved farmers only with active traceability code.'
+                  : 'Approved farmers / suppliers only with active traceability code.'
               }
             >
               <FarmerSelect approvedOnly disabled={isEdit} />

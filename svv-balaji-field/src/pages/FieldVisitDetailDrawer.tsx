@@ -54,7 +54,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
       ) : data ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Descriptions bordered column={2} size="small" title="Visit">
-            <Descriptions.Item label="Farmer">{data.farmer?.fullName ?? EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Farmer / Supplier">{data.farmer?.fullName ?? EM_DASH}</Descriptions.Item>
             <Descriptions.Item label="Code">
               {data.farmer?.farmerCode ? (
                 <Typography.Text code>{data.farmer.farmerCode}</Typography.Text>
@@ -76,7 +76,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
             </Descriptions.Item>
             <Descriptions.Item label="Health">{data.cropHealth ?? EM_DASH}</Descriptions.Item>
             <Descriptions.Item label="Pests">{data.pestStatus ?? EM_DASH}</Descriptions.Item>
-            <Descriptions.Item label="Disease" span={2}>
+            <Descriptions.Item label="Disease & Crop Remarks" span={2}>
               {data.diseaseObservation ?? EM_DASH}
             </Descriptions.Item>
             <Descriptions.Item label="Predicted yield" span={2}>
@@ -94,7 +94,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
             <Descriptions.Item label="Pest control">
               {data.pestControlSuggestions ?? EM_DASH}
             </Descriptions.Item>
-            <Descriptions.Item label="Harvest preparation">
+            <Descriptions.Item label="Harvest & Field Remarks">
               {data.harvestPreparation ?? EM_DASH}
             </Descriptions.Item>
           </Descriptions>

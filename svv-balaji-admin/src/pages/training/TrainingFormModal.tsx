@@ -98,10 +98,10 @@ export function TrainingFormModal({ open, session, onClose }: TrainingFormModalP
 
         <Form.Item
           name="description"
-          label="What was covered"
-          extra="Recorded by the executive who ran the session. Farmers do not see this — there is no farmer login."
+          label="Session Description & Remarks"
+          extra="Recorded by the executive who ran the session. Add topics covered, discussion points, or special remarks."
         >
-          <Input.TextArea rows={3} placeholder="Optional" />
+          <Input.TextArea rows={3} placeholder="e.g. Organic bio-fertilizer usage, pest control demo, farmer questions and remarks..." />
         </Form.Item>
       </Form>
     </Sheet>

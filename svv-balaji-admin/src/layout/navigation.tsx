@@ -72,7 +72,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         key: 'onboarding',
         path: '/onboarding',
-        label: 'Farmer Onboarding',
+        label: 'Farmer / Supplier Onboarding',
         // Default: the roles that register and approve farmers. An Agriculture
         // Expert has their own panel at /field.
         permission: 'ONBOARDING_PANEL',
@@ -104,7 +104,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         key: 'farmers',
         path: '/farmers',
-        label: 'Farmers',
+        label: 'Farmers / Suppliers',
         permission: 'FARMER_VIEW',
         description:
           'Farmer registry, verification workflow and traceability IDs. Approval is Super ' +

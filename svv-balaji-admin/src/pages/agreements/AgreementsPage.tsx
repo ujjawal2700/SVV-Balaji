@@ -57,7 +57,7 @@ export function AgreementsPage() {
 
   const columns: ColumnsType<Agreement> = [
     {
-      title: 'Farmer',
+      title: 'Farmer / Supplier',
       key: 'farmer',
       render: (_, agreement) => (
         <div>
@@ -118,6 +118,22 @@ export function AgreementsPage() {
       render: (value: string | null) => formatDate(value),
     },
     {
+      title: 'Remarks / Terms',
+      dataIndex: 'qualityStandards',
+      key: 'qualityStandards',
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Paragraph
+            ellipsis={{ rows: 2, tooltip: value }}
+            style={{ margin: 0, maxWidth: 220, fontSize: 12 }}
+          >
+            {value}
+          </Typography.Paragraph>
+        ) : (
+          EM_DASH
+        ),
+    },
+    {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
@@ -173,7 +189,7 @@ export function AgreementsPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer"
+          placeholder="Filter by farmer / supplier"
           value={farmerId}
           onChange={setFarmerId}
         />

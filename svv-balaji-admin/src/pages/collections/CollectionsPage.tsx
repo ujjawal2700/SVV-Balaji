@@ -71,7 +71,7 @@ export function CollectionsPage() {
         ),
     },
     {
-      title: 'Farmer',
+      title: 'Farmer / Supplier',
       key: 'farmer',
       render: (_, row) => (
         <div>
@@ -111,6 +111,22 @@ export function CollectionsPage() {
       key: 'collectionDate',
       render: (value: string) => formatDate(value),
       sorter: (a, b) => a.collectionDate.localeCompare(b.collectionDate),
+    },
+    {
+      title: 'Location / Remarks',
+      dataIndex: 'collectionLocation',
+      key: 'collectionLocation',
+      render: (value: string | null) =>
+        value ? (
+          <Typography.Paragraph
+            ellipsis={{ rows: 2, tooltip: value }}
+            style={{ marginBottom: 0, maxWidth: 180, fontSize: 13 }}
+          >
+            {value}
+          </Typography.Paragraph>
+        ) : (
+          EM_DASH
+        ),
     },
     {
       title: 'Payment',
@@ -174,7 +190,7 @@ export function CollectionsPage() {
       <Col xs={24} md={8}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer"
+          placeholder="Filter by farmer / supplier"
           value={filters.farmerId}
           onChange={(farmerId) => setFilters((f) => ({ ...f, farmerId }))}
         />

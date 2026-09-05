@@ -46,7 +46,7 @@ export function OnboardingApprovalsTab() {
         <Alert
           type="warning"
           showIcon
-          message={`${rows.length} farmer${rows.length === 1 ? '' : 's'} waiting`}
+          message={`${rows.length} farmer / supplier${rows.length === 1 ? '' : 's'} waiting`}
           description="Approving issues the traceability code that the whole farm-to-fork chain hangs on. Until then this farmer cannot be inspected or collected from."
         />
       ) : null}
@@ -57,7 +57,7 @@ export function OnboardingApprovalsTab() {
         error={farmers.error}
         onRetry={() => void farmers.refetch()}
         keyOf={(farmer) => farmer.id}
-        emptyText="Nothing waiting — every registered farmer has been through verification"
+        emptyText="Nothing waiting — every registered farmer / supplier has been through verification"
         renderCard={(farmer) => {
           const gaps = farmerGaps(farmer);
           const blocking = gaps.filter((gap) => gap.severity === 'blocking');

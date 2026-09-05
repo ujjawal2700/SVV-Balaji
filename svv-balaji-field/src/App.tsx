@@ -46,7 +46,7 @@ const TrainingTab = lazy(() =>
  */
 const TABS: ShellTab[] = [
   { path: '/', label: 'Home', icon: <HomeOutlined /> },
-  { path: '/farmers', label: 'Farmers', icon: <TeamOutlined />, permission: 'FARMER_VIEW' },
+  { path: '/farmers', label: 'Farmers / Suppliers', icon: <TeamOutlined />, permission: 'FARMER_VIEW' },
   { path: '/visits', label: 'Visits', icon: <EnvironmentOutlined />, permission: 'FIELD_VISIT_VIEW' },
   {
     path: '/inspections',

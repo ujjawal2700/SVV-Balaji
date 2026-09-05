@@ -25,6 +25,7 @@ import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
 } from '@shared/hooks/useSeedDistribution';
+import { useFarmer } from '@shared/hooks/useFarmers';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { toIsoDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
@@ -131,6 +132,43 @@ export function SeedDistributionFormModal({
     }
   }, [open, record, form]);
 
+  const selectedFarmerId = Form.useWatch('farmerId', form);
+  const { data: farmer } = useFarmer(selectedFarmerId);
+
+  useEffect(() => {
+    if (isEdit || !farmer) return;
+
+    const seedNameTouched = form.isFieldTouched('seedName');
+    const currentSeedName = form.getFieldValue('seedName');
+
+    if (!seedNameTouched || !currentSeedName) {
+      const pastSeedDists = farmer.seedDistributions;
+      const pastAgreements = farmer.agreements;
+
+      if (pastSeedDists && pastSeedDists.length > 0) {
+        const latest = pastSeedDists[0];
+        form.setFieldsValue({
+          seedName: latest.seedName,
+          seedVariety: latest.seedVariety ?? undefined,
+        });
+      } else if (pastAgreements && pastAgreements.length > 0) {
+        const latestAgreement = pastAgreements[0];
+        form.setFieldsValue({
+          seedName: latestAgreement.cropName,
+          seedVariety: latestAgreement.variety ?? undefined,
+        });
+      } else if (farmer.cropDetails) {
+        const crops = farmer.cropDetails.split(',').map((c: string) => c.trim()).filter(Boolean);
+        if (crops.length > 0) {
+          form.setFieldsValue({
+            seedName: crops[0],
+            seedVariety: undefined,
+          });
+        }
+      }
+    }
+  }, [farmer, form, isEdit]);
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
     const payload = {
@@ -173,10 +211,10 @@ export function SeedDistributionFormModal({
         icon={<EnvironmentOutlined />}
         iconBg="#ecfdf5"
         iconColor="#059669"
-        title="Beneficiary Farmer"
-        subtitle="Select the registered farmer receiving the seed batch"
+        title="Beneficiary Farmer / Supplier"
+        subtitle="Select the registered farmer / supplier receiving the seed batch"
       >
-        <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
+        <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
           <FarmerSelect />
         </Form.Item>
       </FormSectionCard>
@@ -230,10 +268,10 @@ export function SeedDistributionFormModal({
           <Col xs={24}>
             <Form.Item
               name="batchNumber"
-              label="Supplier / Lot Batch Number"
-              extra="Printed on seed packaging — essential for batch traceability"
+              label="Supplier Batch Number / Lot Remarks"
+              extra="Printed on seed packaging or special notes — essential for batch traceability"
             >
-              <Input placeholder="e.g. LOT-2026-WHT-0482" style={{ borderRadius: 8 }} />
+              <Input placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>

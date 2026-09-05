@@ -61,7 +61,7 @@ export function BatchTraceDrawer({ batchNumber, onClose }: BatchTraceDrawerProps
           </Descriptions>
 
           <Descriptions bordered column={2} size="small" title="Grown by">
-            <Descriptions.Item label="Farmer">{data.farmer.fullName}</Descriptions.Item>
+            <Descriptions.Item label="Farmer / Supplier">{data.farmer.fullName}</Descriptions.Item>
             <Descriptions.Item label="Traceability code">
               <Typography.Text code>{data.farmer.farmerCode ?? EM_DASH}</Typography.Text>
             </Descriptions.Item>

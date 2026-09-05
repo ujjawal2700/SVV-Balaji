@@ -154,7 +154,7 @@ function PlotOrigin({ plot }: { plot: TraceFarmer['plot'] }) {
 function TraceResult({ data }: { data: FinishedGoodsTrace }) {
   const farmerColumns = [
     {
-      title: 'Farmer',
+      title: 'Farmer / Supplier',
       key: 'farmer',
       render: (_: unknown, farmer: TraceFarmer) => (
         <Space direction="vertical" size={0}>
@@ -286,7 +286,7 @@ function TraceResult({ data }: { data: FinishedGoodsTrace }) {
 
       <Card
         size="small"
-        title={`Farmers behind this pack (${data.farmers.length})`}
+        title={`Farmers / Suppliers behind this pack (${data.farmers.length})`}
         extra={
           data.farmers.length === 0 ? (
             <Typography.Text type="danger">Chain incomplete</Typography.Text>

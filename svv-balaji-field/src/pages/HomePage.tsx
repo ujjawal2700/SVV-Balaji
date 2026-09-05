@@ -95,7 +95,7 @@ export function FieldHomePage() {
           icon: <TeamOutlined />,
           colour: '#3b82f6',
           bgTint: '#eff6ff',
-          label: 'Farmers & Land',
+          label: 'Farmers / Suppliers & Land',
           description: 'Profiles, GPS mapping & plots',
           count: farmers.data?.data?.length ?? 0,
           suffix: 'registered',
