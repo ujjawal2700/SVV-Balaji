@@ -1,0 +1,194 @@
+- generic [ref=f7e4]:
+  - banner [ref=f7e5]:
+    - generic [ref=f7e7]:
+      - generic [ref=f7e8]:
+        - generic [ref=f7e9]:
+          - img "safety-certificate" [ref=f7e10]
+          - text: 100% Farm-Traceable Agro Foods & Staples
+        - generic [ref=f7e13]: "|"
+        - generic [ref=f7e14]:
+          - img "truck" [ref=f7e15]
+          - text: Same-Day Mill Dispatch
+      - generic [ref=f7e18]:
+        - link [ref=f7e19] [cursor=pointer]:
+          - /url: /trace
+          - img "qrcode" [ref=f7e20]
+          - text: Trace QR Batch
+        - generic [ref=f7e23]: "|"
+        - generic [ref=f7e24]:
+          - img "phone" [ref=f7e25]
+          - strong [ref=f7e28]: 1800-209-DESI
+    - generic [ref=f7e30]:
+      - generic [ref=f7e31]:
+        - link [ref=f7e32] [cursor=pointer]:
+          - /url: /
+          - img "Desi Tokri" [ref=f7e33]
+        - generic [ref=f7e34] [cursor=pointer]:
+          - img "environment" [ref=f7e35]
+          - generic [ref=f7e38]:
+            - generic [ref=f7e39]: Delivering to
+            - strong [ref=f7e40]: Central Hub, Sec 18
+      - generic [ref=f7e43]:
+        - img "search" [ref=f7e45]
+        - textbox "Search atta, spices, namkeen..." [ref=f7e48]
+        - generic [ref=f7e50]:
+          - link [ref=f7e51] [cursor=pointer]:
+            - /url: /trace
+            - img "barcode" [ref=f7e52]
+            - text: Batch
+          - button "Search" [ref=f7e55] [cursor=pointer]
+      - generic [ref=f7e57]:
+        - link "qrcode Trace Pack" [ref=f7e58] [cursor=pointer]:
+          - /url: /trace
+          - img "qrcode" [ref=f7e59]
+          - generic [ref=f7e62]: Trace Pack
+        - link "gift Schemes" [ref=f7e63] [cursor=pointer]:
+          - /url: /products/atta-flour
+          - img "gift" [ref=f7e64]
+          - generic [ref=f7e67]: Schemes
+        - link "user Profile Sharma General Store down" [ref=f7e68] [cursor=pointer]:
+          - /url: /profile
+          - generic [ref=f7e69]:
+            - img "user" [ref=f7e71]
+            - generic [ref=f7e74]:
+              - generic [ref=f7e75]: Profile
+              - generic [ref=f7e76]: Sharma General Store
+            - img "down" [ref=f7e77]
+        - link [ref=f7e80] [cursor=pointer]:
+          - /url: /cart
+          - button "shopping-cart My Cart ₹0" [ref=f7e81]:
+            - img "shopping-cart" [ref=f7e83]
+            - generic [ref=f7e86]:
+              - generic [ref=f7e87]: My Cart
+              - strong [ref=f7e88]: ₹0
+    - generic [ref=f7e90]:
+      - generic [ref=f7e91]:
+        - button "🌾 Categories down" [ref=f7e92] [cursor=pointer]:
+          - generic [ref=f7e93]: 🌾 Categories
+          - img "down" [ref=f7e94]
+        - generic [ref=f7e97]:
+          - link "Atta & Flour Atta & Flour" [ref=f7e98] [cursor=pointer]:
+            - /url: /products/atta-flour
+            - img "Atta & Flour" [ref=f7e99]
+            - generic [ref=f7e100]: Atta & Flour
+          - link "Namkeen Namkeen" [ref=f7e101] [cursor=pointer]:
+            - /url: /products/namkeen
+            - img "Namkeen" [ref=f7e102]
+            - generic [ref=f7e103]: Namkeen
+          - link "Wafers Wafers" [ref=f7e104] [cursor=pointer]:
+            - /url: /products/wafers
+            - img "Wafers" [ref=f7e105]
+            - generic [ref=f7e106]: Wafers
+          - link "Spices Spices" [ref=f7e107] [cursor=pointer]:
+            - /url: /products/spices
+            - img "Spices" [ref=f7e108]
+            - generic [ref=f7e109]: Spices
+      - generic [ref=f7e110]:
+        - link [ref=f7e111] [cursor=pointer]:
+          - /url: /orders
+          - img "reload" [ref=f7e112]
+          - text: Reorder
+        - link [ref=f7e115] [cursor=pointer]:
+          - /url: /wallet
+          - img "credit-card" [ref=f7e116]
+          - text: Ledger
+        - link [ref=f7e119] [cursor=pointer]:
+          - /url: /profile
+          - img "user" [ref=f7e120]
+          - text: Profile
+  - main [ref=f7e123]:
+    - generic [ref=f7e124]: Loading Storefront…
+  - contentinfo [ref=f7e125]:
+    - generic [ref=f7e128]:
+      - generic [ref=f7e129]:
+        - img "qrcode" [ref=f7e131]
+        - generic [ref=f7e134]:
+          - strong [ref=f7e136]: 100% Farm Traceable
+          - text: Scan QR on pack to trace farm origin
+      - generic [ref=f7e137]:
+        - img "truck" [ref=f7e139]
+        - generic [ref=f7e142]:
+          - strong [ref=f7e144]: Direct Mill Dispatch
+          - text: Same-day delivery to retailer store
+      - generic [ref=f7e145]:
+        - img "safety-certificate" [ref=f7e147]
+        - generic [ref=f7e150]:
+          - strong [ref=f7e152]: FSSAI & Agmark Certified
+          - text: Unadulterated, graded quality
+      - generic [ref=f7e153]:
+        - img "thunderbolt" [ref=f7e155]
+        - generic [ref=f7e158]:
+          - strong [ref=f7e160]: Flexible Retailer Credit
+          - text: Transparent ledger & instant invoices
+    - generic [ref=f7e161]:
+      - generic [ref=f7e162]:
+        - generic [ref=f7e163]:
+          - generic [ref=f7e164]:
+            - img "Desi Tokri" [ref=f7e166]
+            - generic [ref=f7e167]:
+              - generic [ref=f7e168]: Desi Tokri
+              - generic [ref=f7e169]: By SVV Balaji Enterprises
+          - paragraph [ref=f7e170]: Desi Tokri Food & Beverages Pvt. Ltd. connects consumers and retail partners directly to authentic mandi farmers and certified milling units. Every single package carries an immutable batch QR code for complete transparency.
+          - link [ref=f7e172] [cursor=pointer]:
+            - /url: /trace
+            - img "qrcode" [ref=f7e173]
+            - text: Trace Any Batch QR
+        - generic [ref=f7e176]:
+          - heading "Shop by Category" [level=5] [ref=f7e177]
+          - list [ref=f7e178]:
+            - listitem [ref=f7e179]:
+              - link "Atta & Flour" [ref=f7e180] [cursor=pointer]:
+                - /url: /products/atta-flour
+            - listitem [ref=f7e181]:
+              - link "Namkeen" [ref=f7e182] [cursor=pointer]:
+                - /url: /products/namkeen
+            - listitem [ref=f7e183]:
+              - link "Wafers" [ref=f7e184] [cursor=pointer]:
+                - /url: /products/wafers
+            - listitem [ref=f7e185]:
+              - link "Spices" [ref=f7e186] [cursor=pointer]:
+                - /url: /products/spices
+        - generic [ref=f7e187]:
+          - heading "Retailer Services" [level=5] [ref=f7e188]
+          - list [ref=f7e189]:
+            - listitem [ref=f7e190]:
+              - link "Track Running Orders" [ref=f7e191] [cursor=pointer]:
+                - /url: /orders
+            - listitem [ref=f7e192]:
+              - link "Retailer Ledger & Credit" [ref=f7e193] [cursor=pointer]:
+                - /url: /wallet
+            - listitem [ref=f7e194]:
+              - link "Active Wholesale Schemes" [ref=f7e195] [cursor=pointer]:
+                - /url: /products/atta-flour
+            - listitem [ref=f7e196]:
+              - link "Quality & Lab Reports" [ref=f7e197] [cursor=pointer]:
+                - /url: /trace
+            - listitem [ref=f7e198]:
+              - link "Store Profile & KYC" [ref=f7e199] [cursor=pointer]:
+                - /url: /profile
+        - generic [ref=f7e200]:
+          - heading "Retailer Support Desk" [level=5] [ref=f7e201]
+          - generic [ref=f7e202]:
+            - generic [ref=f7e203]:
+              - img "phone" [ref=f7e204]
+              - generic [ref=f7e207]:
+                - strong [ref=f7e208]: "Toll Free: 1800-209-DESI"
+                - text: "Mon - Sat: 8:00 AM to 8:00 PM"
+            - generic [ref=f7e209]:
+              - img "mail" [ref=f7e210]
+              - generic [ref=f7e213]: orders@desitokri.com
+            - generic [ref=f7e214]:
+              - img "environment" [ref=f7e215]
+              - generic [ref=f7e218]: Central Mandi Hub, Plot 42-B, Industrial Area, Sector 18
+            - generic [ref=f7e219]:
+              - text: "Assigned Field Rep:"
+              - strong [ref=f7e220]: Ramesh Verma (+91 98765 43210)
+      - separator [ref=f7e221]
+      - generic [ref=f7e222]:
+        - generic [ref=f7e223]: © 2026 Desi Tokri Food & Beverages Pvt. Ltd. All rights reserved. | FSSAI Lic. No. 10020011000342
+        - generic [ref=f7e224]:
+          - generic [ref=f7e225]:
+            - img "lock" [ref=f7e226]
+            - text: 256-Bit SSL Encrypted
+          - generic [ref=f7e229]: Privacy Policy
+          - generic [ref=f7e230]: Terms of B2B Supply

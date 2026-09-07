@@ -2,14 +2,12 @@
  * Storefront base styles.
  *
  * Ant Design supplies almost everything; this file only covers what a theme
- * token cannot reach. Keep it short — anything that can be a token should be
- * one, in theme.ts, so the two stay in one place.
+ * token cannot reach.
  */
 
 :root {
-  /* Read by the shell for the sticky header offset. Changing the header height
-     without changing this leaves the first card tucked under it. */
   --store-header-height: 60px;
+  --store-desktop-header-height: 116px;
 }
 
 * {
@@ -19,7 +17,7 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0;
 }
@@ -28,12 +26,17 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   background: #fafaf9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+}
+
+.brand-title-font {
+  font-family: 'Outfit', 'Cinzel', sans-serif;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
 }
 
 /*
- * iOS zooms the whole page when a focused input's font is under 16px, and the
- * page never zooms back out. Ant Design's default input font is 15px, so this
- * is not hypothetical.
+ * iOS zoom prevention for form controls
  */
 input,
 textarea,
@@ -41,8 +44,7 @@ select {
   font-size: 16px;
 }
 
-/* Paint under the notch and the home indicator; content is kept clear of both
-   with env() padding in the shell. */
+/* Safe area insets for mobile */
 .store-safe-top {
   padding-top: env(safe-area-inset-top);
 }
@@ -50,17 +52,27 @@ select {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* One content column, centred, with a readable maximum. Product grids and prose
-   both live inside this. */
+/* Container responsive widths */
 .store-container {
   width: 100%;
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: 16px 16px 40px;
 }
 
-/* Used by the trace page, which is the one screen a customer may reach with no
-   prior context at all — from a QR code, in a shop. It gets more air. */
+@media (min-width: 768px) {
+  .store-container {
+    padding: 20px 24px 48px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .store-container {
+    max-width: 1320px;
+    padding: 24px 32px 56px;
+  }
+}
+
 .store-container--narrow {
   max-width: 720px;
 }
@@ -73,3 +85,141 @@ select {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Responsive display helper classes */
+.mobile-only {
+  display: block;
+}
+
+.desktop-only {
+  display: none;
+}
+
+.mobile-flex {
+  display: flex;
+}
+
+.desktop-flex {
+  display: none;
+}
+
+.desktop-grid {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mobile-only {
+    display: none !important;
+  }
+  .desktop-only {
+    display: block !important;
+  }
+  .mobile-flex {
+    display: none !important;
+  }
+  .desktop-flex {
+    display: flex !important;
+  }
+  .desktop-grid {
+    display: grid !important;
+  }
+}
+
+/* Header specific responsiveness */
+.header-extra-action {
+  display: none !important;
+}
+
+@media (min-width: 1180px) {
+  .header-extra-action {
+    display: inline-flex !important;
+  }
+}
+
+.header-location-pill {
+  display: none !important;
+}
+
+@media (min-width: 960px) {
+  .header-location-pill {
+    display: flex !important;
+  }
+}
+
+.header-retailer-name {
+  display: none;
+}
+
+@media (min-width: 1080px) {
+  .header-retailer-name {
+    display: block;
+  }
+}
+
+/* Hover effects & animations for desktop */
+.product-card-hover {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.product-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -4px rgba(28, 25, 23, 0.12), 0 4px 8px -2px rgba(28, 25, 23, 0.06);
+}
+
+.category-pill-hover {
+  transition: all 0.2s ease;
+}
+.category-pill-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.nav-link-hover {
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.nav-link-hover:hover {
+  color: #059669 !important;
+}
+
+/* Custom slick dot styling */
+.slick-dots li button {
+  background: rgba(255, 255, 255, 0.6) !important;
+}
+.slick-dots li.slick-active button {
+  background: #ffffff !important;
+}
+
+/* Horizontal scrollable price deals strip on mobile, 4-col grid on desktop */
+.price-deals-scroll {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+}
+
+.price-deals-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.price-deal-card {
+  flex: 0 0 170px;
+  min-width: 170px;
+  scroll-snap-align: start;
+}
+
+@media (min-width: 768px) {
+  .price-deals-scroll {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 16px !important;
+    overflow-x: visible !important;
+    padding-bottom: 0 !important;
+  }
+  .price-deal-card {
+    flex: initial !important;
+    min-width: 0 !important;
+  }
+}
+

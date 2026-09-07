@@ -1,52 +1,45 @@
-import { MenuOutlined, ShoppingCartOutlined, UserOutlined } from '@ant-design/icons';
-import { Badge, Button, Drawer, Layout, Space, Typography } from 'antd';
-import { Suspense, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '@shared/auth/useAuth';
-import { useCart } from '../cart/useCart';
+import { Layout, Typography } from 'antd';
+import { Suspense } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { BOTTOM_NAV_HEIGHT, BottomNav } from './BottomNav';
-import { STORE_NAV } from './navigation';
+import { DesktopFooter } from './DesktopFooter';
+import { DesktopHeader } from './DesktopHeader';
 
 /**
- * The five destinations with a tab in `BottomNav`. Everything else (trace,
- * login/register, checkout, product detail, order tracking) is a stack page
- * reached FROM one of these — it keeps the generic top header and gets no
- * bottom bar, the same way a detail screen pushed on top of a tab does not
- * carry its own copy of the tab bar.
+ * The five destinations with a tab in `BottomNav`. Everything else is a stack page.
  */
 const TAB_ROUTES = ['/', '/categories', '/cart', '/orders', '/profile'];
 
 /**
- * The frame every storefront page renders inside.
+ * The shell frame every storefront page renders inside.
  *
- * Two things make this different from `FieldShell` and the admin layout, and
- * both are worth stating because they are easy to undo by accident:
- *
- * 1. It renders SIGNED OUT. Browsing, product detail and pack tracing are
- *    public — the whole point of the QR code is that anybody holding a pack can
- *    use it, and nobody scans a bag in a shop and then creates an account.
- *    Nothing in this shell may assume `user` exists.
- *
- * 2. It has no permission model. `useCan` and the permission registry are the
- *    staff apps' concern. A customer's access is decided by ownership — your
- *    orders are yours — which is enforced on the server, not by hiding a link.
+ * Responsiveness architecture:
+ * - Mobile (< 768px):
+ *     Shows the app-style BottomNav on tab routes and pads content.
+ * - Desktop (>= 768px):
+ *     Renders DesktopHeader (omni-search, brand, location, links, cart, ledger)
+ *     and DesktopFooter (trust badges, multi-column categories, support).
  */
 export function StoreShell() {
-  const { user } = useAuth();
-  const cart = useCart();
   const location = useLocation();
   const isTabRoute = TAB_ROUTES.includes(location.pathname);
 
   return (
-    <Layout style={{ minHeight: '100dvh', background: '#fafaf9' }}>
+    <Layout style={{ minHeight: '100dvh', background: '#fafaf9', display: 'flex', flexDirection: 'column' }}>
+      {/* Desktop Top Header (Hidden on mobile) */}
+      <DesktopHeader />
 
-      <Layout.Content style={isTabRoute ? { paddingBottom: BOTTOM_NAV_HEIGHT } : undefined}>
-        {/* Every page is lazily loaded in App.tsx, so the boundary belongs here
-            rather than being repeated per route. */}
+      {/* Main Content Area */}
+      <Layout.Content
+        style={{
+          flex: '1 0 auto',
+          paddingBottom: isTabRoute ? BOTTOM_NAV_HEIGHT : undefined,
+        }}
+      >
         <Suspense
           fallback={
-            <div className="store-container" style={{ color: '#78716c' }}>
-              Loading…
+            <div className="store-container" style={{ color: '#78716c', padding: 40, textAlign: 'center' }}>
+              Loading Storefront…
             </div>
           }
         >
@@ -54,17 +47,21 @@ export function StoreShell() {
         </Suspense>
       </Layout.Content>
 
-      {isTabRoute ? (
-        <BottomNav />
-      ) : (
+      {/* Mobile App Bottom Tab Bar (Hidden on desktop) */}
+      {isTabRoute && <BottomNav />}
+
+      {/* Desktop Rich Footer (Hidden on mobile) */}
+      <DesktopFooter />
+
+      {/* Mobile Simple Safe Footer for non-tab stack routes */}
+      {!isTabRoute && (
         <Layout.Footer
-          className="store-safe-bottom"
-          style={{ background: '#ffffff', borderTop: '1px solid #e7e5e4' }}
+          className="store-safe-bottom mobile-only"
+          style={{ background: '#ffffff', borderTop: '1px solid #e7e5e4', padding: '16px 20px' }}
         >
-          <div className="store-container" style={{ paddingBottom: 20 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              Desi Tokri Food &amp; Beverages Pvt. Ltd. — every pack traceable to the farm it came
-              from.
+          <div style={{ textAlign: 'center' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Desi Tokri Food &amp; Beverages Pvt. Ltd. — every pack traceable to the farm it came from.
             </Typography.Text>
           </div>
         </Layout.Footer>
