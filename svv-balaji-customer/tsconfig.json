@@ -24,7 +24,20 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+
+      // shared/ lives outside each app, so its bare imports (react, antd, axios…)
+      // cannot resolve by walking up from shared/. The catch-all below points them
+      // at this app's node_modules. react/react-dom are redirected explicitly to
+      // @types, because the catch-all would otherwise resolve them to the untyped
+      // JS package and TS would fall back to the legacy JSX namespace — which
+      // rejects antd's ForwardRefExoticComponent exports ("Card cannot be used as
+      // a JSX component").
+      "react": ["node_modules/@types/react"],
+      "react/*": ["node_modules/@types/react/*"],
+      "react-dom": ["node_modules/@types/react-dom"],
+      "react-dom/*": ["node_modules/@types/react-dom/*"],
+      "*": ["node_modules/*"]
     }
   },
   "include": ["src", "../shared", "vite.config.ts"]

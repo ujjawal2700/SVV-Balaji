@@ -12,9 +12,20 @@
     "noEmit": true,
     "strict": false,
     "noImplicitAny": false,
+
+    // shared/ uses import.meta.env; vite's client types live in a sibling app
+    "types": ["../svv-balaji-admin/node_modules/vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./*"]
+      "@shared/*": ["./*"],
+
+      // shared/ has no node_modules of its own; resolve against a sibling app,
+      // with react/react-dom redirected to @types (see the app tsconfigs).
+      "react": ["../svv-balaji-admin/node_modules/@types/react"],
+      "react/*": ["../svv-balaji-admin/node_modules/@types/react/*"],
+      "react-dom": ["../svv-balaji-admin/node_modules/@types/react-dom"],
+      "react-dom/*": ["../svv-balaji-admin/node_modules/@types/react-dom/*"],
+      "*": ["../svv-balaji-admin/node_modules/*"]
     }
   },
   "include": ["**/*"]
