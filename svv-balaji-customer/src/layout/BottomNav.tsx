@@ -13,11 +13,8 @@ import { useCart } from '../cart/useCart';
 /**
  * The app-style bottom tab bar.
  *
- * Fixed to the viewport, not the layout flow — `StoreShell` pads its content
- * area by this bar's height so the last card on any page is never tucked
- * underneath it. This mirrors the "retailer" ordering UI (reorder, schemes,
- * credit position) rather than the FRD 29 public-shopper reading of the app;
- * see the comment on `HomePage`.
+ * Fixed to the viewport on mobile devices (< 768px). Automatically hidden on
+ * laptop/desktop viewports where the full desktop header is rendered.
  */
 const TABS = [
   { path: '/', label: 'Home', icon: HomeOutlined, activeIcon: HomeFilled, end: true },
@@ -27,7 +24,7 @@ const TABS = [
   { path: '/profile', label: 'Profile', icon: UserOutlined, activeIcon: UserOutlined, end: false },
 ] as const;
 
-const ACTIVE_COLOR = '#1d4ed8';
+const ACTIVE_COLOR = '#059669';
 const INACTIVE_COLOR = '#78716c';
 
 export function BottomNav() {
@@ -35,21 +32,21 @@ export function BottomNav() {
 
   return (
     <nav
-      className="store-safe-bottom"
+      className="store-safe-bottom mobile-only"
       style={{
         position: 'fixed',
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 20,
+        zIndex: 100,
         background: '#ffffff',
         borderTop: '1px solid #e7e5e4',
-        boxShadow: '0 -2px 12px 0 rgba(28, 25, 23, 0.06)',
+        boxShadow: '0 -2px 12px 0 rgba(28, 25, 23, 0.08)',
       }}
     >
       <div
         style={{
-          maxWidth: 1080,
+          maxWidth: 600,
           margin: '0 auto',
           display: 'flex',
           alignItems: 'stretch',
@@ -84,7 +81,7 @@ export function BottomNav() {
                   ) : (
                     iconNode
                   )}
-                  <span style={{ fontSize: 11, fontWeight: isActive ? 600 : 500, color }}>
+                  <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 500, color }}>
                     {tab.label}
                   </span>
                 </>
@@ -97,5 +94,5 @@ export function BottomNav() {
   );
 }
 
-/** Read by pages that need to keep content clear of the fixed bar. */
-export const BOTTOM_NAV_HEIGHT = 58;
+/** Read by pages that need to keep content clear of the fixed bar on mobile. */
+export const BOTTOM_NAV_HEIGHT = 60;

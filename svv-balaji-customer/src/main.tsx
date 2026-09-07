@@ -7,6 +7,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
 import { AuthProvider } from '@shared/auth/AuthProvider';
+import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { App } from './App';
 import { CartProvider } from './cart/CartProvider';
 import { theme } from './theme';
@@ -78,7 +79,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
           <BrowserRouter>
             <CartProvider>
               <AuthProvider>
-                <App />
+                <CustomerAuthProvider>
+                  <App />
+                </CustomerAuthProvider>
               </AuthProvider>
             </CartProvider>
           </BrowserRouter>

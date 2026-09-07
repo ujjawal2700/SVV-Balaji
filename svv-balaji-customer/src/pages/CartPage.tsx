@@ -1,7 +1,17 @@
-import { CheckCircleFilled, WarningOutlined, ClockCircleFilled, ArrowLeftOutlined, DeleteOutlined, PlusOutlined, MinusOutlined, HeartOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
-import { Button, Divider, Empty, Spin, Typography, message, Tag } from 'antd';
+import {
+  ArrowLeftOutlined,
+  CheckCircleFilled,
+  ClockCircleFilled,
+  DeleteOutlined,
+  HeartOutlined,
+  MinusOutlined,
+  PlusOutlined,
+  SafetyCertificateOutlined,
+  ShoppingOutlined,
+} from '@ant-design/icons';
+import { Button, Divider, Empty, Tag, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
 
 function formatInr(value: number): string {
@@ -11,33 +21,32 @@ function formatInr(value: number): string {
 export function CartPage() {
   const navigate = useNavigate();
   const cart = useCart();
-  
+
   if (cart.lines.length === 0) {
     return (
-      <div style={{ minHeight: '100vh', background: '#f1f3f6', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <header
+          className="mobile-only"
           style={{
             background: '#fff',
-            padding: '12px 16px',
+            padding: '14px 16px',
+            borderBottom: '1px solid #e7e5e4',
             display: 'flex',
             alignItems: 'center',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 100
           }}
         >
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }}>
-            <ArrowLeftOutlined style={{ fontSize: 20 }} />
+            <ArrowLeftOutlined style={{ fontSize: 18 }} />
           </button>
           <Typography.Text strong style={{ fontSize: 16 }}>My Cart</Typography.Text>
         </header>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
           <Empty
-            description={<Typography.Text type="secondary">Your cart is empty!</Typography.Text>}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={<Typography.Text type="secondary" style={{ fontSize: 15 }}>Your retail cart is currently empty!</Typography.Text>}
           >
-            <Button type="primary" style={{ background: '#f97316', borderColor: '#f97316' }} onClick={() => navigate('/')}>
-              Shop Now
+            <Button type="primary" size="large" style={{ background: '#059669', borderColor: '#059669', borderRadius: 8, marginTop: 12 }} onClick={() => navigate('/')}>
+              Explore Wholesale Catalog
             </Button>
           </Empty>
         </div>
@@ -45,18 +54,17 @@ export function CartPage() {
     );
   }
 
-  // Calculate Subtotal (sum of selling price), Total MRP, and Discount
+  // Calculations
   const totalMrp = cart.lines.reduce((acc, line) => acc + ((line.mrp || line.displayUnitPrice || 0) * line.quantity), 0);
   const subtotal = cart.indicativeTotal || 0;
   const productDiscount = totalMrp - subtotal;
-  const gst = Math.floor(subtotal * 0.05); // Mock 5% GST
-  const couponDiscount = 50; // Mock coupon
-  
+  const gst = Math.floor(subtotal * 0.05); // 5% GST
+  const couponDiscount = 50;
+
   const deliveryCharge = cart.deliveryInfo ? cart.deliveryInfo.charge : (subtotal > 500 ? 0 : 50);
   const grandTotal = subtotal + gst + deliveryCharge - couponDiscount;
   const totalSavings = productDiscount + couponDiscount + (deliveryCharge === 0 && subtotal <= 500 ? 50 : 0);
 
-  // Mock delivery dates
   const today = new Date();
   const tmrw = new Date(today);
   tmrw.setDate(tmrw.getDate() + 1);
@@ -65,7 +73,6 @@ export function CartPage() {
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
 
   useEffect(() => {
-    // Read from localStorage to sync with AddressesPage
     const storedAddrsStr = localStorage.getItem('mockAddresses');
     const storedSelectedId = localStorage.getItem('selectedAddressId') || 'addr-1';
     if (storedAddrsStr) {
@@ -73,235 +80,319 @@ export function CartPage() {
       const selected = addrs.find((a: any) => a.id === storedSelectedId) || addrs[0];
       setSelectedAddress(selected);
     } else {
-      // Default fallback if AddressesPage was never visited
       setSelectedAddress({
-        type: 'Home',
-        addressLine1: '123 Main St, Apartment 4B',
-        addressLine2: 'Andheri West',
+        type: 'Store Hub',
+        addressLine1: 'Plot 12, Main Mandi Road',
+        addressLine2: 'Sector 18',
         city: 'Mumbai',
         state: 'Maharashtra',
-        pincode: '400001'
+        pincode: '400001',
       });
     }
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 100 }}>
-      {/* Header */}
+    <div style={{ minHeight: '100vh', background: '#fafaf9', paddingBottom: 100 }}>
+      {/* Mobile-only subheader */}
       <header
+        className="mobile-only"
         style={{
           background: '#fff',
-          padding: '12px 16px',
+          padding: '14px 16px',
           display: 'flex',
           alignItems: 'center',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          borderBottom: '1px solid #e7e5e4',
           position: 'sticky',
           top: 0,
-          zIndex: 100
+          zIndex: 90,
         }}
       >
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }}>
-          <ArrowLeftOutlined style={{ fontSize: 20 }} />
+          <ArrowLeftOutlined style={{ fontSize: 18 }} />
         </button>
         <Typography.Text strong style={{ fontSize: 16 }}>My Cart ({cart.count} items)</Typography.Text>
       </header>
 
-      {/* Address Details */}
-      {selectedAddress && (
-        <div style={{ background: '#fff', padding: '16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Typography.Text strong style={{ fontSize: 14 }}>Deliver to:</Typography.Text>
-              <Tag color="orange" style={{ margin: 0, borderRadius: 12, fontWeight: 600 }}>{selectedAddress.type}</Tag>
-            </div>
-            <Typography.Text style={{ color: '#616161', fontSize: 13, display: 'block', lineHeight: 1.4 }}>
-              {selectedAddress.addressLine1}, {selectedAddress.addressLine2}<br />{selectedAddress.city}, {selectedAddress.state} {selectedAddress.pincode}
-            </Typography.Text>
+      {/* Main Responsive Container */}
+      <div className="store-container">
+        {/* Breadcrumb / Title on Desktop */}
+        <div className="desktop-only" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#78716c', marginBottom: 6 }}>
+            <Link to="/" style={{ color: '#78716c', textDecoration: 'none' }}>Home</Link>
+            <span>/</span>
+            <span style={{ color: '#1c1917', fontWeight: 600 }}>Shopping Cart</span>
           </div>
-          <Button size="small" style={{ color: '#f97316', borderColor: '#f97316', borderRadius: 4 }} onClick={() => navigate('/addresses')}>
-            Change
-          </Button>
+          <Typography.Title level={3} style={{ margin: 0, color: '#1c1917' }}>
+            Shopping Cart ({cart.count} items)
+          </Typography.Title>
         </div>
-      )}
 
-      {/* Cart Items */}
-      <div style={{ padding: '8px 0' }}>
-        {cart.lines.map((line) => {
-          const lineMrp = line.mrp || line.displayUnitPrice || 0;
-          const lineSellingPrice = line.displayUnitPrice || 0;
-          const discountPercent = lineMrp > 0 ? Math.round(((lineMrp - lineSellingPrice) / lineMrp) * 100) : 0;
-
-          return (
-            <div key={line.productId} style={{ background: '#fff', padding: '16px', marginBottom: 8, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: 16 }}>
-                
-                {/* Details on Left */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#212121', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {line.productName}
-                  </Typography.Text>
-                  
-                  <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
-                    {line.unit} {line.packSize ? `(${line.packSize})` : ''}
-                  </Typography.Text>
-                  
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
-                    <Typography.Text strong style={{ fontSize: 16, color: '#212121' }}>
-                      {formatInr(lineSellingPrice)}
-                    </Typography.Text>
-                    {discountPercent > 0 && (
-                      <>
-                        <Typography.Text delete style={{ fontSize: 13, color: '#878787' }}>
-                          {formatInr(lineMrp)}
-                        </Typography.Text>
-                        <Typography.Text strong style={{ fontSize: 12, color: '#16a34a' }}>
-                          {discountPercent}% OFF
-                        </Typography.Text>
-                      </>
-                    )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'flex-start' }}>
+          
+          {/* Left Column: Delivery Address & Cart Lines */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Delivery Address Card */}
+            {selectedAddress && (
+              <div
+                style={{
+                  background: '#fff',
+                  borderRadius: 14,
+                  padding: '16px 20px',
+                  border: '1px solid #e7e5e4',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Typography.Text strong style={{ fontSize: 14 }}>Delivering to:</Typography.Text>
+                    <Tag color="green" style={{ margin: 0, borderRadius: 6, fontWeight: 600 }}>{selectedAddress.type}</Tag>
                   </div>
-                  
-                  <Typography.Text style={{ fontSize: 12, color: '#424242', marginTop: 8 }}>
-                    Delivered by {cart.deliveryInfo?.eta || `Tomorrow, ${dayStr}`}
+                  <Typography.Text type="secondary" style={{ fontSize: 13, display: 'block', lineHeight: 1.4 }}>
+                    {selectedAddress.addressLine1}, {selectedAddress.addressLine2}, {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode}
                   </Typography.Text>
                 </div>
+                <Button size="small" style={{ color: '#059669', borderColor: '#059669', borderRadius: 6 }} onClick={() => navigate('/addresses')}>
+                  Change
+                </Button>
+              </div>
+            )}
 
-                {/* Image & Controls on Right */}
-                <div style={{ width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ width: 80, height: 80, background: '#f5f5f5', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginBottom: 12 }}>
-                    {line.imageUrl ? (
-                      <img src={line.imageUrl} alt={line.productName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
-                    ) : (
-                      <Typography.Text type="secondary" style={{ fontSize: 10 }}>No Image</Typography.Text>
-                    )}
+            {/* Cart Item Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {cart.lines.map((line) => {
+                const lineMrp = line.mrp || line.displayUnitPrice || 0;
+                const lineSellingPrice = line.displayUnitPrice || 0;
+                const discountPercent = lineMrp > 0 ? Math.round(((lineMrp - lineSellingPrice) / lineMrp) * 100) : 0;
+
+                return (
+                  <div
+                    key={line.productId}
+                    style={{
+                      background: '#fff',
+                      borderRadius: 14,
+                      padding: '18px 20px',
+                      border: '1px solid #e7e5e4',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 18 }}>
+                      {/* Product Thumbnail */}
+                      <div
+                        style={{
+                          width: 84,
+                          height: 84,
+                          background: '#f8f7f5',
+                          borderRadius: 12,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          overflow: 'hidden',
+                          padding: 6,
+                        }}
+                      >
+                        {line.imageUrl ? (
+                          <img src={line.imageUrl} alt={line.productName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                        ) : (
+                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>No Image</Typography.Text>
+                        )}
+                      </div>
+
+                      {/* Product Details */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <Typography.Text strong style={{ fontSize: 15, color: '#1c1917', display: 'block', lineHeight: 1.3 }}>
+                            {line.productName}
+                          </Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 2, display: 'block' }}>
+                            {line.unit} {line.packSize ? `(${line.packSize})` : ''}
+                          </Typography.Text>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                            <Typography.Text strong style={{ fontSize: 17, color: '#065f46' }}>
+                              {formatInr(lineSellingPrice)}
+                            </Typography.Text>
+                            {discountPercent > 0 && (
+                              <>
+                                <Typography.Text delete type="secondary" style={{ fontSize: 13 }}>
+                                  {formatInr(lineMrp)}
+                                </Typography.Text>
+                                <Typography.Text strong style={{ fontSize: 12, color: '#16a34a' }}>
+                                  {discountPercent}% OFF
+                                </Typography.Text>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Quantity selector */}
+                          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: 8, background: '#fff' }}>
+                            <Button
+                              type="text"
+                              icon={<MinusOutlined style={{ fontSize: 11 }} />}
+                              onClick={() => cart.setQuantity(line.productId, line.quantity - 1)}
+                              style={{ width: 32, minWidth: 32, height: 32, padding: 0 }}
+                            />
+                            <Typography.Text strong style={{ width: 32, textAlign: 'center', fontSize: 14, background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 32 }}>
+                              {line.quantity}
+                            </Typography.Text>
+                            <Button
+                              type="text"
+                              icon={<PlusOutlined style={{ fontSize: 11 }} />}
+                              onClick={() => cart.setQuantity(line.productId, line.quantity + 1)}
+                              style={{ width: 32, minWidth: 32, height: 32, padding: 0 }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Divider style={{ margin: '14px 0 10px' }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Button
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() => cart.remove(line.productId)}
+                        style={{ color: '#ef4444', padding: 0, height: 'auto', fontSize: 13 }}
+                      >
+                        Remove
+                      </Button>
+                      <Button
+                        type="text"
+                        icon={<HeartOutlined />}
+                        onClick={() => {
+                          cart.remove(line.productId);
+                          message.success('Moved item to wishlist');
+                        }}
+                        style={{ color: '#4b5563', padding: 0, height: 'auto', fontSize: 13 }}
+                      >
+                        Save for later
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #d3d3d3', borderRadius: 6, background: '#fff' }}>
-                    <Button 
-                      type="text" 
-                      icon={<MinusOutlined style={{ fontSize: 10 }} />} 
-                      onClick={() => cart.setQuantity(line.productId, line.quantity - 1)} 
-                      style={{ width: 28, minWidth: 28, height: 28, padding: 0 }} 
-                    />
-                    <Typography.Text strong style={{ width: 24, textAlign: 'center', fontSize: 13, background: '#fcfcfc', borderLeft: '1px solid #d3d3d3', borderRight: '1px solid #d3d3d3', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 28 }}>
-                      {line.quantity}
-                    </Typography.Text>
-                    <Button 
-                      type="text" 
-                      icon={<PlusOutlined style={{ fontSize: 10 }} />} 
-                      onClick={() => cart.setQuantity(line.productId, line.quantity + 1)} 
-                      style={{ width: 28, minWidth: 28, height: 28, padding: 0 }} 
-                    />
-                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column: Sticky Price Breakdown & Checkout */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: 16,
+                padding: '22px 24px',
+                border: '1px solid #e7e5e4',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+              }}
+            >
+              <Typography.Title level={5} style={{ margin: '0 0 18px', fontSize: 16, color: '#1c1917' }}>
+                Order Summary
+              </Typography.Title>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4b5563' }}>Total MRP ({cart.count} items)</span>
+                  <span style={{ color: '#1c1917' }}>{formatInr(totalMrp)}</span>
                 </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4b5563' }}>Wholesale Discount</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>-{formatInr(productDiscount)}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4b5563' }}>Coupon Savings</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>-{formatInr(couponDiscount)}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4b5563' }}>GST / Taxes (5%)</span>
+                  <span style={{ color: '#1c1917' }}>{formatInr(gst)}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#4b5563' }}>Delivery Charge</span>
+                  <span style={{ color: deliveryCharge === 0 ? '#059669' : '#1c1917', fontWeight: deliveryCharge === 0 ? 600 : 400 }}>
+                    {deliveryCharge === 0 ? 'FREE' : formatInr(deliveryCharge)}
+                  </span>
+                </div>
+
+                <Divider style={{ margin: '10px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: 16, color: '#1c1917' }}>Grand Total</strong>
+                  <strong style={{ fontSize: 20, color: '#065f46' }}>{formatInr(grandTotal)}</strong>
+                </div>
+
+                {totalSavings > 0 && (
+                  <div style={{ marginTop: 8, padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0' }}>
+                    <Typography.Text strong style={{ color: '#065f46', fontSize: 13 }}>
+                      You saved {formatInr(totalSavings)} on this order 🎉
+                    </Typography.Text>
+                  </div>
+                )}
               </div>
 
-              <Divider style={{ margin: '12px 0' }} />
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Button 
-                  type="text" 
-                  icon={<DeleteOutlined />} 
-                  onClick={() => cart.remove(line.productId)} 
-                  style={{ color: '#878787', padding: 0, height: 'auto', fontSize: 13 }}
+              {/* Desktop Checkout CTA */}
+              <div className="desktop-only" style={{ marginTop: 24 }}>
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  style={{
+                    background: '#f97316',
+                    borderColor: '#f97316',
+                    fontWeight: 700,
+                    height: 48,
+                    borderRadius: 10,
+                    fontSize: 16,
+                  }}
+                  onClick={() => navigate('/checkout')}
                 >
-                  Remove
+                  Proceed to Checkout ({formatInr(grandTotal)}) &rarr;
                 </Button>
-                <Button 
-                  type="text" 
-                  icon={<HeartOutlined />} 
-                  onClick={() => {
-                    cart.remove(line.productId);
-                    message.success('Moved to Wishlist');
-                  }} 
-                  style={{ color: '#424242', padding: 0, height: 'auto', fontSize: 13 }}
-                >
-                  Move to Wishlist
-                </Button>
+              </div>
+
+              <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', color: '#78716c', fontSize: 12 }}>
+                <SafetyCertificateOutlined style={{ color: '#059669' }} />
+                <span>100% Secure &amp; Verified B2B Billing</span>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Bill Details */}
-      <div style={{ background: '#fff', padding: '16px', marginBottom: 8 }}>
-        <Typography.Text strong style={{ display: 'block', fontSize: 15, marginBottom: 16 }}>
-          Price Breakdown
-        </Typography.Text>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Total MRP ({cart.count} items)</Typography.Text>
-          <Typography.Text style={{ color: '#212121', fontSize: 13 }}>{formatInr(totalMrp)}</Typography.Text>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Discount on MRP</Typography.Text>
-          <Typography.Text style={{ color: '#16a34a', fontSize: 13 }}>-{formatInr(productDiscount)}</Typography.Text>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Coupon Savings</Typography.Text>
-          <Typography.Text style={{ color: '#16a34a', fontSize: 13 }}>-{formatInr(couponDiscount)}</Typography.Text>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Typography.Text style={{ color: '#424242', fontSize: 13 }}>GST / Taxes (5%)</Typography.Text>
-          <Typography.Text style={{ color: '#212121', fontSize: 13 }}>{formatInr(gst)}</Typography.Text>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Delivery Charge</Typography.Text>
-          <Typography.Text style={{ color: deliveryCharge === 0 ? '#16a34a' : '#212121', fontSize: 13 }}>
-            {deliveryCharge === 0 ? 'FREE' : formatInr(deliveryCharge)}
-          </Typography.Text>
-        </div>
-        
-        <Divider style={{ margin: '16px 0' }} />
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography.Text strong style={{ color: '#212121', fontSize: 16 }}>Grand Total</Typography.Text>
-          <Typography.Text strong style={{ color: '#212121', fontSize: 18 }}>{formatInr(grandTotal)}</Typography.Text>
-        </div>
-        
-        {totalSavings > 0 && (
-          <div style={{ marginTop: 16, padding: '10px 12px', background: '#dcfce7', borderRadius: 6 }}>
-             <Typography.Text strong style={{ color: '#15803d', fontSize: 13 }}>
-               You saved {formatInr(totalSavings)} on this order 🎉
-             </Typography.Text>
           </div>
-        )}
-        
-        <div style={{ marginTop: 12, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-           <SafetyCertificateOutlined style={{ color: '#878787', fontSize: 16 }} />
-           <Typography.Text style={{ color: '#878787', fontSize: 12 }}>Safe and Secure Payments.</Typography.Text>
         </div>
       </div>
 
-      {/* Sticky Bottom Checkout Bar */}
+      {/* Mobile Fixed Bottom Checkout Bar */}
       <div
+        className="mobile-only"
         style={{
           position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
           background: '#fff',
-          padding: '12px 16px',
+          padding: '12px 18px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
-          zIndex: 100
+          boxShadow: '0 -4px 14px rgba(0,0,0,0.08)',
+          zIndex: 100,
         }}
       >
         <div>
-          <Typography.Text style={{ display: 'block', fontSize: 12, color: '#878787' }}>Total Amount</Typography.Text>
-          <Typography.Text strong style={{ fontSize: 18, color: '#212121', lineHeight: 1 }}>{formatInr(grandTotal)}</Typography.Text>
+          <span style={{ display: 'block', fontSize: 11, color: '#78716c' }}>Total Amount</span>
+          <strong style={{ fontSize: 18, color: '#065f46', lineHeight: 1 }}>{formatInr(grandTotal)}</strong>
         </div>
-        <Button 
-          type="primary" 
+        <Button
+          type="primary"
           size="large"
-          style={{ background: '#f97316', borderColor: '#f97316', fontWeight: 600, width: 180, borderRadius: 8 }}
+          style={{ background: '#f97316', borderColor: '#f97316', fontWeight: 700, width: 180, borderRadius: 10 }}
           onClick={() => navigate('/checkout')}
         >
           Place Order

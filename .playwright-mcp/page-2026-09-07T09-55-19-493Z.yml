@@ -1,0 +1,25 @@
+- generic [ref=f6e4]:
+  - main [ref=f6e5]:
+    - generic [ref=f6e6]: Loading Storefront…
+  - navigation [ref=f6e7]:
+    - generic [ref=f6e8]:
+      - link "home Home" [ref=f6e9] [cursor=pointer]:
+        - /url: /
+        - img "home" [ref=f6e10]
+        - generic [ref=f6e13]: Home
+      - link "appstore Categories" [ref=f6e14] [cursor=pointer]:
+        - /url: /categories
+        - img "appstore" [ref=f6e15]
+        - generic [ref=f6e18]: Categories
+      - link "shopping-cart Cart" [ref=f6e19] [cursor=pointer]:
+        - /url: /cart
+        - img "shopping-cart" [ref=f6e21]
+        - generic [ref=f6e24]: Cart
+      - link "file-text Orders" [ref=f6e25] [cursor=pointer]:
+        - /url: /orders
+        - img "file-text" [ref=f6e26]
+        - generic [ref=f6e29]: Orders
+      - link "user Profile" [ref=f6e30] [cursor=pointer]:
+        - /url: /profile
+        - img "user" [ref=f6e31]
+        - generic [ref=f6e34]: Profile
