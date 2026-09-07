@@ -35,6 +35,20 @@ Removed the fake font and `tasks.json`, hardened `settings.json`, then purged al
 versions from every commit with `git filter-repo` and force-pushed. Verified: zero payload blobs
 remain in the object database.
 
+Separately, removed the `code-review-graph` MCP tooling from the repo. Its config hard-coded a
+Windows interpreter path (`C:\Users\admin\AppData\Local\Python\...`) and a `D:\Appzeto\SVV-Balaji`
+working directory, so it could never run on any machine but the one that generated it. It had also
+seeded instruction files for eight different AI coding agents (`AGENTS.md`, `GEMINI.md`,
+`CODEBUDDY.md`, `QODER.md`, `.cursorrules`, `.windsurfrules`, `opencode.jsonc`,
+`.github/code-review-graph.instruction.md`), each telling the agent to prefer an unavailable tool
+over normal file search, plus `.claude/settings.json` hooks on Edit/Write and SessionStart and four
+graph-dependent skills. Removed all of it and trimmed the appended block from `CLAUDE.md`, keeping
+the real project documentation intact.
+
+Audited every `package.json` while in there: no `preinstall`/`install`/`postinstall`/`prepare`
+scripts anywhere, no `.npmrc`, and every dependency resolves from the public registry — no git,
+http or file sources. Clean.
+
 **Contract changes:** none — no application code touched.
 
 **Other developer needs to know:** **`main` history was rewritten and force-pushed.** Your existing
@@ -47,7 +61,9 @@ copy rather than anything you did deliberately — but please scan your machine 
 foreign to this project (`launch.json` references SST, `AWS_PROFILE: flo-ct-flo360`, Lerna and
 Contentful; `public/fonts/README.md` describes a "Blockchain Explorer application"), so it appears
 a poisoned project skeleton was copied in at setup — which also explains why two other Appzeto
-repos were hit. Don't reuse that skeleton.
+repos were hit. Don't reuse that skeleton. Also note the `code-review-graph`
+MCP setup is gone from the repo — if you use it, keep it in your **user-level** config rather than
+committing machine-specific absolute paths here, since they break every other machine.
 
 **Next:** rotate the GitHub token in the macOS Keychain, then resume normal work.
 

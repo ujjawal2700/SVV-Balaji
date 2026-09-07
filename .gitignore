@@ -61,7 +61,6 @@ desktop.ini
 .gemini/
 .kiro/
 .qoder/
-.code-review-graph/
 
 # --- Stray files that are not project sources ------------------------------
 # Installer scripts, screenshots and pasted images. Delete them if they are not
