@@ -16,6 +16,42 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-07 — Ujjawal
+
+**Did:** Found and removed a malware loader that had been in this repo since the initial commit
+(7 Aug). It was disguised as a Font Awesome webfont at `public/fonts/fa-solid-400.woff2`
+(renamed to `fa-solid-500.woff2` in the last commit) — not a font, but obfuscated Node.js padded
+with tab characters so editors render it as blank. `.vscode/tasks.json` held a hidden background
+task with `runOn: folderOpen` that ran it through `node` every time the folder was opened in
+VS Code, with all output suppressed. `.vscode/settings.json` had `task.allowAutomaticTasks: true`,
+which is what let it run with no prompt.
+
+The payload resolves a C2 IP from an Ethereum mainnet transaction (EtherHiding — the C2 address is
+encoded in a transaction's `to` field, so it can be rotated without touching the repo), pulls a
+XOR-encrypted second stage over plain HTTP, `eval()`s it, and re-spawns itself detached. Three
+payload generations were committed over the project's life.
+
+Removed the fake font and `tasks.json`, hardened `settings.json`, then purged all three payload
+versions from every commit with `git filter-repo` and force-pushed. Verified: zero payload blobs
+remain in the object database.
+
+**Contract changes:** none — no application code touched.
+
+**Other developer needs to know:** **`main` history was rewritten and force-pushed.** Your existing
+clone will not fast-forward — back up any local work, then re-clone, or
+`git fetch origin && git reset --hard origin/main`. **Do not** merge or push an old clone: that
+would reintroduce the malware. Two things worth your attention: the payload was committed under
+your authorship in `c337079`, `6029d4f` and `bfaf3a3`, which most likely means it rode in on a file
+copy rather than anything you did deliberately — but please scan your machine and check
+`.vscode/tasks.json` in every project you have locally. And the whole `.vscode/` directory here is
+foreign to this project (`launch.json` references SST, `AWS_PROFILE: flo-ct-flo360`, Lerna and
+Contentful; `public/fonts/README.md` describes a "Blockchain Explorer application"), so it appears
+a poisoned project skeleton was copied in at setup — which also explains why two other Appzeto
+repos were hit. Don't reuse that skeleton.
+
+**Next:** rotate the GitHub token in the macOS Keychain, then resume normal work.
+
+---
 ## 2026-09-02 — Raunak
 
 **Did:** Built the `svv-balaji-customer` home screen as a retailer B2B ordering surface (greeting
