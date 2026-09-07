@@ -42,8 +42,11 @@ seeded instruction files for eight different AI coding agents (`AGENTS.md`, `GEM
 `CODEBUDDY.md`, `QODER.md`, `.cursorrules`, `.windsurfrules`, `opencode.jsonc`,
 `.github/code-review-graph.instruction.md`), each telling the agent to prefer an unavailable tool
 over normal file search, plus `.claude/settings.json` hooks on Edit/Write and SessionStart and four
-graph-dependent skills. Removed all of it and trimmed the appended block from `CLAUDE.md`, keeping
-the real project documentation intact.
+graph-dependent skills. It had additionally written four whole agent directories — `.codebuddy/`,
+`.gemini/`, `.kiro/` and `.qoder/` — each with its own MCP server definition, hooks and duplicate
+skill set, including two shell hook scripts (`.gemini/hooks/crg-*.sh`) that called the binary
+against a hard-coded `D:/Appzeto/SVV-Balaji` path. Removed all of it and trimmed the appended block
+from `CLAUDE.md`, keeping the real project documentation intact.
 
 Audited every `package.json` while in there: no `preinstall`/`install`/`postinstall`/`prepare`
 scripts anywhere, no `.npmrc`, and every dependency resolves from the public registry — no git,
