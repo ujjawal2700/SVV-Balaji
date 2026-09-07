@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { ProcurementPlanStatus } from '@prisma/client';
 import { ProcurementService } from './procurement.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FarmerPerformanceService } from '../farmers/farmer-performance.service';
 
 /**
  * The two "consumed record" boundaries in procurement.
@@ -41,6 +42,11 @@ describe('ProcurementService - plan and inspection maintenance', () => {
         farmerId: 'f1',
         cropName: 'Wheat',
         result: 'APPROVED',
+        // An APPROVED inspection always carries both measurements - approval is
+        // what lets the harvest be collected, so the service refuses to leave
+        // them blank. Seeding them keeps this fixture a record that could exist.
+        moistureLevel: 12.0,
+        foreignMatter: 1.5,
         collection: null,
       },
     };
@@ -89,7 +95,10 @@ describe('ProcurementService - plan and inspection maintenance', () => {
       $transaction: jest.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
     };
 
-    service = new ProcurementService(prisma as unknown as PrismaService);
+    service = new ProcurementService(
+      prisma as unknown as PrismaService,
+      { recalculate: jest.fn() } as unknown as FarmerPerformanceService,
+    );
   });
 
   // --- plans ---------------------------------------------------------------

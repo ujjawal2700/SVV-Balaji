@@ -11,12 +11,27 @@ import {
 } from './dto/production.dto';
 
 /**
- * Set MULTIGRAIN_ENABLED=true once the client confirms the multigrain
- * ratio/blending engine is in contracted scope. The data model supports it
- * fully; only execution is gated, so enabling it is a config change rather
- * than a migration.
+ * How far a blend may drift from its recipe before production is refused,
+ * in percentage points of the total input.
+ *
+ * 0.5 pp is tight enough that a 60/40 blend cannot quietly become 65/35 - which
+ * is the whole point of holding a formula of record - and loose enough to
+ * absorb the rounding that comes of drawing whole-ish quantities from stock. On
+ * a 1,000 kg mix it allows 5 kg of slack per grain.
+ *
+ * `BLEND_TOLERANCE_POINTS` in the panel's ProductionBatchFormModal mirrors this
+ * so the form can show the operator where they stand before they submit. If it
+ * changes here, change it there.
  */
-const multigrainEnabled = () => process.env.MULTIGRAIN_ENABLED === 'true';
+const BLEND_TOLERANCE_POINTS = 0.5;
+
+/**
+ * Crop names are free text on both the recipe and the batch - they are typed by
+ * different people, months apart, in the field and in the office. Matching them
+ * case- and whitespace-insensitively is the difference between "Wheat" and
+ * "wheat " blocking a legitimate production run.
+ */
+const normaliseCrop = (crop: string) => crop.trim().toLowerCase();
 
 @Injectable()
 export class ProductionService {
@@ -166,13 +181,6 @@ export class ProductionService {
       );
     }
 
-    if (recipe.productionType === ProductionType.MULTI_GRAIN && !multigrainEnabled()) {
-      throw new BadRequestException(
-        'Multigrain production is not enabled. The recipe/BOM ratio engine is pending client ' +
-          'scope confirmation - set MULTIGRAIN_ENABLED=true once it is contracted.',
-      );
-    }
-
     // Validate every consumed batch before touching anything.
     const rmBatches = await this.prisma.rawMaterialBatch.findMany({
       where: { id: { in: dto.consumptions.map((c) => c.rawMaterialBatchId) } },
@@ -259,13 +267,17 @@ export class ProductionService {
 
       // The crop must actually appear in the recipe, else the formula is a fiction.
       const inRecipe = recipe.ingredients.some(
-        (i) => i.cropName.trim().toLowerCase() === batch.cropName.trim().toLowerCase(),
+        (i) => normaliseCrop(i.cropName) === normaliseCrop(batch.cropName),
       );
       if (!inRecipe) {
         throw new BadRequestException(
           `Batch ${batch.batchNumber} is ${batch.cropName}, which is not an ingredient of recipe ${recipe.recipeCode}`,
         );
       }
+    }
+
+    if (recipe.productionType === ProductionType.MULTI_GRAIN) {
+      this.assertBlendMatchesRecipe(recipe, rmBatches, dto.consumptions);
     }
 
     const productionDate = new Date(dto.productionDate);
@@ -370,6 +382,70 @@ export class ProductionService {
         },
       });
     });
+  }
+
+  /**
+   * A recipe fixes a ratio at approval; nothing else makes that ratio true at
+   * production time. Without this, a 60/40 blend can be run 80/20 and still be
+   * labelled and traced as the approved formula (A-05, confirmed in scope
+   * 14 Aug 2026).
+   */
+  private assertBlendMatchesRecipe(
+    recipe: { recipeCode: string; ingredients: Array<{ cropName: string; percentage: unknown }> },
+    rmBatches: Array<{ id: string; cropName: string }>,
+    consumptions: Array<{ rawMaterialBatchId: string; quantityUsed: number }>,
+  ) {
+    const usedByCrop = new Map<string, number>();
+    let totalInput = 0;
+
+    for (const consumption of consumptions) {
+      const batch = rmBatches.find((b) => b.id === consumption.rawMaterialBatchId)!;
+      const key = normaliseCrop(batch.cropName);
+      usedByCrop.set(key, (usedByCrop.get(key) ?? 0) + consumption.quantityUsed);
+      totalInput += consumption.quantityUsed;
+    }
+
+    if (totalInput <= 0) {
+      throw new BadRequestException('A production run must consume some raw material');
+    }
+
+    // Every grain in the formula has to be present. A three-grain blend made
+    // from two grains is a different product, not a rounding error.
+    const missing = recipe.ingredients
+      .filter((i) => !usedByCrop.has(normaliseCrop(i.cropName)))
+      .map((i) => i.cropName);
+
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Recipe ${recipe.recipeCode} calls for ${missing.join(' and ')}, but no ` +
+          `${missing.length === 1 ? 'batch of it was' : 'batches of them were'} supplied. ` +
+          `Every grain in the formula has to be in the mix.`,
+      );
+    }
+
+    const drifted = recipe.ingredients
+      .map((ingredient) => {
+        const required = Number(ingredient.percentage);
+        const actual = ((usedByCrop.get(normaliseCrop(ingredient.cropName)) ?? 0) / totalInput) * 100;
+        return { cropName: ingredient.cropName, required, actual };
+      })
+      .filter((i) => Math.abs(i.actual - i.required) > BLEND_TOLERANCE_POINTS);
+
+    if (drifted.length > 0) {
+      const detail = drifted
+        .map(
+          (i) =>
+            `${i.cropName} is ${i.actual.toFixed(2)}% of the mix but the recipe says ` +
+            `${i.required.toFixed(2)}% (needs ${((i.required / 100) * totalInput).toFixed(2)} ` +
+            `of the ${totalInput.toFixed(2)} total)`,
+        )
+        .join('; ');
+
+      throw new BadRequestException(
+        `The mix does not match recipe ${recipe.recipeCode}: ${detail}. ` +
+          `Blends may drift by at most ${BLEND_TOLERANCE_POINTS} percentage points.`,
+      );
+    }
   }
 
   /** FRD 20.5 - records actual output and derives process loss. */

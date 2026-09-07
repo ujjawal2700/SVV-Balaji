@@ -154,6 +154,18 @@ describe('SalesService', () => {
           allocations = allocations.filter((a) => a.orderId !== where.orderId);
           return { count: 0 };
         }),
+        // Cancelling releases allocations rather than deleting them, so the order
+        // can still answer which batches it was promised (A-13).
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          let count = 0;
+          for (const a of allocations) {
+            if (a.orderId === where.orderId && a.releasedAt == null) {
+              Object.assign(a, data);
+              count += 1;
+            }
+          }
+          return { count };
+        }),
       },
       finishedGoodsStock: {
         findMany: jest.fn(async ({ where }) =>
@@ -192,6 +204,11 @@ describe('SalesService', () => {
           counters[where.key] += 1;
           return { key: where.key, lastNumber: counters[where.key] };
         }),
+      },
+      // Dispatch writes the stock ledger; without this the tx client has no
+      // stockMovement and the fulfilment tests blow up inside the service.
+      stockMovement: {
+        create: jest.fn(async ({ data }: any) => ({ id: 'mv-1', ...data })),
       },
       $transaction: jest.fn(async (fn: any) => fn(prisma)),
     };
@@ -348,7 +365,11 @@ describe('SalesService', () => {
       fgStock({ quantity: 100, fgBatch: { id: 'fg-old', expiryDate: D('2020-01-01') } });
 
       const order = await confirmed(10);
-      await expect(service.allocate(order.id, 'user-1')).rejects.toThrow(/Not enough/);
+      // Expired stock is not allocatable, so nothing can be created for the line
+      // and allocate refuses outright rather than allocating a partial quantity.
+      await expect(service.allocate(order.id, 'user-1')).rejects.toThrow(
+        /No QA-released stock is available/,
+      );
     });
 
     it('reserves what it allocates, so the same packs cannot be promised twice', async () => {
@@ -358,8 +379,15 @@ describe('SalesService', () => {
       await service.allocate(first.id, 'user-1');
       expect(row.reservedQuantity).toBe(20);
 
+      // Only 5 of the 25 packs are still free. Allocation fills what it can and
+      // reports the rest as short rather than throwing - the property under test
+      // is that the 20 already reserved are never handed to a second order.
       const second = await confirmed(10);
-      await expect(service.allocate(second.id, 'user-1')).rejects.toThrow(/Not enough/);
+      const result: any = await service.allocate(second.id, 'user-1');
+      expect(result.complete).toBe(false);
+      expect(result.shortfalls).toHaveLength(1);
+      expect(result.shortfalls[0]).toMatchObject({ requested: 10, allocated: 5, short: 5 });
+      expect(row.reservedQuantity).toBe(25);
     });
 
     it('refuses to allocate an order twice', async () => {
@@ -400,8 +428,8 @@ describe('SalesService', () => {
       expect(row.quantity).toBe(40);
       expect(row.reservedQuantity).toBe(15);
 
-      await service.advance(order.id, 'PACKED' as any);
-      await service.advance(order.id, 'DISPATCHED' as any);
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+      await service.advance(order.id, 'DISPATCHED' as any, 'user-1');
 
       expect(row.quantity).toBe(25);
       expect(row.reservedQuantity).toBe(0);
@@ -409,7 +437,7 @@ describe('SalesService', () => {
 
     it('refuses to skip a step in the lifecycle', async () => {
       const order: any = await placeOrder('cust-b2b');
-      await expect(service.advance(order.id, 'DELIVERED' as any)).rejects.toThrow(
+      await expect(service.advance(order.id, 'DELIVERED' as any, 'user-1')).rejects.toThrow(
         /cannot go from PLACED to DELIVERED/,
       );
     });
@@ -432,8 +460,8 @@ describe('SalesService', () => {
       const order: any = await placeOrder('cust-b2b', 5);
       await service.confirm(order.id);
       await service.allocate(order.id, 'user-1');
-      await service.advance(order.id, 'PACKED' as any);
-      await service.advance(order.id, 'DISPATCHED' as any);
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+      await service.advance(order.id, 'DISPATCHED' as any, 'user-1');
 
       await expect(service.cancel(order.id, { reason: 'too late' })).rejects.toThrow(
         BadRequestException,

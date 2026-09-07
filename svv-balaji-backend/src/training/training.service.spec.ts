@@ -68,6 +68,14 @@ describe('TrainingService - session maintenance', () => {
       },
       trainingMaterial: {
         findUnique: jest.fn(async ({ where }) => materials[where.id] ?? null),
+        // removeMaterial scopes the lookup to the session, so a material only
+        // resolves when it actually belongs to the session being edited.
+        findFirst: jest.fn(async ({ where }: any) => {
+          const material = materials[where.id];
+          if (!material) return null;
+          if (where.sessionId !== undefined && material.sessionId !== where.sessionId) return null;
+          return material;
+        }),
         delete: jest.fn(async ({ where }) => {
           const removed = materials[where.id];
           delete materials[where.id];
@@ -78,7 +86,11 @@ describe('TrainingService - session maintenance', () => {
           return { count: 1 };
         }),
       },
-      $transaction: jest.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
+      // The service uses both forms: an array of operations for the attendance
+      // check and a callback for session deletion.
+      $transaction: jest.fn(async (arg: any) =>
+        typeof arg === 'function' ? arg(prisma) : Promise.all(arg),
+      ),
     };
 
     service = new TrainingService(prisma as unknown as PrismaService);

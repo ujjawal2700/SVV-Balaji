@@ -54,7 +54,14 @@ function pluralise(plural: string, n: number): string {
   if (n !== 1) return plural;
   if (IRREGULAR[plural]) return IRREGULAR[plural];
   if (plural.endsWith('ies')) return `${plural.slice(0, -3)}y`;
-  if (plural.endsWith('es') && /(ch|sh|s|x|z)es$/.test(plural)) return plural.slice(0, -2);
+  /**
+   * "-sses" is an unambiguous "-es" plural (classes -> class), but a single
+   * "-ses" is not: "warehouses" is "warehouse" + s, not "warehous" + es. Only
+   * ch/sh/x/z genuinely take "-es", so a lone "s" must not be in this class -
+   * it turned "1 warehouses" into "1 warehous" in the delete refusal.
+   */
+  if (plural.endsWith('sses')) return plural.slice(0, -2);
+  if (plural.endsWith('es') && /(ch|sh|x|z)es$/.test(plural)) return plural.slice(0, -2);
   if (plural.endsWith('s')) return plural.slice(0, -1);
   return plural;
 }

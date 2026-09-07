@@ -1,6 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CollectionService } from './collection.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FarmerPerformanceService } from '../farmers/farmer-performance.service';
+import { SequenceService } from '../common/sequence.service';
 
 /**
  * Collection is where the traceability chain extends Farmer -> Batch.
@@ -75,7 +77,15 @@ describe('CollectionService', () => {
       $transaction: jest.fn(async (cb: any) => cb(makeTx())),
     };
 
-    service = new CollectionService(prisma as unknown as PrismaService);
+    service = new CollectionService(
+      prisma as unknown as PrismaService,
+      // Score refresh is deliberately fire-and-forget in the service, so a
+      // stub is enough; these tests are about weights and receipt numbers.
+      { recalculate: jest.fn() } as unknown as FarmerPerformanceService,
+      {
+        next: jest.fn(async (_tx: unknown, prefix: string) => `${prefix}-20260807-001`),
+      } as unknown as SequenceService,
+    );
   });
 
   const approvedInspection = (id = 'insp-1', overrides: Record<string, unknown> = {}) => {

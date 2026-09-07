@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { FarmerVerificationAction } from '@prisma/client';
 import { FarmersService } from './farmers.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FarmerPerformanceService } from './farmer-performance.service';
 
 /**
  * The farmerCode is the anchor of the whole farm-to-fork traceability chain
@@ -60,7 +61,12 @@ describe('FarmersService - traceability code', () => {
       $transaction: jest.fn(async (cb: any) => cb(makeTxClient())),
     };
 
-    service = new FarmersService(prisma as unknown as PrismaService);
+    service = new FarmersService(
+      prisma as unknown as PrismaService,
+      // FarmersService injects this but never calls it; a bare stub keeps the
+      // constructor honest without inventing behaviour the tests don't exercise.
+      { recalculate: jest.fn() } as unknown as FarmerPerformanceService,
+    );
   });
 
   const seedFarmer = (id: string, overrides: Record<string, unknown> = {}) => {
@@ -69,6 +75,20 @@ describe('FarmersService - traceability code', () => {
       fullName: 'Test Farmer',
       status: 'PENDING_VERIFICATION',
       farmerCode: null,
+      // Approval refuses an incomplete record (registration-completeness.ts), so
+      // a farmer seeded here has every required field filled. These tests are
+      // about code issuance, not completeness; blank one via `overrides` to
+      // exercise the gate.
+      aadhaarNumber: '1234 5678 9012',
+      address: '12 Market Road, Nagpur',
+      farmSizeAcres: 4.5,
+      landType: 'IRRIGATED',
+      irrigationType: 'DRIP',
+      cropDetails: 'Soybean, kharif',
+      bankAccountName: 'Test Farmer',
+      bankName: 'State Bank of India',
+      bankAccountNo: '30123456789',
+      ifscCode: 'SBIN0001234',
       ...overrides,
     };
   };

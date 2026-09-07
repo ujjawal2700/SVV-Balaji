@@ -20,7 +20,7 @@ import {
  */
 function makePrisma() {
   let grants: { role: UserRole; permission: string }[] = [];
-  let state: { role: UserRole }[] = [];
+  const state: { role: UserRole }[] = [];
   let users: { role: UserRole }[] = [];
 
   return {
@@ -113,10 +113,24 @@ describe('permission registry', () => {
     expect(defaultPermissionsFor(UserRole.QA_MANAGER)).toContain('quality.release');
     expect(defaultPermissionsFor(UserRole.WAREHOUSE_MANAGER)).toContain('stock.move');
     expect(defaultPermissionsFor(UserRole.SALES_TEAM)).not.toContain('stock.move');
-    // Only Super Admin approved farmers, recipes or created users.
+    // Only Super Admin approves farmers or recipes.
     for (const role of ASSIGNABLE_ROLES) {
       expect(defaultPermissionsFor(role)).not.toContain('farmers.approve');
       expect(defaultPermissionsFor(role)).not.toContain('recipes.approve');
+    }
+
+    /**
+     * `users.create` was Super-Admin-only until FRD 5.2 "Branch Staff
+     * Management" moved it to Branch Manager. It is only safe because
+     * UsersService bounds it - a non-Super-Admin may create accounts at their
+     * own branch and only in roles below their own, never a peer and never a
+     * Super Admin. Branch Manager is therefore the one assignable role allowed
+     * to hold it; anywhere else it is a privilege-escalation route rather than
+     * a delegation, so this stays a tripwire.
+     */
+    expect(defaultPermissionsFor(UserRole.BRANCH_MANAGER)).toContain('users.create');
+    for (const role of ASSIGNABLE_ROLES) {
+      if (role === UserRole.BRANCH_MANAGER) continue;
       expect(defaultPermissionsFor(role)).not.toContain('users.create');
     }
   });

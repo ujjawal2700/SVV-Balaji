@@ -89,7 +89,22 @@ describe('AuthService - session lifecycle', () => {
     );
   });
 
-  const login = () => service.login({ email: 'admin@svvbalaji.com', password: 'ChangeMe@123' });
+  /**
+   * `login` returns either a session or a two-factor challenge, and the union is
+   * narrowed once here. These tests all cover the session path; if 2FA is ever
+   * switched on for this fixture the helper fails loudly rather than letting a
+   * cast quietly hide a challenge behind an undefined token.
+   */
+  const login = async () => {
+    const result = await service.login({
+      email: 'admin@svvbalaji.com',
+      password: 'ChangeMe@123',
+    });
+    if ('requiresTwoFactor' in result) {
+      throw new Error('Expected a session, but login returned a two-factor challenge');
+    }
+    return result;
+  };
 
   describe('login', () => {
     it('returns an access and refresh token for valid credentials', async () => {

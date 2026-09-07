@@ -89,6 +89,16 @@ describe('ProductionService - blend ratio enforcement', () => {
           where.id.in.map((id: string) => batches[id]).filter(Boolean),
         ),
       },
+      /**
+       * The QA gates added with the QC panel run on `this.prisma`, before the
+       * blend check and outside the transaction. Both return "nothing on
+       * record", which the service treats as clear: cleaning only has to have
+       * passed if it happened at all, and a batch with no raw-material
+       * inspection is not blocked. That keeps these tests about the blend
+       * ratio rather than about QA.
+       */
+      cleaningGradingRecord: { findFirst: jest.fn(async () => null) },
+      qualityInspection: { findFirst: jest.fn(async () => null) },
       $transaction: jest.fn(async (fn: (client: unknown) => Promise<unknown>) => fn(tx)),
     };
 

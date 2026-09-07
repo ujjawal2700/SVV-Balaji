@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 /**
  * The warehouse master screen can now close a warehouse. The guard that matters
@@ -10,6 +11,18 @@ import { PrismaService } from '../prisma/prisma.service';
  * would know that was the fix.
  */
 describe('WarehouseService - master maintenance', () => {
+
+  /**
+   * `findAll` is branch-scoped (FRD 5.2). A Super Admin is organisation-wide, so
+   * this actor applies no branch filter and leaves these tests about the active
+   * / inactive split they are named for.
+   */
+  const ADMIN: JwtPayload = {
+    sub: 'admin-1',
+    email: 'admin@svvbalaji.com',
+    role: 'SUPER_ADMIN',
+    branchId: null,
+  };
   const WAREHOUSE_ID = 'w1';
 
   let warehouses: Record<string, any>;
@@ -62,13 +75,13 @@ describe('WarehouseService - master maintenance', () => {
 
   it('hides closed warehouses from the pickers by default', async () => {
     warehouses.w2 = { id: 'w2', name: 'Old Shed', isActive: false };
-    const listed = await service.findAll();
+    const listed = await service.findAll(ADMIN);
     expect(listed).toHaveLength(1);
   });
 
   it('includes closed warehouses when the master screen asks', async () => {
     warehouses.w2 = { id: 'w2', name: 'Old Shed', isActive: false };
-    const listed = await service.findAll(undefined, true);
+    const listed = await service.findAll(ADMIN, undefined, true);
     expect(listed).toHaveLength(2);
   });
 

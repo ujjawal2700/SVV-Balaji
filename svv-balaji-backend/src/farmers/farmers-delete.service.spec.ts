@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { FarmersService } from './farmers.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FarmerPerformanceService } from './farmer-performance.service';
 
 /**
  * Deleting a farmer is the one destructive action on the farm-sourcing screens,
@@ -69,7 +70,12 @@ describe('FarmersService - update and delete', () => {
       ),
     };
 
-    service = new FarmersService(prisma as unknown as PrismaService);
+    service = new FarmersService(
+      prisma as unknown as PrismaService,
+      // FarmersService injects this but never calls it; a bare stub keeps the
+      // constructor honest without inventing behaviour the tests don't exercise.
+      { recalculate: jest.fn() } as unknown as FarmerPerformanceService,
+    );
   });
 
   // --- update --------------------------------------------------------------

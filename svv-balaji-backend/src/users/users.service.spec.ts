@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { UserRole, UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 /**
  * These tests exist because of a specific failure mode: the admin panel now
@@ -14,6 +15,19 @@ describe('UsersService - edit, deactivate and delete guards', () => {
   const ADMIN_ID = 'admin-1';
   const OTHER_ADMIN_ID = 'admin-2';
   const STAFF_ID = 'staff-1';
+
+  /**
+   * `update` checks the caller may manage the target's role and branch before it
+   * applies anything. Both actors here are Super Admins so that check always
+   * passes and these tests stay about the lockout guards they are named for.
+   */
+  const ADMIN_ACTOR: JwtPayload = {
+    sub: ADMIN_ID,
+    email: 'admin@svvbalaji.com',
+    role: UserRole.SUPER_ADMIN,
+    branchId: null,
+  };
+  const OTHER_ADMIN_ACTOR: JwtPayload = { ...ADMIN_ACTOR, sub: OTHER_ADMIN_ID };
 
   let users: Record<string, any>;
   let prisma: any;
@@ -41,6 +55,9 @@ describe('UsersService - edit, deactivate and delete guards', () => {
         fullName: 'Asha',
         role: UserRole.PROCUREMENT_MANAGER,
         status: UserStatus.ACTIVE,
+        // Every role but Super Admin is branch-scoped and the service refuses to
+        // save one without a branch, so the fixture carries it.
+        branchId: 'branch-1',
         passwordHash: 'hashed',
         refreshTokenHash: null,
       },
@@ -118,7 +135,7 @@ describe('UsersService - edit, deactivate and delete guards', () => {
 
   it('rejects an email that already belongs to someone else', async () => {
     await expect(
-      service.update(STAFF_ID, { email: 'admin@svvbalaji.com' }, ADMIN_ID),
+      service.update(STAFF_ID, { email: 'admin@svvbalaji.com' }, ADMIN_ID, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -127,18 +144,19 @@ describe('UsersService - edit, deactivate and delete guards', () => {
       STAFF_ID,
       { email: 'asha@svvbalaji.com', fullName: 'Asha Kumari' },
       ADMIN_ID,
+      ADMIN_ACTOR,
     );
     expect(result.fullName).toBe('Asha Kumari');
   });
 
   it('refuses to let an admin change their own role', async () => {
     await expect(
-      service.update(ADMIN_ID, { role: UserRole.SALES_TEAM }, ADMIN_ID),
+      service.update(ADMIN_ID, { role: UserRole.SALES_TEAM }, ADMIN_ID, ADMIN_ACTOR),
     ).rejects.toThrow(/cannot change your own role/i);
   });
 
   it('404s on a user that does not exist', async () => {
-    await expect(service.update('nope', { fullName: 'X' }, ADMIN_ID)).rejects.toBeInstanceOf(
+    await expect(service.update('nope', { fullName: 'X' }, ADMIN_ID, ADMIN_ACTOR)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -147,7 +165,7 @@ describe('UsersService - edit, deactivate and delete guards', () => {
 
   it('refuses to demote the only active Super Admin', async () => {
     await expect(
-      service.update(ADMIN_ID, { role: UserRole.BRANCH_MANAGER }, OTHER_ADMIN_ID),
+      service.update(ADMIN_ID, { role: UserRole.BRANCH_MANAGER }, OTHER_ADMIN_ID, OTHER_ADMIN_ACTOR),
     ).rejects.toThrow(/only active Super Admin/i);
   });
 
@@ -161,8 +179,11 @@ describe('UsersService - edit, deactivate and delete guards', () => {
     };
     const result: any = await service.update(
       ADMIN_ID,
-      { role: UserRole.BRANCH_MANAGER },
+      // Demotion moves them into a branch-scoped role, so the branch has to come
+      // with it - a branch manager with no branch is refused.
+      { role: UserRole.BRANCH_MANAGER, branchId: 'branch-1' },
       OTHER_ADMIN_ID,
+      OTHER_ADMIN_ACTOR,
     );
     expect(result.role).toBe(UserRole.BRANCH_MANAGER);
   });

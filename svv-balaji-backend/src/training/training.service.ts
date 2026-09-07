@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -6,6 +6,7 @@ import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { AddTrainingMaterialDto } from './dto/add-training-material.dto';
+import { assertDeletable } from '../common/dependants';
 
 @Injectable()
 export class TrainingService {
@@ -117,7 +118,7 @@ export class TrainingService {
 
   async updateSession(
     id: string,
-    dto: import('./dto/update-training-session.dto').UpdateTrainingSessionDto,
+    dto: UpdateTrainingSessionDto,
   ) {
     const session = await this.prisma.trainingSession.findUnique({ where: { id } });
     if (!session) throw new NotFoundException('Training session not found');
@@ -138,20 +139,22 @@ export class TrainingService {
     });
     if (!session) throw new NotFoundException('Training session not found');
 
-    if (session._count.attendances > 0) {
-      throw new BadRequestException(
-        'Cannot delete training session once attendance has been marked',
-      );
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      await tx.trainingMaterial.deleteMany({
-        where: { sessionId: id },
-      });
-      return tx.trainingSession.delete({
-        where: { id },
-      });
+    /**
+     * Shared refusal, not an ad-hoc one: a 409 with the blocking count and the
+     * "deactivate instead" guidance, the same as every other master delete.
+     * A bare 400 saying "attendance has been marked" tells the user neither how
+     * many records are in the way nor what to do next.
+     */
+    assertDeletable('Training session', session.title, {
+      'attendance records': session._count.attendances,
     });
+
+    await this.prisma.$transaction([
+      this.prisma.trainingMaterial.deleteMany({ where: { sessionId: id } }),
+      this.prisma.trainingSession.delete({ where: { id } }),
+    ]);
+
+    return { id, deleted: true };
   }
 }
 

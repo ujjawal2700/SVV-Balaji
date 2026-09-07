@@ -16,6 +16,57 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-07 (later) — Ujjawal
+
+**Did:** Brought the backend test suite back to green: **23/23 suites, 283/283 tests, 0 type
+errors, 0 lint errors.** It started at 14 suites failing and 22 tests failing, with 8 suites not
+compiling at all — so 131 of those 283 tests had never been running.
+
+Most of it was ordinary drift: specs constructing services that had since gained injected
+dependencies (`FarmerPerformanceService`, `SequenceService`, `PricingService`), calling methods
+that had gained parameters (`advance`, `users.update`, warehouse `findAll` after branch scoping),
+and fixtures predating new validation (a farmer approved without the 10 required fields, an
+APPROVED inspection with no measurements, a branch-scoped user with no branch). Those were fixed on
+the test side, because the services were right.
+
+**Three were not drift, and all three came from the same commit — `87051b6` "qc panel":**
+
+1. **Warehouse deactivation stopped counting finished goods.** The guard was replaced with one
+   reading only `warehouse.stock`, so a warehouse full of packed product could be closed and that
+   stock stranded with no screen able to move it. Restored the both-ledger count.
+2. **`assertDeletable` was replaced by ad-hoc refusals** in warehouse and training — a 400 instead
+   of the shared 409, losing the blocking counts and the "deactivate instead" guidance. Restored.
+3. **The `MULTIGRAIN_ENABLED` gate came back, and the blend-ratio engine was deleted.** A-05 was
+   closed on 14 Aug with the client confirming multigrain in scope; this log says the flag "no
+   longer exists" and `PROJECT_STATE.md` lists multigrain as live. It had been reinstated, so every
+   MULTI_GRAIN run was being refused in a build we were treating as shipping that feature — and
+   the 0.5pp ratio enforcement that made removing the gate safe was gone with it. Restored both;
+   the 17 blend-ratio specs verify it.
+
+Also fixed a real bug in `assertDeletable`: `pluralise` had `s` in its `(ch|sh|s|x|z)es$` class, so
+"1 warehouses" printed as **"1 warehous"**. `-ses` is ambiguous ("warehouses" is warehouse+s, not
+warehous+es) while `-sses` is not, so they are now handled separately. That one bug was failing
+both `dependants.spec.ts` and `branches.service.spec.ts`.
+
+**Contract changes:** none to routes or DTOs. Two behavioural restorations that callers will see:
+warehouse and training deletes refuse with **409 Conflict** again (they had regressed to 400), and
+multigrain production runs are accepted again, subject to the 0.5pp blend tolerance.
+
+**Other developer needs to know:** please look at what else `87051b6` touched — three unrelated
+guards were reverted in one commit, which suggests a bad merge or a stale working copy rather than
+three separate decisions. Separately, `users.create` moving from Super-Admin-only to Branch Manager
+(FRD 5.2) was never recorded here, and `permissions.service.spec.ts` carries a tripwire test whose
+comment says exactly that such a change "belongs in DEV_LOG, not in a quiet edit to the registry".
+Recording it now: **Branch Manager holds `users.create`**, and it is safe only because
+`UsersService.assertMayManage` bounds it — own branch only, roles strictly below their own, never a
+peer, never a Super Admin. The tripwire now pins that Branch Manager is the only assignable role
+allowed to hold it.
+
+**Next:** the 176 remaining lint warnings are all `no-explicit-any` in specs; worth a pass but not
+urgent.
+
+---
+
 ## 2026-09-07 — Ujjawal
 
 **Did:** Found and removed a malware loader that had been in this repo since the initial commit

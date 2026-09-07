@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
+import { assertDeletable } from '../common/dependants';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
   AdjustStockDto,
@@ -58,18 +59,30 @@ export class WarehouseService {
     });
   }
 
+  /**
+   * Closing a warehouse. Refused while it still physically holds anything -
+   * a closed warehouse disappears from the transfer and stock-out pickers, so
+   * closing one with stock in it would strand that stock with no screen able
+   * to move it out.
+   *
+   * Both ledgers are counted. Reading only `warehouse.stock` misses finished
+   * goods entirely, which lets a warehouse full of packed product be closed.
+   */
   async setActive(id: string, isActive: boolean) {
-    const warehouse = await this.prisma.warehouse.findUnique({
-      where: { id },
-      include: { stock: true },
-    });
-    if (!warehouse) throw new NotFoundException('Warehouse not found');
+    const warehouse = await this.findOne(id);
+    if (warehouse.isActive === isActive) return warehouse;
 
     if (!isActive) {
-      const totalStock = warehouse.stock.reduce((sum, s) => sum + Number(s.quantity), 0);
-      if (totalStock > 0) {
+      const [raw, finished] = await this.prisma.$transaction([
+        this.prisma.warehouseStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
+        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id, quantity: { gt: 0 } } }),
+      ]);
+      const holding = raw + finished;
+      if (holding > 0) {
         throw new BadRequestException(
-          `Cannot deactivate warehouse while it still holds stock (${totalStock} units across ${warehouse.stock.length} batches)`,
+          `This warehouse still holds ${holding} stock line${holding === 1 ? '' : 's'}. ` +
+            `Transfer or issue the stock first - once the warehouse is closed it no longer ` +
+            `appears in the transfer picker, and the stock would be stranded.`,
         );
       }
     }
@@ -77,43 +90,40 @@ export class WarehouseService {
     return this.prisma.warehouse.update({
       where: { id },
       data: { isActive },
+      include: { branch: { select: { id: true, name: true } } },
     });
   }
 
+  /**
+   * Deleting a warehouse. Every reference is counted, not just the three that
+   * happen to be relations on the row - finished goods, orders and allocations
+   * point here too, and deleting past one of those loses the history that says
+   * where stock physically was.
+   */
   async remove(id: string) {
-    const warehouse = await this.prisma.warehouse.findUnique({
-      where: { id },
-      include: {
-        stock: true,
-        _count: {
-          select: {
-            movementsOutgoing: true,
-            movementsIncoming: true,
-            batches: true,
-          },
-        },
-      },
+    const warehouse = await this.findOne(id);
+
+    const [batches, stock, movementsOut, movementsIn, finishedStock, orders, allocations] =
+      await this.prisma.$transaction([
+        this.prisma.rawMaterialBatch.count({ where: { warehouseId: id } }),
+        this.prisma.warehouseStock.count({ where: { warehouseId: id } }),
+        this.prisma.stockMovement.count({ where: { fromWarehouseId: id } }),
+        this.prisma.stockMovement.count({ where: { toWarehouseId: id } }),
+        this.prisma.finishedGoodsStock.count({ where: { warehouseId: id } }),
+        this.prisma.order.count({ where: { warehouseId: id } }),
+        this.prisma.orderAllocation.count({ where: { warehouseId: id } }),
+      ]);
+
+    assertDeletable('Warehouse', warehouse.name, {
+      batches,
+      'stock lines': stock + finishedStock,
+      'stock movements': movementsOut + movementsIn,
+      orders,
+      allocations,
     });
-    if (!warehouse) throw new NotFoundException('Warehouse not found');
 
-    const totalStock = warehouse.stock.reduce((sum, s) => sum + Number(s.quantity), 0);
-    if (totalStock > 0) {
-      throw new BadRequestException('Cannot delete warehouse that holds stock');
-    }
-
-    if (
-      warehouse._count.movementsOutgoing > 0 ||
-      warehouse._count.movementsIncoming > 0 ||
-      warehouse._count.batches > 0
-    ) {
-      throw new BadRequestException(
-        'Cannot delete warehouse with existing inventory movements or batch history. Deactivate it instead.',
-      );
-    }
-
-    return this.prisma.warehouse.delete({
-      where: { id },
-    });
+    await this.prisma.warehouse.delete({ where: { id } });
+    return { id, deleted: true };
   }
 
 

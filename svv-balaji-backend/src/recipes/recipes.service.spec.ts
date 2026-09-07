@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { ProductionType, RecipeStatus } from '@prisma/client';
 import { RecipesService } from './recipes.service';
 import { PrismaService } from '../prisma/prisma.service';
