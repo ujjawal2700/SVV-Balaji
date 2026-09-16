@@ -151,7 +151,7 @@ export function SeedDistributionFormModal({
         preserve={false}
         initialValues={{ unit: 'KG' }}
       >
-        <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
+        <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
           <FarmerSelect />
         </Form.Item>
 

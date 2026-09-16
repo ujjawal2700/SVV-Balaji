@@ -799,12 +799,23 @@ export class SalesService {
                           include: {
                             farmer: {
                               select: {
+                                id: true,
                                 farmerCode: true,
                                 fullName: true,
                                 village: true,
                                 district: true,
                                 state: true,
                                 gpsLocation: true,
+                              },
+                            },
+                            supplier: {
+                              select: {
+                                id: true,
+                                supplierCode: true,
+                                fullName: true,
+                                city: true,
+                                district: true,
+                                state: true,
                               },
                             },
                           },
@@ -836,12 +847,12 @@ export class SalesService {
           productionBatchNumber: a.fgBatch.productionBatch.productionBatchNumber,
           recipe: a.fgBatch.productionBatch.recipe,
           farmers: a.fgBatch.productionBatch.consumptions.map((c) => ({
-            farmerCode: c.rawMaterialBatch.farmer.farmerCode,
-            farmerName: c.rawMaterialBatch.farmer.fullName,
-            village: c.rawMaterialBatch.farmer.village,
-            district: c.rawMaterialBatch.farmer.district,
-            state: c.rawMaterialBatch.farmer.state,
-            gpsLocation: c.rawMaterialBatch.farmer.gpsLocation,
+            farmerCode: c.rawMaterialBatch.farmer?.farmerCode || c.rawMaterialBatch.supplier?.supplierCode || '',
+            farmerName: c.rawMaterialBatch.farmer?.fullName || c.rawMaterialBatch.supplier?.fullName || '',
+            village: c.rawMaterialBatch.farmer?.village || c.rawMaterialBatch.supplier?.city || '',
+            district: c.rawMaterialBatch.farmer?.district || c.rawMaterialBatch.supplier?.district || '',
+            state: c.rawMaterialBatch.farmer?.state || c.rawMaterialBatch.supplier?.state || '',
+            gpsLocation: c.rawMaterialBatch.farmer?.gpsLocation || '',
             crop: c.rawMaterialBatch.cropName,
             rawBatchNumber: c.rawMaterialBatch.batchNumber,
           })),

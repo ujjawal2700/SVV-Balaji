@@ -72,6 +72,15 @@ const TrainingPage = lazy(() =>
 const FieldVisitsPage = lazy(() =>
   import('./pages/field-visits/FieldVisitsPage').then((m) => ({ default: m.FieldVisitsPage })),
 );
+const SuppliersPage = lazy(() =>
+  import('./pages/suppliers/SuppliersPage').then((m) => ({ default: m.SuppliersPage })),
+);
+const TransportsPage = lazy(() =>
+  import('./pages/suppliers/TransportsPage').then((m) => ({ default: m.TransportsPage })),
+);
+const PurchaseOrdersPage = lazy(() =>
+  import('./pages/suppliers/PurchaseOrdersPage').then((m) => ({ default: m.PurchaseOrdersPage })),
+);
 const TracePage = lazy(() =>
   import('./pages/trace/TracePage').then((m) => ({ default: m.TracePage })),
 );
@@ -169,6 +178,10 @@ const SCREENS: Record<string, ReactElement> = {
   '/seed-distribution': <SeedDistributionPage />,
   '/training': <TrainingPage />,
   '/field-visits': <FieldVisitsPage />,
+  // Supplier Sourcing
+  '/suppliers': <SuppliersPage />,
+  '/transports': <TransportsPage />,
+  '/purchase-orders': <PurchaseOrdersPage />,
   // Zone 2 — Procurement & Raw Material Control (FRD Sections 13-17)
   '/procurement-plans': <ProcurementPlansPage />,
   '/harvest-inspections': <HarvestInspectionsPage />,

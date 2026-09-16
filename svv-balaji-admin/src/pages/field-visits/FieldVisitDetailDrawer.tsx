@@ -54,7 +54,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
       ) : data ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Descriptions bordered column={2} size="small" title="Visit">
-            <Descriptions.Item label="Farmer / Supplier">{data.farmer?.fullName ?? EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Farmer">{data.farmer?.fullName ?? EM_DASH}</Descriptions.Item>
             <Descriptions.Item label="Code">
               {data.farmer?.farmerCode ? (
                 <Typography.Text code>{data.farmer.farmerCode}</Typography.Text>

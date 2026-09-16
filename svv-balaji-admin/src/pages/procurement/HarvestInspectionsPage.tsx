@@ -59,7 +59,7 @@ export function HarvestInspectionsPage() {
       sorter: (a, b) => a.inspectionDate.localeCompare(b.inspectionDate),
     },
     {
-      title: 'Farmer / Supplier',
+      title: 'Farmer',
       key: 'farmer',
       render: (_, row) => (
         <div>
@@ -158,7 +158,7 @@ export function HarvestInspectionsPage() {
       <Col xs={24} md={8}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer / supplier"
+          placeholder="Filter by farmer"
           value={filters.farmerId}
           onChange={(farmerId) => setFilters((f) => ({ ...f, farmerId }))}
         />

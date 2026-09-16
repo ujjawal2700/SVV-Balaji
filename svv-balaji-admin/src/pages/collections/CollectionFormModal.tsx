@@ -161,7 +161,7 @@ export function CollectionFormModal({ open, collection, onClose }: CollectionFor
 
         {selected ? (
           <Descriptions size="small" bordered column={2} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="Farmer / Supplier">{selected.farmer?.fullName}</Descriptions.Item>
+            <Descriptions.Item label="Farmer">{selected.farmer?.fullName}</Descriptions.Item>
             <Descriptions.Item label="Code">
               <Typography.Text code>{selected.farmer?.farmerCode}</Typography.Text>
             </Descriptions.Item>

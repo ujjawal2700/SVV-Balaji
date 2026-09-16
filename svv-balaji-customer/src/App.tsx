@@ -48,6 +48,7 @@ const OrderTrackingPage = lazy(() =>
 const AddressesPage = lazy(() => import('./pages/AddressesPage').then((m) => ({ default: m.AddressesPage })));
 const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
 const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
+const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage').then((m) => ({ default: m.LoyaltyPage })));
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -104,6 +105,7 @@ export function App() {
         <Route path="addresses" element={<AddressesPage />} />
         <Route path="wishlist" element={<WishlistPage />} />
         <Route path="wallet" element={<WalletPage />} />
+        <Route path="loyalty" element={<LoyaltyPage />} />
 
         {/*
           A real 404, not a redirect home. This app is public and reached from

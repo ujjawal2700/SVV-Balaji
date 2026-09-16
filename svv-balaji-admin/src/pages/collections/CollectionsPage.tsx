@@ -71,7 +71,7 @@ export function CollectionsPage() {
         ),
     },
     {
-      title: 'Farmer / Supplier',
+      title: 'Farmer',
       key: 'farmer',
       render: (_, row) => (
         <div>
@@ -190,7 +190,7 @@ export function CollectionsPage() {
       <Col xs={24} md={8}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer / supplier"
+          placeholder="Filter by farmer"
           value={filters.farmerId}
           onChange={(farmerId) => setFilters((f) => ({ ...f, farmerId }))}
         />

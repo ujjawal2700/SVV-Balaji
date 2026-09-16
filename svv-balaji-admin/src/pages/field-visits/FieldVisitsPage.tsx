@@ -43,7 +43,7 @@ export function FieldVisitsPage() {
       sorter: (a, b) => a.visitDate.localeCompare(b.visitDate),
     },
     {
-      title: 'Farmer / Supplier',
+      title: 'Farmer',
       key: 'farmer',
       render: (_, visit) => (
         <div>
@@ -141,7 +141,7 @@ export function FieldVisitsPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer / supplier"
+          placeholder="Filter by farmer"
           value={farmerId}
           onChange={setFarmerId}
         />

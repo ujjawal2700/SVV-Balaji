@@ -77,7 +77,7 @@ export function FarmersPage() {
         render: (code: string | null) => <FarmerCodeCell code={code} />,
       },
       {
-        title: 'Farmer / Supplier',
+        title: 'Farmer',
         dataIndex: 'fullName',
         key: 'fullName',
         render: (name: string, farmer) => (
@@ -339,7 +339,7 @@ export function FarmersPage() {
                 verticalAlign: 'middle',
               }}
             />
-            Farmers / Suppliers
+            Farmers
           </span>
         }
         subtitle={
@@ -350,7 +350,7 @@ export function FarmersPage() {
         actions={
           <Can do="FARMER_CREATE">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>
-              Register farmer / supplier
+              Register farmer
             </Button>
           </Can>
         }
@@ -365,7 +365,7 @@ export function FarmersPage() {
         error={farmers.error}
         onRetry={() => void farmers.refetch()}
         toolbar={toolbar}
-        emptyText="No farmers / suppliers match these filters"
+        emptyText="No farmers match these filters"
       />
 
       <FarmerFormModal open={registerOpen} farmer={editing} onClose={closeForm} />

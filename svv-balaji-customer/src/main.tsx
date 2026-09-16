@@ -10,6 +10,7 @@ import { AuthProvider } from '@shared/auth/AuthProvider';
 import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { App } from './App';
 import { CartProvider } from './cart/CartProvider';
+import { LoyaltyProvider } from './loyalty/LoyaltyProvider';
 import { theme } from './theme';
 import './styles.css';
 
@@ -80,7 +81,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             <CartProvider>
               <AuthProvider>
                 <CustomerAuthProvider>
-                  <App />
+                  <LoyaltyProvider>
+                    <App />
+                  </LoyaltyProvider>
                 </CustomerAuthProvider>
               </AuthProvider>
             </CartProvider>

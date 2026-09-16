@@ -25,6 +25,9 @@ import { CustomersModule } from './customers/customers.module';
 import { PricingModule } from './pricing/pricing.module';
 import { SalesModule } from './sales/sales.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { TransportModule } from './transport/transport.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 
 @Module({
   imports: [
@@ -43,6 +46,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
     SeedDistributionModule,
     TrainingModule,
     FieldMonitoringModule,
+    // Supplier Sourcing
+    SuppliersModule,
+    TransportModule,
+    PurchaseOrdersModule,
     // Phase 2 - Procurement & Raw Material Control (FRD Sections 13-17)
     ProcurementModule,
     CollectionModule,

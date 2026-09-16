@@ -154,7 +154,7 @@ export function AgreementFormModal({ open, agreement, onClose }: AgreementFormMo
           />
         ) : null}
 
-        <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
+        <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
           <FarmerSelect disabled={isEdit} />
         </Form.Item>
 

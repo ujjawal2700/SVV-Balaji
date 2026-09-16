@@ -174,7 +174,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
         iconBg="#eff6ff"
         iconColor="#2563eb"
         title="Identity & Personal Information"
-        subtitle="Basic farmer / supplier identification for agreements & traceability"
+        subtitle="Basic farmer identification for agreements & traceability"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
@@ -422,7 +422,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
 
       <div style={{ position: 'relative', zIndex: 2 }}>
         <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
-          {isEdit ? `Edit Farmer / Supplier: ${farmer?.fullName}` : 'Register New Farmer / Supplier'}
+          {isEdit ? `Edit Farmer: ${farmer?.fullName}` : 'Register New Farmer'}
         </Typography.Title>
         <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2, maxWidth: 'calc(100% - 110px)' }}>
           {isEdit
@@ -478,7 +478,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
               boxShadow: '0 2px 10px 0 rgba(124, 58, 237, 0.35)',
             }}
           >
-            {isEdit ? 'Save Changes' : 'Register Farmer / Supplier'}
+            {isEdit ? 'Save Changes' : 'Register Farmer'}
           </Button>
         </div>
       }

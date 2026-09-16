@@ -96,7 +96,7 @@ export function CollectionCorrectionModal({
       {collection ? (
         <>
           <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="Farmer / Supplier">
+            <Descriptions.Item label="Farmer">
               {collection.farmer?.fullName ?? EM_DASH}
             </Descriptions.Item>
             <Descriptions.Item label="Batch">

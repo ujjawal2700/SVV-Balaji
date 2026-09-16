@@ -3,6 +3,7 @@ import {
   CheckCircleFilled,
   ClockCircleFilled,
   DeleteOutlined,
+  GiftOutlined,
   HeartOutlined,
   MinusOutlined,
   PlusOutlined,
@@ -13,6 +14,7 @@ import { Button, Divider, Empty, Tag, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
+import { useLoyalty } from '../loyalty/useLoyalty';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
@@ -21,6 +23,7 @@ function formatInr(value: number): string {
 export function CartPage() {
   const navigate = useNavigate();
   const cart = useCart();
+  const loyalty = useLoyalty();
 
   if (cart.lines.length === 0) {
     return (
@@ -64,6 +67,10 @@ export function CartPage() {
   const deliveryCharge = cart.deliveryInfo ? cart.deliveryInfo.charge : (subtotal > 500 ? 0 : 50);
   const grandTotal = subtotal + gst + deliveryCharge - couponDiscount;
   const totalSavings = productDiscount + couponDiscount + (deliveryCharge === 0 && subtotal <= 500 ? 50 : 0);
+
+  const estimatedPoints = loyalty.estimateOrderPoints(
+    cart.lines.map((l) => ({ productName: l.productName, price: l.displayUnitPrice ?? 0, quantity: l.quantity })),
+  );
 
   const today = new Date();
   const tmrw = new Date(today);
@@ -334,6 +341,15 @@ export function CartPage() {
                   <div style={{ marginTop: 8, padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0' }}>
                     <Typography.Text strong style={{ color: '#065f46', fontSize: 13 }}>
                       You saved {formatInr(totalSavings)} on this order 🎉
+                    </Typography.Text>
+                  </div>
+                )}
+
+                {estimatedPoints > 0 && (
+                  <div style={{ marginTop: 8, padding: '10px 14px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <GiftOutlined style={{ color: '#d97706' }} />
+                    <Typography.Text strong style={{ color: '#92400e', fontSize: 13 }}>
+                      Earn {estimatedPoints} loyalty points on this order
                     </Typography.Text>
                   </div>
                 )}

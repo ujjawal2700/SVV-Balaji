@@ -146,7 +146,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
 
-  // --- Farm sourcing --------------------------------------------------------
+  // --- Farm Sourcing --------------------------------------------------------
   {
     key: 'farmers',
     label: 'Farmers',
@@ -212,6 +212,108 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'View QR and barcode',
         description: 'The printable traceability codes for an approved farmer.',
         defaultRoles: [BM, PM, AE],
+      },
+    ],
+  },
+  {
+    key: 'suppliers',
+    label: 'Suppliers',
+    path: '/suppliers',
+    viewKey: 'suppliers.view',
+    permissions: [
+      {
+        key: 'suppliers.view',
+        label: 'View suppliers',
+        description: 'Read-only access to the supplier registry.',
+        defaultRoles: ASSIGNABLE_ROLES,
+      },
+      {
+        key: 'suppliers.create',
+        label: 'Register suppliers',
+        description: 'May submit new suppliers for approval.',
+        defaultRoles: [PM, BM],
+      },
+      {
+        key: 'suppliers.edit',
+        label: 'Edit supplier details',
+        description: 'May correct supplier details.',
+        defaultRoles: [PM, BM],
+      },
+      {
+        key: 'suppliers.status',
+        label: 'Change supplier status',
+        description: 'May suspend, blacklist or reactivate an already-approved supplier.',
+        defaultRoles: [PM, BM],
+      },
+      {
+        key: 'suppliers.approve',
+        label: 'Approve suppliers',
+        description: 'The gate that mints the SUP traceability code.',
+        defaultRoles: [],
+      },
+      {
+        key: 'suppliers.delete',
+        label: 'Delete unapproved suppliers',
+        description: 'Cleanup of mistaken entries.',
+        defaultRoles: [PM, BM],
+      },
+    ],
+  },
+  {
+    key: 'transports',
+    label: 'Transports',
+    path: '/transports',
+    viewKey: 'transports.view',
+    permissions: [
+      {
+        key: 'transports.view',
+        label: 'View transports',
+        description: 'View scheduled and incoming transports from suppliers.',
+        defaultRoles: ASSIGNABLE_ROLES,
+      },
+      {
+        key: 'transports.create',
+        label: 'Schedule transports',
+        description: 'May schedule a transport for inbound logistics.',
+        defaultRoles: [PM, BM, LT],
+      },
+      {
+        key: 'transports.edit',
+        label: 'Manage transports',
+        description: 'May edit, dispatch, deliver, or cancel transports.',
+        defaultRoles: [PM, BM, LT],
+      },
+    ],
+  },
+  {
+    key: 'purchaseOrders',
+    label: 'Purchase Orders',
+    path: '/purchase-orders',
+    viewKey: 'purchaseOrders.view',
+    permissions: [
+      {
+        key: 'purchaseOrders.view',
+        label: 'View purchase orders',
+        description: 'View supplier purchase orders.',
+        defaultRoles: ASSIGNABLE_ROLES,
+      },
+      {
+        key: 'purchaseOrders.create',
+        label: 'Create purchase orders',
+        description: 'May create purchase orders for suppliers.',
+        defaultRoles: [PM, BM],
+      },
+      {
+        key: 'purchaseOrders.edit',
+        label: 'Edit purchase orders',
+        description: 'May edit purchase order details.',
+        defaultRoles: [PM, BM],
+      },
+      {
+        key: 'purchaseOrders.status',
+        label: 'Change purchase order status',
+        description: 'May confirm, fulfill or cancel purchase orders.',
+        defaultRoles: [PM, BM],
       },
     ],
   },

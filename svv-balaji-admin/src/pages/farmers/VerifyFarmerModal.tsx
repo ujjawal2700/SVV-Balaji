@@ -52,7 +52,7 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
 
       if (values.action === 'APPROVED' && updated.farmerCode) {
         modal.success({
-          title: 'Farmer / Supplier approved',
+          title: 'Farmer approved',
           content: (
             <Space direction="vertical" size={4}>
               <Typography.Text>
@@ -79,7 +79,7 @@ export function VerifyFarmerModal({ farmer, onClose }: VerifyFarmerModalProps) {
   return (
     <Modal
       open={Boolean(farmer)}
-      title={farmer ? `Verify ${farmer.fullName}` : 'Verify farmer / supplier'}
+      title={farmer ? `Verify ${farmer.fullName}` : 'Verify farmer'}
       okText="Record decision"
       onOk={handleSubmit}
       onCancel={onClose}

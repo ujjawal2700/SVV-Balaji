@@ -48,7 +48,7 @@ export function FarmerDetailDrawer({ farmerId, onClose }: FarmerDetailDrawerProp
             <FarmerStatusTag status={data.status} />
           </Space>
         ) : (
-          'Farmer / Supplier'
+          'Farmer'
         )
       }
     >

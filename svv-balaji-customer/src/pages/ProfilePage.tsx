@@ -15,6 +15,7 @@ import {
   ShopOutlined,
   ShoppingOutlined,
   SyncOutlined,
+  TrophyOutlined,
   UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
@@ -35,10 +36,12 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
+import { useLoyalty } from '../loyalty/useLoyalty';
 
 export function ProfilePage() {
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, switchRole } = useCustomerAuth();
+  const loyalty = useLoyalty();
   const [whatsappAlerts, setWhatsappAlerts] = useState(true);
 
   const handleLogout = () => {
@@ -104,6 +107,15 @@ export function ProfilePage() {
           label: 'Desi Wallet',
           subtitle: `₹${customerProfile?.walletBalance || 0} Balance available`,
           route: '/wallet',
+        },
+        {
+          key: 'loyalty',
+          icon: <TrophyOutlined />,
+          iconBg: '#fffbeb',
+          iconColor: '#d97706',
+          label: 'Desi Rewards',
+          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • ${loyalty.tier.label}`,
+          route: '/loyalty',
         },
         {
           key: 'watchlist',
@@ -187,6 +199,15 @@ export function ProfilePage() {
           label: 'Wholesale Schemes & Margins',
           subtitle: '2 Active Mandi Deals',
           action: () => message.info('2 active wholesale schemes on your account'),
+        },
+        {
+          key: 'loyalty',
+          icon: <TrophyOutlined />,
+          iconBg: '#fffbeb',
+          iconColor: '#d97706',
+          label: 'Wholesaler Rewards',
+          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • ${loyalty.tier.label}`,
+          route: '/loyalty',
         },
         {
           key: 'reorder',
@@ -656,25 +677,25 @@ export function ProfilePage() {
           />
 
           {/* Page Heading with Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
-              <Typography.Title level={2} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+              <Typography.Title level={3} style={{ margin: 0, color: '#0f172a', fontWeight: 700, fontSize: 20 }}>
                 {isRetailer ? 'Retailer Account Overview' : 'Customer Account Overview'}
               </Typography.Title>
-              <Typography.Text style={{ color: '#64748b', fontSize: 14 }}>
+              <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
                 {isRetailer
                   ? 'Manage your store profile, verified GSTIN billing credentials, credit limits, and alerts.'
                   : 'Manage your personal delivery addresses, saved wishlist, and consumer order receipts.'}
               </Typography.Text>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {/* Demo Mode Toggle */}
-              <div style={{ background: '#f1f5f9', borderRadius: 10, padding: 4, display: 'flex', gap: 4 }}>
+              <div style={{ background: '#f1f5f9', borderRadius: 8, padding: 3, display: 'flex', gap: 4 }}>
                 <Button
                   size="small"
                   type={!isRetailer ? 'primary' : 'text'}
-                  style={{ borderRadius: 6, fontSize: 12, background: !isRetailer ? '#f97316' : undefined }}
+                  style={{ borderRadius: 6, fontSize: 11, height: 26, padding: '0 8px', background: !isRetailer ? '#f97316' : undefined }}
                   onClick={() => switchRole('CUSTOMER')}
                 >
                   👤 Customer
@@ -682,7 +703,7 @@ export function ProfilePage() {
                 <Button
                   size="small"
                   type={isRetailer ? 'primary' : 'text'}
-                  style={{ borderRadius: 6, fontSize: 12, background: isRetailer ? '#ea580c' : undefined }}
+                  style={{ borderRadius: 6, fontSize: 11, height: 26, padding: '0 8px', background: isRetailer ? '#ea580c' : undefined }}
                   onClick={() => switchRole('RETAILER')}
                 >
                   🏪 Retailer
@@ -692,7 +713,8 @@ export function ProfilePage() {
               {!isRetailer && (
                 <Button
                   type="primary"
-                  style={{ background: '#ea580c', borderColor: '#ea580c', borderRadius: 8, fontWeight: 600 }}
+                  size="middle"
+                  style={{ background: '#ea580c', borderColor: '#ea580c', borderRadius: 8, fontWeight: 600, fontSize: 12, height: 34 }}
                   onClick={() => navigate('/register')}
                 >
                   Become a Partner / Buy Wholesale
@@ -853,66 +875,66 @@ export function ProfilePage() {
             {/* Right Content */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* 4 Stats Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: isRetailer ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 16 }}>
-                <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-                  <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: 'block' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isRetailer ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                     DESI WALLET
                   </Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 22, color: '#ea580c', display: 'block', marginTop: 4 }}>
+                  <Typography.Text strong style={{ fontSize: 18, color: '#ea580c', display: 'block', marginTop: 2 }}>
                     ₹{isRetailer ? retailerProfile?.walletBalance || 895 : customerProfile?.walletBalance || 250}
                   </Typography.Text>
-                  <Link to="/wallet" style={{ fontSize: 12, color: '#ea580c', fontWeight: 600 }}>
+                  <Link to="/wallet" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
                     Recharge Balance &rarr;
                   </Link>
                 </div>
 
-                <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-                  <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: 'block' }}>
+                <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                     MY ORDERS
                   </Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 22, color: '#0f172a', display: 'block', marginTop: 4 }}>
+                  <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
                     {isRetailer ? retailerProfile?.totalOrders || 12 : customerProfile?.totalOrders || 4}
                   </Typography.Text>
-                  <Link to="/orders" style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>
+                  <Link to="/orders" style={{ fontSize: 11.5, color: '#f97316', fontWeight: 600 }}>
                     View Order History &rarr;
                   </Link>
                 </div>
 
                 {isRetailer ? (
                   <>
-                    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-                      <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: 'block' }}>
+                    <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                      <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                         TOTAL SAVINGS
                       </Typography.Text>
-                      <Typography.Text strong style={{ fontSize: 22, color: '#16a34a', display: 'block', marginTop: 4 }}>
+                      <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
                         ₹{(retailerProfile?.totalSavings || 4320).toLocaleString('en-IN')}
                       </Typography.Text>
-                      <Typography.Text style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+                      <Typography.Text style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                         Wholesale Margins
                       </Typography.Text>
                     </div>
 
-                    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-                      <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: 'block' }}>
+                    <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                      <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                         CREDIT LINE
                       </Typography.Text>
-                      <Typography.Text strong style={{ fontSize: 22, color: '#0f172a', display: 'block', marginTop: 4 }}>
+                      <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
                         ₹{((retailerProfile?.creditLimit || 50000) - (retailerProfile?.creditUsed || 14500)).toLocaleString('en-IN')}
                       </Typography.Text>
-                      <Typography.Text style={{ fontSize: 12, color: '#64748b' }}>
+                      <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
                         Limit: ₹50,000
                       </Typography.Text>
                     </div>
                   </>
                 ) : (
-                  <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-                    <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 600, display: 'block' }}>
+                  <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                       ACTIVE COUPONS
                     </Typography.Text>
-                    <Typography.Text strong style={{ fontSize: 22, color: '#16a34a', display: 'block', marginTop: 4 }}>
+                    <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
                       {customerProfile?.couponsCount || 3} Offers
                     </Typography.Text>
-                    <Typography.Text style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+                    <Typography.Text style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                       Apply at Checkout
                     </Typography.Text>
                   </div>

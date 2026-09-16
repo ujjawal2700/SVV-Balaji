@@ -40,7 +40,7 @@ export function SeedDistributionPage() {
       sorter: (a, b) => a.distributionDate.localeCompare(b.distributionDate),
     },
     {
-      title: 'Farmer / Supplier',
+      title: 'Farmer',
       key: 'farmer',
       render: (_, row) => (
         <div>
@@ -106,7 +106,7 @@ export function SeedDistributionPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer / supplier"
+          placeholder="Filter by farmer"
           value={farmerId}
           onChange={setFarmerId}
         />

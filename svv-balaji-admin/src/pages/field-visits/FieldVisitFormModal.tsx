@@ -296,12 +296,12 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
         icon={<CompassOutlined />}
         iconBg="#ecfdf5"
         iconColor="#059669"
-        title="Visit & Farmer / Supplier Details"
-        subtitle="Specify farmer / supplier, operational branch, and visit date"
+        title="Visit & Farmer Details"
+        subtitle="Specify farmer, operational branch, and visit date"
       >
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
-            <Form.Item name="farmerId" label="Farmer / Supplier" rules={[required('Farmer / Supplier')]}>
+            <Form.Item name="farmerId" label="Farmer" rules={[required('Farmer')]}>
               <FarmerSelect />
             </Form.Item>
             {farmer ? (

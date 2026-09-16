@@ -14,6 +14,7 @@ import {
   SearchOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
+  TrophyOutlined,
   TruckOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -22,6 +23,7 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
+import { useLoyalty } from '../loyalty/useLoyalty';
 import { categories } from '../mock/homeMockData';
 
 function formatInr(value: number): string {
@@ -32,6 +34,7 @@ export function DesktopHeader() {
   const cart = useCart();
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, isLoggedIn } = useCustomerAuth();
+  const loyalty = useLoyalty();
   const [searchQuery, setSearchQuery] = useState('');
 
   const isRetailer = role === 'RETAILER';
@@ -77,6 +80,9 @@ export function DesktopHeader() {
               <strong style={{ color: '#dc2626' }}>{formatInr(retailerProfile?.creditUsed || 14500)}</strong>
             </div>
           </div>
+          <Tag color="gold" style={{ margin: '8px 0 0', fontSize: 11 }}>
+            {loyalty.points.toLocaleString('en-IN')} loyalty pts • {loyalty.tier.label}
+          </Tag>
         </div>
       ),
     },
@@ -90,6 +96,11 @@ export function DesktopHeader() {
       key: 'wallet',
       icon: <CreditCardOutlined style={{ color: '#059669' }} />,
       label: <Link to="/wallet">Mandi Ledger &amp; Credit</Link>,
+    },
+    {
+      key: 'loyalty',
+      icon: <TrophyOutlined style={{ color: '#d97706' }} />,
+      label: <Link to="/loyalty">Wholesaler Rewards</Link>,
     },
     {
       key: 'profile',
@@ -120,6 +131,9 @@ export function DesktopHeader() {
             <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>
               Wallet: ₹{customerProfile?.walletBalance || 250}
             </Tag>
+            <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
+              {loyalty.points.toLocaleString('en-IN')} pts
+            </Tag>
           </div>
         </div>
       ),
@@ -129,6 +143,11 @@ export function DesktopHeader() {
       key: 'orders',
       icon: <TruckOutlined style={{ color: '#2563eb' }} />,
       label: <Link to="/orders">My Orders &amp; Receipts</Link>,
+    },
+    {
+      key: 'loyalty',
+      icon: <TrophyOutlined style={{ color: '#d97706' }} />,
+      label: <Link to="/loyalty">Desi Rewards</Link>,
     },
     {
       key: 'wishlist',

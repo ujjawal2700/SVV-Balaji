@@ -267,6 +267,16 @@ export class PackagingService {
                         gpsLocation: true,
                       },
                     },
+                    supplier: {
+                      select: {
+                        id: true,
+                        supplierCode: true,
+                        fullName: true,
+                        city: true,
+                        district: true,
+                        state: true,
+                      },
+                    },
                     collection: {
                       select: {
                         collectionDate: true,
@@ -309,12 +319,12 @@ export class PackagingService {
 
     // Flatten to the shape a consumer-facing traceability page actually wants.
     const farmers = batch.productionBatch.consumptions.map((c) => ({
-      farmerCode: c.rawMaterialBatch.farmer.farmerCode,
-      farmerName: c.rawMaterialBatch.farmer.fullName,
-      village: c.rawMaterialBatch.farmer.village,
-      district: c.rawMaterialBatch.farmer.district,
-      state: c.rawMaterialBatch.farmer.state,
-      gpsLocation: c.rawMaterialBatch.farmer.gpsLocation,
+      farmerCode: c.rawMaterialBatch.farmer?.farmerCode || c.rawMaterialBatch.supplier?.supplierCode || '',
+      farmerName: c.rawMaterialBatch.farmer?.fullName || c.rawMaterialBatch.supplier?.fullName || '',
+      village: c.rawMaterialBatch.farmer?.village || c.rawMaterialBatch.supplier?.city || '',
+      district: c.rawMaterialBatch.farmer?.district || c.rawMaterialBatch.supplier?.district || '',
+      state: c.rawMaterialBatch.farmer?.state || c.rawMaterialBatch.supplier?.state || '',
+      gpsLocation: c.rawMaterialBatch.farmer?.gpsLocation || '',
       crop: c.rawMaterialBatch.cropName,
       rawBatchNumber: c.rawMaterialBatch.batchNumber,
       quantityUsed: c.quantityUsed,

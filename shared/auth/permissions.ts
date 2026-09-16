@@ -57,6 +57,25 @@ export const PERMISSIONS = {
   /** Mapping a farmer's individual plots. Field work, unlike editing bank details. */
   FARMER_PLOTS: 'farmers.plots',
 
+  // --- Suppliers ------------------------------------------------------------
+  SUPPLIER_VIEW: 'suppliers.view',
+  SUPPLIER_CREATE: 'suppliers.create',
+  SUPPLIER_EDIT: 'suppliers.edit',
+  SUPPLIER_SET_STATUS: 'suppliers.status',
+  SUPPLIER_APPROVE: 'suppliers.approve',
+  SUPPLIER_DELETE: 'suppliers.delete',
+
+  // --- Transports -----------------------------------------------------------
+  TRANSPORT_VIEW: 'transports.view',
+  TRANSPORT_CREATE: 'transports.create',
+  TRANSPORT_EDIT: 'transports.edit',
+
+  // --- Purchase Orders ------------------------------------------------------
+  PURCHASE_ORDER_VIEW: 'purchaseOrders.view',
+  PURCHASE_ORDER_CREATE: 'purchaseOrders.create',
+  PURCHASE_ORDER_EDIT: 'purchaseOrders.edit',
+  PURCHASE_ORDER_STATUS: 'purchaseOrders.status',
+
   // --- Farm sourcing --------------------------------------------------------
   AGREEMENT_VIEW: 'agreements.view',
   AGREEMENT_CREATE: 'agreements.create',

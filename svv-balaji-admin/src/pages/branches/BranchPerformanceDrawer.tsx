@@ -176,7 +176,7 @@ export function BranchPerformanceDrawer({
                   <Descriptions.Item label="Value">
                     {formatCurrency(data.procurement.totalValue)}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Farmers / Suppliers supplying">
+                  <Descriptions.Item label="Farmers supplying">
                     {data.procurement.farmersSupplying}
                   </Descriptions.Item>
                   <Descriptions.Item label="Inspections">

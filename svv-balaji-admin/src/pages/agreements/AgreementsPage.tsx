@@ -57,7 +57,7 @@ export function AgreementsPage() {
 
   const columns: ColumnsType<Agreement> = [
     {
-      title: 'Farmer / Supplier',
+      title: 'Farmer',
       key: 'farmer',
       render: (_, agreement) => (
         <div>
@@ -189,7 +189,7 @@ export function AgreementsPage() {
       <Col xs={24} md={10}>
         <FarmerSelect
           allowClear
-          placeholder="Filter by farmer / supplier"
+          placeholder="Filter by farmer"
           value={farmerId}
           onChange={setFarmerId}
         />

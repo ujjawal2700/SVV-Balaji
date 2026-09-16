@@ -7,10 +7,12 @@ import {
   WalletOutlined,
   BankOutlined,
 } from '@ant-design/icons';
+import { GiftOutlined } from '@ant-design/icons';
 import { Button, Divider, Radio, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
+import { useLoyalty } from '../loyalty/useLoyalty';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
@@ -46,6 +48,7 @@ const DELIVERY_CHARGE = 49;
 export function CheckoutPage() {
   const navigate = useNavigate();
   const cart = useCart();
+  const loyalty = useLoyalty();
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>('cod');
 
@@ -69,8 +72,17 @@ export function CheckoutPage() {
   const deliveryFee = sellingTotal >= 500 ? 0 : DELIVERY_CHARGE;
   const grandTotal = sellingTotal + deliveryFee;
 
+  const loyaltyLines = cart.lines.map((l) => ({ productName: l.productName, price: l.displayUnitPrice ?? 0, quantity: l.quantity }));
+  const estimatedPoints = loyalty.estimateOrderPoints(loyaltyLines);
+
   const handlePlaceOrder = () => {
-    message.success('Order placed successfully! 🎉');
+    const orderId = `ORD-${Math.floor(10000000 + Math.random() * 89999999)}`;
+    const earnedPoints = loyalty.earnForOrder(orderId, loyaltyLines);
+    message.success(
+      earnedPoints > 0
+        ? `Order placed successfully! 🎉 You earned ${earnedPoints} loyalty points.`
+        : 'Order placed successfully! 🎉',
+    );
     cart.clear();
     setTimeout(() => navigate('/orders'), 800);
   };
@@ -209,10 +221,19 @@ export function CheckoutPage() {
           </div>
 
           {discount > 0 && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: estimatedPoints > 0 ? 10 : 0 }}>
               <CheckCircleFilled style={{ color: '#16a34a' }} />
               <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
                 You're saving {formatInr(discount)} on this order!
+              </Typography.Text>
+            </div>
+          )}
+
+          {estimatedPoints > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GiftOutlined style={{ color: '#d97706' }} />
+              <Typography.Text style={{ color: '#92400e', fontSize: 13, fontWeight: 500 }}>
+                You'll earn {estimatedPoints} loyalty points on this order
               </Typography.Text>
             </div>
           )}

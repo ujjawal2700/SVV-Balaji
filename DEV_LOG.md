@@ -16,6 +16,54 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-07 (later still) — Raunak
+
+**Did:** Added a Loyalty Program to `svv-balaji-customer` for both the Customer (B2C) and Retailer
+(B2B) roles — mock-data only, same as the rest of the storefront (WS2.5 sales is still a backend
+placeholder; see PROJECT_STATE.md). New `src/loyalty/` module:
+
+- `loyaltyRules.ts` — the rules engine, as pure functions: points earn at a rate keyed to a
+  product's own price (2/3/4/5 pts per ₹100, rising with price band), retailer orders earn at
+  1.5× in recognition of order volume, and four tiers per role (Bronze→Platinum for customers,
+  Bronze Partner→Platinum Distributor for retailers) each add a further bonus multiplier on top.
+  Redemption is 1 pt = ₹0.25, 200 pt minimum.
+- `LoyaltyProvider.tsx` / `useLoyalty.ts` — same shape as `CartProvider`/`useCart`: two independent
+  point ledgers (customer vs retailer, mirroring `customerProfile`/`retailerProfile` in
+  `CustomerAuthContext`), persisted to `localStorage`, active ledger selected by role. Exposes
+  `estimateLinePoints` (per-product hint, tier-bonus included), `estimateOrderPoints` (cart/checkout
+  preview), `earnForOrder` (credits on order placement), `redeemPoints`.
+- `pages/LoyaltyPage.tsx` — the full program screen at `/loyalty`: points balance, tier progress,
+  the earn-rate table with worked examples, the tier ladder, redemption, and points history. Styled
+  to match `WalletPage.tsx`.
+
+Wired in: a "Desi Rewards" / "Wholesaler Rewards" entry in `ProfilePage`'s menu (both role
+sections) and in `DesktopHeader`'s account dropdowns; a per-product "Earn X pts" hint on
+`ProductDetailPage` (both the B2C price block and the B2B wholesale-tier block); an order-level
+points estimate banner on `CartPage`; and `CheckoutPage.handlePlaceOrder` now calls
+`loyalty.earnForOrder` so points are actually credited when an order goes through, with an estimate
+shown in the price breakdown beforehand.
+
+**Contract changes:** none — customer app only, no backend routes touched.
+
+**Other developer needs to know:** found while testing that `/checkout` is unreachable in this
+environment regardless of the loyalty work — `RequireAccount` (in `src/auth/RequireAccount.tsx`)
+gates on the real `@shared/auth` session (`useAuth()`), but `LoginPage` only ever calls the mock
+`useCustomerAuth().login()`. So without a live backend session, checkout always redirects to
+`/login`. Every other "needs an account" route (`/orders`, `/wallet`, `/wishlist`, `/addresses`,
+and now `/loyalty`) is *not* wrapped in `RequireAccount` and works fine off the mock auth alone —
+checkout is the one inconsistent route. Did not touch this; it's pre-existing and orthogonal to
+loyalty, but it means checkout's `earnForOrder` call path could only be verified by code review and
+by exercising the identical persist mechanism via Redeem Points (confirmed working, including
+surviving a reload). Worth a decision on whether checkout should read the mock auth like the rest of
+this app until a real B2C backend session exists.
+
+**Next:** nothing queued from this session. If backend loyalty ever gets a real
+`/api/v1/loyalty/*` endpoint, `src/loyalty/loyaltyRules.ts` and `LoyaltyProvider.tsx` are the only
+files that should need to change — screens are written against `useLoyalty()`, not against mock
+internals.
+
+---
+
 ## 2026-09-07 (later) — Ujjawal
 
 **Did:** Brought the backend test suite back to green: **23/23 suites, 283/283 tests, 0 type

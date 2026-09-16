@@ -4,6 +4,7 @@ import {
   CheckCircleOutlined,
   EnvironmentOutlined,
   FileProtectOutlined,
+  GiftOutlined,
   HeartOutlined,
   InfoCircleOutlined,
   MinusOutlined,
@@ -29,6 +30,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
+import { useLoyalty } from '../loyalty/useLoyalty';
 import { bestOfBasics, buyAgainProducts, popularProducts } from '../mock/homeMockData';
 
 function formatInr(value: number): string {
@@ -40,6 +42,7 @@ export function ProductDetailPage() {
   const navigate = useNavigate();
   const cart = useCart();
   const { role, switchRole } = useCustomerAuth();
+  const loyalty = useLoyalty();
   const isRetailer = role === 'RETAILER';
 
   // Pincode mock state
@@ -239,10 +242,10 @@ export function ProductDetailPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 90, display: 'flex', flexDirection: 'column' }}>
-      {/* Sticky Header */}
+    <div className="pdp-wrapper">
+      {/* Sticky Mobile App-bar Header (Hidden on Desktop/Tablet since DesktopHeader is present) */}
       <header
-        className="store-safe-top"
+        className="store-safe-top pdp-mobile-header"
         style={{
           position: 'sticky',
           top: 0,
@@ -342,29 +345,35 @@ export function ProductDetailPage() {
         </div>
       </div>
 
-      {/* Breadcrumbs */}
-      <div style={{ padding: '10px 16px', background: '#fff', fontSize: 12, color: '#878787', borderBottom: '1px solid #f0f0f0' }}>
-        <Link to="/" style={{ color: '#878787', textDecoration: 'none' }}>Home</Link> &gt;{' '}
-        <Link to="/categories" style={{ color: '#878787', textDecoration: 'none' }}>Groceries</Link> &gt;{' '}
-        <span style={{ color: '#212121', fontWeight: 600 }}>{(activeProduct as any).name}</span>
+      {/* Breadcrumbs (Desktop Enhanced) */}
+      <div style={{ padding: '12px 20px', background: '#fff', fontSize: 13, color: '#878787', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: 1340, margin: '0 auto' }}>
+          <Link to="/" style={{ color: '#878787', textDecoration: 'none' }}>Home</Link> &gt;{' '}
+          <Link to="/categories" style={{ color: '#878787', textDecoration: 'none' }}>Groceries</Link> &gt;{' '}
+          <span style={{ color: '#212121', fontWeight: 600 }}>{(activeProduct as any).name}</span>
+        </div>
       </div>
 
-      {/* Product Image Carousel with Wishlist & Share */}
-      <div style={{ background: '#fff', padding: '16px 0 24px', position: 'relative', textAlign: 'center' }}>
-        <style>{`
-          .product-detail-carousel .slick-track {
-            display: flex !important;
-            align-items: center !important;
-          }
-          .product-detail-carousel .slick-slide {
-            text-align: center !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-          }
-          .product-detail-carousel .slick-slide > div {
-            width: 100% !important;
-            display: flex !important;
+      {/* Main Responsive Grid Container (Phone: Stacked | Mid & Large: 2-Column Gallery + Details) */}
+      <div className="pdp-desktop-container">
+        {/* Left Column: Gallery & Quick Visual Trust */}
+        <div className="pdp-gallery-col">
+          {/* Product Image Carousel with Wishlist & Share */}
+          <div className="pdp-gallery-card" style={{ background: '#fff', padding: '16px 0 24px', position: 'relative', textAlign: 'center' }}>
+            <style>{`
+              .product-detail-carousel .slick-track {
+                display: flex !important;
+                align-items: center !important;
+              }
+              .product-detail-carousel .slick-slide {
+                text-align: center !important;
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+              }
+              .product-detail-carousel .slick-slide > div {
+                width: 100% !important;
+                display: flex !important;
             justify-content: center !important;
             align-items: center !important;
           }
@@ -490,10 +499,13 @@ export function ProductDetailPage() {
             </div>
           ))}
         </Carousel>
-      </div>
+          </div>
+        </div>
 
-      {/* Core Info & Pricing */}
-      <div style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
+        {/* Right Column: Product details, wholesale pricing, specs, offers, and delivery */}
+        <div className="pdp-content-col">
+          {/* Core Info & Pricing */}
+          <div className="pdp-section-card" style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
         {(activeProduct as any).brand && (
           <Typography.Text style={{ color: '#878787', fontSize: 13, textTransform: 'uppercase', fontWeight: 600 }}>
             {(activeProduct as any).brand}
@@ -643,6 +655,9 @@ export function ProductDetailPage() {
                   </Typography.Text>
                   <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
                     Applied: <strong>{activeTier.label}</strong> ({activeTier.discount}% off) • Total: <strong>{formatInr(totalWholesaleOrderAmount)}</strong>
+                  </Typography.Text>
+                  <Typography.Text style={{ fontSize: 11, color: '#b45309', display: 'block', marginTop: 4 }}>
+                    <GiftOutlined /> Earn {loyalty.estimateLinePoints(activeWholesalePriceInclGst, wholesaleQty)} loyalty pts on this order
                   </Typography.Text>
                 </div>
 
@@ -813,6 +828,9 @@ export function ProductDetailPage() {
             <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
               Inclusive of all taxes • 100% Farm Milled
             </Typography.Text>
+            <Typography.Text style={{ fontSize: 12, color: '#b45309', display: 'block', marginTop: 4, fontWeight: 500 }}>
+              <GiftOutlined /> Earn {loyalty.estimateLinePoints(consumerPrice, selectedUnits)} loyalty pts on this order
+            </Typography.Text>
 
             {/* Consumer Quantity Stepper */}
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0' }}>
@@ -899,11 +917,65 @@ export function ProductDetailPage() {
             )}
           </div>
         )}
+
+        {/* Desktop Quick Buy & Cart Action Panel (visible on tablet/desktop, hidden on phone) */}
+        <div className="pdp-desktop-buy-panel">
+          <Button
+            size="large"
+            style={{
+              flex: 1,
+              height: 50,
+              borderRadius: 10,
+              background: '#fff',
+              fontSize: 16,
+              fontWeight: 700,
+              color: '#ea580c',
+              border: '2px solid #fed7aa',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+            onClick={handleAddToCart}
+          >
+            <ShoppingCartOutlined />
+            {isRetailer
+              ? `Add ${wholesaleQty} pcs • ${formatInr(totalWholesaleOrderAmount)}`
+              : `Add to Cart • ${formatInr(consumerPrice * selectedUnits)}`}
+          </Button>
+
+          <Button
+            type="primary"
+            size="large"
+            style={{
+              flex: 1,
+              height: 50,
+              borderRadius: 10,
+              background: isRetailer ? '#059669' : '#ea580c',
+              borderColor: isRetailer ? '#059669' : '#ea580c',
+              fontSize: 16,
+              fontWeight: 700,
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 4px 14px rgba(234, 88, 12, 0.3)',
+            }}
+            onClick={() => {
+              handleAddToCart();
+              navigate('/cart');
+            }}
+          >
+            <ThunderboltFilled />
+            {isRetailer ? 'Bulk Consignment Order' : 'Instant Buy Now'}
+          </Button>
+        </div>
       </div>
 
       {/* Variants Selector */}
       {hasVariants && (
-        <div style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
+        <div className="pdp-section-card" style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 14, marginBottom: 12 }}>
             Available Variants &amp; Pack Sizes
           </Typography.Text>
@@ -935,7 +1007,7 @@ export function ProductDetailPage() {
 
       {/* Product Information (Description & Specifications Details) */}
       {((activeProduct as any).description || (activeProduct as any).disclaimer || (activeProduct as any).specifications) && (
-        <div style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
+        <div className="pdp-section-card" style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 14, marginBottom: 12 }}>
             Product Information &amp; Specifications
           </Typography.Text>
@@ -1005,7 +1077,7 @@ export function ProductDetailPage() {
 
       {/* Available Offers */}
       {(activeProduct as any).offers && (
-        <div style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
+        <div className="pdp-section-card" style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 14, marginBottom: 12 }}>
             Available Offers &amp; Bank Discounts
           </Typography.Text>
@@ -1026,7 +1098,7 @@ export function ProductDetailPage() {
       )}
 
       {/* Delivery & Pincode Check */}
-      <div style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
+      <div className="pdp-section-card" style={{ background: '#fff', padding: '16px', marginTop: 8 }}>
         <Typography.Text strong style={{ fontSize: 14, display: 'block', marginBottom: 12 }}>
           {isRetailer ? '🚚 Wholesale Freight & Store Dispatch' : 'Delivery & Services'}
         </Typography.Text>
@@ -1149,7 +1221,7 @@ export function ProductDetailPage() {
 
       {/* Business Information (Available for B2B Wholesale / Retailers) */}
       {isRetailer && (
-        <div style={{ background: '#fff', padding: '0 16px 16px', marginTop: 8 }}>
+        <div className="pdp-section-card" style={{ background: '#fff', padding: '0 16px 16px', marginTop: 8 }}>
           <Collapse
             ghost
             defaultActiveKey={['1']}
@@ -1194,7 +1266,7 @@ export function ProductDetailPage() {
 
       {/* Frequently Asked Questions (FAQs) */}
       {(activeProduct as any).faqs && (
-        <div style={{ background: '#fff', padding: '0 16px 16px', marginTop: 8 }}>
+        <div className="pdp-section-card" style={{ background: '#fff', padding: '0 16px 16px', marginTop: 8 }}>
           <Collapse
             ghost
             expandIconPosition="end"
@@ -1221,96 +1293,101 @@ export function ProductDetailPage() {
           />
         </div>
       )}
-
-      {/* Frequently Bought Together */}
-      <div style={{ marginTop: 8, background: '#fff', padding: '16px 0 24px' }}>
-        <Typography.Text strong style={{ display: 'block', fontSize: 14, margin: '0 16px 16px' }}>
-          Frequently Bought Together
-        </Typography.Text>
-        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 16px 10px' }}>
-          <style>{`
-            div::-webkit-scrollbar { display: none; }
-            .product-dots li button { background: #c2c2c2 !important; height: 6px !important; border-radius: 4px !important; }
-            .product-dots li.slick-active button { background: #f97316 !important; width: 16px !important; }
-          `}</style>
-          {popularProducts.slice(0, 6).map((related) => {
-            const relatedCartLine = cart.lines.find((line) => line.productId === related.id);
-            const relatedPrice = isRetailer ? Math.round(related.price * 0.8) : related.price;
-            return (
-              <div
-                key={related.id}
-                style={{
-                  width: 144,
-                  flexShrink: 0,
-                  borderRadius: 8,
-                  border: '1px solid #f0f0f0',
-                  padding: 10,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  background: '#ffffff',
-                }}
-              >
-                <Link to={`/product-detail/${related.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{ width: '100%', height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#fafaf9', borderRadius: 6 }}>
-                    <img src={related.image} alt={related.name} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} />
-                  </div>
-                  <Typography.Text style={{ display: 'block', fontSize: 12, color: '#212121', lineHeight: 1.3, height: 32, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {related.name}
-                  </Typography.Text>
-                </Link>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
-                  <Typography.Text strong style={{ fontSize: 14, color: isRetailer ? '#065f46' : '#212121' }}>
-                    {formatInr(relatedPrice)}
-                  </Typography.Text>
-
-                  {relatedCartLine ? (
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #fed7aa', borderRadius: 6, background: '#fff7ed' }}>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<MinusOutlined style={{ fontSize: 9 }} />}
-                        onClick={() => cart.setQuantity(related.id, relatedCartLine.quantity - 1)}
-                        style={{ width: 22, minWidth: 22, height: 22, padding: 0 }}
-                      />
-                      <Typography.Text strong style={{ width: 20, textAlign: 'center', fontSize: 11, color: '#ea580c' }}>
-                        {relatedCartLine.quantity}
-                      </Typography.Text>
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<PlusOutlined style={{ fontSize: 9 }} />}
-                        onClick={() => cart.setQuantity(related.id, relatedCartLine.quantity + 1)}
-                        style={{ width: 22, minWidth: 22, height: 22, padding: 0 }}
-                      />
-                    </div>
-                  ) : (
-                    <Button
-                      size="small"
-                      style={{ border: '1px solid #f97316', color: '#f97316', borderRadius: 6, padding: '0 8px', fontSize: 11, fontWeight: 600, height: 24 }}
-                      onClick={() =>
-                        cart.add({
-                          productId: related.id,
-                          productName: related.name,
-                          unit: (related as any).variant || (related as any).weight || '1 pack',
-                          displayUnitPrice: relatedPrice,
-                          imageUrl: related.image,
-                          mrp: (related as any).mrp,
-                        })
-                      }
-                    >
-                      ADD
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 
-      {/* Sticky Bottom Bar for Actions */}
+      {/* Frequently Bought Together (Full width container on desktop) */}
+      <div style={{ marginTop: 16, background: '#fff', padding: '24px 0 32px', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 20px' }}>
+          <Typography.Text strong style={{ display: 'block', fontSize: 18, marginBottom: 16, color: '#0f172a' }}>
+            Frequently Bought Together
+          </Typography.Text>
+          <div className="pdp-related-grid" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 4px 10px' }}>
+            <style>{`
+              div::-webkit-scrollbar { display: none; }
+              .product-dots li button { background: #c2c2c2 !important; height: 6px !important; border-radius: 4px !important; }
+              .product-dots li.slick-active button { background: #f97316 !important; width: 16px !important; }
+            `}</style>
+            {popularProducts.slice(0, 6).map((related) => {
+              const relatedCartLine = cart.lines.find((line) => line.productId === related.id);
+              const relatedPrice = isRetailer ? Math.round(related.price * 0.8) : related.price;
+              return (
+                <div
+                  key={related.id}
+                  style={{
+                    width: 144,
+                    flexShrink: 0,
+                    borderRadius: 10,
+                    border: '1px solid #f0f0f0',
+                    padding: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    background: '#ffffff',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <Link to={`/product-detail/${related.id}`} style={{ textDecoration: 'none' }}>
+                    <div style={{ width: '100%', height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#fafaf9', borderRadius: 6 }}>
+                      <img src={related.image} alt={related.name} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} />
+                    </div>
+                    <Typography.Text style={{ display: 'block', fontSize: 12, color: '#212121', lineHeight: 1.3, height: 32, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {related.name}
+                    </Typography.Text>
+                  </Link>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
+                    <Typography.Text strong style={{ fontSize: 14, color: isRetailer ? '#065f46' : '#212121' }}>
+                      {formatInr(relatedPrice)}
+                    </Typography.Text>
+
+                    {relatedCartLine ? (
+                      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #fed7aa', borderRadius: 6, background: '#fff7ed' }}>
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<MinusOutlined style={{ fontSize: 9 }} />}
+                          onClick={() => cart.setQuantity(related.id, relatedCartLine.quantity - 1)}
+                          style={{ width: 22, minWidth: 22, height: 22, padding: 0 }}
+                        />
+                        <Typography.Text strong style={{ width: 20, textAlign: 'center', fontSize: 11, color: '#ea580c' }}>
+                          {relatedCartLine.quantity}
+                        </Typography.Text>
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<PlusOutlined style={{ fontSize: 9 }} />}
+                          onClick={() => cart.setQuantity(related.id, relatedCartLine.quantity + 1)}
+                          style={{ width: 22, minWidth: 22, height: 22, padding: 0 }}
+                        />
+                      </div>
+                    ) : (
+                      <Button
+                        size="small"
+                        style={{ border: '1px solid #f97316', color: '#f97316', borderRadius: 6, padding: '0 8px', fontSize: 11, fontWeight: 600, height: 24 }}
+                        onClick={() =>
+                          cart.add({
+                            productId: related.id,
+                            productName: related.name,
+                            unit: (related as any).variant || (related as any).weight || '1 pack',
+                            displayUnitPrice: relatedPrice,
+                            imageUrl: related.image,
+                            mrp: (related as any).mrp,
+                          })
+                        }
+                      >
+                        ADD
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky Bottom Bar for Actions (Mobile only - on tablet/desktop, inline buy panel is used) */}
       <div
-        className="store-safe-bottom"
+        className="store-safe-bottom pdp-fixed-bottom-bar"
         style={{
           position: 'fixed',
           bottom: 0,

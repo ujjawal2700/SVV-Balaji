@@ -72,7 +72,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         key: 'onboarding',
         path: '/onboarding',
-        label: 'Farmer / Supplier Onboarding',
+        label: 'Farmer Onboarding',
         // Default: the roles that register and approve farmers. An Agriculture
         // Expert has their own panel at /field.
         permission: 'ONBOARDING_PANEL',
@@ -104,7 +104,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         key: 'farmers',
         path: '/farmers',
-        label: 'Farmers / Suppliers',
+        label: 'Farmers',
         permission: 'FARMER_VIEW',
         description:
           'Farmer registry, verification workflow and traceability IDs. Approval is Super ' +
@@ -161,6 +161,40 @@ export const NAV_SECTIONS: NavSection[] = [
           'agronomic advice and yield prediction. Also captured offline in the field app (WS3.1).',
         endpoints: ['GET /field-visits', 'POST /field-visits'],
         workstream: 'WS2.2',
+      },
+    ],
+  },
+  {
+    key: 'supplier-sourcing',
+    label: 'Supplier Sourcing',
+    icon: <TeamOutlined />,
+    items: [
+      {
+        key: 'suppliers',
+        path: '/suppliers',
+        label: 'Suppliers',
+        permission: 'SUPPLIER_VIEW',
+        description: 'Supplier registry and verification workflow.',
+        endpoints: ['GET /suppliers', 'POST /suppliers'],
+        workstream: 'WS2.2',
+      },
+      {
+        key: 'transports',
+        path: '/transports',
+        label: 'Transports',
+        permission: 'TRANSPORT_VIEW',
+        description: 'Manage inbound material transports from suppliers.',
+        endpoints: ['GET /transports'],
+        workstream: 'WS2.3',
+      },
+      {
+        key: 'purchase-orders',
+        path: '/purchase-orders',
+        label: 'Purchase Orders',
+        permission: 'PURCHASE_ORDER_VIEW',
+        description: 'Manage supplier purchase orders.',
+        endpoints: ['GET /purchase-orders'],
+        workstream: 'WS2.3',
       },
     ],
   },

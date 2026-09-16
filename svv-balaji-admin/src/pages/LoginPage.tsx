@@ -49,7 +49,7 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await authApi.login(values.email, values.password);
+      const result = await authApi.login(values.email.trim(), values.password);
 
       if ('requiresTwoFactor' in result) {
         setRequiresTwoFactor(true);

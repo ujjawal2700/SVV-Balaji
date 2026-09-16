@@ -156,6 +156,37 @@ enum QualityResult {
   REWORK_REQUIRED
 }
 
+// --- Supplier Module --------------------------------------------------------
+
+enum SupplierStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  BLACKLISTED
+  SUSPENDED
+}
+
+enum SupplierVerificationAction {
+  APPROVED
+  REJECTED
+  DOCUMENTS_REQUESTED
+}
+
+enum TransportStatus {
+  SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
 // ---------------------------------------------------------------------------
 // Auth / Users
 // ---------------------------------------------------------------------------
@@ -213,6 +244,12 @@ model User {
   priceListsCreated  PriceList[]       @relation("PriceListsCreated")
   ordersPlaced       Order[]           @relation("OrdersPlaced")
   orderAllocations   OrderAllocation[] @relation("OrderAllocations")
+
+  // Supplier back-relations
+  suppliersCreated          Supplier[]                @relation("SuppliersCreated")
+  supplierVerificationLogs  SupplierVerificationLog[]
+  supplierTransportsCreated SupplierTransport[]       @relation("TransportsCreated")
+  purchaseOrdersCreated     PurchaseOrder[]           @relation("PurchaseOrdersCreated")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -738,14 +775,26 @@ model RawMaterialBatch {
   /// FRD 15.1 format: RM-YYYYMMDD-NNN
   batchNumber String @unique
 
-  collectionId String                @unique
-  collection   RawMaterialCollection @relation(fields: [collectionId], references: [id])
+  // -------------------------------------------------------------------------
+  // Origin Link - either from a Farmer Collection or a Supplier Transport
+  // -------------------------------------------------------------------------
 
-  farmerId String
-  farmer   Farmer @relation(fields: [farmerId], references: [id])
+  collectionId String?                @unique
+  collection   RawMaterialCollection? @relation(fields: [collectionId], references: [id])
 
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id])
+  supplierTransportId String?            @unique
+  supplierTransport   SupplierTransport? @relation(fields: [supplierTransportId], references: [id])
+
+  farmerId String?
+  farmer   Farmer? @relation(fields: [farmerId], references: [id])
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  // -------------------------------------------------------------------------
 
   cropName String
   quantity Decimal @db.Decimal(12, 2)
@@ -1271,6 +1320,9 @@ model Warehouse {
   /// Runs drawing raw material from here (FRD 17.2 reservation).
   productionBatches ProductionBatch[]
 
+  // Supplier transports destined for this warehouse
+  supplierTransports SupplierTransport[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1709,4 +1761,199 @@ model FarmPlot {
 
   @@index([farmerId])
   @@map("farm_plots")
+}
+
+// ===========================================================================
+// SUPPLIER MODULE
+//
+// Suppliers are external entities who deliver raw materials but are NOT
+// farmers. They don't have land profiles, seed distribution, training,
+// field visits or harvest inspections. Instead of the Collection flow,
+// they use Transport for inbound logistics, and Purchase Orders instead
+// of Agreements.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Supplier (analogous to Farmer, but simpler)
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id           String  @id @default(uuid())
+  supplierCode String? @unique // SUP-YYYY-NNNNNN - assigned on approval
+
+  fullName    String
+  mobile      String
+  aadhaarNumber String?
+  panNumber     String?
+
+  /// Business/firm name. Many suppliers in India operate as sole
+  /// proprietorships and won't have one — keep it optional.
+  companyName String?
+  /// GST Identification Number for B2B tax invoices.
+  gstin       String?
+
+  address  String?
+  city     String?
+  district String?
+  state    String?
+  pincode  String?
+
+  bankAccountName String?
+  bankName        String?
+  bankAccountNo   String?
+  ifscCode        String?
+
+  status SupplierStatus @default(PENDING_VERIFICATION)
+
+  createdById String?
+  createdBy   User?   @relation("SuppliersCreated", fields: [createdById], references: [id])
+
+  verificationLogs SupplierVerificationLog[]
+  transports       SupplierTransport[]
+  purchaseOrders   PurchaseOrder[]
+  rawMaterialBatches RawMaterialBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Supplier code sequence - backs SUP-YYYY-NNNNNN traceability ID.
+// ---------------------------------------------------------------------------
+
+model SupplierCodeCounter {
+  year       Int @id
+  lastNumber Int @default(0)
+
+  @@map("supplier_code_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Verification Audit Trail (same pattern as FarmerVerificationLog)
+// ---------------------------------------------------------------------------
+
+model SupplierVerificationLog {
+  id         String @id @default(uuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  action  SupplierVerificationAction
+  remarks String?
+
+  verifiedById String
+  verifiedBy   User   @relation(fields: [verifiedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_verification_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Purchase Orders (industry-standard supplier agreements)
+//
+// A Purchase Order is a binding commitment: SVV Balaji agrees to buy a
+// specific material at a specific rate, and the supplier commits to deliver
+// by a date. Transports reference the PO they fulfil so cost and quantity
+// can be reconciled.
+// ---------------------------------------------------------------------------
+
+model PurchaseOrder {
+  id String @id @default(uuid())
+
+  /// Format: PO-YYYYMMDD-NNN
+  poNumber String @unique
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  materialName     String
+  expectedQuantity Decimal  @db.Decimal(12, 2)
+  unit             String   @default("KG")
+  purchaseRate     Decimal  @db.Decimal(12, 2)
+  totalAmount      Decimal  @db.Decimal(14, 2)
+
+  orderDate    DateTime
+  deliveryDate DateTime?
+
+  qualityStandards String?
+  terms            String?
+
+  status PurchaseOrderStatus @default(DRAFT)
+
+  createdById String
+  createdBy   User   @relation("PurchaseOrdersCreated", fields: [createdById], references: [id])
+
+  transports SupplierTransport[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Transport (replaces Collection for suppliers)
+//
+// Lifecycle: SCHEDULED → IN_TRANSIT → DELIVERED (auto-creates batch)
+//
+// When a transport reaches DELIVERED, a RawMaterialBatch is automatically
+// created in the destination warehouse — same as how Collection creates
+// one for farmers, but without the inspection gate.
+// ---------------------------------------------------------------------------
+
+model SupplierTransport {
+  id String @id @default(uuid())
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  /// Optional link to the PO this delivery fulfils.
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  materialName String
+  quantity     Decimal @db.Decimal(12, 2)
+  unit         String  @default("KG")
+
+  vehicleNumber String?
+  driverName    String?
+  driverPhone   String?
+
+  scheduledDate DateTime
+  dispatchedAt  DateTime?
+  deliveredAt   DateTime?
+
+  deliveryLocation String?
+
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  purchaseRate  Decimal?      @db.Decimal(12, 2)
+  totalAmount   Decimal?      @db.Decimal(14, 2)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  /// Receipt issued on delivery, same pattern as RawMaterialCollection.
+  receiptNumber String? @unique
+
+  batch RawMaterialBatch?
+
+  status  TransportStatus @default(SCHEDULED)
+  remarks String?
+
+  createdById String
+  createdBy   User   @relation("TransportsCreated", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([warehouseId])
+  @@map("supplier_transports")
 }
