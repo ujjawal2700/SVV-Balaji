@@ -22,19 +22,60 @@ import {
 import { Badge, Button, Carousel, Input, InputNumber, Typography } from 'antd';
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useStorefrontBanners } from '@shared/hooks/useBanners';
+import { useStorefrontSchemes } from '@shared/hooks/useSchemes';
+import { api as storefrontApi } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
+import { useCategoryTree } from '../hooks/useCategoryTree';
 import {
   bestOfBasics,
   buyAgainProducts,
-  categories,
   popularProducts,
-  schemes,
 } from '../mock/homeMockData';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
 }
+
+interface HeroSlide {
+  id: string;
+  badgeText?: string | null;
+  title: string;
+  description: string;
+  imageUrl: string;
+  ctaTextPrimary: string;
+  ctaLinkPrimary: string;
+  ctaTextSecondary?: string | null;
+  ctaLinkSecondary?: string | null;
+  background: string;
+}
+
+/** Shown only while no HOMEPAGE banner has been published from Admin > Banner Management yet. */
+const FALLBACK_HERO_SLIDES: HeroSlide[] = [
+  {
+    id: 'fallback-1',
+    badgeText: '100% FARM-TRACEABLE STAPLES',
+    title: 'Direct From Verified Mandis to Your Store',
+    description: 'Pure Sharbati Atta, cold-pressed oils, and ground spices with verifiable batch QR provenance.',
+    imageUrl: '/images/welcome_3d.jpg',
+    ctaTextPrimary: 'Explore Catalog',
+    ctaLinkPrimary: '/products/atta-flour',
+    ctaTextSecondary: 'Trace A Batch',
+    ctaLinkSecondary: '/trace',
+    background: 'linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%)',
+  },
+  {
+    id: 'fallback-2',
+    badgeText: 'MEGA WHOLESALE SAVINGS',
+    title: 'Festive Retailer Schemes Live Now',
+    description: 'Enjoy up to 20% margin discounts + Buy 10 Get 1 free on selected spices and pulses.',
+    imageUrl: '/images/cat_spices.jpg',
+    ctaTextPrimary: 'Claim Active Schemes',
+    ctaLinkPrimary: '/products/atta-flour',
+    background: 'linear-gradient(135deg, #9a3412 0%, #c2410c 50%, #ea580c 100%)',
+  },
+];
 
 export function HomePage() {
   const cart = useCart();
@@ -42,6 +83,33 @@ export function HomePage() {
   const { role, customerProfile, retailerProfile } = useCustomerAuth();
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
+  const categories = useCategoryTree();
+
+  const { data: publishedBanners } = useStorefrontBanners(
+    'HOMEPAGE',
+    isRetailer ? 'B2B' : 'B2C',
+    storefrontApi,
+  );
+  // Deliberately no mock fallback here: an empty result is Super Admin
+  // choosing to hide the "Today's Schemes & Offers" section, not a loading
+  // gap, so the section renders nothing rather than substituting placeholder
+  // content. See shared/hooks/useSchemes.ts.
+  const { data: schemes = [] } = useStorefrontSchemes(isRetailer ? 'B2B' : 'B2C', storefrontApi);
+  const heroSlides: HeroSlide[] =
+    publishedBanners && publishedBanners.length > 0
+      ? publishedBanners.map((banner) => ({
+          id: banner.id,
+          badgeText: banner.badgeText,
+          title: banner.title,
+          description: banner.description,
+          imageUrl: banner.imageUrl,
+          ctaTextPrimary: banner.ctaTextPrimary,
+          ctaLinkPrimary: banner.ctaLinkPrimary,
+          ctaTextSecondary: banner.ctaTextSecondary,
+          ctaLinkSecondary: banner.ctaLinkSecondary,
+          background: banner.backgroundColor,
+        }))
+      : FALLBACK_HERO_SLIDES;
 
   const handleTraceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,135 +276,81 @@ export function HomePage() {
             {/* Left: Large Desktop Promo Carousel */}
             <div style={{ borderRadius: 20, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
               <Carousel autoplay effect="fade" dotPosition="bottom">
-                <div>
-                  <div
-                    style={{
-                      height: 320,
-                      background: 'linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%)',
-                      color: '#fff',
-                      padding: '36px 44px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      position: 'relative',
-                    }}
-                  >
-                    <div style={{ maxWidth: '60%', zIndex: 2 }}>
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          background: 'rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(4px)',
-                          padding: '4px 12px',
-                          borderRadius: 20,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#fef08a',
-                          marginBottom: 12,
-                        }}
-                      >
-                        <SafetyCertificateFilled /> 100% FARM-TRACEABLE STAPLES
-                      </div>
-                      <Typography.Title level={2} style={{ color: '#fff', margin: '0 0 10px', fontSize: 32, fontWeight: 800, lineHeight: 1.15 }}>
-                        Direct From Verified Mandis to Your Store
-                      </Typography.Title>
-                      <Typography.Text style={{ color: '#d1fae5', fontSize: 15, display: 'block', marginBottom: 24, lineHeight: 1.4 }}>
-                        Pure Sharbati Atta, cold-pressed oils, and ground spices with verifiable batch QR provenance.
-                      </Typography.Text>
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <Button
-                          type="primary"
-                          size="large"
-                          style={{ background: '#f59e0b', borderColor: '#f59e0b', color: '#1c1917', fontWeight: 700, borderRadius: 10 }}
-                          onClick={() => navigate('/products/atta-flour')}
-                        >
-                          Explore Catalog
-                        </Button>
-                        <Button
-                          size="large"
-                          style={{ background: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)', color: '#fff', fontWeight: 600, borderRadius: 10 }}
-                          onClick={() => navigate('/trace')}
-                        >
-                          Trace A Batch
-                        </Button>
-                      </div>
-                    </div>
-                    <img
-                      src="/images/welcome_3d.jpg"
-                      alt="Welcome to Desi Tokri"
+                {heroSlides.map((slide) => (
+                  <div key={slide.id}>
+                    <div
                       style={{
-                        height: 220,
-                        width: 220,
-                        objectFit: 'cover',
-                        borderRadius: 24,
-                        border: '6px solid rgba(255,255,255,0.2)',
-                        boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
+                        height: 320,
+                        background: slide.background,
+                        color: '#fff',
+                        padding: '36px 44px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        position: 'relative',
                       }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      height: 320,
-                      background: 'linear-gradient(135deg, #9a3412 0%, #c2410c 50%, #ea580c 100%)',
-                      color: '#fff',
-                      padding: '36px 44px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div style={{ maxWidth: '60%', zIndex: 2 }}>
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          background: 'rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(4px)',
-                          padding: '4px 12px',
-                          borderRadius: 20,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#ffedd5',
-                          marginBottom: 12,
-                        }}
-                      >
-                        <FireFilled /> MEGA WHOLESALE SAVINGS
+                    >
+                      <div style={{ maxWidth: '60%', zIndex: 2 }}>
+                        {slide.badgeText && (
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: 'rgba(255,255,255,0.2)',
+                              backdropFilter: 'blur(4px)',
+                              padding: '4px 12px',
+                              borderRadius: 20,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: '#fef08a',
+                              marginBottom: 12,
+                            }}
+                          >
+                            <SafetyCertificateFilled /> {slide.badgeText}
+                          </div>
+                        )}
+                        <Typography.Title level={2} style={{ color: '#fff', margin: '0 0 10px', fontSize: 32, fontWeight: 800, lineHeight: 1.15 }}>
+                          {slide.title}
+                        </Typography.Title>
+                        <Typography.Text style={{ color: '#d1fae5', fontSize: 15, display: 'block', marginBottom: 24, lineHeight: 1.4 }}>
+                          {slide.description}
+                        </Typography.Text>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <Button
+                            type="primary"
+                            size="large"
+                            style={{ background: '#f59e0b', borderColor: '#f59e0b', color: '#1c1917', fontWeight: 700, borderRadius: 10 }}
+                            onClick={() => navigate(slide.ctaLinkPrimary)}
+                          >
+                            {slide.ctaTextPrimary}
+                          </Button>
+                          {slide.ctaTextSecondary && slide.ctaLinkSecondary && (
+                            <Button
+                              size="large"
+                              style={{ background: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)', color: '#fff', fontWeight: 600, borderRadius: 10 }}
+                              onClick={() => navigate(slide.ctaLinkSecondary as string)}
+                            >
+                              {slide.ctaTextSecondary}
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <Typography.Title level={2} style={{ color: '#fff', margin: '0 0 10px', fontSize: 32, fontWeight: 800, lineHeight: 1.15 }}>
-                        Festive Retailer Schemes Live Now
-                      </Typography.Title>
-                      <Typography.Text style={{ color: '#fed7aa', fontSize: 15, display: 'block', marginBottom: 24 }}>
-                        Enjoy up to 20% margin discounts + Buy 10 Get 1 free on selected spices and pulses.
-                      </Typography.Text>
-                      <Button
-                        type="primary"
-                        size="large"
-                        style={{ background: '#ffffff', borderColor: '#ffffff', color: '#c2410c', fontWeight: 800, borderRadius: 10 }}
-                        onClick={() => navigate('/products/atta-flour')}
-                      >
-                        Claim Active Schemes
-                      </Button>
+                      <img
+                        src={slide.imageUrl}
+                        alt={slide.title}
+                        style={{
+                          height: 220,
+                          width: 220,
+                          objectFit: 'cover',
+                          borderRadius: 24,
+                          border: '6px solid rgba(255,255,255,0.2)',
+                          boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
+                        }}
+                      />
                     </div>
-                    <img
-                      src="/images/cat_spices.jpg"
-                      alt="Festival Schemes"
-                      style={{
-                        height: 220,
-                        width: 220,
-                        objectFit: 'cover',
-                        borderRadius: 24,
-                        border: '6px solid rgba(255,255,255,0.2)',
-                        boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
-                      }}
-                    />
                   </div>
-                </div>
+                ))}
               </Carousel>
             </div>
 
@@ -556,33 +570,20 @@ export function HomePage() {
         {/* ======================================================================= */}
         <div className="mobile-only" style={{ borderRadius: 16, overflow: 'hidden' }}>
           <Carousel autoplay dotPosition="bottom">
-            <div>
-              <div style={{ height: 160, background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)', color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <Typography.Title level={3} style={{ color: '#fff', margin: 0, fontSize: 18 }}>Welcome to Desi Tokri</Typography.Title>
-                  <Typography.Text style={{ color: '#dcfce7', fontSize: 12, marginTop: 4, display: 'block' }}>Farm fresh groceries at your fingertips.</Typography.Text>
+            {heroSlides.map((slide) => (
+              <div key={slide.id}>
+                <div
+                  onClick={() => navigate(slide.ctaLinkPrimary)}
+                  style={{ height: 160, background: slide.background, color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                >
+                  <div style={{ flex: 1, paddingRight: 16 }}>
+                    <Typography.Title level={3} style={{ color: '#fff', margin: 0, fontSize: 18 }}>{slide.title}</Typography.Title>
+                    <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, display: 'block' }}>{slide.description}</Typography.Text>
+                  </div>
+                  <img src={slide.imageUrl} alt={slide.title} style={{ height: 90, width: 90, objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
                 </div>
-                <img src="/images/welcome_3d.jpg" alt="Welcome" style={{ height: 90, width: 90, objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
               </div>
-            </div>
-            <div>
-              <div style={{ height: 160, background: 'linear-gradient(135deg, #c2410c 0%, #ea580c 100%)', color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <Typography.Title level={3} style={{ color: '#fff', margin: 0, fontSize: 18 }}>Mega Savings Festival</Typography.Title>
-                  <Typography.Text style={{ color: '#ffedd5', fontSize: 12, marginTop: 4, display: 'block' }}>Up to 50% off on all staples today.</Typography.Text>
-                </div>
-                <img src="/images/cat_spices.jpg" alt="Festival" style={{ height: 90, width: 90, objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
-              </div>
-            </div>
-            <div>
-              <div style={{ height: 160, background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%)', color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ flex: 1, paddingRight: 16 }}>
-                  <Typography.Title level={3} style={{ color: '#fff', margin: 0, fontSize: 18 }}>Free Delivery</Typography.Title>
-                  <Typography.Text style={{ color: '#dbeafe', fontSize: 12, marginTop: 4, display: 'block' }}>On your first 3 orders with Desi Tokri.</Typography.Text>
-                </div>
-                <img src="/images/aloo_bhujia.jpg" alt="Delivery" style={{ height: 90, width: 90, objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
-              </div>
-            </div>
+            ))}
           </Carousel>
         </div>
 
@@ -681,139 +682,143 @@ export function HomePage() {
 
         {/* ======================================================================= */}
         {/* 4. TODAY'S SCHEMES & WHOLESALE OFFERS                                   */}
+        {/* Managed via Admin > Schemes & Offers. Hidden entirely (no fallback)     */}
+        {/* when Super Admin has unpublished every scheme.                         */}
         {/* ======================================================================= */}
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FireFilled style={{ color: '#f97316', fontSize: 20 }} />
-              <Typography.Title level={4} style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                Today&apos;s Active Schemes &amp; Offers
-              </Typography.Title>
+        {schemes.length > 0 && (
+          <section>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FireFilled style={{ color: '#f97316', fontSize: 20 }} />
+                <Typography.Title level={4} style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                  Today&apos;s Active Schemes &amp; Offers
+                </Typography.Title>
+              </div>
+              <Link to="/products/atta-flour" style={{ fontSize: 13, color: '#059669', fontWeight: 600 }}>
+                View All Schemes &rarr;
+              </Link>
             </div>
-            <Link to="/products/atta-flour" style={{ fontSize: 13, color: '#059669', fontWeight: 600 }}>
-              View All Schemes &rarr;
-            </Link>
-          </div>
 
-          {/* Mobile horizontal scroller */}
-          <div className="mobile-only">
-            <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
-              {schemes.map((scheme) => (
-                <div
-                  key={scheme.id}
-                  style={{
-                    flex: '0 0 auto',
-                    width: 270,
-                    borderRadius: 14,
-                    padding: 18,
-                    background: scheme.background,
-                    color: scheme.foreground,
-                  }}
-                >
-                  <Typography.Text
+            {/* Mobile horizontal scroller */}
+            <div className="mobile-only">
+              <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
+                {schemes.map((scheme) => (
+                  <div
+                    key={scheme.id}
                     style={{
-                      color: scheme.badgeFg,
-                      fontSize: 9,
-                      fontWeight: 800,
-                      letterSpacing: 0.5,
-                      background: scheme.badgeBg,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      textTransform: 'uppercase',
+                      flex: '0 0 auto',
+                      width: 270,
+                      borderRadius: 14,
+                      padding: 18,
+                      background: scheme.backgroundColor,
+                      color: scheme.textColor,
                     }}
                   >
-                    {scheme.tag}
-                  </Typography.Text>
-                  <Typography.Title level={4} style={{ color: scheme.foreground, margin: '10px 0 2px', fontWeight: 700, fontSize: 17 }}>
-                    {scheme.title}
-                  </Typography.Title>
-                  <Typography.Text style={{ color: scheme.subtitleFg, fontSize: 13, fontWeight: 500 }}>
-                    {scheme.subtitle}
-                  </Typography.Text>
-                  <div style={{ marginTop: 14 }}>
-                    <Button
-                      block
+                    <Typography.Text
                       style={{
-                        background: scheme.btnBg,
-                        color: scheme.btnFg,
-                        fontWeight: 700,
-                        border: 'none',
-                        borderRadius: 8,
+                        color: scheme.badgeTextColor,
+                        fontSize: 9,
+                        fontWeight: 800,
+                        letterSpacing: 0.5,
+                        background: scheme.badgeColor,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        textTransform: 'uppercase',
                       }}
-                      onClick={() => navigate('/products/atta-flour')}
                     >
-                      {scheme.cta}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Desktop 3-column schemes grid */}
-          <div className="desktop-only">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-              {schemes.map((scheme) => (
-                <div
-                  key={scheme.id}
-                  className="product-card-hover"
-                  style={{
-                    borderRadius: 16,
-                    padding: '24px 22px',
-                    background: scheme.background,
-                    color: scheme.foreground,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span
-                        style={{
-                          color: scheme.badgeFg,
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: 0.5,
-                          background: scheme.badgeBg,
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {scheme.tag}
-                      </span>
-                      <span style={{ fontSize: 11, opacity: 0.8, color: scheme.foreground }}>⚡ Limited Time</span>
-                    </div>
-                    <Typography.Title level={4} style={{ color: scheme.foreground, margin: '14px 0 6px', fontWeight: 800, fontSize: 20 }}>
+                      {scheme.tag}
+                    </Typography.Text>
+                    <Typography.Title level={4} style={{ color: scheme.textColor, margin: '10px 0 2px', fontWeight: 700, fontSize: 17 }}>
                       {scheme.title}
                     </Typography.Title>
-                    <Typography.Text style={{ color: scheme.subtitleFg, fontSize: 14, fontWeight: 500, lineHeight: 1.4, display: 'block' }}>
+                    <Typography.Text style={{ color: scheme.textColor, fontSize: 13, fontWeight: 500 }}>
                       {scheme.subtitle}
                     </Typography.Text>
+                    <div style={{ marginTop: 14 }}>
+                      <Button
+                        block
+                        style={{
+                          background: scheme.buttonColor,
+                          color: scheme.buttonTextColor,
+                          fontWeight: 700,
+                          border: 'none',
+                          borderRadius: 8,
+                        }}
+                        onClick={() => navigate(scheme.ctaLink)}
+                      >
+                        {scheme.ctaText}
+                      </Button>
+                    </div>
                   </div>
-
-                  <div style={{ marginTop: 20 }}>
-                    <Button
-                      block
-                      size="large"
-                      style={{
-                        background: scheme.btnBg,
-                        color: scheme.btnFg,
-                        fontWeight: 700,
-                        border: 'none',
-                        borderRadius: 10,
-                      }}
-                      onClick={() => navigate('/products/atta-flour')}
-                    >
-                      {scheme.cta} &rarr;
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+
+            {/* Desktop 3-column schemes grid */}
+            <div className="desktop-only">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+                {schemes.map((scheme) => (
+                  <div
+                    key={scheme.id}
+                    className="product-card-hover"
+                    style={{
+                      borderRadius: 16,
+                      padding: '24px 22px',
+                      background: scheme.backgroundColor,
+                      color: scheme.textColor,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span
+                          style={{
+                            color: scheme.badgeTextColor,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: 0.5,
+                            background: scheme.badgeColor,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {scheme.tag}
+                        </span>
+                        <span style={{ fontSize: 11, opacity: 0.8, color: scheme.textColor }}>⚡ Limited Time</span>
+                      </div>
+                      <Typography.Title level={4} style={{ color: scheme.textColor, margin: '14px 0 6px', fontWeight: 800, fontSize: 20 }}>
+                        {scheme.title}
+                      </Typography.Title>
+                      <Typography.Text style={{ color: scheme.textColor, fontSize: 14, fontWeight: 500, lineHeight: 1.4, display: 'block' }}>
+                        {scheme.subtitle}
+                      </Typography.Text>
+                    </div>
+
+                    <div style={{ marginTop: 20 }}>
+                      <Button
+                        block
+                        size="large"
+                        style={{
+                          background: scheme.buttonColor,
+                          color: scheme.buttonTextColor,
+                          fontWeight: 700,
+                          border: 'none',
+                          borderRadius: 10,
+                        }}
+                        onClick={() => navigate(scheme.ctaLink)}
+                      >
+                        {scheme.ctaText} &rarr;
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ======================================================================= */}
         {/* 5. BEST OF THE BASICS (DAILY STAPLES)                                    */}

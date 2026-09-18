@@ -1,310 +1,464 @@
-import {
-  ArrowLeftOutlined,
-  CheckCircleFilled,
-  LockOutlined,
-  MobileOutlined,
-  SafetyCertificateOutlined,
-  ShopOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
-import { Alert, Button, Card, Divider, Input, Segmented, Tag, Typography, message } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Button, Input, Typography, message } from 'antd';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
+import { apiErrorMessage } from '../api/client';
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
+
+const OTP_LENGTH = 6;
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useCustomerAuth();
+  const { requestOtp, verifyOtp } = useCustomerAuth();
 
-  const [mobileNumber, setMobileNumber] = useState('9876543210');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [otp, setOtp] = useState('');
+  const [fullName, setFullName] = useState('');
+  // Preserves the code across a shared referral link (/login?ref=CODE) into
+  // the form, per the "link should preserve the referral code" requirement -
+  // opening the link is not itself a successful referral (see
+  // CustomerAuthContext.verifyOtp for where it actually gets validated).
+  const [referralCode, setReferralCode] = useState(
+    () => new URLSearchParams(location.search).get('ref')?.toUpperCase() ?? '',
+  );
   const [step, setStep] = useState<'PHONE' | 'OTP'>('PHONE');
-  const [loginRole, setLoginRole] = useState<UserRole>('CUSTOMER');
-  const [timer, setTimer] = useState(30);
+  const [isNewAccount, setIsNewAccount] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  const destination = (location.state as { from?: string })?.from || (loginRole === 'RETAILER' ? '/profile' : '/');
+  const isRetailer = location.pathname.includes('retailer');
+  const loginRole: 'CUSTOMER' | 'RETAILER' = isRetailer ? 'RETAILER' : 'CUSTOMER';
 
-  const handleSendOtp = () => {
-    const cleanNum = mobileNumber.replace(/\D/g, '');
+  const destination = (location.state as { from?: string })?.from;
+
+  const cleanPhone = () => mobileNumber.replace(/\D/g, '');
+
+  const handleSendOtp = async () => {
+    const cleanNum = cleanPhone();
     if (cleanNum.length !== 10) {
       message.error('Please enter a valid 10-digit mobile number');
       return;
     }
-    setStep('OTP');
-    setOtp('1234'); // Auto pre-fill mock OTP for smooth convenience
-    message.success('OTP sent to +91 ' + cleanNum + ' (Mock OTP: 1234)');
+
+    setSendingOtp(true);
+    try {
+      const response = await requestOtp(cleanNum);
+
+      if (loginRole === 'RETAILER' && response.purpose === 'REGISTRATION') {
+        // Verifying an unknown number here would self-provision it as a B2C
+        // consumer account, not a retailer — the sign-in form can never create
+        // a retailer account. Send them to register instead.
+        message.info('No store partner account found for this number. Let’s get you registered.');
+        navigate('/retailers/register', { state: { phone: cleanNum } });
+        return;
+      }
+
+      setIsNewAccount(response.purpose === 'REGISTRATION');
+      setDevCode(response.devCode ?? null);
+      setStep('OTP');
+      setOtp('');
+      message.success(
+        response.mode === 'mock'
+          ? `OTP sent to +91 ${cleanNum} (dev code: ${response.devCode})`
+          : `OTP sent to +91 ${cleanNum}`,
+      );
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Could not send the OTP. Please try again.'));
+    } finally {
+      setSendingOtp(false);
+    }
   };
 
-  const handleVerifyOtp = () => {
-    if (otp !== '1234') {
-      message.error('Invalid OTP. Please enter 1234 for testing');
+  const handleVerifyOtp = async () => {
+    const code = otp.trim();
+    if (code.length !== OTP_LENGTH || !/^\d+$/.test(code)) {
+      message.error(`Enter the ${OTP_LENGTH}-digit code sent to your phone`);
       return;
     }
 
-    const success = login(mobileNumber, otp, loginRole);
-    if (success) {
-      message.success(`Welcome! Signed in as ${loginRole === 'RETAILER' ? 'Store Partner' : 'Customer'}`);
-      navigate(destination, { replace: true });
-    } else {
-      message.error('Login failed. Please try again.');
+    setVerifying(true);
+    try {
+      const outcome = await verifyOtp(
+        cleanPhone(),
+        code,
+        isNewAccount && loginRole === 'CUSTOMER' && fullName.trim() ? fullName.trim() : undefined,
+        isNewAccount && loginRole === 'CUSTOMER' && referralCode.trim() ? referralCode.trim() : undefined,
+      );
+
+      if (outcome.status === 'pending') {
+        message.info(outcome.message);
+        return;
+      }
+
+      message.success(
+        `Welcome! Signed in as ${outcome.channel === 'B2B' ? 'Store Partner' : 'Customer'}`,
+      );
+      const fallback = outcome.channel === 'B2B' ? '/profile' : '/';
+      navigate(destination || fallback, { replace: true });
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Invalid code. Please try again.'));
+    } finally {
+      setVerifying(false);
     }
   };
 
-  const handleQuickLogin = (roleToUse: UserRole) => {
-    login('9876543210', '1234', roleToUse);
-    message.success(`Logged in as ${roleToUse === 'RETAILER' ? 'Sri Balaji Provision Store' : 'Rahul Sharma'}`);
-    navigate(roleToUse === 'RETAILER' ? '/profile' : '/', { replace: true });
+  const handleResendOtp = () => {
+    if (sendingOtp) return;
+    void handleSendOtp();
+  };
+
+  // Common input styles to match the "border-bottom only" design
+  const inputStyle = {
+    border: 'none',
+    borderBottom: '2px solid #d9d9d9',
+    borderRadius: 0,
+    boxShadow: 'none',
+    padding: '8px 0',
+    fontSize: '16px',
+    backgroundColor: 'transparent',
   };
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 120px)', background: '#f8fafc', padding: '24px 16px 60px' }}>
-      {/* Mobile top back bar */}
-      <div className="mobile-only" style={{ marginBottom: 16 }}>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#ffffff',
+      overflow: 'hidden',
+      position: 'relative',
+      display: 'flex',
+    }}>
+      {/* Left side: Form */}
+      <div className="login-left-pane">
+
         <button
+          className="login-back-btn"
           onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
         >
-          <ArrowLeftOutlined style={{ fontSize: 18, color: '#475569' }} />
-          <Typography.Text strong style={{ fontSize: 15, color: '#334155' }}>
-            Back to Store
+          <ArrowLeftOutlined style={{ fontSize: 18 }} />
+          <Typography.Text strong style={{ fontSize: 15, color: 'inherit' }}>
+            Back
           </Typography.Text>
         </button>
-      </div>
 
-      <div style={{ maxWidth: 460, margin: '0 auto' }}>
-        {/* Main Card */}
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: 20,
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header Banner */}
-          <div
-            style={{
-              background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-              padding: '28px 24px',
-              color: '#ffffff',
-              textAlign: 'center',
-              position: 'relative',
-            }}
-          >
-            <div style={{ width: 64, height: 64, margin: '0 auto 12px', background: '#fff', borderRadius: 16, padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-              <img src="/images/desi-tokri-cropped.png" alt="Desi Tokri" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            </div>
-            <Typography.Title level={3} style={{ color: '#fff', margin: '0 0 4px 0', fontWeight: 800 }}>
-              Welcome to Desi Tokri
+        <div className="login-form-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
+
+          <img src="/images/desi-tokri-cropped.png" alt="Desi Tokri" className="login-logo" style={{ height: '70px', marginBottom: '60px' }} />
+
+          <div className="login-text-container" style={{ marginBottom: '32px' }}>
+            <Typography.Title level={2} style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#15803d', fontFamily: 'serif' }}>
+              {loginRole === 'RETAILER' ? 'Partner with Us' : 'Your Cravings Stop Here'}
             </Typography.Title>
-            <Typography.Text style={{ color: '#ffedd5', fontSize: 13 }}>
-              Farm-to-Fork Agro Staples & Wholesale Mandi Supply
+            <Typography.Text style={{ color: '#64748b', fontSize: 14 }}>
+              {loginRole === 'RETAILER' ? 'Login to order snacks and spices in bulk for your store' : 'Login to get your favourite snacks, wafers, and spices fast'}
             </Typography.Text>
           </div>
 
-          <div style={{ padding: '24px' }}>
-            {/* Role Switcher */}
-            <div style={{ marginBottom: 20 }}>
-              <Typography.Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#475569' }}>
-                SIGN IN AS
-              </Typography.Text>
-              <Segmented
-                block
-                value={loginRole}
-                onChange={(val) => setLoginRole(val as UserRole)}
-                options={[
-                  {
-                    label: (
-                      <div style={{ padding: '4px 0' }}>
-                        <UserOutlined style={{ marginRight: 6 }} /> Customer (Personal)
-                      </div>
-                    ),
-                    value: 'CUSTOMER',
-                  },
-                  {
-                    label: (
-                      <div style={{ padding: '4px 0' }}>
-                        <ShopOutlined style={{ marginRight: 6 }} /> Retailer / Wholesale
-                      </div>
-                    ),
-                    value: 'RETAILER',
-                  },
-                ]}
-                style={{ background: '#f1f5f9', padding: 4, borderRadius: 12 }}
-              />
-            </div>
-
-            {/* Test Helper Alert */}
-            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
-              <Typography.Text style={{ color: '#1e40af', fontSize: 12 }}>
-                ℹ️ <strong>Mock Demo Mode:</strong> Use any 10-digit phone number. Use OTP <strong>1234</strong>.
-              </Typography.Text>
-            </div>
-
-            {step === 'PHONE' ? (
-              <div>
-                <div style={{ marginBottom: 20 }}>
-                  <Typography.Text strong style={{ display: 'block', marginBottom: 6, fontSize: 14 }}>
-                    Mobile Number
-                  </Typography.Text>
-                  <Input
-                    size="large"
-                    prefix={<span style={{ color: '#64748b', fontWeight: 600, marginRight: 4 }}>+91</span>}
-                    placeholder="Enter 10-digit mobile number"
-                    value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
-                    maxLength={10}
-                    style={{ borderRadius: 10, height: 46 }}
-                  />
-                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
-                    We'll send a 4-digit verification code.
-                  </Typography.Text>
-                </div>
-
-                <Button
-                  type="primary"
-                  block
-                  size="large"
-                  onClick={handleSendOtp}
-                  style={{
-                    background: '#f97316',
-                    borderColor: '#f97316',
-                    height: 46,
-                    borderRadius: 10,
-                    fontWeight: 600,
-                    fontSize: 15,
-                  }}
-                >
-                  Continue with OTP
-                </Button>
-              </div>
-            ) : (
-              <div>
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <Typography.Text strong style={{ fontSize: 14 }}>
-                      Enter 4-Digit OTP
-                    </Typography.Text>
-                    <Button type="link" size="small" onClick={() => setStep('PHONE')} style={{ padding: 0, color: '#f97316' }}>
-                      Change Phone (+91 {mobileNumber})
-                    </Button>
-                  </div>
-                  <Input
-                    size="large"
-                    prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
-                    placeholder="Enter 1234"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    maxLength={4}
-                    style={{ borderRadius: 10, height: 46, fontSize: 18, letterSpacing: 6, textAlign: 'center' }}
-                  />
-                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
-                    Mock OTP: <strong>1234</strong>
-                  </Typography.Text>
-                </div>
-
-                <Button
-                  type="primary"
-                  block
-                  size="large"
-                  onClick={handleVerifyOtp}
-                  style={{
-                    background: '#f97316',
-                    borderColor: '#f97316',
-                    height: 46,
-                    borderRadius: 10,
-                    fontWeight: 600,
-                    fontSize: 15,
-                    marginBottom: 12,
-                  }}
-                >
-                  Verify & Sign In
-                </Button>
-
-                <Button block onClick={() => setStep('PHONE')} style={{ borderRadius: 10, height: 40 }}>
-                  Back
-                </Button>
-              </div>
-            )}
-
-            <Divider style={{ margin: '20px 0', color: '#94a3b8', fontSize: 12 }}>OR QUICK ACCESS</Divider>
-
-            {/* Quick Demo One-Click Access */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Button
-                onClick={() => handleQuickLogin('CUSTOMER')}
-                style={{ borderRadius: 10, height: 38, fontSize: 12, fontWeight: 500 }}
-              >
-                👤 Customer Test
-              </Button>
-              <Button
-                onClick={() => handleQuickLogin('RETAILER')}
-                style={{ borderRadius: 10, height: 38, fontSize: 12, fontWeight: 500, borderColor: '#f97316', color: '#ea580c' }}
-              >
-                🏪 Retailer Test
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* 'Become a Partner / Buy Wholesale' Callout Banner */}
-        <div
-          style={{
-            marginTop: 20,
-            background: '#ffffff',
-            borderRadius: 18,
-            border: '1px solid #fed7aa',
-            padding: '20px 22px',
-            boxShadow: '0 2px 8px rgba(249, 115, 22, 0.06)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
             <div
+              onClick={() => navigate('/login', { replace: true })}
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                background: '#fff7ed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                border: '1px solid #ffedd5',
+                flex: 1,
+                padding: '12px',
+                borderRadius: '12px',
+                border: loginRole === 'CUSTOMER' ? '2px solid #15803d' : '2px solid #f1f5f9',
+                backgroundColor: loginRole === 'CUSTOMER' ? '#f0fdf4' : '#f8fafc',
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.2s'
               }}
             >
-              <ShopOutlined style={{ fontSize: 22, color: '#f97316' }} />
+              <Typography.Text strong style={{ color: loginRole === 'CUSTOMER' ? '#15803d' : '#64748b' }}>Customer</Typography.Text>
             </div>
-            <div style={{ flex: 1 }}>
-              <Tag color="orange" style={{ fontWeight: 700, borderRadius: 10, marginBottom: 4 }}>
-                FOR KIRANAS & WHOLESALERS
-              </Tag>
-              <Typography.Title level={5} style={{ margin: '2px 0 4px 0', color: '#0f172a' }}>
-                Become a Partner / Buy Wholesale
-              </Typography.Title>
-              <Typography.Text style={{ color: '#64748b', fontSize: 13, display: 'block', lineHeight: 1.4 }}>
-                Register your store to get mandi-direct pricing, GST input tax credit invoices, up to 20% margin, and 15-day credit lines.
-              </Typography.Text>
-
-              <Link to="/register" style={{ textDecoration: 'none' }}>
-                <Button
-                  type="primary"
-                  style={{
-                    background: '#f97316',
-                    borderColor: '#f97316',
-                    borderRadius: 8,
-                    fontWeight: 600,
-                    marginTop: 12,
-                  }}
-                >
-                  Register Business Store &rarr;
-                </Button>
-              </Link>
+            <div
+              onClick={() => navigate('/retailers/login', { replace: true })}
+              style={{
+                flex: 1,
+                padding: '12px',
+                borderRadius: '12px',
+                border: loginRole === 'RETAILER' ? '2px solid #15803d' : '2px solid #f1f5f9',
+                backgroundColor: loginRole === 'RETAILER' ? '#f0fdf4' : '#f8fafc',
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Typography.Text strong style={{ color: loginRole === 'RETAILER' ? '#15803d' : '#64748b' }}>Store Partner</Typography.Text>
             </div>
           </div>
+
+
+
+          {step === 'PHONE' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              <div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>Mobile Number</Typography.Text>
+                <Input
+                  size="large"
+                  placeholder="9876543210"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  maxLength={10}
+                  inputMode="numeric"
+                  style={inputStyle}
+                  onFocus={(e) => e.target.style.borderBottom = '2px solid #15803d'}
+                  onBlur={(e) => e.target.style.borderBottom = '2px solid #d9d9d9'}
+                  onPressEnter={() => void handleSendOtp()}
+                />
+              </div>
+
+              <div className="login-button-container" style={{ marginTop: 16 }}>
+                <Button
+                  className="login-button"
+                  type="primary"
+                  size="large"
+                  loading={sendingOtp}
+                  onClick={() => void handleSendOtp()}
+                  style={{
+                    background: '#15803d',
+                    border: 'none',
+                    height: 44,
+                    padding: '0 40px',
+                    borderRadius: 24,
+                    fontWeight: 600,
+                    fontSize: 16,
+                    color: '#fff',
+                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)',
+                    width: '100%',
+                  }}
+                >
+                  Send OTP
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {isNewAccount && loginRole === 'CUSTOMER' && (
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>Your Name (optional)</Typography.Text>
+                  <Input
+                    size="large"
+                    placeholder="How should we address you?"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    maxLength={120}
+                    style={inputStyle}
+                    onFocus={(e) => e.target.style.borderBottom = '2px solid #15803d'}
+                    onBlur={(e) => e.target.style.borderBottom = '2px solid #d9d9d9'}
+                  />
+                </div>
+              )}
+
+              {isNewAccount && loginRole === 'CUSTOMER' && (
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>Referral Code (optional)</Typography.Text>
+                  <Input
+                    size="large"
+                    placeholder="Have a friend's code?"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                    maxLength={20}
+                    style={inputStyle}
+                    onFocus={(e) => e.target.style.borderBottom = '2px solid #15803d'}
+                    onBlur={(e) => e.target.style.borderBottom = '2px solid #d9d9d9'}
+                  />
+                </div>
+              )}
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>OTP Code</Typography.Text>
+                  <Button type="link" size="small" onClick={() => setStep('PHONE')} style={{ padding: 0, color: '#15803d', fontSize: 12 }}>
+                    Change (+91 {cleanPhone()})
+                  </Button>
+                </div>
+                <Input
+                  size="large"
+                  placeholder={'•'.repeat(OTP_LENGTH)}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+                  maxLength={OTP_LENGTH}
+                  inputMode="numeric"
+                  style={{ ...inputStyle, letterSpacing: 8, fontSize: 20 }}
+                  onFocus={(e) => e.target.style.borderBottom = '2px solid #15803d'}
+                  onBlur={(e) => e.target.style.borderBottom = '2px solid #d9d9d9'}
+                  onPressEnter={() => void handleVerifyOtp()}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  {devCode ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                      Dev OTP: {devCode}
+                    </Typography.Text>
+                  ) : <span />}
+                  <Button type="link" size="small" disabled={sendingOtp} onClick={handleResendOtp} style={{ padding: 0, color: '#15803d', fontSize: 11 }}>
+                    Resend OTP
+                  </Button>
+                </div>
+              </div>
+
+              <div className="login-button-container" style={{ marginTop: 16 }}>
+                <Button
+                  className="login-button"
+                  type="primary"
+                  size="large"
+                  loading={verifying}
+                  onClick={() => void handleVerifyOtp()}
+                  style={{
+                    background: '#15803d',
+                    border: 'none',
+                    height: 44,
+                    padding: '0 40px',
+                    borderRadius: 24,
+                    fontWeight: 600,
+                    fontSize: 16,
+                    color: '#fff',
+                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)',
+                    width: '100%',
+                  }}
+                >
+                  Verify & Log in
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {loginRole === 'RETAILER' && (
+            <div style={{ display: 'flex', alignItems: 'center', margin: '40px 0', color: '#94a3b8' }}>
+              <div style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+              <span style={{ padding: '0 16px', fontSize: 12, fontWeight: 500 }}>OR</span>
+              <div style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+            </div>
+          )}
+
+          {loginRole === 'RETAILER' && (
+            <div style={{ textAlign: 'center' }}>
+              <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
+                Don't have an account?{' '}
+                <Link to="/retailers/register" style={{ color: '#15803d', fontWeight: 600, textDecoration: 'underline' }}>
+                  Register
+                </Link>
+              </Typography.Text>
+            </div>
+          )}
+
+
+
         </div>
       </div>
+
+      {/* Right side: Image with curved edge */}
+      <div className="login-image-section">
+        {/* Spices, wafers, namkeen image */}
+        <img
+          src="/images/svv-login.png"
+          alt="SVV Login"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: '65% center',
+            transform: 'scale(1.15)',
+            transformOrigin: 'top left',
+          }}
+        />
+        {/* Subtle overlay */}
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'linear-gradient(to right, rgba(0,0,0,0.1), transparent)',
+          pointerEvents: 'none'
+        }} />
+      </div>
+
+      <style>{`
+        @media (min-width: 992px) {
+          .login-image-section {
+            position: absolute !important;
+            top: 0; right: 0; bottom: 0; left: 20%;
+            display: block !important;
+            z-index: 1;
+            background: #e9ecef;
+            overflow: hidden;
+          }
+          .login-left-pane {
+            position: absolute !important;
+            top: 0; bottom: 0; left: 0;
+            width: 100%;
+            background: #ffffff;
+            z-index: 2;
+            clip-path: ellipse(80% 150% at -25% 100%);
+            display: flex;
+            flex-direction: column;
+            padding-top: 40px;
+          }
+          .login-back-btn {
+            background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+            margin-left: 10%;
+            margin-bottom: 20px;
+            align-self: flex-start;
+            color: #64748b;
+          }
+          .login-form-container {
+            margin: auto 0 auto 10% !important;
+            max-width: 420px !important;
+            padding-bottom: 60px;
+          }
+          .login-logo {
+            align-self: flex-start;
+          }
+          .login-text-container {
+            text-align: left;
+          }
+          .login-button-container {
+            text-align: left;
+          }
+          .login-button {
+            width: auto !important;
+            padding: 0 40px !important;
+          }
+        }
+        @media (max-width: 991px) {
+          .login-left-pane {
+            padding: 24px;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            z-index: 2;
+            position: relative;
+          }
+          .login-back-btn {
+            background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+            margin-bottom: 40px;
+            align-self: flex-start;
+            color: #64748b;
+          }
+          .login-form-container {
+            margin: 0 auto !important;
+          }
+          .login-image-section {
+            display: none !important;
+          }
+          .login-logo {
+            align-self: center;
+          }
+          .login-text-container {
+            text-align: center;
+          }
+          .login-button-container {
+            text-align: center;
+          }
+          .login-button {
+            width: 100% !important;
+          }
+        }
+        /* Override Ant Design Input hover/focus defaults */
+        .ant-input:hover, .ant-input:focus {
+          border-color: #15803d !important;
+          box-shadow: none !important;
+        }
+      `}</style>
     </div>
   );
 }

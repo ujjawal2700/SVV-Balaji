@@ -138,6 +138,25 @@ function CleaningFormModal({ open, onClose }: { open: boolean; onClose: () => vo
           </Col>
         </Row>
 
+        <Typography.Text strong>By-product recovered (optional)</Typography.Text>
+        <Row gutter={16} style={{ marginTop: 8, marginBottom: 16 }}>
+          <Col xs={12} md={8}>
+            <Form.Item
+              name="byProductQuantity"
+              label="By-product quantity (KG)"
+              rules={[positiveNumber('By-product quantity', true)]}
+              extra="Bran, choker, husk — has resale value, unlike wastage."
+            >
+              <InputNumber style={{ width: '100%' }} min={0} step={1} />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={8}>
+            <Form.Item name="byProductName" label="By-product name">
+              <Input placeholder="e.g. Bran" />
+            </Form.Item>
+          </Col>
+        </Row>
+
         <Form.Item name="qaVerified" valuePropName="checked" initialValue={false}>
           <Checkbox>QA verified — cleared for production (FRD 18.3)</Checkbox>
         </Form.Item>
@@ -213,6 +232,24 @@ export function CleaningGradingPage() {
       key: 'wastageQuantity',
       align: 'right',
       render: (value: string | null) => formatQuantity(value, 'KG'),
+    },
+    {
+      title: 'By-product',
+      key: 'byProduct',
+      align: 'right',
+      render: (_, row) =>
+        row.byProductQuantity ? (
+          <Space direction="vertical" size={0} style={{ textAlign: 'right' }}>
+            <Typography.Text>{formatQuantity(row.byProductQuantity, 'KG')}</Typography.Text>
+            {row.byProductName && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {row.byProductName}
+              </Typography.Text>
+            )}
+          </Space>
+        ) : (
+          EM_DASH
+        ),
     },
     {
       title: 'QA',

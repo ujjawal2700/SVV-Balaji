@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { productionApi, productsApi, recipesApi } from '../api/production';
 import { queryKeys } from '../api/queryKeys';
 import type {
+  CompleteProductionInput,
   CreateCleaningGradingInput,
   CreateProductInput,
   CreateProductionBatchInput,
@@ -70,6 +71,15 @@ export function useDeleteProduct() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
     },
+  });
+}
+
+/** The inventory screen's one call - every active product against its thresholds. */
+export function useProductStockSummary() {
+  return useQuery({
+    queryKey: queryKeys.products.stockSummary(),
+    queryFn: () => productsApi.stockSummary(),
+    staleTime: 30 * 1000, // stock moves; not master data
   });
 }
 
@@ -216,8 +226,8 @@ export function useDeleteProductionBatch() {
 export function useCompleteProduction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, actualQuantity }: { id: string; actualQuantity: number }) =>
-      productionApi.complete(id, actualQuantity),
+    mutationFn: ({ id, ...input }: { id: string } & CompleteProductionInput) =>
+      productionApi.complete(id, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.productionBatches.all });
     },

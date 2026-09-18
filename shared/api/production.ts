@@ -2,6 +2,7 @@ import { api } from './client';
 import { pruneEmpty, unwrap, unwrapList, type Paginated } from './envelope';
 import type {
   CleaningGradingRecord,
+  CompleteProductionInput,
   CreateCleaningGradingInput,
   CreateProductInput,
   CreateProductionBatchInput,
@@ -9,6 +10,7 @@ import type {
   Product,
   ProductionBatch,
   ProductionStatus,
+  ProductStockSummary,
   Recipe,
   RecipeStatus,
   UpdateProductInput,
@@ -50,6 +52,12 @@ export const productsApi = {
 
   async remove(id: string): Promise<void> {
     await api.delete(`/products/${id}`);
+  },
+
+  /** One row per active product: sellable quantity vs. its reorder/safety thresholds. */
+  async stockSummary(): Promise<ProductStockSummary[]> {
+    const response = await api.get<ProductStockSummary[]>('/products/stock-summary');
+    return unwrapList<ProductStockSummary>(response.data).data;
   },
 };
 
@@ -157,10 +165,11 @@ export const productionApi = {
   },
 
   /** FRD 20.5 — records actual output and derives process loss. */
-  async complete(id: string, actualQuantity: number): Promise<ProductionBatch> {
-    const response = await api.patch<ProductionBatch>(`/production-batches/${id}/complete`, {
-      actualQuantity,
-    });
+  async complete(id: string, input: CompleteProductionInput): Promise<ProductionBatch> {
+    const response = await api.patch<ProductionBatch>(
+      `/production-batches/${id}/complete`,
+      pruneEmpty(input),
+    );
     return unwrap<ProductionBatch>(response.data);
   },
 

@@ -71,6 +71,21 @@ export class CreateCleaningGradingDto {
   @Min(0)
   wastageQuantity?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'By-product recovered during cleaning with resale value (bran, choker, husk) - distinct ' +
+      'from wastageQuantity, which is pure loss.',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  byProductQuantity?: number;
+
+  @ApiPropertyOptional({ description: 'Name of the by-product recovered, e.g. "Bran"' })
+  @IsOptional()
+  @IsString()
+  byProductName?: string;
+
   /**
    * Deliberately absent: `qaVerified`.
    *
@@ -170,4 +185,25 @@ export class CompleteProductionDto {
   @IsNumber()
   @Min(0)
   actualQuantity: number;
+
+  @ApiPropertyOptional({
+    description:
+      'By-product recovered during this run with resale value (e.g. oil cake) - distinct from ' +
+      'productionLoss, which is pure loss.',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  byProductQuantity?: number;
+
+  @ApiPropertyOptional({ description: 'Name of the by-product recovered' })
+  @IsOptional()
+  @IsString()
+  byProductName?: string;
+
+  @ApiPropertyOptional({ description: 'Revenue realised (or expected) from selling the by-product' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  byProductRevenue?: number;
 }

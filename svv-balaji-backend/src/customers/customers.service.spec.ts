@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { CustomersService } from './customers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
+import { ReferralService } from '../common/referral.service';
 
 /**
  * B2B and B2C are different commercial relationships, not a display toggle.
@@ -75,7 +76,11 @@ describe('CustomersService', () => {
       },
       $transaction: jest.fn(async (fn: any) => fn(prisma)),
     };
-    service = new CustomersService(prisma as unknown as PrismaService, new SequenceService());
+    service = new CustomersService(
+      prisma as unknown as PrismaService,
+      new SequenceService(),
+      new ReferralService(),
+    );
   });
 
   describe('customer codes', () => {

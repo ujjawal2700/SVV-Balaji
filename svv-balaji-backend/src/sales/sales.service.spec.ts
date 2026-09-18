@@ -3,6 +3,7 @@ import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
+import { ReferralService } from '../common/referral.service';
 
 /**
  * Phase 4 is where the traceability chain either survives into the sales half
@@ -21,6 +22,9 @@ describe('SalesService', () => {
   let allocations: any[];
   let orders: any[];
   let orderItems: any[];
+  let referrals: any[];
+  let referralSettings: any;
+  let coinTransactions: any[];
   let counters: Record<string, number>;
   let prisma: any;
   let pricing: any;
@@ -57,6 +61,9 @@ describe('SalesService', () => {
     allocations = [];
     orders = [];
     orderItems = [];
+    referrals = [];
+    referralSettings = null;
+    coinTransactions = [];
     counters = {};
 
     customers = {
@@ -103,7 +110,57 @@ describe('SalesService', () => {
     };
 
     prisma = {
-      customer: { findUnique: jest.fn(async ({ where }) => customers[where.id] ?? null) },
+      customer: {
+        findUnique: jest.fn(async ({ where }) => customers[where.id] ?? null),
+        update: jest.fn(async ({ where, data }) => {
+          const row = customers[where.id];
+          if (!row) return null;
+          if (data.coinBalance?.increment) {
+            row.coinBalance = (row.coinBalance ?? 0) + data.coinBalance.increment;
+          } else {
+            Object.assign(row, data);
+          }
+          return row;
+        }),
+      },
+      referral: {
+        findUnique: jest.fn(async ({ where }) =>
+          referrals.find((r) => r.id === where.id || r.refereeId === where.refereeId) ?? null,
+        ),
+        update: jest.fn(async ({ where, data }) => {
+          const row = referrals.find((r) => r.id === where.id);
+          Object.assign(row, data);
+          return row;
+        }),
+      },
+      referralSettings: {
+        findFirst: jest.fn(async () => referralSettings),
+        create: jest.fn(async ({ data }) => {
+          referralSettings = {
+            id: 'rs-1',
+            referrerRewardCoins: 100,
+            refereeRewardCoins: 50,
+            rewardTrigger: 'REGISTRATION',
+            isActive: true,
+            createdAt: new Date(),
+            ...data,
+          };
+          return referralSettings;
+        }),
+        update: jest.fn(async ({ data }) => {
+          for (const [key, value] of Object.entries(data)) {
+            if (value !== undefined) (referralSettings as any)[key] = value;
+          }
+          return referralSettings;
+        }),
+      },
+      coinTransaction: {
+        create: jest.fn(async ({ data }: any) => {
+          const row = { id: `ct-${coinTransactions.length + 1}`, createdAt: new Date(), ...data };
+          coinTransactions.push(row);
+          return row;
+        }),
+      },
       warehouse: {
         findUnique: jest.fn(async ({ where }) => ({ id: where.id, branchId: 'branch-1' })),
       },
@@ -143,6 +200,15 @@ describe('SalesService', () => {
           Object.assign(row, data);
           return row;
         }),
+        count: jest.fn(async ({ where }: any) =>
+          orders.filter((o) => {
+            if (where.customerId && o.customerId !== where.customerId) return false;
+            if (where.id?.not && o.id === where.id.not) return false;
+            if (where.status?.in && !where.status.in.includes(o.status)) return false;
+            if (where.status && typeof where.status === 'string' && o.status !== where.status) return false;
+            return true;
+          }).length,
+        ),
       },
       orderAllocation: {
         create: jest.fn(async ({ data }) => {
@@ -228,6 +294,7 @@ describe('SalesService', () => {
       prisma as unknown as PrismaService,
       new SequenceService(),
       pricing as unknown as PricingService,
+      new ReferralService(),
     );
   });
 
@@ -466,6 +533,112 @@ describe('SalesService', () => {
       await expect(service.cancel(order.id, { reason: 'too late' })).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('referral rewards', () => {
+    const setUpReferral = (trigger: string) => {
+      customers['cust-referrer'] = {
+        id: 'cust-referrer',
+        customerCode: 'CUST-B2C-000099',
+        channel: 'B2C',
+        type: 'CONSUMER',
+        status: 'ACTIVE',
+        paymentTerms: 'PREPAID',
+        creditLimit: null,
+        branchId: null,
+        coinBalance: 0,
+      };
+      referrals.push({
+        id: 'ref-1',
+        referrerId: 'cust-referrer',
+        refereeId: 'cust-b2c',
+        code: 'REFCODE1',
+        rewardedAt: null,
+        createdAt: new Date(),
+      });
+      referralSettings = {
+        id: 'rs-1',
+        referrerRewardCoins: 100,
+        refereeRewardCoins: 50,
+        rewardTrigger: trigger,
+        isActive: true,
+        createdAt: new Date(),
+      };
+    };
+
+    it('credits both sides on the referee\'s first confirmed order when the trigger is FIRST_ORDER', async () => {
+      setUpReferral('FIRST_ORDER');
+      const order: any = await placeOrder('cust-b2c');
+
+      await service.confirm(order.id);
+
+      expect(customers['cust-referrer'].coinBalance).toBe(100);
+      expect(customers['cust-b2c'].coinBalance).toBe(50);
+      expect(referrals[0].rewardedAt).not.toBeNull();
+      expect(coinTransactions).toHaveLength(2);
+    });
+
+    it('does not credit again on a second order', async () => {
+      setUpReferral('FIRST_ORDER');
+      const first: any = await placeOrder('cust-b2c');
+      await service.confirm(first.id);
+
+      const second: any = await placeOrder('cust-b2c');
+      await service.confirm(second.id);
+
+      expect(customers['cust-referrer'].coinBalance).toBe(100);
+      expect(customers['cust-b2c'].coinBalance).toBe(50);
+      expect(coinTransactions).toHaveLength(2);
+    });
+
+    it('does not credit an order confirmation when the trigger is FIRST_DELIVERY', async () => {
+      setUpReferral('FIRST_DELIVERY');
+      const order: any = await placeOrder('cust-b2c');
+      await service.confirm(order.id);
+
+      expect(customers['cust-referrer'].coinBalance).toBe(0);
+      expect(referrals[0].rewardedAt).toBeNull();
+    });
+
+    it('credits both sides on the referee\'s first delivered order when the trigger is FIRST_DELIVERY', async () => {
+      setUpReferral('FIRST_DELIVERY');
+      fgStock({ quantity: 40 });
+      const order: any = await placeOrder('cust-b2c', 5);
+      await service.confirm(order.id);
+      await service.allocate(order.id, 'user-1');
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+      await service.advance(order.id, 'DISPATCHED' as any, 'user-1');
+
+      expect(customers['cust-referrer'].coinBalance).toBe(0);
+
+      await service.advance(order.id, 'DELIVERED' as any, 'user-1');
+
+      expect(customers['cust-referrer'].coinBalance).toBe(100);
+      expect(customers['cust-b2c'].coinBalance).toBe(50);
+      expect(referrals[0].rewardedAt).not.toBeNull();
+    });
+
+    it('does not credit while the program is switched off', async () => {
+      setUpReferral('FIRST_ORDER');
+      referralSettings.isActive = false;
+      const order: any = await placeOrder('cust-b2c');
+
+      await service.confirm(order.id);
+
+      expect(customers['cust-referrer'].coinBalance).toBe(0);
+      expect(referrals[0].rewardedAt).toBeNull();
+    });
+
+    it('never lets a referral-crediting failure block the order transition', async () => {
+      setUpReferral('FIRST_ORDER');
+      prisma.referralSettings.findFirst = jest.fn(async () => {
+        throw new Error('boom');
+      });
+      const order: any = await placeOrder('cust-b2c');
+
+      const confirmed: any = await service.confirm(order.id);
+      expect(confirmed.status).toBe('CONFIRMED');
     });
   });
 

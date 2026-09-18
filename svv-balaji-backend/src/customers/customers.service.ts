@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
+import { ReferralService } from '../common/referral.service';
 import {
   CreateCustomerDto,
   UpdateCustomerDto,
@@ -43,6 +44,7 @@ export class CustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequence: SequenceService,
+    private readonly referrals: ReferralService,
   ) {}
 
   async create(dto: CreateCustomerDto) {
@@ -71,10 +73,12 @@ export class CustomersService {
 
     return this.prisma.$transaction(async (tx) => {
       const customerCode = await this.sequence.nextInSeries(tx, `CUST-${dto.channel}`);
+      const referralCode = await this.referrals.generateCode(tx, dto.name);
 
       return tx.customer.create({
         data: {
           customerCode,
+          referralCode,
           channel: dto.channel,
           type: dto.type,
           name: dto.name,
@@ -177,6 +181,7 @@ export class CustomersService {
       include: {
         branch: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, fullName: true } },
+        referredAs: { select: { referrer: { select: { id: true, name: true, customerCode: true, referralCode: true } } } },
       },
     });
   }
@@ -187,6 +192,7 @@ export class CustomersService {
       include: {
         branch: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, fullName: true, email: true } },
+        referredAs: { select: { referrer: { select: { id: true, name: true, customerCode: true, referralCode: true } } } },
         orders: {
           orderBy: { orderDate: 'desc' },
           take: 20,

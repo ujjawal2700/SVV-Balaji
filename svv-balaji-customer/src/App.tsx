@@ -1,4 +1,4 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { RequireAccount } from './auth/RequireAccount';
 import { StoreShell } from './layout/StoreShell';
@@ -63,61 +63,66 @@ const NotFoundPage = lazy(() =>
 
 export function App() {
   return (
-    <Routes>
-      <Route element={<StoreShell />}>
-        {/* --- Public ------------------------------------------------------ */}
-        <Route index element={<HomePage />} />
-        <Route path="categories" element={<CategoriesPage />} />
-        <Route path="products/:categoryId" element={<ProductsPage />} />
-        <Route path="product-detail/:productId" element={<ProductDetailPage />} />
-        <Route path="cart" element={<CartPage />} />
+    <Suspense fallback={<div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+      <Routes>
+        <Route element={<StoreShell />}>
+          {/* --- Public ------------------------------------------------------ */}
+          <Route index element={<HomePage />} />
+          <Route path="categories" element={<CategoriesPage />} />
+          <Route path="products/:categoryId" element={<ProductsPage />} />
+          <Route path="product-detail/:productId" element={<ProductDetailPage />} />
+          <Route path="cart" element={<CartPage />} />
 
-        {/*
-          The QR destination. Both forms exist on purpose: `/trace` is for
-          somebody who typed the domain and needs to enter the number by hand,
-          `/trace/:fgBatchNumber` is what the code on the pack encodes.
+          {/*
+            The QR destination. Both forms exist on purpose: `/trace` is for
+            somebody who typed the domain and needs to enter the number by hand,
+            `/trace/:fgBatchNumber` is what the code on the pack encodes.
 
-          This path is fixed by printed packaging. It cannot move.
-        */}
-        <Route path="trace" element={<TracePage />} />
-        <Route path="trace/:fgBatchNumber" element={<TracePage />} />
+            This path is fixed by printed packaging. It cannot move.
+          */}
+          <Route path="trace" element={<TracePage />} />
+          <Route path="trace/:fgBatchNumber" element={<TracePage />} />
 
+          {/* RegisterPage moved outside StoreShell */}
+
+          {/*
+            Mock-data only for now — matches Home/BottomNav, which read the same
+            static retailer profile rather than `useAuth()`. See ProfilePage.
+          */}
+          <Route path="profile" element={<ProfilePage />} />
+
+          {/* --- Needs an account -------------------------------------------- */}
+          <Route
+            path="checkout"
+            element={
+              <RequireAccount>
+                <CheckoutPage />
+              </RequireAccount>
+            }
+          />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/:orderId" element={<OrderTrackingPage />} />
+          <Route path="addresses" element={<AddressesPage />} />
+          <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="wallet" element={<WalletPage />} />
+          <Route path="loyalty" element={<LoyaltyPage />} />
+
+          {/*
+            A real 404, not a redirect home. This app is public and reached from
+            printed packaging, so a wrong URL is usually a mistyped batch number —
+            worth saying so rather than silently landing somebody on the shop.
+
+            Note that /admin and /field never reach this: they are separate builds
+            served by nginx (and by the dev proxy), so the browser never hands
+            those paths to this router.
+          */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+        {/* Standalone pages without StoreShell header/footer */}
         <Route path="login" element={<LoginPage />} />
-        <Route path="register" element={<RegisterPage />} />
-
-        {/*
-          Mock-data only for now — matches Home/BottomNav, which read the same
-          static retailer profile rather than `useAuth()`. See ProfilePage.
-        */}
-        <Route path="profile" element={<ProfilePage />} />
-
-        {/* --- Needs an account -------------------------------------------- */}
-        <Route
-          path="checkout"
-          element={
-            <RequireAccount>
-              <CheckoutPage />
-            </RequireAccount>
-          }
-        />
-        <Route path="orders" element={<OrdersPage />} />
-        <Route path="orders/:orderId" element={<OrderTrackingPage />} />
-        <Route path="addresses" element={<AddressesPage />} />
-        <Route path="wishlist" element={<WishlistPage />} />
-        <Route path="wallet" element={<WalletPage />} />
-        <Route path="loyalty" element={<LoyaltyPage />} />
-
-        {/*
-          A real 404, not a redirect home. This app is public and reached from
-          printed packaging, so a wrong URL is usually a mistyped batch number —
-          worth saying so rather than silently landing somebody on the shop.
-
-          Note that /admin and /field never reach this: they are separate builds
-          served by nginx (and by the dev proxy), so the browser never hands
-          those paths to this router.
-        */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+        <Route path="retailers/login" element={<LoginPage />} />
+        <Route path="retailers/register" element={<RegisterPage />} />
+      </Routes>
+    </Suspense>
   );
 }

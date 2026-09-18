@@ -6,6 +6,15 @@ import {
   SettingOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
+  AppstoreOutlined,
+  TagsOutlined,
+  CreditCardOutlined,
+  LineChartOutlined,
+  UsergroupAddOutlined,
+  FolderOutlined,
+  PictureOutlined,
+  CustomerServiceOutlined,
+  ShopOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import type { Permission } from '../auth/permissions';
@@ -30,6 +39,19 @@ import type { Permission } from '../auth/permissions';
  * Still a usability layer. The API enforces the real boundary - hiding a menu
  * item is a courtesy, not a control.
  */
+/**
+ * Which half of the business a screen belongs to, for the Supply/Commerce
+ * toggle in the sidebar (AdminZoneToggle). `undefined` means shared — visible
+ * regardless of which zone is selected (the dashboard, trace, and
+ * administration screens all cut across both sides of the business).
+ *
+ * This is a navigation filter only, layered on top of the permission check,
+ * never a replacement for it — a role with no sales access sees nothing extra
+ * by switching to "Customer & Retail", because `can(item.permission)` still
+ * runs first.
+ */
+export type AdminZone = 'supply' | 'commerce';
+
 export interface NavItem {
   key: string;
   path: string;
@@ -45,6 +67,8 @@ export interface NavItem {
   endpoints: string[];
   /** Workstream that delivers it, per the schedule baseline. */
   workstream: string;
+  /** Which zone this belongs to. Omit for a screen that is relevant to both. */
+  zone?: AdminZone;
 }
 
 export interface NavSection {
@@ -82,6 +106,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'traceability code, and until it happens a farmer cannot be inspected or collected from.',
         endpoints: ['GET /farmers', 'POST /farmers', 'PATCH /farmers/:id/verify', 'GET /agreements'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'trace',
@@ -117,6 +142,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'GET /farmers/:id/codes',
         ],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'agreements',
@@ -126,6 +152,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Pre-season rate, quality and quantity agreements per farmer.',
         endpoints: ['GET /agreements', 'POST /agreements', 'PATCH /agreements/:id/status'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'seed-distribution',
@@ -135,6 +162,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Certified seed and crop-input distribution log.',
         endpoints: ['GET /seed-distribution', 'POST /seed-distribution'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'training',
@@ -150,6 +178,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'POST /training-sessions/:id/attendance',
         ],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'field-visits',
@@ -161,6 +190,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'agronomic advice and yield prediction. Also captured offline in the field app (WS3.1).',
         endpoints: ['GET /field-visits', 'POST /field-visits'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
     ],
   },
@@ -177,6 +207,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Supplier registry and verification workflow.',
         endpoints: ['GET /suppliers', 'POST /suppliers'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'transports',
@@ -186,6 +217,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Manage inbound material transports from suppliers.',
         endpoints: ['GET /transports'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'purchase-orders',
@@ -195,6 +227,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Manage supplier purchase orders.',
         endpoints: ['GET /purchase-orders'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
     ],
   },
@@ -211,6 +244,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Crop, branch, quantity and schedule planning.',
         endpoints: ['GET /procurement-plans', 'POST /procurement-plans'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'harvest-inspections',
@@ -222,6 +256,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'traceability code can be inspected, and only an APPROVED inspection can be collected.',
         endpoints: ['GET /harvest-inspections', 'POST /harvest-inspections'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'collections',
@@ -233,6 +268,7 @@ export const NAV_SECTIONS: NavSection[] = [
           '(RM-YYYYMMDD-NNN) in one transaction. Rate falls back to the agreement rate.',
         endpoints: ['GET /collections', 'POST /collections'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'batches',
@@ -242,6 +278,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Batch register with status, warehouse and upstream trace.',
         endpoints: ['GET /batches', 'GET /batches/:batchNumber/trace'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
     ],
   },
@@ -258,6 +295,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Warehouse master with live occupancy against capacity.',
         endpoints: ['GET /warehouses', 'POST /warehouses', 'GET /warehouses/:id/status'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'warehouse-stock',
@@ -274,6 +312,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'POST /warehouses/transfer',
         ],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
       {
         key: 'stock-movements',
@@ -283,6 +322,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Append-only audit trail of every inventory change.',
         endpoints: ['GET /warehouses/movements'],
         workstream: 'WS2.3',
+        zone: 'supply',
       },
     ],
   },
@@ -301,6 +341,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'the price list and are changed by superseding, never by editing in place.',
         endpoints: ['GET /products', 'POST /products', 'GET /price-lists/product/:id/comparison'],
         workstream: 'WS2.2',
+        zone: 'supply',
       },
       {
         key: 'recipes',
@@ -318,6 +359,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'GET /recipes/code/:recipeCode/versions',
         ],
         workstream: 'WS2.4',
+        zone: 'supply',
       },
       {
         key: 'cleaning-grading',
@@ -327,6 +369,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Pre-production cleaning activities, grading parameters and QA sign-off.',
         endpoints: ['GET /cleaning-grading', 'POST /cleaning-grading'],
         workstream: 'WS2.4',
+        zone: 'supply',
       },
       {
         key: 'production-batches',
@@ -342,6 +385,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'PATCH /production-batches/:id/complete',
         ],
         workstream: 'WS2.4',
+        zone: 'supply',
       },
       {
         key: 'quality-inspections',
@@ -358,6 +402,7 @@ export const NAV_SECTIONS: NavSection[] = [
           'PATCH /quality-inspections/release/:fgBatchId',
         ],
         workstream: 'WS2.4',
+        zone: 'supply',
       },
       {
         key: 'finished-goods',
@@ -374,58 +419,289 @@ export const NAV_SECTIONS: NavSection[] = [
           'GET /finished-goods-stock',
         ],
         workstream: 'WS2.4',
+        zone: 'supply',
+      },
+      {
+        key: 'yield-tracking',
+        path: '/yield-tracking',
+        label: 'Loss & Yield Tracking',
+        permission: 'SUPPLY_CHAIN_YIELD_VIEW',
+        description:
+          'Stage-wise loss across Cleaning & Grading, Production and Finished Goods, chain ' +
+          'totals and yield %, an alert when total loss exceeds the 4-8% normal band, plus ' +
+          'farmer/supplier and machine health flags. Read-only - built on the existing phases, ' +
+          'no new processing step.',
+        endpoints: [
+          'GET /supply-chain/yield',
+          'GET /supply-chain/yield/chain',
+          'GET /supply-chain/yield/farmer-quality',
+          'GET /supply-chain/yield/machine-health',
+        ],
+        workstream: 'WS2.6',
+        zone: 'supply',
       },
     ],
   },
   {
-    key: 'sales',
-    label: 'Sales',
-    icon: <ShoppingCartOutlined />,
+    key: 'catalog',
+    label: 'Product & Catalog',
+    icon: <AppstoreOutlined />,
     items: [
       {
-        key: 'customers',
-        path: '/customers',
-        label: 'Customers',
-        permission: 'CUSTOMER_VIEW',
-        description:
-          'One registry, two channels. Pick the channel FIRST — B2B needs a GSTIN, credit ' +
-          'limit, payment terms and an executive; B2C gets none of those. Channel cannot be ' +
-          'changed after registration.',
-        endpoints: ['GET /customers', 'POST /customers', 'GET /customers/:id/credit'],
+        key: 'productlists',
+        path: '/productlists',
+        label: 'Product List & Editor',
+        permission: 'PRODUCT_VIEW',
+        description: 'SKU management, variants, imagery, and SEO metadata.',
+        endpoints: [],
         workstream: 'WS2.5',
+        zone: 'commerce',
       },
       {
         key: 'price-lists',
         path: '/price-lists',
-        label: 'Price Lists',
+        label: 'Tiered Pricing',
         permission: 'PRICE_VIEW',
-        description:
-          'Dated per-channel rates. A price is NEVER edited in place — use supersede, which ' +
-          'closes the old rule and opens a new one. Render it as "change price from [date]".',
-        endpoints: [
-          'GET /price-lists',
-          'POST /price-lists',
-          'POST /price-lists/:id/supersede',
-          'GET /price-lists/resolve',
-        ],
+        description: 'Separate MSRP for B2C and volume-based/negotiated rate cards for B2B accounts.',
+        endpoints: [],
         workstream: 'WS2.5',
+        zone: 'commerce',
       },
       {
-        key: 'orders',
-        path: '/orders',
-        label: 'Orders',
-        permission: 'ORDER_VIEW',
-        description:
-          'Channel-aware orders with a forward-only lifecycle. Allocation is a server action, ' +
-          'not a form: it picks batches first-expiry-first-out from QA-released stock and ' +
-          'returns exactly what to put on the picking slip.',
-        endpoints: [
-          'GET /orders',
-          'POST /orders',
-          'POST /orders/:id/allocate',
-          'GET /orders/number/:orderNumber/traceability',
-        ],
+        key: 'inventory',
+        path: '/inventory',
+        label: 'Inventory & Warehouse',
+        permission: 'STOCK_VIEW',
+        description: 'Stock counts, automated replenishment thresholds, safety stock rules, and backorder controls.',
+        endpoints: [],
         workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'banner-management',
+    label: 'Banner Management',
+    icon: <PictureOutlined />,
+    items: [
+      {
+        key: 'banners',
+        path: '/banners',
+        label: 'Banner Management',
+        permission: 'BANNER_VIEW',
+        description: 'Manage storefront homepage hero banners, promotional carousels, and target channels.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'category-management',
+    label: 'Manage Category',
+    icon: <FolderOutlined />,
+    items: [
+      {
+        key: 'main-categories',
+        path: '/categories',
+        label: 'Main Categories',
+        permission: 'CATEGORY_VIEW',
+        description: 'Manage main top-level storefront product categories.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'sub-categories',
+        path: '/subcategories',
+        label: 'Sub-Categories',
+        permission: 'CATEGORY_VIEW',
+        description: 'Manage child sub-categories and their parent assignments.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'pos-management',
+    label: 'POS Counter & Store Sales',
+    icon: <ShopOutlined />,
+    items: [
+      {
+        key: 'pos-sale',
+        path: '/pos-sale',
+        label: 'New Sale (Billing Terminal)',
+        permission: 'ORDER_VIEW',
+        description: 'Interactive billing terminal for offline walk-in store customers with manual customer details, product scanning & tax receipt printing.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'pos-orders',
+        path: '/pos-orders',
+        label: 'POS Counter Orders',
+        permission: 'ORDER_VIEW',
+        description: 'Complete list of offline/counter orders created at physical outlet terminals with payment mode tags and receipt re-printing.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'pos-reports',
+        path: '/pos-reports',
+        label: 'Sale Reports & Shift Reconciliation',
+        permission: 'ORDER_VIEW',
+        description: 'Daily counter sales performance, cashier shift logs, digital/cash collection reports, and cash drawer reconciliations.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'outlets',
+        path: '/outlets',
+        label: 'Physical Outlets & POS Terminals',
+        permission: 'STOCK_VIEW',
+        description: 'Manage company-owned physical stores, POS machine terminals, cashier assignments, local stock balances & counter reconciliations.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'oms',
+    label: 'Order Management',
+    icon: <ShoppingCartOutlined />,
+    items: [
+      {
+        key: 'b2c-orders',
+        path: '/b2c-orders',
+        label: 'B2C Orders',
+        permission: 'ORDER_VIEW',
+        description: 'Standard checkout orders, immediate payment captures, and returns (RMA).',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'b2b-orders',
+        path: '/b2b-orders',
+        label: 'B2B Orders & Quotes',
+        permission: 'ORDER_VIEW',
+        description: 'Purchase Orders (PO), draft quotes, net payment terms, and bulk fulfillments.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'franchise-orders',
+        path: '/franchise-orders',
+        label: 'Franchise Supply Orders',
+        permission: 'ORDER_VIEW',
+        description: 'Franchise store stock fulfillment logs, bulk supplies, transit trucks, and credit ledger.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'support-resolution',
+    label: 'Customer Support & Resolution',
+    icon: <CustomerServiceOutlined />,
+    items: [
+      {
+        key: 'complaints',
+        path: '/complaints',
+        label: 'Complaints & Disputes',
+        permission: 'ORDER_VIEW',
+        description: 'Inspect customer complaints, B2B disputes, evidence vault, batch traceability, and process refunds/replacements.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'crm',
+    label: 'Customer Management',
+    icon: <UsergroupAddOutlined />,
+    items: [
+      {
+        key: 'b2c-customers',
+        path: '/b2c-customers',
+        label: 'B2C Customers',
+        permission: 'CUSTOMER_VIEW',
+        description: 'Individual profiles, order history, lifetime value (LTV), and shipping addresses.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'b2b-accounts',
+        path: '/b2b-accounts',
+        label: 'Retailer Approvals & B2B Accounts',
+        permission: 'CUSTOMER_ACCOUNT_VIEW',
+        description: 'Self-service Kirana/Retailer registrations awaiting Super Admin approval, GSTIN compliance audit, and address verification.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'billing',
+    label: 'Promotions & Billing',
+    icon: <TagsOutlined />,
+    items: [
+      {
+        key: 'schemes',
+        path: '/schemes',
+        label: 'Schemes & Offers',
+        permission: 'SCHEME_VIEW',
+        description: 'Manage the "Today\'s Schemes & Offers" tiles on the customer homepage - copy, display order, and target channel.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'earnings',
+        path: '/earnings',
+        label: 'Earnings & Financial MIS',
+        permission: 'DASHBOARD_VIEW',
+        description: 'Multi-stream realized income, B2B credit ledger, payment gateway settlements, and statutory GST liability.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'invoices',
+        path: '/invoices',
+        label: 'Invoicing & Payments',
+        permission: 'ORDER_VIEW',
+        description: 'Gateway logs, offline payment reconciliations, and GST/tax invoicing.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'analytics',
+    label: 'Reports & Analytics',
+    icon: <LineChartOutlined />,
+    items: [
+      {
+        key: 'reports',
+        path: '/reports',
+        label: 'Sales Analytics',
+        permission: 'DASHBOARD_VIEW',
+        description: 'Cohort analysis, B2B reorder cycles, channel-specific sales velocity, and gross margin reporting.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
       },
     ],
   },
@@ -468,6 +744,32 @@ export const NAV_SECTIONS: NavSection[] = [
           'POST /permissions/roles/:role/reset',
         ],
         workstream: 'WS2.2',
+      },
+      {
+        key: 'referralSettings',
+        path: '/settings/referrals',
+        label: 'Referral & Reward Settings',
+        permission: 'REFERRAL_SETTINGS_VIEW',
+        description:
+          'Coin amounts, trigger and on/off switch for the refer-a-friend program. Applies live ' +
+          'to referrals already in flight, not only ones created after a change.',
+        endpoints: ['GET /referral-settings', 'PATCH /referral-settings'],
+        workstream: 'WS2.5',
+      },
+      {
+        key: 'referrals',
+        path: '/referrals',
+        label: 'Referral Management',
+        permission: 'REFERRALS_VIEW',
+        description:
+          'Who referred whom, whether it qualified, what each side earned, and every customer\'s ' +
+          'complete coin history — including manual refunds, reversals and adjustments.',
+        endpoints: [
+          'GET /referrals',
+          'GET /referrals/ledger/:customerId',
+          'POST /referrals/ledger/:customerId/adjust',
+        ],
+        workstream: 'WS2.5',
       },
     ],
   },

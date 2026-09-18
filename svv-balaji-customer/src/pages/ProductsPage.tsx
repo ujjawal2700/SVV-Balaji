@@ -13,7 +13,8 @@ import { Badge, Breadcrumb, Button, InputNumber, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
-import { bestOfBasics, categories, popularProducts } from '../mock/homeMockData';
+import { useCategoryTree } from '../hooks/useCategoryTree';
+import { bestOfBasics, popularProducts } from '../mock/homeMockData';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
@@ -24,6 +25,7 @@ export function ProductsPage() {
   const navigate = useNavigate();
   const cart = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
+  const categories = useCategoryTree();
 
   const maxPriceParam = searchParams.get('maxPrice');
   const maxPrice = maxPriceParam ? Number(maxPriceParam) : null;

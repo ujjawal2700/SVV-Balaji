@@ -21,6 +21,7 @@ import { RecipesModule } from './recipes/recipes.module';
 import { ProductionModule } from './production/production.module';
 import { QualityModule } from './quality/quality.module';
 import { PackagingModule } from './packaging/packaging.module';
+import { YieldTrackingModule } from './yield-tracking/yield-tracking.module';
 import { CustomersModule } from './customers/customers.module';
 import { PricingModule } from './pricing/pricing.module';
 import { SalesModule } from './sales/sales.module';
@@ -28,6 +29,13 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TransportModule } from './transport/transport.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
+import { StorefrontAuthModule } from './storefront/storefront-auth.module';
+import { StorefrontCatalogueModule } from './storefront/storefront-catalogue.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ReferralSettingsModule } from './referral-settings/referral-settings.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { BannersModule } from './banners/banners.module';
+import { SchemesModule } from './schemes/schemes.module';
 
 @Module({
   imports: [
@@ -60,12 +68,24 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
     ProductionModule,
     QualityModule,
     PackagingModule,
+    YieldTrackingModule, // Loss/yield tracking - read-only aggregation over the phases above
     // Phase 4 - Sales, Order Fulfilment & Delivery (FRD Sections 24-28)
     // Both channels, per the client decision of 11-Aug-2026.
     CustomersModule,
     PricingModule,
     SalesModule,
     DashboardModule,
+    // Storefront - B2C/B2B self-service on top of the staff-operated modules
+    // above. Its own auth (CustomerAccount, not User) and its own read-only
+    // catalogue surface; order placement still goes through SalesModule once a
+    // storefront session resolves to a Customer.
+    StorefrontAuthModule,
+    StorefrontCatalogueModule,
+    CategoriesModule,
+    ReferralSettingsModule,
+    ReferralsModule,
+    BannersModule,
+    SchemesModule,
     // Still to land: DispatchModule (vehicle, route, POD), InvoicingModule
     // (GST invoice + GSP e-invoicing), FeedbackModule.
   ],

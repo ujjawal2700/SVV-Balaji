@@ -41,6 +41,9 @@ export const UPLOAD_FOLDERS = {
   training: 'svv-balaji/training-materials',
   inspections: 'svv-balaji/harvest-inspections',
   farmers: 'svv-balaji/farmer-documents',
+  products: 'svv-balaji/product-images',
+  categories: 'svv-balaji/category-images',
+  banners: 'svv-balaji/banner-images',
 } as const;
 
 export type UploadFolder = keyof typeof UPLOAD_FOLDERS;

@@ -5,8 +5,7 @@ import axios from 'axios';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { apiErrorMessage } from '@shared/api/client';
-import { AuthProvider } from '@shared/auth/AuthProvider';
+import { apiErrorMessage } from './api/client';
 import { CustomerAuthProvider } from './auth/CustomerAuthContext';
 import { App } from './App';
 import { CartProvider } from './cart/CartProvider';
@@ -73,19 +72,17 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             would break the printed QR URL, which is the one URL in this project
             that cannot be changed after the fact.
 
-            CartProvider sits outside AuthProvider on purpose: the cart belongs
-            to the browser, not to a session, and must survive signing in. See
-            cart/CartProvider.tsx.
+            CartProvider sits outside CustomerAuthProvider on purpose: the cart
+            belongs to the browser, not to a session, and must survive signing
+            in. See cart/CartProvider.tsx.
           */}
           <BrowserRouter>
             <CartProvider>
-              <AuthProvider>
-                <CustomerAuthProvider>
-                  <LoyaltyProvider>
-                    <App />
-                  </LoyaltyProvider>
-                </CustomerAuthProvider>
-              </AuthProvider>
+              <CustomerAuthProvider>
+                <LoyaltyProvider>
+                  <App />
+                </LoyaltyProvider>
+              </CustomerAuthProvider>
             </CartProvider>
           </BrowserRouter>
         </QueryClientProvider>

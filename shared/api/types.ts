@@ -1051,15 +1051,165 @@ export interface TraceFarmer {
 // ZONE 3 — Processing, QA & Packaging (FRD Sections 18-23)
 // ===========================================================================
 
+// --- Category (catalogue taxonomy, added 16 Sep) ----------------------------
+
+/** The relation shape embedded on a Product - not the full Category record. */
+export interface CategoryRef {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  displayOrder: number;
+  isActive: boolean;
+  parentId: string | null;
+  /** Present on list/detail. */
+  parent?: { id: string; name: string } | null;
+  /** Present on GET /categories/:id only. */
+  children?: Array<{ id: string; name: string; isActive: boolean }>;
+  /** Present on list - how many child categories and products reference it, for the delete guard. */
+  _count?: { children: number; products: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCategoryInput {
+  name: string;
+  /** Auto-derived from the name if left blank. */
+  slug?: string;
+  description?: string;
+  imageUrl?: string;
+  parentId?: string;
+  displayOrder?: number;
+}
+
+export type UpdateCategoryInput = Partial<CreateCategoryInput>;
+
+/** GET /storefront/categories - active categories only, nested two levels deep. */
+export interface CategoryTreeNode {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl: string | null;
+  children: CategoryTreeNode[];
+}
+
+// --- Banners (storefront hero/promo CMS, added 18 Sep) ---------------------
+
+export type BannerPlacement = 'HOMEPAGE' | 'CATEGORIES_PAGE' | 'PRODUCTS_PAGE';
+export type BannerAudience = 'ALL' | 'B2C' | 'B2B';
+
+export interface Banner {
+  id: string;
+  title: string;
+  badgeText: string | null;
+  description: string;
+  imageUrl: string;
+  ctaTextPrimary: string;
+  ctaLinkPrimary: string;
+  ctaTextSecondary: string | null;
+  ctaLinkSecondary: string | null;
+  backgroundColor: string;
+  textColor: string;
+  targetAudience: BannerAudience;
+  placement: BannerPlacement;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateBannerInput {
+  title: string;
+  badgeText?: string;
+  description: string;
+  imageUrl: string;
+  ctaTextPrimary: string;
+  ctaLinkPrimary: string;
+  ctaTextSecondary?: string;
+  ctaLinkSecondary?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  targetAudience?: BannerAudience;
+  placement?: BannerPlacement;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export type UpdateBannerInput = Partial<CreateBannerInput>;
+
+// --- Schemes (homepage "Today's Schemes & Offers" CMS, added 18 Sep) -------
+
+export interface Scheme {
+  id: string;
+  tag: string;
+  title: string;
+  subtitle: string;
+  ctaText: string;
+  ctaLink: string;
+  backgroundColor: string;
+  textColor: string;
+  badgeColor: string;
+  badgeTextColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  targetAudience: BannerAudience;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSchemeInput {
+  tag: string;
+  title: string;
+  subtitle: string;
+  ctaText: string;
+  ctaLink?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  badgeColor?: string;
+  badgeTextColor?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  targetAudience?: BannerAudience;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export type UpdateSchemeInput = Partial<CreateSchemeInput>;
+
 // --- Product master ---------------------------------------------------------
 
 export interface Product {
   id: string;
   name: string;
   sku: string;
-  category: string | null;
+  categoryId: string | null;
+  category: CategoryRef | null;
   unit: string;
   isActive: boolean;
+
+  /** Shopper-facing copy - null until staff write it. */
+  description: string | null;
+  images: string[];
+  showOnStorefront: boolean;
+  slug: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+
+  /** Available quantity at or below this flags LOW on the inventory screen. */
+  reorderPoint: number | null;
+  /** Available quantity at or below this flags CRITICAL. */
+  safetyStock: number | null;
+  allowBackorder: boolean;
+
   /** Present on GET /products/:id. */
   recipes?: Array<{ id: string; recipeCode: string; version: number; status: RecipeStatus }>;
   createdAt: string;
@@ -1072,7 +1222,32 @@ export interface CreateProductInput {
   name: string;
   sku: string;
   unit: string;
-  category?: string;
+  categoryId?: string;
+  description?: string;
+  images?: string[];
+  showOnStorefront?: boolean;
+  slug?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  reorderPoint?: number;
+  safetyStock?: number;
+  allowBackorder?: boolean;
+}
+
+export type StockStatus = 'OK' | 'LOW' | 'CRITICAL';
+
+/** One row of GET /products/stock-summary - sellable quantity vs. threshold, aggregated across every warehouse. */
+export interface ProductStockSummary {
+  productId: string;
+  name: string;
+  sku: string;
+  unit: string;
+  category: CategoryRef | null;
+  availableQuantity: number;
+  reorderPoint: number;
+  safetyStock: number;
+  allowBackorder: boolean;
+  status: StockStatus;
 }
 
 // --- Recipes (FRD Section 19) -----------------------------------------------
@@ -1166,6 +1341,9 @@ export interface CleaningGradingRecord {
   moistureLevel: string | null;
   purity: string | null;
   wastageQuantity: string | null;
+  /** By-product recovered during cleaning with resale value (bran, choker, husk) — distinct from wastageQuantity, which is pure loss. */
+  byProductQuantity: string | null;
+  byProductName: string | null;
   qaVerified: boolean;
   remarks: string | null;
   operatorId: string;
@@ -1185,6 +1363,8 @@ export interface CreateCleaningGradingInput {
   moistureLevel?: number;
   purity?: number;
   wastageQuantity?: number;
+  byProductQuantity?: number;
+  byProductName?: string;
   qaVerified?: boolean;
   remarks?: string;
 }
@@ -1200,6 +1380,13 @@ export const PRODUCTION_STATUSES = [
 ] as const;
 
 export type ProductionStatus = (typeof PRODUCTION_STATUSES)[number];
+
+export interface CompleteProductionInput {
+  actualQuantity: number;
+  byProductQuantity?: number;
+  byProductName?: string;
+  byProductRevenue?: number;
+}
 
 export interface ProductionConsumption {
   id: string;
@@ -1231,6 +1418,10 @@ export interface ProductionBatch {
   plannedQuantity: string;
   actualQuantity: string | null;
   productionLoss: string | null;
+  /** By-product recovered during this run with resale value (e.g. oil cake) — distinct from productionLoss, which is pure loss. */
+  byProductQuantity: string | null;
+  byProductName: string | null;
+  byProductRevenue: string | null;
   unit: string;
 
   productionDate: string;
@@ -1253,6 +1444,82 @@ export interface ProductionBatch {
 
   createdAt: string;
   updatedAt: string;
+}
+
+// --- Loss / Yield Tracking ---------------------------------------------------
+// Read-only aggregation over the existing Cleaning & Grading, Production and
+// Finished Goods phases above. Adds no new phase.
+
+export type YieldStageName = 'CLEANING_GRADING' | 'PRODUCTION' | 'FINISHED_GOODS';
+export type YieldAlertLevel = 'NORMAL' | 'HIGH';
+
+export interface YieldStageBreakdown {
+  stage: YieldStageName;
+  inputQuantity: number;
+  outputQuantity: number;
+  lossQuantity: number;
+  lossPercent: number | null;
+  byProductQuantity: number;
+}
+
+export interface YieldChain {
+  productionBatchId: string;
+  productionBatchNumber: string;
+  productId: string;
+  productName: string;
+  branchId: string;
+  machineName: string | null;
+  machineNumber: string | null;
+  productionDate: string;
+  stages: YieldStageBreakdown[];
+  totalInput: number;
+  totalLoss: number;
+  totalByProduct: number;
+  finalOutput: number;
+  overallYieldPercent: number | null;
+  totalLossPercent: number | null;
+  alertLevel: YieldAlertLevel;
+  fgBatchNumbers: string[];
+}
+
+export interface YieldChainListResult {
+  data: YieldChain[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface YieldChainQuery {
+  productId?: string;
+  branchId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface FarmerYieldQuality {
+  farmerId: string;
+  farmerCode: string | null;
+  fullName: string;
+  rawMaterialBatches: number;
+  averageLossPercent: number | null;
+  flagged: boolean;
+}
+
+export interface MachineYieldHealth {
+  machineName: string;
+  machineNumber: string | null;
+  totalRuns: number;
+  historicalAverageLossPercent: number;
+  flaggedRuns: Array<{
+    productionBatchId: string;
+    productionBatchNumber: string;
+    lossPercent: number;
+    productionDate: string;
+  }>;
+  needsMaintenanceReview: boolean;
 }
 
 export interface CreateProductionBatchInput {
@@ -1513,6 +1780,15 @@ export interface Customer {
   branch?: BranchRef | null;
   assignedToId: string | null;
   assignedTo?: UserRef | null;
+
+  /** Auto-generated, unique — this customer's own shareable refer-a-friend code. */
+  referralCode: string;
+
+  /** Set if a referral code was used at this customer's signup. Null for staff-created or unreferred customers. */
+  referredAs?: { referrer: { id: string; name: string; customerCode: string; referralCode: string } } | null;
+
+  /** Running coin total — see ReferralSettings and CoinTransaction. */
+  coinBalance: number;
 
   createdAt: string;
   updatedAt: string;
@@ -1775,3 +2051,243 @@ export interface AllocationResult {
   shortfalls: AllocationShortfall[];
   complete: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Storefront accounts (WS2.5 addendum, 16 Sep) — the B2C/B2B self-service
+// login queue. Separate from Customer: this is the *login*, approved rows are
+// linked to the *commercial record* via customerId. See
+// svv-balaji-backend/src/storefront/ for the reasoning.
+// ---------------------------------------------------------------------------
+
+export type CustomerAccountStatus =
+  | 'PENDING_VERIFICATION'
+  | 'PENDING_APPROVAL'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'SUSPENDED';
+
+export interface CustomerAccount {
+  id: string;
+  phone: string;
+  email: string | null;
+  fullName: string;
+  channel: SalesChannel;
+  status: CustomerAccountStatus;
+  phoneVerifiedAt: string | null;
+  lastLoginAt: string | null;
+  customerId: string | null;
+  customer?: { id: string; customerCode: string; referralCode?: string } | null;
+
+  /** Set on a B2B registration only; null for a self-provisioned B2C account. */
+  businessName: string | null;
+  gstin: string | null;
+  pan: string | null;
+  addressLine: string | null;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  pincode: string | null;
+
+  /** The referral code this applicant entered at signup, if any — see Customer.referralCode. */
+  referralCode: string | null;
+
+  reviewedById: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerAccountQuery {
+  channel?: SalesChannel;
+  search?: string;
+}
+
+export interface RejectCustomerAccountInput {
+  reason: string;
+}
+
+// ---------------------------------------------------------------------------
+// Referral & Reward Settings (17 Sep) — the coin amounts, trigger and on/off
+// switch for the refer-a-friend program. One row, read live at every
+// candidate trigger event rather than frozen onto a Referral at creation —
+// see svv-balaji-backend/src/common/referral.service.ts.
+// ---------------------------------------------------------------------------
+
+export type ReferralRewardTrigger =
+  | 'REGISTRATION'
+  | 'ACCOUNT_VERIFICATION'
+  | 'FIRST_ORDER'
+  | 'FIRST_DELIVERY';
+
+export const REFERRAL_REWARD_TRIGGERS: readonly ReferralRewardTrigger[] = [
+  'REGISTRATION',
+  'ACCOUNT_VERIFICATION',
+  'FIRST_ORDER',
+  'FIRST_DELIVERY',
+];
+
+export const REFERRAL_REWARD_TRIGGER_LABELS: Record<ReferralRewardTrigger, string> = {
+  REGISTRATION: 'After Registration',
+  ACCOUNT_VERIFICATION: 'After Account Verification',
+  FIRST_ORDER: 'After First Successful Order',
+  FIRST_DELIVERY: 'After First Order Delivery',
+};
+
+export interface ReferralSettings {
+  id: string;
+  referrerRewardCoins: number;
+  refereeRewardCoins: number;
+  rewardTrigger: ReferralRewardTrigger;
+  isActive: boolean;
+  updatedById: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface UpdateReferralSettingsInput {
+  referrerRewardCoins?: number;
+  refereeRewardCoins?: number;
+  rewardTrigger?: ReferralRewardTrigger;
+  isActive?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Referral Management (17 Sep) — Super Admin reporting over what the program
+// above actually produced: who referred whom, whether it qualified, the coin
+// ledger behind any customer's balance, and manual corrections to it. See
+// svv-balaji-backend/src/referrals/referrals.module.ts.
+// ---------------------------------------------------------------------------
+
+/** The referrer or referee side of a Referral row, as the list endpoint returns it. */
+export interface ReferralParty {
+  id: string;
+  name: string;
+  phone: string;
+  customerCode: string;
+  referralCode: string;
+  channel: SalesChannel;
+  status?: CustomerStatus;
+}
+
+export interface QualifyingOrderRef {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  total: string;
+}
+
+export interface Referral {
+  id: string;
+  code: string;
+  createdAt: string;
+  rewardedAt: string | null;
+  /** True once the configured trigger has fired and both sides have been paid. */
+  qualified: boolean;
+  referrer: ReferralParty;
+  referee: ReferralParty;
+  referrerCoins: number;
+  refereeCoins: number;
+  /** The order whose confirm/deliver transition paid this out, for an order-based trigger. Null otherwise. */
+  qualifyingOrder: QualifyingOrderRef | null;
+}
+
+export interface ReferralQuery {
+  search?: string;
+  status?: 'QUALIFIED' | 'PENDING';
+  channel?: SalesChannel;
+  from?: string;
+  to?: string;
+}
+
+export type CoinTransactionReason =
+  | 'REFERRAL_REFERRER_REWARD'
+  | 'REFERRAL_REFEREE_REWARD'
+  | 'MANUAL_ADJUSTMENT';
+
+export const COIN_TRANSACTION_REASON_LABELS: Record<CoinTransactionReason, string> = {
+  REFERRAL_REFERRER_REWARD: 'Referral reward (as referrer)',
+  REFERRAL_REFEREE_REWARD: 'Referral reward (as referred user)',
+  MANUAL_ADJUSTMENT: 'Manual adjustment',
+};
+
+export interface CoinTransaction {
+  id: string;
+  customerId: string;
+  /** Positive credits, negative debits — see the reason for which kind. */
+  amount: number;
+  reason: CoinTransactionReason;
+  note: string | null;
+  referralId: string | null;
+  referral: {
+    id: string;
+    referrerId: string;
+    refereeId: string;
+    referrer: { id: string; name: string; customerCode: string } | null;
+    referee: { id: string; name: string; customerCode: string } | null;
+  } | null;
+  orderId: string | null;
+  order: QualifyingOrderRef | null;
+  performedById: string | null;
+  performedBy: { id: string; fullName: string } | null;
+  createdAt: string;
+}
+
+export interface CoinLedger {
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    customerCode: string;
+    referralCode: string;
+    coinBalance: number;
+  };
+  balance: number;
+  totalEarned: number;
+  totalAdjusted: number;
+  transactions: CoinTransaction[];
+}
+
+export interface AdjustCoinBalanceInput {
+  /** Positive refunds/bonuses the balance; negative claws it back. Never zero. */
+  amount: number;
+  note: string;
+}
+
+// --- Coupons & Promo Codes (added 18 Sep) ----------------------------------
+
+export type CouponDiscountType = 'FIXED' | 'PERCENTAGE';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  discountType: CouponDiscountType;
+  discountValue: number;
+  minOrderValue: number;
+  maxDiscount?: number;
+  targetAudience: BannerAudience;
+  expiryDate?: string;
+  usageLimit?: number;
+  usedCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCouponInput {
+  code: string;
+  title: string;
+  description: string;
+  discountType: CouponDiscountType;
+  discountValue: number;
+  minOrderValue?: number;
+  maxDiscount?: number;
+  targetAudience?: BannerAudience;
+  expiryDate?: string;
+  usageLimit?: number;
+  isActive?: boolean;
+}
+

@@ -1,4 +1,4 @@
-import type { CustomerQuery, FarmerQuery, OrderQuery, PriceListQuery } from './types';
+import type { CustomerAccountQuery, CustomerQuery, FarmerQuery, OrderQuery, PriceListQuery, ReferralQuery } from './types';
 
 /**
  * Every React Query key in the app, in one hierarchy.
@@ -129,6 +129,37 @@ export const queryKeys = {
     list: (includeInactive = false) =>
       [...queryKeys.products.all, 'list', includeInactive] as const,
     detail: (id: string) => [...queryKeys.products.all, 'detail', id] as const,
+    stockSummary: () => [...queryKeys.products.all, 'stock-summary'] as const,
+  },
+
+  categories: {
+    all: ['categories'] as const,
+    list: (includeInactive = false) =>
+      [...queryKeys.categories.all, 'list', includeInactive] as const,
+    detail: (id: string) => [...queryKeys.categories.all, 'detail', id] as const,
+    // Unauthenticated storefront tree, separate cache entry from the admin list.
+    storefront: () => [...queryKeys.categories.all, 'storefront'] as const,
+  },
+
+  banners: {
+    all: ['banners'] as const,
+    list: (includeInactive = false) =>
+      [...queryKeys.banners.all, 'list', includeInactive] as const,
+    detail: (id: string) => [...queryKeys.banners.all, 'detail', id] as const,
+    // Separate from the admin list above - unauthenticated, filtered by
+    // placement/audience, and cached on its own so a customer session and an
+    // admin session open in the same browser never share a cache entry.
+    storefront: (placement: string, audience?: string) =>
+      [...queryKeys.banners.all, 'storefront', placement, audience ?? null] as const,
+  },
+
+  schemes: {
+    all: ['schemes'] as const,
+    list: (includeInactive = false) =>
+      [...queryKeys.schemes.all, 'list', includeInactive] as const,
+    detail: (id: string) => [...queryKeys.schemes.all, 'detail', id] as const,
+    storefront: (audience?: string) =>
+      [...queryKeys.schemes.all, 'storefront', audience ?? null] as const,
   },
 
   recipes: {
@@ -175,6 +206,16 @@ export const queryKeys = {
     matrix: () => [...queryKeys.permissions.all, 'matrix'] as const,
   },
 
+  yieldTracking: {
+    all: ['yield-tracking'] as const,
+    list: (filters: Record<string, unknown>) =>
+      [...queryKeys.yieldTracking.all, 'list', filters] as const,
+    chain: (args: { productionBatchId?: string; fgBatchNumber?: string }) =>
+      [...queryKeys.yieldTracking.all, 'chain', args] as const,
+    farmerQuality: () => [...queryKeys.yieldTracking.all, 'farmer-quality'] as const,
+    machineHealth: () => [...queryKeys.yieldTracking.all, 'machine-health'] as const,
+  },
+
   finishedGoods: {
     all: ['finished-goods'] as const,
     list: (filters: Record<string, unknown>) =>
@@ -194,6 +235,22 @@ export const queryKeys = {
     // customer record is edited - so it is its own key and gets invalidated by
     // order mutations too.
     credit: (id: string) => [...queryKeys.customers.all, 'credit', id] as const,
+  },
+
+  customerAccounts: {
+    all: ['customer-accounts'] as const,
+    list: (query: CustomerAccountQuery) =>
+      [...queryKeys.customerAccounts.all, 'list', query] as const,
+  },
+
+  referralSettings: {
+    all: ['referral-settings'] as const,
+  },
+
+  referrals: {
+    all: ['referrals'] as const,
+    list: (query: ReferralQuery) => [...queryKeys.referrals.all, 'list', query] as const,
+    ledger: (customerId: string) => [...queryKeys.referrals.all, 'ledger', customerId] as const,
   },
 
   priceLists: {

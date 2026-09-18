@@ -23,8 +23,8 @@ import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
+import { useCategoryTree } from '../hooks/useCategoryTree';
 import { useLoyalty } from '../loyalty/useLoyalty';
-import { categories } from '../mock/homeMockData';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
@@ -35,6 +35,7 @@ export function DesktopHeader() {
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, isLoggedIn } = useCustomerAuth();
   const loyalty = useLoyalty();
+  const categories = useCategoryTree();
   const [searchQuery, setSearchQuery] = useState('');
 
   const isRetailer = role === 'RETAILER';

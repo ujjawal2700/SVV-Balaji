@@ -61,6 +61,15 @@ export function ProductionBatchDetailDrawer({
                 formatQuantity(data.productionLoss, data.unit)
               )}
             </Descriptions.Item>
+            <Descriptions.Item label="By-product">
+              {data.byProductQuantity ? formatQuantity(data.byProductQuantity, data.unit) : EM_DASH}
+            </Descriptions.Item>
+            <Descriptions.Item label="By-product name">
+              {data.byProductName ?? EM_DASH}
+            </Descriptions.Item>
+            <Descriptions.Item label="By-product revenue" span={2}>
+              {data.byProductRevenue ? `₹${data.byProductRevenue}` : EM_DASH}
+            </Descriptions.Item>
           </Descriptions>
 
           <Descriptions bordered column={2} size="small" title="Machine & operator">

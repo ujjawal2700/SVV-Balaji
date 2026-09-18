@@ -5,6 +5,7 @@ import {
   Card,
   Col,
   Form,
+  Input,
   InputNumber,
   Modal,
   Row,
@@ -49,7 +50,12 @@ function CompleteModal({
   batch: ProductionBatch | null;
   onClose: () => void;
 }) {
-  const [form] = Form.useForm<{ actualQuantity: number }>();
+  const [form] = Form.useForm<{
+    actualQuantity: number;
+    byProductQuantity?: number;
+    byProductName?: string;
+    byProductRevenue?: number;
+  }>();
   const { message } = AntApp.useApp();
   const complete = useCompleteProduction();
 
@@ -60,6 +66,9 @@ function CompleteModal({
       const updated = await complete.mutateAsync({
         id: batch.id,
         actualQuantity: values.actualQuantity,
+        byProductQuantity: values.byProductQuantity,
+        byProductName: values.byProductName,
+        byProductRevenue: values.byProductRevenue,
       });
       const loss = Number(updated.productionLoss ?? 0);
       message.success(
@@ -96,6 +105,29 @@ function CompleteModal({
         >
           <InputNumber style={{ width: '100%' }} min={0} step={1} />
         </Form.Item>
+
+        <Typography.Text strong>By-product recovered (optional)</Typography.Text>
+        <Row gutter={16} style={{ marginTop: 8 }}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              name="byProductQuantity"
+              label={`Quantity (${batch?.unit ?? 'KG'})`}
+              extra="e.g. oil cake — distinct from process loss."
+            >
+              <InputNumber style={{ width: '100%' }} min={0} step={1} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="byProductName" label="Name">
+              <Input placeholder="e.g. Oil cake" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="byProductRevenue" label="Revenue (₹)">
+              <InputNumber style={{ width: '100%' }} min={0} step={1} />
+            </Form.Item>
+          </Col>
+        </Row>
       </Form>
     </Modal>
   );
@@ -175,6 +207,24 @@ export function ProductionBatchesPage() {
           </Typography.Text>
         ) : (
           formatQuantity(batch.productionLoss, batch.unit)
+        ),
+    },
+    {
+      title: 'By-product',
+      key: 'byProduct',
+      align: 'right',
+      render: (_, batch) =>
+        batch.byProductQuantity ? (
+          <Space direction="vertical" size={0} style={{ textAlign: 'right' }}>
+            <Typography.Text>{formatQuantity(batch.byProductQuantity, batch.unit)}</Typography.Text>
+            {batch.byProductName && (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {batch.byProductName}
+              </Typography.Text>
+            )}
+          </Space>
+        ) : (
+          EM_DASH
         ),
     },
     {

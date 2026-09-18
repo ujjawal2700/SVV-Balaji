@@ -1,10 +1,145 @@
 # SVV Balaji — Project State
 
-**Last updated:** 16 August 2026 · **Updated by:** Raunak
-**Programme week:** 2 of 18 (Week 1 commenced 4 Aug 2026)
+**Last updated:** 18 September 2026 · **Updated by:** Raunak
+**Programme week:** 7 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
 > first. Keep it current; a stale state file is worse than none.
+
+> ⚠️ **Everything below this notice except section 0 was last verified 16 August.** A month of
+> work has landed since then that this file does not describe in full — a supplier/purchase-order/
+> transport module, a retailer-facing UI pass on the customer storefront, a loyalty program. See
+> `DEV_LOG.md` for the real chronological record; treat anything below dated "16 Aug" as
+> possibly stale on specifics (screen counts, percentages) even where the shape is still right.
+
+---
+
+## 0. Since 16 August — what changed, most recent first
+
+**18 Sep (latest) — Homepage schemes, made real, with a genuine "hide the section" control.** Same
+pattern as banners/categories, applied to the "Today's Schemes & Offers" tiles: new `Scheme` model,
+staff CRUD at `/schemes` + new admin screen, unguarded `/storefront/schemes` read, `displayOrder`
+for row position. The one deliberate difference: no mock fallback on empty - unpublishing every
+scheme is how Super Admin hides the section outright, verified live (deactivated all schemes,
+confirmed the homepage feed returns empty, reactivated, confirmed it's back). Full detail in
+`DEV_LOG.md` (2026-09-18, "latest").
+
+**18 Sep — Storefront categories, made real too.** Same fix as the banner work, applied to
+categories/subcategories: the customer app's category rail, `/categories` page, header mega-menu
+and product routing all read one hardcoded array; admin's existing Manage Category screens had
+nothing to do with what a shopper saw. Added an unguarded `GET /storefront/categories` (nested
+tree, no schema change needed — `Category` already had everything required), seeded the old
+hardcoded categories as real rows with matching slugs so existing links keep working, and switched
+the four consuming screens to a hook that reads live data and falls back to the (untouched) mock
+array when nothing's published. Full detail in `DEV_LOG.md` (2026-09-18, "even later").
+
+**18 Sep — Storefront banners, made real.** The admin Banner Management screen
+(`/banners`) existed but only wrote to `localStorage`; the customer app's homepage hero and
+Categories page banner were hardcoded JSX reading nothing from it. Built the missing piece: a
+`Banner` model, staff CRUD at `/banners`, an unguarded `/storefront/banners` read (same pattern as
+the storefront catalogue), and wired the admin screen and the customer homepage/categories hero to
+it end to end. New permission group `banners.*` — hit the recurring A-14 gap (see below) again,
+granted to BM/ST by hand. Verified with `tsc` + a live curl CRUD pass through the running backend;
+**visual rendering not verified** (no headless browser in this environment) — worth a quick
+click-through before treating this as demo-ready. Full detail in `DEV_LOG.md` (2026-09-18).
+
+**17 Sep (latest) — Referral Management (Super Admin reporting).** New screen at `/referrals`:
+who referred whom, qualified/pending status, coins earned each side, the qualifying order for an
+order-triggered reward, and — per customer — a complete coin ledger with balance/earned/adjusted
+totals plus a manual refund/reversal/adjustment tool (own permission, `referrals.adjust`, separate
+from viewing). Not new mechanics, just visibility and correction over what the last two sessions
+already built. `CoinTransaction` gained `orderId`/`note`/`performedById` to support it. Still 371
+backend tests (31 new, none removed — this session only added reporting, didn't touch the crediting
+logic itself). Full detail in `DEV_LOG.md` (2026-09-17, "latest") — including a flag that
+`CustomersPage.tsx` changed to read from mock data mid-session, presumably from other concurrent
+work, worth checking before treating it as live.
+
+**17 Sep (even later) — Referral & Reward Settings, wired to real coin crediting.** New admin
+screen at `/settings/referrals`: referrer/referee reward amounts (coins), which of four lifecycle
+events credits them, and a program-wide on/off switch. Not a UI shell — `ReferralService` now
+actually credits coins (with a ledger, `CoinTransaction`) at the configured trigger, live, for
+referrals already in flight and not just new ones. Two of the four triggers required touching
+`SalesService` (Ujjawal's WS1.5) — logged clearly in `DEV_LOG.md`, every call best-effort so a
+reward-crediting bug can never block an order or a signup. 357 backend tests passing (was 343).
+Full detail in `DEV_LOG.md` (2026-09-17, "even later").
+
+**17 Sep (later) — refer-a-friend program.** Every `Customer` now has a unique auto-generated
+`referralCode`; a new storefront signup (B2C on first OTP verify, B2B at staff approval) can
+enter someone else's to create a tracked `Referral` relationship. Full validation — no duplicates,
+code must belong to a real active customer, self-referral rejected by phone or email, explicitly
+no IP/device checks. Visible in the admin Customers screen (new Referral column) and the B2B
+review drawer; enterable in the storefront's Login/Register forms, which also read `?ref=CODE`
+from a shared link. **No reward is attached yet** — this is tracking only, since wallet/loyalty
+have no real backend to credit against. 343 backend tests passing (was 328). Full detail in
+`DEV_LOG.md` (2026-09-17, "later").
+
+**17 Sep — customer storefront wired to real login/registration.** The storefront
+(`svv-balaji-customer`) made zero HTTP calls until now — `LoginPage`/`RegisterPage` faked OTP
+`1234` locally. Now calls the real `/storefront/auth/*` API the backend already had (built 16
+Sep). Found and fixed a real bug in the process: the app's checkout/orders/addresses gate
+(`RequireAccount`) was checking the **staff** auth session (`@shared/auth/useAuth`), which a
+customer can never hold — those screens were effectively unreachable regardless of storefront
+login state. Retailer registration's success screen also used to claim instant approval with a
+welcome wallet credit; it now says what actually happens (submitted, pending staff review of the
+GSTIN, sign in once approved from `/b2b-accounts` in the admin panel). Wallet, loyalty and order
+history are still 100% mock — only identity (login, registration, `/me`) is real. Full detail in
+`DEV_LOG.md` (2026-09-17).
+
+**16 Sep — Catalog + Inventory (first slice of the "customer side module").** The client/user
+listed ~10 commerce subsystems (dashboard, catalog, pricing, taxonomy, inventory, B2C+B2B orders,
+CRM, promotions, invoicing, analytics). Agreed to build Catalog + Inventory first and explicitly
+skip Invoicing & Payments — it overlaps Ujjawal's assigned WS4.4 (GST e-invoicing) and WS4.5
+(Razorpay). Built: a `Category` model (two-level hierarchy, replaces the free-text
+`Product.category` string), a real Category admin screen, product SEO fields (slug/meta
+title/description) and inventory thresholds (reorder point/safety stock/backorder), a new
+`GET /products/stock-summary` endpoint, and an Inventory screen with OK/Low/Critical status.
+**Repeats a gap found earlier the same day**: new permission keys (`categories.*`) don't
+auto-grant to already-configured roles (see A-14 below) — granted by hand again, logged in
+`DEV_LOG.md`. Verified via `tsc`/lint/build plus a live curl pass through both the backend and the
+admin dev-server proxy; visual rendering not verified (no headless browser in this environment).
+Full detail in `DEV_LOG.md` (2026-09-16, "even later").
+
+**16 Sep — admin panel: Storefront Accounts screen + Supply/Commerce zone toggle.** The panel is
+now the "two parts" the client described — farmer/supplier/raw-material screens vs.
+customer/retail screens — as one app with a sidebar toggle rather than two deployments. Every
+`NavItem` carries an optional `zone: 'supply' | 'commerce'`; the toggle (persisted per-browser) is
+a navigation filter layered on top of the existing permission check, not a replacement for it. Also
+added a real screen for reviewing retailer signups (`/customer-accounts`) — list, filter, a drawer
+showing the submitted GSTIN, Approve/Reject. Data path verified end-to-end via the dev-server proxy;
+**visual rendering not verified — no headless browser available in this environment.** Full detail
+in `DEV_LOG.md` (2026-09-16, "later still").
+
+**16 Sep — storefront commerce foundation (backend).** Built self-service identity for the B2C/B2B
+storefront and a public read-only catalogue, on top of the sales module that already existed.
+`CustomerAccount` (login, phone+OTP) is now separate from `Customer` (the commercial record) — an
+unknown phone self-provisions as B2C with an immediate `Customer` row; a retailer registers, sits
+`PENDING_APPROVAL`, and a new staff screen (`GET/PATCH /storefront/accounts`, permissions
+`customerAccounts.view`/`.review`) approves or rejects it, which is what creates their `Customer`
+row. OTP is mock-only for now (no SMS vendor procured — same shape of gap as A-11's GSP; fixed code
+123456, returned in the response), and refuses to boot in that mode if `NODE_ENV=production`.
+Customer sessions are signed with their own JWT secret pair, deliberately not the staff one — see
+`svv-balaji-backend/src/storefront/customer-token.config.ts` for why sharing it would let a
+storefront token pass the staff auth guard. `Product` gained `description`/`images`/
+`showOnStorefront` (additive, default off) so a catalogue endpoint has something to serve.
+**What this is not:** the `svv-balaji-customer` React app is still 100% mock and makes no HTTP
+calls anywhere — wiring it to these new endpoints, and building storefront order placement against
+`SalesService`, are next. Full detail and the new env vars required to boot in `DEV_LOG.md`
+(2026-09-16, "backend commerce foundation").
+
+**16 Sep — malware reintroduced on `origin/main`, then removed.** The loader Ujjawal purged on
+7 Sep (fake Font Awesome file + VS Code autorun task) came back via a commit made from an old
+clone. Found mid-merge before it executed. Remediated: `git merge --abort`, then `origin/main`
+**force-pushed** back to the clean commit — anyone with a clone from between 7–16 Sep must
+`git fetch origin && git reset --hard origin/main` or re-clone. Full incident writeup in
+`DEV_LOG.md` (2026-09-16). **If you are reading this and haven't done that reset yet, do it before
+anything else.**
+
+**Between 16 Aug and 16 Sep (not detailed here — read `DEV_LOG.md` directly):** a
+supplier/purchase-order/transport module was added (`src/suppliers`, `src/purchase-orders`,
+`src/transport`, admin screens under `pages/suppliers/`); the customer storefront got a substantial
+retailer-facing UI pass (`DesktopHeader`, `DesktopFooter`, home/product/cart/profile rewrites) and a
+mock-only loyalty program (`src/loyalty/`); `users.create` moved from Super-Admin-only to Branch
+Manager. None of this is reflected in the sections below yet.
 
 ---
 
@@ -362,6 +497,7 @@ must not be read as "nearly ready".
 | **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
 | **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
 | A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Ujjawal / Raunak | 15 Aug | Open — shapes WS2.5 screens |
+| A-14 | Fix permission seeding so a new key added to an already-configured role's defaults actually grants, instead of needing a by-hand DB write | Ujjawal / Raunak | — | **Open — hit a third time on 17 Sep** (`customerAccounts.*` and `categories.*` on 16 Sep, `referralSettings.*` on 17 Sep), each worked around manually and logged in `DEV_LOG.md`. `PermissionsService.seedUnconfiguredRoles()` only backfills a role the first time it has never been configured. Worth fixing properly now rather than a fourth by-hand grant |
 
 ---
 

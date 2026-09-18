@@ -31,6 +31,8 @@ export interface DataTableProps<T> {
   toolbar?: ReactNode;
   size?: TableProps<T>['size'];
   onRow?: TableProps<T>['onRow'];
+  /** Expandable rows, passed straight through to antd's Table. */
+  expandable?: TableProps<T>['expandable'];
 }
 
 /**
@@ -55,6 +57,7 @@ export function DataTable<T extends object>({
   toolbar,
   size = 'middle',
   onRow,
+  expandable,
 }: DataTableProps<T>) {
   if (error) {
     return (
@@ -86,6 +89,7 @@ export function DataTable<T extends object>({
         loading={isLoading || isFetching}
         size={size}
         onRow={onRow}
+        expandable={expandable}
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: <Empty description={emptyText} /> }}
         pagination={{

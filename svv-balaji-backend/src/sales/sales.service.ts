@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   CustomerStatus,
   OrderStatus,
@@ -12,6 +12,7 @@ import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
+import { ReferralService } from '../common/referral.service';
 import {
   CancelOrderDto,
   CreateOrderDto,
@@ -49,10 +50,13 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
  */
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(SalesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequence: SequenceService,
     private readonly pricing: PricingService,
+    private readonly referrals: ReferralService,
   ) {}
 
   async create(dto: CreateOrderDto, placedById: string | null) {
@@ -431,10 +435,20 @@ export class SalesService {
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, OrderStatus.CONFIRMED);
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: { status: OrderStatus.CONFIRMED },
     });
+
+    // Best-effort and outside any transaction: the FIRST_ORDER referral
+    // reward, if configured. Never lets a coin-crediting bug fail an order
+    // confirmation - see ReferralService's note on why these calls take the
+    // plain PrismaService rather than a nested tx.
+    await this.referrals.onOrderConfirmed(this.prisma, order.customerId, order.id).catch((err) => {
+      this.logger.warn(`Referral reward check failed for confirmed order ${order.orderNumber}: ${err instanceof Error ? err.message : String(err)}`);
+    });
+
+    return updated;
   }
 
   /**
@@ -628,10 +642,19 @@ export class SalesService {
     this.assertTransition(order.status, to);
 
     if (to !== OrderStatus.DISPATCHED) {
-      return this.prisma.order.update({
+      const updated = await this.prisma.order.update({
         where: { id },
         data: { status: to, ...this.stampFor(to) },
       });
+
+      if (to === OrderStatus.DELIVERED) {
+        // Best-effort, outside any transaction - see confirm() above for why.
+        await this.referrals.onOrderDelivered(this.prisma, order.customerId, order.id).catch((err) => {
+          this.logger.warn(`Referral reward check failed for delivered order ${order.orderNumber}: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      }
+
+      return updated;
     }
 
     return this.prisma.$transaction(async (tx) => {

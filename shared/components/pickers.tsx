@@ -2,6 +2,7 @@ import { Select } from 'antd';
 import type { CSSProperties } from 'react';
 import type { SalesChannel } from '../api/types';
 import { useBranches } from '../hooks/useBranches';
+import { useCategories } from '../hooks/useCategories';
 import { useCustomers } from '../hooks/useCustomers';
 import { useFarmers } from '../hooks/useFarmers';
 import { useProducts } from '../hooks/useProduction';
@@ -172,6 +173,31 @@ export function CustomerSelect({
       options={(customers.data?.data ?? []).map((customer) => ({
         value: customer.id,
         label: `${customer.name} — ${customer.customerCode} · ${customer.channel}`,
+      }))}
+      style={{ width: '100%', ...props.style }}
+    />
+  );
+}
+
+/**
+ * Category picker for the product form. Indents a child under its parent's
+ * label rather than flattening the hierarchy - "Flours" and "Multigrain
+ * Flours" read as unrelated options otherwise.
+ */
+export function CategorySelect({ placeholder = 'Select a category', ...props }: PickerProps) {
+  const categories = useCategories();
+  const rows = categories.data?.data ?? [];
+
+  return (
+    <Select
+      {...props}
+      showSearch
+      optionFilterProp="label"
+      placeholder={categories.isLoading ? 'Loading…' : placeholder}
+      loading={categories.isLoading}
+      options={rows.map((category) => ({
+        value: category.id,
+        label: category.parentId ? `— ${category.name}` : category.name,
       }))}
       style={{ width: '100%', ...props.style }}
     />

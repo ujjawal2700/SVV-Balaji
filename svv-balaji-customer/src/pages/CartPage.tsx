@@ -9,12 +9,15 @@ import {
   PlusOutlined,
   SafetyCertificateOutlined,
   ShoppingOutlined,
+  TagsOutlined,
 } from '@ant-design/icons';
-import { Button, Divider, Empty, Tag, Typography, message } from 'antd';
+import { Button, Divider, Empty, Input, Modal, Space, Tag, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
 import { useLoyalty } from '../loyalty/useLoyalty';
+import { couponsApi } from '@shared/api/coupons';
+import type { Coupon } from '@shared/api/types';
 
 function formatInr(value: number): string {
   return `₹${value.toLocaleString('en-IN')}`;
@@ -24,6 +27,25 @@ export function CartPage() {
   const navigate = useNavigate();
   const cart = useCart();
   const loyalty = useLoyalty();
+
+  // Coupons state
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponModalOpen, setCouponModalOpen] = useState(false);
+
+  useEffect(() => {
+    const list = couponsApi.list(false);
+    setCoupons(list);
+    // Try to auto-apply first valid coupon if subtotal qualifies
+    const savedCode = sessionStorage.getItem('applied_coupon_code');
+    if (savedCode) {
+      const c = couponsApi.getByCode(savedCode);
+      if (c && c.isActive) setAppliedCoupon(c);
+    } else if (list.length > 0) {
+      setAppliedCoupon(list[0]);
+    }
+  }, []);
 
   if (cart.lines.length === 0) {
     return (
@@ -43,10 +65,10 @@ export function CartPage() {
           </button>
           <Typography.Text strong style={{ fontSize: 16 }}>My Cart</Typography.Text>
         </header>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<Typography.Text type="secondary" style={{ fontSize: 15 }}>Your retail cart is currently empty!</Typography.Text>}
+            image={<ShoppingOutlined style={{ fontSize: 64, color: '#059669' }} />}
+            description={<Typography.Text type="secondary" style={{ fontSize: 16 }}>Your wholesale cart is currently empty</Typography.Text>}
           >
             <Button type="primary" size="large" style={{ background: '#059669', borderColor: '#059669', borderRadius: 8, marginTop: 12 }} onClick={() => navigate('/')}>
               Explore Wholesale Catalog
@@ -62,11 +84,41 @@ export function CartPage() {
   const subtotal = cart.indicativeTotal || 0;
   const productDiscount = totalMrp - subtotal;
   const gst = Math.floor(subtotal * 0.05); // 5% GST
-  const couponDiscount = 50;
+
+  const couponDiscount = appliedCoupon ? couponsApi.calculateDiscount(appliedCoupon, subtotal) : 0;
 
   const deliveryCharge = cart.deliveryInfo ? cart.deliveryInfo.charge : (subtotal > 500 ? 0 : 50);
-  const grandTotal = subtotal + gst + deliveryCharge - couponDiscount;
+  const grandTotal = Math.max(0, subtotal + gst + deliveryCharge - couponDiscount);
   const totalSavings = productDiscount + couponDiscount + (deliveryCharge === 0 && subtotal <= 500 ? 50 : 0);
+
+  const handleApplyCode = (codeToApply?: string) => {
+    const code = (codeToApply || couponInput).trim().toUpperCase();
+    if (!code) {
+      message.error('Please enter a coupon code');
+      return;
+    }
+    const found = couponsApi.getByCode(code);
+    if (!found || !found.isActive) {
+      message.error(`Coupon code "${code}" is invalid or expired.`);
+      return;
+    }
+    if (subtotal < found.minOrderValue) {
+      message.warning(`Add items worth ${formatInr(found.minOrderValue - subtotal)} more to apply "${found.code}"`);
+      return;
+    }
+    setAppliedCoupon(found);
+    sessionStorage.setItem('applied_coupon_code', found.code);
+    const saving = couponsApi.calculateDiscount(found, subtotal);
+    message.success(`🎉 Coupon "${found.code}" applied! You saved ${formatInr(saving)}.`);
+    setCouponInput('');
+    setCouponModalOpen(false);
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    sessionStorage.removeItem('applied_coupon_code');
+    message.info('Coupon removed');
+  };
 
   const estimatedPoints = loyalty.estimateOrderPoints(
     cart.lines.map((l) => ({ productName: l.productName, price: l.displayUnitPrice ?? 0, quantity: l.quantity })),
@@ -289,6 +341,116 @@ export function CartPage() {
 
           {/* Right Column: Sticky Price Breakdown & Checkout */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Coupons & Promo Codes Card */}
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: 16,
+                padding: '18px 20px',
+                border: '1px solid #e7e5e4',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Typography.Text strong style={{ fontSize: 14, color: '#1c1917', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <TagsOutlined style={{ color: '#f97316' }} /> Apply Coupon &amp; Offers
+                </Typography.Text>
+                {coupons.length > 0 && (
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0, color: '#f97316', fontWeight: 600 }}
+                    onClick={() => setCouponModalOpen(true)}
+                  >
+                    View All ({coupons.length})
+                  </Button>
+                )}
+              </div>
+
+              {appliedCoupon ? (
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px dashed #22c55e',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Tag color="green" style={{ fontWeight: 700, letterSpacing: 0.5, margin: 0 }}>
+                        {appliedCoupon.code}
+                      </Tag>
+                      <Typography.Text strong style={{ color: '#15803d', fontSize: 13 }}>
+                        APPLIED
+                      </Typography.Text>
+                    </div>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 3 }}>
+                      {couponDiscount > 0 ? `Saving ${formatInr(couponDiscount)} on this cart` : `Minimum cart required: ${formatInr(appliedCoupon.minOrderValue)}`}
+                    </Typography.Text>
+                  </div>
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    onClick={handleRemoveCoupon}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Input
+                      placeholder="Enter Coupon Code"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      onPressEnter={() => handleApplyCode()}
+                      style={{ textTransform: 'uppercase', fontWeight: 600 }}
+                    />
+                    <Button
+                      type="primary"
+                      onClick={() => handleApplyCode()}
+                      style={{ background: '#f97316', borderColor: '#f97316', fontWeight: 600 }}
+                    >
+                      Apply
+                    </Button>
+                  </Space.Compact>
+
+                  {/* Available Quick Coupon Chips */}
+                  {coupons.slice(0, 2).map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => handleApplyCode(c.code)}
+                      style={{
+                        marginTop: 10,
+                        padding: '6px 10px',
+                        background: '#fffbeb',
+                        border: '1px solid #fef3c7',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Tag color="orange" style={{ fontWeight: 700, margin: 0, fontSize: 11 }}>
+                          {c.code}
+                        </Tag>
+                        <span style={{ fontSize: 12, color: '#92400e' }}>{c.description}</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#d97706' }}>TAP TO APPLY</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div
               style={{
                 background: '#fff',
@@ -314,7 +476,7 @@ export function CartPage() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#4b5563' }}>Coupon Savings</span>
+                  <span style={{ color: '#4b5563' }}>Coupon Savings {appliedCoupon ? `(${appliedCoupon.code})` : ''}</span>
                   <span style={{ color: '#059669', fontWeight: 600 }}>-{formatInr(couponDiscount)}</span>
                 </div>
 
@@ -414,6 +576,79 @@ export function CartPage() {
           Place Order
         </Button>
       </div>
+
+      {/* Available Coupons Modal */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TagsOutlined style={{ color: '#f97316' }} />
+            <span>Available Coupons &amp; Offers</span>
+          </div>
+        }
+        open={couponModalOpen}
+        onCancel={() => setCouponModalOpen(false)}
+        footer={null}
+        width={500}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+          {coupons.map((c) => {
+            const isApplied = appliedCoupon?.id === c.id;
+            const qualifies = subtotal >= c.minOrderValue;
+            const saving = couponsApi.calculateDiscount(c, subtotal);
+
+            return (
+              <div
+                key={c.id}
+                style={{
+                  border: isApplied ? '2px solid #22c55e' : '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  background: isApplied ? '#f0fdf4' : '#fff',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Tag color="orange" style={{ fontWeight: 700, fontSize: 13, letterSpacing: 0.5 }}>
+                      {c.code}
+                    </Tag>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: '#1f2937' }}>{c.title}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>{c.description}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                    Min order: {formatInr(c.minOrderValue)}
+                    {c.discountType === 'PERCENTAGE' && c.maxDiscount ? ` • Max discount: ${formatInr(c.maxDiscount)}` : ''}
+                  </div>
+                </div>
+
+                <div>
+                  {isApplied ? (
+                    <Button type="text" danger size="small" onClick={handleRemoveCoupon} style={{ fontWeight: 700 }}>
+                      Remove
+                    </Button>
+                  ) : (
+                    <Button
+                      type="primary"
+                      size="small"
+                      disabled={!qualifies}
+                      style={{
+                        background: qualifies ? '#059669' : undefined,
+                        borderColor: qualifies ? '#059669' : undefined,
+                        fontWeight: 600,
+                      }}
+                      onClick={() => handleApplyCode(c.code)}
+                    >
+                      {qualifies ? `Apply (-${formatInr(saving)})` : 'Under Min Cart'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Modal>
     </div>
   );
 }

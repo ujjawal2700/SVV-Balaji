@@ -207,15 +207,15 @@ model User {
 
   // Phase 0 / 2FA & Security
   isTwoFactorEnabled     Boolean  @default(false)
-  twoFactorSecret        String?  // AES-256-GCM encrypted
-  twoFactorTempSecret    String?  // AES-256-GCM encrypted (during setup)
+  twoFactorSecret        String? // AES-256-GCM encrypted
+  twoFactorTempSecret    String? // AES-256-GCM encrypted (during setup)
   twoFactorRecoveryCodes String[] @default([]) // Array of bcrypt-hashed recovery codes
 
   // Phase 1 back-relations
-  farmerVerificationLogs FarmerVerificationLog[]
-  seedDistributionsGiven SeedDistribution[]
+  farmerVerificationLogs    FarmerVerificationLog[]
+  seedDistributionsGiven    SeedDistribution[]
   trainingSessionsConducted TrainingSession[]
-  fieldVisitsAsExpert FieldVisit[]
+  fieldVisitsAsExpert       FieldVisit[]
 
   // Phase 2 back-relations
   procurementPlansCreated ProcurementPlan[]       @relation("ProcurementPlansCreated")
@@ -223,33 +223,38 @@ model User {
   rawMaterialCollections  RawMaterialCollection[] @relation("RawMaterialCollections")
   stockMovements          StockMovement[]         @relation("StockMovements")
 
-  farmPlotsCreated        FarmPlot[]              @relation("FarmPlotsCreated")
-  farmersCreated          Farmer[]                @relation("FarmersCreated")
+  farmPlotsCreated FarmPlot[] @relation("FarmPlotsCreated")
+  farmersCreated   Farmer[]   @relation("FarmersCreated")
 
   // Phase 3 back-relations
   /// FRD 6.2 - the branch this user is the assigned manager of, if any.
   /// Distinct from `branch` above, which is where they work.
-  managedBranch           Branch?                 @relation("BranchManager")
+  managedBranch Branch? @relation("BranchManager")
 
-  cleaningGradingRecords  CleaningGradingRecord[] @relation("CleaningGradingOperator")
-  cleaningGradingVerified CleaningGradingRecord[] @relation("CleaningGradingVerifier")
-  recipesCreated          Recipe[]                @relation("RecipesCreated")
-  recipesApproved         Recipe[]                @relation("RecipesApproved")
-  productionBatchesCreated ProductionBatch[]      @relation("ProductionBatchesCreated")
-  qualityInspections      QualityInspection[]     @relation("QualityInspections")
-  finishedGoodsPacked     FinishedGoodsBatch[]    @relation("FinishedGoodsPacked")
+  cleaningGradingRecords   CleaningGradingRecord[] @relation("CleaningGradingOperator")
+  cleaningGradingVerified  CleaningGradingRecord[] @relation("CleaningGradingVerifier")
+  recipesCreated           Recipe[]                @relation("RecipesCreated")
+  recipesApproved          Recipe[]                @relation("RecipesApproved")
+  productionBatchesCreated ProductionBatch[]       @relation("ProductionBatchesCreated")
+  qualityInspections       QualityInspection[]     @relation("QualityInspections")
+  finishedGoodsPacked      FinishedGoodsBatch[]    @relation("FinishedGoodsPacked")
 
   // Phase 4 back-relations
-  customersAssigned  Customer[]        @relation("CustomerAssignedTo")
-  priceListsCreated  PriceList[]       @relation("PriceListsCreated")
-  ordersPlaced       Order[]           @relation("OrdersPlaced")
-  orderAllocations   OrderAllocation[] @relation("OrderAllocations")
+  customersAssigned Customer[]        @relation("CustomerAssignedTo")
+  priceListsCreated PriceList[]       @relation("PriceListsCreated")
+  ordersPlaced      Order[]           @relation("OrdersPlaced")
+  orderAllocations  OrderAllocation[] @relation("OrderAllocations")
 
   // Supplier back-relations
   suppliersCreated          Supplier[]                @relation("SuppliersCreated")
   supplierVerificationLogs  SupplierVerificationLog[]
   supplierTransportsCreated SupplierTransport[]       @relation("TransportsCreated")
   purchaseOrdersCreated     PurchaseOrder[]           @relation("PurchaseOrdersCreated")
+
+  // Storefront back-relations
+  customerAccountsReviewed CustomerAccount[] @relation("CustomerAccountsReviewed")
+  referralSettingsUpdated  ReferralSettings[]
+  coinTransactionsPerformed CoinTransaction[] @relation("CoinTransactionsPerformed")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -264,13 +269,13 @@ model User {
 // ---------------------------------------------------------------------------
 
 model Branch {
-  id          String  @id @default(uuid())
-  name        String
-  location    String
-  address     String
-  contactName String?
+  id           String  @id @default(uuid())
+  name         String
+  location     String
+  address      String
+  contactName  String?
   contactPhone String?
-  isActive    Boolean @default(true)
+  isActive     Boolean @default(true)
 
   /// FRD 6.2 - the Branch Manager assigned to run this branch.
   ///
@@ -285,9 +290,9 @@ model Branch {
   managerId String? @unique
   manager   User?   @relation("BranchManager", fields: [managerId], references: [id])
 
-  users      User[]
-  farmers    Farmer[]
-  warehouses Warehouse[]
+  users            User[]
+  farmers          Farmer[]
+  warehouses       Warehouse[]
   trainingSessions TrainingSession[]
   fieldVisits      FieldVisit[]
 
@@ -316,10 +321,10 @@ model Branch {
 // ---------------------------------------------------------------------------
 
 model Farmer {
-  id          String       @id @default(uuid())
-  farmerCode  String?      @unique // e.g. SVV-2026-000123 - assigned on approval, the traceability anchor
-  fullName    String
-  mobile      String
+  id            String  @id @default(uuid())
+  farmerCode    String? @unique // e.g. SVV-2026-000123 - assigned on approval, the traceability anchor
+  fullName      String
+  mobile        String
   aadhaarNumber String?
   panNumber     String?
 
@@ -338,10 +343,10 @@ model Farmer {
   address     String?
   gpsLocation String?
 
-  farmSizeAcres   Decimal? @db.Decimal(10, 2)
-  landType        String?
-  irrigationType  String?
-  cropDetails     String?
+  farmSizeAcres  Decimal? @db.Decimal(10, 2)
+  landType       String?
+  irrigationType String?
+  cropDetails    String?
 
   bankAccountName String?
   bankName        String?
@@ -366,8 +371,8 @@ model Farmer {
   qualityRating Decimal? @db.Decimal(5, 2)
 
   /// FRD 7.6 components, each 0-100 and each NULL when it has no input.
-  cropQualityScore       Decimal? @db.Decimal(5, 2)
-  deliveryTimelinessScore Decimal? @db.Decimal(5, 2)
+  cropQualityScore         Decimal? @db.Decimal(5, 2)
+  deliveryTimelinessScore  Decimal? @db.Decimal(5, 2)
   procurementQuantityScore Decimal? @db.Decimal(5, 2)
 
   /// When the scores above were last recomputed. Stale values are a bug, so
@@ -380,12 +385,12 @@ model Farmer {
   createdById String?
   createdBy   User?   @relation("FarmersCreated", fields: [createdById], references: [id])
 
-  verificationLogs   FarmerVerificationLog[]
-  agreements         Agreement[]
-  seedDistributions  SeedDistribution[]
+  verificationLogs    FarmerVerificationLog[]
+  agreements          Agreement[]
+  seedDistributions   SeedDistribution[]
   trainingAttendances TrainingAttendance[]
-  fieldVisits        FieldVisit[]
-  plots              FarmPlot[]
+  fieldVisits         FieldVisit[]
+  plots               FarmPlot[]
 
   // Phase 2 - the traceability chain from this farmer forward
   harvestInspections     HarvestInspection[]
@@ -447,8 +452,8 @@ model Agreement {
 
   cropName         String
   variety          String?
-  expectedQuantity Decimal @db.Decimal(12, 2)
-  purchaseRate     Decimal @db.Decimal(12, 2)
+  expectedQuantity Decimal   @db.Decimal(12, 2)
+  purchaseRate     Decimal   @db.Decimal(12, 2)
   agreementDate    DateTime
   harvestDate      DateTime?
   qualityStandards String?
@@ -937,17 +942,23 @@ model CleaningGradingRecord {
   /// Weight lost to cleaning - matters for yield reconciliation.
   wastageQuantity Decimal? @db.Decimal(12, 2)
 
+  /// FRD loss/yield tracking - material removed during cleaning that still has
+  /// resale value (bran, choker, husk), distinct from pure wastage above.
+  /// `wastageQuantity` stays pure loss; this is loss that has value.
+  byProductQuantity Decimal? @db.Decimal(12, 2)
+  byProductName     String?
+
   /// FRD 18.3 - QA sign-off before the batch is production-ready.
   /// FRD 18.3. Set only through `PATCH /cleaning-grading/:id/verify`, which
   /// requires `quality.create` - never by the operator submitting the record.
   /// Production refuses a batch whose cleaning record is not verified.
-  qaVerified Boolean @default(false)
+  qaVerified     Boolean   @default(false)
   /// Who verified, and when. A sign-off nobody is named against is not a sign-off.
   qaVerifiedById String?
-  qaVerifiedBy   User?   @relation("CleaningGradingVerifier", fields: [qaVerifiedById], references: [id])
+  qaVerifiedBy   User?     @relation("CleaningGradingVerifier", fields: [qaVerifiedById], references: [id])
   qaVerifiedAt   DateTime?
 
-  remarks    String?
+  remarks String?
 
   operatorId String
   operator   User   @relation("CleaningGradingOperator", fields: [operatorId], references: [id])
@@ -996,10 +1007,10 @@ model Recipe {
   createdBy   User   @relation("RecipesCreated", fields: [createdById], references: [id])
 
   approvedById String?
-  approvedBy   User?   @relation("RecipesApproved", fields: [approvedById], references: [id])
+  approvedBy   User?     @relation("RecipesApproved", fields: [approvedById], references: [id])
   approvedAt   DateTime?
 
-  ingredients      RecipeIngredient[]
+  ingredients       RecipeIngredient[]
   productionBatches ProductionBatch[]
 
   createdAt DateTime @default(now())
@@ -1023,8 +1034,8 @@ model RecipeIngredient {
   /// Matches RawMaterialBatch.cropName - what to pull from stock.
   cropName String
 
-  quantity   Decimal @db.Decimal(12, 3)
-  unit       String  @default("KG")
+  quantity   Decimal  @db.Decimal(12, 3)
+  unit       String   @default("KG")
   /// Share of the finished blend, 0-100.
   percentage Decimal? @db.Decimal(5, 2)
 
@@ -1060,6 +1071,13 @@ model ProductionBatch {
   productionLoss  Decimal? @db.Decimal(12, 2)
   unit            String   @default("KG")
 
+  /// Loss/yield tracking - material recovered during production with resale
+  /// value (e.g. oil cake, screenings), distinct from pure process loss above.
+  byProductQuantity Decimal? @db.Decimal(12, 2)
+  byProductName     String?
+  /// Revenue if/when the by-product is sold. A recorded figure, not a sales workflow.
+  byProductRevenue  Decimal? @db.Decimal(12, 2)
+
   productionDate DateTime
   status         ProductionStatus @default(PLANNED)
 
@@ -1087,8 +1105,8 @@ model ProductionBatch {
   createdById String
   createdBy   User   @relation("ProductionBatchesCreated", fields: [createdById], references: [id])
 
-  consumptions        ProductionConsumption[]
-  qualityInspections  QualityInspection[]
+  consumptions         ProductionConsumption[]
+  qualityInspections   QualityInspection[]
   finishedGoodsBatches FinishedGoodsBatch[]
 
   createdAt DateTime @default(now())
@@ -1141,12 +1159,12 @@ model QualityInspection {
   finishedGoodsBatch   FinishedGoodsBatch? @relation(fields: [finishedGoodsBatchId], references: [id])
 
   // FRD 21.1 raw material parameters
-  moisture     Decimal? @db.Decimal(5, 2)
-  purity       Decimal? @db.Decimal(5, 2)
-  grainSize    String?
-  color        String?
+  moisture      Decimal? @db.Decimal(5, 2)
+  purity        Decimal? @db.Decimal(5, 2)
+  grainSize     String?
+  color         String?
   foreignMatter Decimal? @db.Decimal(5, 2)
-  odor         String?
+  odor          String?
 
   // FRD 21.2 in-process parameters
   ingredientRatio    String?
@@ -1192,14 +1210,14 @@ model FinishedGoodsBatch {
   product   Product @relation(fields: [productId], references: [id])
 
   // FRD 22.2 label information
-  packagingType String // pouch | box | bottle | jar | sack
-  netWeight     Decimal  @db.Decimal(12, 3)
-  weightUnit    String   @default("KG")
-  mrp           Decimal? @db.Decimal(12, 2)
-  packagingDate DateTime
+  packagingType     String // pouch | box | bottle | jar | sack
+  netWeight         Decimal   @db.Decimal(12, 3)
+  weightUnit        String    @default("KG")
+  mrp               Decimal?  @db.Decimal(12, 2)
+  packagingDate     DateTime
   manufacturingDate DateTime
-  expiryDate    DateTime?
-  shelfLifeDays Int?
+  expiryDate        DateTime?
+  shelfLifeDays     Int?
 
   /// Number of packs produced at this net weight.
   packCount Int
@@ -1272,9 +1290,40 @@ model Product {
   id       String  @id @default(uuid())
   name     String
   sku      String  @unique
-  category String?
   unit     String // e.g. KG, LITRE, PACK
   isActive Boolean @default(true)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  // --- Storefront catalogue metadata -----------------------------------
+  // Nothing above this line was written with a shopper in mind - `name` is an
+  // operations label, not marketing copy. These fields are additive and
+  // optional so every screen and API caller that already reads Product is
+  // unaffected; they matter only once `showOnStorefront` is turned on.
+  description      String?
+  images           String[] @default([])
+  /// Off by default: an internal SKU does not appear to a shopper until staff
+  /// deliberately publish it, same reasoning as isActive gating pickers.
+  showOnStorefront Boolean  @default(false)
+
+  /// URL-safe, unique when set. Null is fine - a product not yet published
+  /// does not need one, and requiring it up front would block creating a
+  /// product before its storefront copy is ready.
+  slug            String? @unique
+  metaTitle       String?
+  metaDescription String?
+
+  /// Inventory thresholds, product-level rather than per-warehouse for now -
+  /// the catalogue asks "should this be flagged low" as one number, not one
+  /// per location. Per-warehouse thresholds are a real future need (a branch
+  /// with its own reorder cadence) but nothing today asks for it, so it is
+  /// not built. Sellable quantity itself stays computed from
+  /// FinishedGoodsStock, never duplicated here - these are only the trip
+  /// wires against that live number.
+  reorderPoint   Int?    @default(0)
+  safetyStock    Int?    @default(0)
+  allowBackorder Boolean @default(false)
 
   recipes              Recipe[]
   productionBatches    ProductionBatch[]
@@ -1287,7 +1336,37 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([categoryId])
   @@map("products")
+}
+
+/// Customer-facing taxonomy (added 16 Sep for the storefront catalogue).
+/// Deliberately separate from the operational `category` string Product used
+/// to carry - that was free text with no uniqueness, no hierarchy and no way
+/// to render a collection page. A self-relation gives two levels of nesting
+/// (e.g. "Flours" -> "Multigrain Flours") without a fixed depth limit; the
+/// service refuses a category becoming its own ancestor.
+model Category {
+  id           String  @id @default(uuid())
+  name         String
+  /// URL-safe, unique - what a storefront collection page resolves on.
+  slug         String  @unique
+  description  String?
+  imageUrl     String?
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
+
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@map("categories")
 }
 
 // ---------------------------------------------------------------------------
@@ -1295,7 +1374,7 @@ model Product {
 // ---------------------------------------------------------------------------
 
 model Warehouse {
-  id       String  @id @default(uuid())
+  id       String   @id @default(uuid())
   name     String
   location String
   capacity Decimal? @db.Decimal(12, 2)
@@ -1305,10 +1384,10 @@ model Warehouse {
   branch   Branch @relation(fields: [branchId], references: [id])
 
   // Phase 2
-  batches            RawMaterialBatch[]
-  stock              WarehouseStock[]
-  movementsOutgoing  StockMovement[]    @relation("StockMovementFrom")
-  movementsIncoming  StockMovement[]    @relation("StockMovementTo")
+  batches           RawMaterialBatch[]
+  stock             WarehouseStock[]
+  movementsOutgoing StockMovement[]    @relation("StockMovementFrom")
+  movementsIncoming StockMovement[]    @relation("StockMovementTo")
 
   // Phase 3
   finishedGoodsStock FinishedGoodsStock[]
@@ -1328,7 +1407,6 @@ model Warehouse {
 
   @@map("warehouses")
 }
-
 
 // ===========================================================================
 // PHASE 4 - SALES, ORDER FULFILMENT & DELIVERY (FRD Sections 24-28)
@@ -1424,6 +1502,28 @@ model Customer {
 
   orders Order[]
 
+  /// The storefront login attached to this record, if they shop online.
+  /// Staff-created customers who only ever order by phone have none.
+  account CustomerAccount?
+
+  /// Auto-generated on creation (every channel, every creation path - staff
+  /// form and self-registration alike), unique, human-shareable
+  /// (e.g. "RAUNAK4821"). This is the code printed into their referral link;
+  /// see Referral below for the relationship it is used to create.
+  referralCode String @unique
+
+  /// The relationship that brought this customer in, if any - null for
+  /// everyone who signed up without a code or was created by staff.
+  referredAs Referral? @relation("ReferralReferee")
+
+  /// Everyone this customer has successfully referred.
+  referralsGiven Referral[] @relation("ReferralReferrer")
+
+  /// Denormalised running total - see CoinTransaction for the ledger that is
+  /// the actual source of truth.
+  coinBalance      Int               @default(0)
+  coinTransactions CoinTransaction[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1431,6 +1531,135 @@ model Customer {
   @@index([status])
   @@index([branchId])
   @@map("customers")
+}
+
+/// One row per successful referral. Deliberately not just a `referredById`
+/// field on Customer: a dedicated row gives an audit trail (the code as it was
+/// entered, when) that survives the referrer later regenerating their own
+/// code, and `refereeId` being unique is what makes "this customer already has
+/// a referral relationship" a database guarantee rather than an application
+/// check that something could race.
+///
+/// Created exactly once, at the moment the referee's Customer row is created
+/// (B2C: first OTP verify; B2B: staff approval) - never on code entry or link
+/// open, which is not a successful referral yet. See
+/// storefront-auth.service.ts's `resolveReferral`.
+model Referral {
+  id String @id @default(uuid())
+
+  referrerId String
+  referrer   Customer @relation("ReferralReferrer", fields: [referrerId], references: [id])
+
+  refereeId String   @unique
+  referee   Customer @relation("ReferralReferee", fields: [refereeId], references: [id])
+
+  /// The code as entered at signup, kept even if the referrer's own code is
+  /// later regenerated - the audit trail should not silently change under it.
+  code String
+
+  /// Set once the configured reward trigger has fired and coins have been
+  /// credited to both sides - null means "not yet rewarded", not "never will
+  /// be". Checked before crediting so a relationship is never paid out twice,
+  /// including across an admin changing the trigger after some referrals
+  /// already earned their reward under the old one.
+  rewardedAt DateTime?
+
+  coinTransactions CoinTransaction[]
+
+  createdAt DateTime @default(now())
+
+  @@index([referrerId])
+  @@map("referrals")
+}
+
+enum ReferralRewardTrigger {
+  REGISTRATION
+  ACCOUNT_VERIFICATION
+  FIRST_ORDER
+  FIRST_DELIVERY
+}
+
+enum CoinTransactionReason {
+  REFERRAL_REFERRER_REWARD
+  REFERRAL_REFEREE_REWARD
+  /// A Super Admin correction - refund, reversal, or any other manual fix.
+  /// `amount` carries the sign (negative claws back); `note` is required at
+  /// the API layer for this reason, because unlike the two above there is no
+  /// automatic event to point back to.
+  MANUAL_ADJUSTMENT
+}
+
+/// Staff-configured, single row (see ReferralService.getSettings, which
+/// lazily creates it - there is no seed script for a fresh database).
+/// Read live at every candidate trigger event rather than frozen onto a
+/// Referral at creation, so changing the trigger applies to relationships
+/// already in flight, not only ones created after the change.
+model ReferralSettings {
+  id String @id @default(uuid())
+
+  referrerRewardCoins Int @default(100)
+  refereeRewardCoins  Int @default(50)
+  rewardTrigger       ReferralRewardTrigger @default(REGISTRATION)
+
+  /// The program-wide kill switch. While false: no new referral code may be
+  /// entered at signup, and nothing already in flight is credited, regardless
+  /// of when its Referral row was created.
+  isActive Boolean @default(true)
+
+  updatedById String?
+  updatedBy   User?   @relation(fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("referral_settings")
+}
+
+/// The coin ledger. `Customer.coinBalance` is a denormalised running total for
+/// cheap reads - never written to directly outside ReferralService.creditReward,
+/// which always writes the matching row here in the same transaction. Same
+/// invariant this project already holds for warehouse stock and StockMovement:
+/// a balance never moves without a ledger entry explaining why.
+model CoinTransaction {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  /// Positive credits, negative debits. The two referral reasons are always
+  /// positive (nothing spends coins yet); MANUAL_ADJUSTMENT is the one reason
+  /// that can go either way - a refund/bonus is positive, a clawback/reversal
+  /// is negative. `Customer.coinBalance` is always incremented by exactly
+  /// this value, so the balance is correct under either sign without a
+  /// separate debit code path.
+  amount Int
+  reason CoinTransactionReason
+
+  /// Free text. Required at the API layer for MANUAL_ADJUSTMENT (the "why" -
+  /// there is no automatic event to point back to); optional and usually
+  /// unset for the two referral reasons, which speak for themselves via
+  /// `referralId`.
+  note String?
+
+  referralId String?
+  referral   Referral? @relation(fields: [referralId], references: [id])
+
+  /// The order whose CONFIRMED/DELIVERED transition triggered this reward,
+  /// when the configured trigger is order-based. Null for REGISTRATION/
+  /// ACCOUNT_VERIFICATION rewards (no order exists yet) and for every
+  /// MANUAL_ADJUSTMENT.
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  /// Staff who made a MANUAL_ADJUSTMENT. Null for every system-generated row
+  /// (both referral reward reasons) - there is no "performer" for those,
+  /// only a trigger event.
+  performedById String?
+  performedBy   User?   @relation("CoinTransactionsPerformed", fields: [performedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("coin_transactions")
 }
 
 /// A dated price for one product in one channel.
@@ -1553,6 +1782,10 @@ model Order {
 
   items       OrderItem[]
   allocations OrderAllocation[]
+
+  /// Set on a referral reward's ledger rows when a FIRST_ORDER/FIRST_DELIVERY
+  /// trigger paid out because of this specific order - see CoinTransaction.
+  coinTransactions CoinTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1692,8 +1925,8 @@ model RolePermission {
 model RolePermissionState {
   role UserRole @id
 
-  seededAt  DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  seededAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   updatedById String?
 
   @@map("role_permission_state")
@@ -1735,8 +1968,8 @@ model FarmPlot {
   /// What is growing on it now. Free text, because the crop list is not a
   /// master in this system and inventing one here would fork it from the
   /// crop names used on agreements and collections.
-  currentCrop    String?
-  sowingDate     DateTime?
+  currentCrop     String?
+  sowingDate      DateTime?
   expectedHarvest DateTime?
 
   /// "lat,lng" captured on the plot, same format as Farmer.gpsLocation. Held
@@ -1781,8 +2014,8 @@ model Supplier {
   id           String  @id @default(uuid())
   supplierCode String? @unique // SUP-YYYY-NNNNNN - assigned on approval
 
-  fullName    String
-  mobile      String
+  fullName      String
+  mobile        String
   aadhaarNumber String?
   panNumber     String?
 
@@ -1808,9 +2041,9 @@ model Supplier {
   createdById String?
   createdBy   User?   @relation("SuppliersCreated", fields: [createdById], references: [id])
 
-  verificationLogs SupplierVerificationLog[]
-  transports       SupplierTransport[]
-  purchaseOrders   PurchaseOrder[]
+  verificationLogs   SupplierVerificationLog[]
+  transports         SupplierTransport[]
+  purchaseOrders     PurchaseOrder[]
   rawMaterialBatches RawMaterialBatch[]
 
   createdAt DateTime @default(now())
@@ -1836,7 +2069,7 @@ model SupplierCodeCounter {
 // ---------------------------------------------------------------------------
 
 model SupplierVerificationLog {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id])
 
@@ -1871,10 +2104,10 @@ model PurchaseOrder {
   supplier   Supplier @relation(fields: [supplierId], references: [id])
 
   materialName     String
-  expectedQuantity Decimal  @db.Decimal(12, 2)
-  unit             String   @default("KG")
-  purchaseRate     Decimal  @db.Decimal(12, 2)
-  totalAmount      Decimal  @db.Decimal(14, 2)
+  expectedQuantity Decimal @db.Decimal(12, 2)
+  unit             String  @default("KG")
+  purchaseRate     Decimal @db.Decimal(12, 2)
+  totalAmount      Decimal @db.Decimal(14, 2)
 
   orderDate    DateTime
   deliveryDate DateTime?
@@ -1956,4 +2189,210 @@ model SupplierTransport {
   @@index([status])
   @@index([warehouseId])
   @@map("supplier_transports")
+}
+
+// ===========================================================================
+// STOREFRONT IDENTITY (FRD Sections 29-31)
+//
+// Everything above this line is operated by staff: a User signs in and acts on
+// records. The storefront is the first surface where somebody outside the
+// company authenticates, and that difference is why identity is modelled here
+// rather than by adding a CUSTOMER value to UserRole.
+//
+// Three things are deliberate:
+//
+//   1. CustomerAccount is the *login*; Customer is the *commercial record*.
+//      They are separate because a B2B retailer signs up before anyone has
+//      agreed to trade with them - they need somewhere to exist while pending
+//      approval, without occupying a customerCode or appearing in the customer
+//      master as though they were a live account. B2C consumers get both at
+//      once, since there is nothing to approve.
+//   2. Phone is unique here but NOT on Customer. A distributor and its depot
+//      legitimately share a phone number in the customer master; a login
+//      cannot.
+//   3. Customer tokens are signed with their own secret (see
+//      CUSTOMER_JWT_ACCESS_SECRET). JwtStrategy.validate() trusts any payload
+//      carrying a valid signature without re-reading the user, so sharing the
+//      staff secret would make a storefront token a staff token.
+// ===========================================================================
+
+enum CustomerAccountStatus {
+  /// Signed up, phone not yet proven.
+  PENDING_VERIFICATION
+  /// B2B only: phone proven, waiting on staff to approve the business.
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum CustomerOtpPurpose {
+  LOGIN
+  REGISTRATION
+}
+
+model CustomerAccount {
+  id String @id @default(uuid())
+
+  /// 10-digit Indian mobile number, normalised (country code and punctuation
+  /// stripped) before storage so that +91 98765 43210 and 9876543210 are the
+  /// same account rather than two.
+  phone String  @unique
+  email String?
+
+  fullName String
+
+  /// Which storefront they signed up through. B2C self-serves; B2B is the
+  /// retailer registration flow and requires approval.
+  channel SalesChannel
+  status  CustomerAccountStatus @default(PENDING_VERIFICATION)
+
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  /// Rotated on every refresh, same contract as User.refreshTokenHash - one
+  /// live session per account.
+  refreshTokenHash String?
+
+  /// The commercial record orders actually hang off. Null until the account is
+  /// approved (B2B) or first verified (B2C).
+  customerId String?   @unique
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  // --- B2B registration details, captured at signup, before a Customer exists
+  businessName String?
+  gstin        String?
+  pan          String?
+  addressLine  String?
+  city         String?
+  district     String?
+  state        String?
+  pincode      String?
+
+  /// A referral code entered at signup, held here until there is a Customer
+  /// row to attach it to. B2C resolves it immediately (the Customer is
+  /// created in the same call); B2B carries it until staff approve the
+  /// registration, which is when its Customer row - and the Referral - is
+  /// created. Re-validated at approval time (referrer must still exist and be
+  /// active); if it no longer resolves, the referral is silently skipped
+  /// rather than blocking the approval - it is a bonus relationship, not a
+  /// gate on the retailer's own account.
+  referralCode String?
+
+  reviewedById    String?
+  reviewedBy      User?     @relation("CustomerAccountsReviewed", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  otpChallenges CustomerOtpChallenge[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([channel])
+  @@map("customer_accounts")
+}
+
+/// A single OTP challenge. The code is stored hashed and is never readable
+/// back out of the database - the same reason a password is not.
+///
+/// Rows are kept after use rather than deleted: consumedAt and attempts are
+/// the only record of how a session was obtained, and a burst of failures
+/// against one number is what abuse looks like.
+model CustomerOtpChallenge {
+  id String @id @default(uuid())
+
+  phone    String
+  codeHash String
+  purpose  CustomerOtpPurpose @default(LOGIN)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+
+  accountId String?
+  account   CustomerAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([accountId])
+  @@map("customer_otp_challenges")
+}
+
+// ---------------------------------------------------------------------------
+// Storefront banners - Super Admin controlled hero/promo slots, resolved live
+// by the customer app. See BannersService in the backend for the exact rules.
+// ---------------------------------------------------------------------------
+
+enum BannerPlacement {
+  HOMEPAGE
+  CATEGORIES_PAGE
+  PRODUCTS_PAGE
+}
+
+enum BannerAudience {
+  ALL
+  B2C
+  B2B
+}
+
+/// One promotional slide. `placement` decides which storefront screen shows
+/// it, `targetAudience` narrows it to a channel, `displayOrder` decides slide
+/// order within a placement, and `isActive` is the publish switch - the same
+/// hide-don't-delete pattern as Category/Product.
+model Banner {
+  id String @id @default(uuid())
+
+  title            String
+  badgeText        String?
+  description      String
+  imageUrl         String
+  ctaTextPrimary   String
+  ctaLinkPrimary   String
+  ctaTextSecondary String?
+  ctaLinkSecondary String?
+  backgroundColor  String          @default("#064e3b")
+  textColor        String          @default("#ffffff")
+  targetAudience   BannerAudience  @default(ALL)
+  placement        BannerPlacement @default(HOMEPAGE)
+  displayOrder     Int             @default(0)
+  isActive         Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([placement, isActive, displayOrder])
+  @@map("banners")
+}
+
+/// A "Today's Schemes & Offers" tile on the customer homepage. `displayOrder`
+/// is the row/position Super Admin picks; `isActive` is the same
+/// hide-don't-delete publish switch as Banner - deactivating (or deleting)
+/// every scheme is how the whole homepage section is hidden, since the
+/// storefront renders nothing when the published list is empty.
+model Scheme {
+  id String @id @default(uuid())
+
+  tag              String
+  title            String
+  subtitle         String
+  ctaText          String
+  ctaLink          String         @default("/products/atta-flour")
+  backgroundColor  String         @default("#fce3cd")
+  textColor        String         @default("#452b0d")
+  badgeColor       String         @default("#965a0b")
+  badgeTextColor   String         @default("#ffffff")
+  buttonColor      String         @default("#8a4b08")
+  buttonTextColor  String         @default("#ffffff")
+  targetAudience   BannerAudience @default(ALL)
+  displayOrder     Int            @default(0)
+  isActive         Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+  @@map("schemes")
 }

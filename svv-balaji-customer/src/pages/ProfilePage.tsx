@@ -3,6 +3,7 @@ import {
   CreditCardOutlined,
   DeleteOutlined,
   FileProtectOutlined,
+  GiftOutlined,
   HeartOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
@@ -75,6 +76,20 @@ export function ProfilePage() {
   const isRetailer = role === 'RETAILER';
   const isGuest = role === 'GUEST';
 
+  const referralCode = (isRetailer ? retailerProfile?.referralCode : customerProfile?.referralCode) ?? null;
+
+  const handleShareReferral = () => {
+    if (!referralCode) {
+      message.info('Your referral code is still being set up — check back in a moment.');
+      return;
+    }
+    const link = `${window.location.origin}/${isRetailer ? 'retailers/register' : 'login'}?ref=${referralCode}`;
+    void navigator.clipboard
+      ?.writeText(link)
+      .then(() => message.success(`Referral link copied — your code is ${referralCode}`))
+      .catch(() => message.success(`Your referral code is ${referralCode}`));
+  };
+
   // Customer consumer menu items
   const customerSections = [
     {
@@ -125,6 +140,15 @@ export function ProfilePage() {
           label: 'My Wishlist & Saved',
           subtitle: 'Saved items for quick purchase',
           route: '/wishlist',
+        },
+        {
+          key: 'refer',
+          icon: <GiftOutlined />,
+          iconBg: '#fdf4ff',
+          iconColor: '#a21caf',
+          label: 'Refer & Earn',
+          subtitle: referralCode ? `Your code: ${referralCode}` : 'Share your code with friends',
+          action: handleShareReferral,
         },
       ],
     },
@@ -217,6 +241,15 @@ export function ProfilePage() {
           label: 'Frequent Orders Reorder',
           subtitle: 'Quick 1-tap stock replenishment',
           route: '/orders',
+        },
+        {
+          key: 'refer',
+          icon: <GiftOutlined />,
+          iconBg: '#fdf4ff',
+          iconColor: '#a21caf',
+          label: 'Refer a Store Partner',
+          subtitle: referralCode ? `Your code: ${referralCode}` : 'Share your code with other retailers',
+          action: handleShareReferral,
         },
       ],
     },

@@ -4,8 +4,10 @@ import {
   App as AntApp,
   Button,
   Card,
+  Divider,
   Form,
   Input,
+  InputNumber,
   Modal,
   Space,
   Switch,
@@ -21,6 +23,7 @@ import { Can } from '../../components/Can';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
 import { RowActions } from '../../components/RowActions';
+import { CategorySelect } from '../../components/pickers';
 import {
   useCreateProduct,
   useDeleteProduct,
@@ -30,6 +33,7 @@ import {
 } from '../../hooks/useProduction';
 import { EM_DASH } from '../../utils/format';
 import { maxLength, required } from '../../validation/rules';
+import { ProductImagesField } from './ProductImagesField';
 
 const UNITS = ['KG', 'GRAM', 'LITRE', 'ML', 'PACK', 'PIECE'];
 
@@ -57,7 +61,16 @@ function ProductFormModal({
         name: product.name,
         sku: product.sku,
         unit: product.unit,
-        category: product.category ?? undefined,
+        categoryId: product.categoryId ?? undefined,
+        description: product.description ?? undefined,
+        images: product.images,
+        showOnStorefront: product.showOnStorefront,
+        slug: product.slug ?? undefined,
+        metaTitle: product.metaTitle ?? undefined,
+        metaDescription: product.metaDescription ?? undefined,
+        reorderPoint: product.reorderPoint ?? 0,
+        safetyStock: product.safetyStock ?? 0,
+        allowBackorder: product.allowBackorder,
       });
     } else {
       form.resetFields();
@@ -76,7 +89,11 @@ function ProductFormModal({
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
-    const payload = { ...values, sku: values.sku.toUpperCase() };
+    const payload = {
+      ...values,
+      sku: values.sku.toUpperCase(),
+      images: (values.images ?? []).filter(Boolean),
+    };
     try {
       if (product) {
         const updated = await updateProduct.mutateAsync({ id: product.id, input: payload });
@@ -102,9 +119,16 @@ function ProductFormModal({
       onOk={handleSubmit}
       onCancel={onClose}
       confirmLoading={createProduct.isPending || updateProduct.isPending}
+      width={640}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" requiredMark preserve={false} initialValues={{ unit: 'KG' }}>
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark
+        preserve={false}
+        initialValues={{ unit: 'KG', reorderPoint: 0, safetyStock: 0, allowBackorder: false }}
+      >
         <Form.Item name="name" label="Product name" rules={[required('Name'), maxLength(120)]}>
           <Input placeholder="Multigrain Atta" onChange={handleNameChange} />
         </Form.Item>
@@ -132,8 +156,8 @@ function ProductFormModal({
               : 'How this product is measured in production and packaging.'
           }
         >
-          <AutoComplete 
-            options={UNITS.map((unit) => ({ value: unit, label: unit }))} 
+          <AutoComplete
+            options={UNITS.map((unit) => ({ value: unit, label: unit }))}
             placeholder="Type or select a unit"
             filterOption={(inputValue, option) =>
               option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
@@ -141,8 +165,73 @@ function ProductFormModal({
           />
         </Form.Item>
 
-        <Form.Item name="category" label="Category">
-          <Input placeholder="Optional — e.g. Flour" />
+        <Form.Item name="categoryId" label="Category">
+          <CategorySelect allowClear placeholder="Optional — organises it on the storefront" />
+        </Form.Item>
+
+        <Divider orientation="left" plain>
+          Storefront
+        </Divider>
+
+        <Form.Item
+          name="showOnStorefront"
+          label="Show on storefront"
+          valuePropName="checked"
+          extra="Off by default — an internal SKU does not appear to a shopper until this is turned on."
+        >
+          <Switch />
+        </Form.Item>
+
+        <Form.Item name="description" label="Description" extra="Shopper-facing copy, distinct from the operations name.">
+          <Input.TextArea rows={3} maxLength={2000} showCount placeholder="A wholesome blend of five grains…" />
+        </Form.Item>
+
+        <Form.Item name="images" label="Photos">
+          <ProductImagesField />
+        </Form.Item>
+
+        <Form.Item name="slug" label="URL slug" extra="Auto-derived from the name if left blank.">
+          <Input placeholder="multigrain-atta-1kg" />
+        </Form.Item>
+
+        <Form.Item name="metaTitle" label="SEO title">
+          <Input maxLength={70} showCount placeholder="Buy Multigrain Atta Online | SVV Balaji" />
+        </Form.Item>
+
+        <Form.Item name="metaDescription" label="SEO description">
+          <Input.TextArea rows={2} maxLength={160} showCount />
+        </Form.Item>
+
+        <Divider orientation="left" plain>
+          Inventory
+        </Divider>
+
+        <Space.Compact block>
+          <Form.Item
+            name="reorderPoint"
+            label="Reorder point"
+            style={{ width: '50%' }}
+            extra="Available quantity at or below this flags LOW."
+          >
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="safetyStock"
+            label="Safety stock"
+            style={{ width: '50%' }}
+            extra="At or below this flags CRITICAL."
+          >
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+        </Space.Compact>
+
+        <Form.Item
+          name="allowBackorder"
+          label="Allow backorder"
+          valuePropName="checked"
+          extra="Whether a storefront order may be placed once available stock is exhausted."
+        >
+          <Switch />
         </Form.Item>
       </Form>
     </Modal>
@@ -179,9 +268,12 @@ export function ProductsPage() {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, product) => (
-        <Typography.Text strong type={product.isActive ? undefined : 'secondary'}>
-          {name}
-        </Typography.Text>
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong type={product.isActive ? undefined : 'secondary'}>
+            {name}
+          </Typography.Text>
+          {product.showOnStorefront ? <Tag color="blue" style={{ width: 'fit-content' }}>Storefront</Tag> : null}
+        </Space>
       ),
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
@@ -193,9 +285,8 @@ export function ProductsPage() {
     },
     {
       title: 'Category',
-      dataIndex: 'category',
       key: 'category',
-      render: (value: string | null) => value ?? EM_DASH,
+      render: (_, product) => product.category?.name ?? EM_DASH,
     },
     { title: 'Unit', dataIndex: 'unit', key: 'unit', width: 90 },
     {

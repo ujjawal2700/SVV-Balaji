@@ -690,6 +690,38 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    key: 'categories',
+    label: 'Categories',
+    path: '/categories',
+    viewKey: 'categories.view',
+    permissions: [
+      {
+        key: 'categories.view',
+        label: 'View categories',
+        description: 'The customer-facing taxonomy and its picker on the product form.',
+        defaultRoles: [BM, ST, PROD],
+      },
+      {
+        key: 'categories.create',
+        label: 'Add a category',
+        description: 'Name, slug, parent and storefront image.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'categories.edit',
+        label: 'Edit, reparent or hide a category',
+        description: 'Hiding removes it from the storefront and product picker; products keep their assignment.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'categories.delete',
+        label: 'Delete a category',
+        description: 'Only while it has no child categories and no products assigned.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
     key: 'recipes',
     label: 'Recipes',
     path: '/recipes',
@@ -852,6 +884,23 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Stock in finished goods',
         description: 'Only QA-released batches can be stocked.',
         defaultRoles: [WM, PROD],
+      },
+    ],
+  },
+  {
+    key: 'yieldTracking',
+    label: 'Loss & Yield Tracking',
+    path: '/yield-tracking',
+    viewKey: 'supplyChain.yieldView',
+    permissions: [
+      {
+        key: 'supplyChain.yieldView',
+        label: 'View loss & yield tracking',
+        description:
+          'Read-only stage-wise loss/yield across cleaning, production and finished goods, plus ' +
+          'the farmer/supplier and machine health signals derived from it. Super Admin and ' +
+          'Branch Manager oversight by default.',
+        defaultRoles: [BM, PROD, QA],
       },
     ],
   },
@@ -1104,6 +1153,146 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
           'anything else in this list, so it is Super Admin only and the server will not let ' +
           'it be granted to another role.',
         defaultRoles: [],
+      },
+    ],
+  },
+
+  // --- Storefront -------------------------------------------------------------
+  {
+    key: 'customerAccounts',
+    label: 'Storefront Accounts',
+    path: '/customer-accounts',
+    viewKey: 'customerAccounts.view',
+    permissions: [
+      {
+        key: 'customerAccounts.view',
+        label: 'View storefront signups',
+        description:
+          'B2C logins and B2B retailer registrations, including the pending-approval queue.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'customerAccounts.review',
+        label: 'Approve or reject a retailer signup',
+        description:
+          'Approving creates the Customer record the account then orders against - the point ' +
+          'where a self-service signup becomes a real commercial relationship, so it carries the ' +
+          'same GSTIN and credit-limit judgement as registering one by hand.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    key: 'referralSettings',
+    label: 'Referral & Reward Settings',
+    path: '/settings/referrals',
+    viewKey: 'referralSettings.view',
+    permissions: [
+      {
+        key: 'referralSettings.view',
+        label: 'View referral reward settings',
+        description: 'The coin amounts, trigger and on/off switch for the refer-a-friend program.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'referralSettings.manage',
+        label: 'Change referral reward settings',
+        description:
+          'Applies live to every referral going forward, including ones already created under a ' +
+          'different trigger and not yet rewarded.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    key: 'referrals',
+    label: 'Referral Management',
+    path: '/referrals',
+    viewKey: 'referrals.view',
+    permissions: [
+      {
+        key: 'referrals.view',
+        label: 'View referral activity and coin ledgers',
+        description:
+          'Who referred whom, whether it qualified, what each side earned, and any customer\'s ' +
+          'complete coin history including manual corrections.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'referrals.adjust',
+        label: 'Manually adjust a coin balance',
+        description:
+          'A refund, reversal or other correction to a customer\'s coin balance. Every adjustment ' +
+          'is recorded against the staff member who made it.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+
+  {
+    key: 'banners',
+    label: 'Banner Management',
+    path: '/banners',
+    viewKey: 'banners.view',
+    permissions: [
+      {
+        key: 'banners.view',
+        label: 'View storefront banners',
+        description: 'The banner CMS: homepage hero carousel, categories page and products page banners.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'banners.create',
+        label: 'Add a banner',
+        description: 'Copy, image, CTA links, placement and target channel for a new promotional slide.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'banners.edit',
+        label: 'Edit, reorder or publish/unpublish a banner',
+        description: 'Unpublishing removes it from the storefront immediately without deleting it.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'banners.delete',
+        label: 'Delete a banner',
+        description: 'Nothing else references a banner, so this is always allowed.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+
+  {
+    key: 'schemes',
+    label: 'Homepage Schemes & Offers',
+    path: '/schemes',
+    viewKey: 'schemes.view',
+    permissions: [
+      {
+        key: 'schemes.view',
+        label: 'View homepage schemes',
+        description: 'The "Today\'s Schemes & Offers" tiles shown on the customer homepage.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'schemes.create',
+        label: 'Add a scheme',
+        description: 'Copy, colors, CTA link, display order and target channel for a new scheme tile.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'schemes.edit',
+        label: 'Edit, reorder or publish/unpublish a scheme',
+        description:
+          'Unpublishing every scheme removes the whole section from the homepage immediately, ' +
+          'rather than leaving it empty.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'schemes.delete',
+        label: 'Delete a scheme',
+        description: 'Nothing else references a scheme, so this is always allowed.',
+        defaultRoles: [BM],
       },
     ],
   },

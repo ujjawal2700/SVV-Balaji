@@ -112,6 +112,18 @@ const StockMovementsPage = lazy(() =>
 const ProductsPage = lazy(() =>
   import('./pages/products/ProductsPage').then((m) => ({ default: m.ProductsPage })),
 );
+const ProductListsPage = lazy(() =>
+  import('./pages/products/ProductListsPage').then((m) => ({ default: m.ProductListsPage })),
+);
+const AddEditProductPage = lazy(() =>
+  import('./pages/products/AddEditProductPage').then((m) => ({ default: m.AddEditProductPage })),
+);
+const BannersPage = lazy(() =>
+  import('./pages/banners/BannersPage').then((m) => ({ default: m.BannersPage })),
+);
+const SchemesPage = lazy(() =>
+  import('./pages/schemes/SchemesPage').then((m) => ({ default: m.SchemesPage })),
+);
 const RecipesPage = lazy(() =>
   import('./pages/recipes/RecipesPage').then((m) => ({ default: m.RecipesPage })),
 );
@@ -125,6 +137,11 @@ const ProductionBatchesPage = lazy(() =>
     default: m.ProductionBatchesPage,
   })),
 );
+const YieldTrackingPage = lazy(() =>
+  import('./pages/production/YieldTrackingPage').then((m) => ({
+    default: m.YieldTrackingPage,
+  })),
+);
 const QualityInspectionsPage = lazy(() =>
   import('./pages/quality/QualityInspectionsPage').then((m) => ({
     default: m.QualityInspectionsPage,
@@ -132,6 +149,15 @@ const QualityInspectionsPage = lazy(() =>
 );
 const FinishedGoodsPage = lazy(() =>
   import('./pages/packaging/FinishedGoodsPage').then((m) => ({ default: m.FinishedGoodsPage })),
+);
+const MainCategoriesPage = lazy(() =>
+  import('./pages/categories/MainCategoriesPage').then((m) => ({ default: m.MainCategoriesPage })),
+);
+const SubCategoriesPage = lazy(() =>
+  import('./pages/categories/SubCategoriesPage').then((m) => ({ default: m.SubCategoriesPage })),
+);
+const InventoryPage = lazy(() =>
+  import('./pages/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })),
 );
 const CustomersPage = lazy(() =>
   import('./pages/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
@@ -142,10 +168,66 @@ const PriceListsPage = lazy(() =>
 const OrdersPage = lazy(() =>
   import('./pages/sales/OrdersPage').then((m) => ({ default: m.OrdersPage })),
 );
+const B2BOrdersPage = lazy(() =>
+  import('./pages/sales/B2BOrdersPage').then((m) => ({ default: m.B2BOrdersPage })),
+);
+const CustomerAccountsPage = lazy(() =>
+  import('./pages/customer-accounts/CustomerAccountsPage').then((m) => ({
+    default: m.CustomerAccountsPage,
+  })),
+);
+const ComplaintsPage = lazy(() =>
+  import('./pages/complaints/ComplaintsPage').then((m) => ({
+    default: m.ComplaintsPage,
+  })),
+);
+const OutletsPage = lazy(() =>
+  import('./pages/outlets/OutletsPage').then((m) => ({
+    default: m.OutletsPage,
+  })),
+);
+const PosNewSalePage = lazy(() =>
+  import('./pages/pos/PosNewSalePage').then((m) => ({
+    default: m.PosNewSalePage,
+  })),
+);
+const PosOrdersPage = lazy(() =>
+  import('./pages/pos/PosOrdersPage').then((m) => ({
+    default: m.PosOrdersPage,
+  })),
+);
+const PosReportsPage = lazy(() =>
+  import('./pages/pos/PosReportsPage').then((m) => ({
+    default: m.PosReportsPage,
+  })),
+);
+const EarningsFinancePage = lazy(() =>
+  import('./pages/finance/EarningsFinancePage').then((m) => ({
+    default: m.EarningsFinancePage,
+  })),
+);
+const FranchiseOrdersPage = lazy(() =>
+  import('./pages/franchises/FranchiseOrdersPage').then((m) => ({
+    default: m.FranchiseOrdersPage,
+  })),
+);
+const FranchiseOrderDetailPage = lazy(() =>
+  import('./pages/franchises/FranchiseOrderDetailPage').then((m) => ({
+    default: m.FranchiseOrderDetailPage,
+  })),
+);
 const RolesPermissionsPage = lazy(() =>
   import('./pages/settings/RolesPermissionsPage').then((m) => ({
     default: m.RolesPermissionsPage,
   })),
+);
+const ReferralSettingsPage = lazy(() =>
+  import('./pages/referral-settings/ReferralSettingsPage').then((m) => ({
+    default: m.ReferralSettingsPage,
+  })),
+);
+const ReferralsPage = lazy(() =>
+  import('./pages/referrals/ReferralsPage').then((m) => ({ default: m.ReferralsPage })),
 );
 const ProfilePage = lazy(() =>
   import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -197,14 +279,34 @@ const SCREENS: Record<string, ReactElement> = {
   '/production-batches': <ProductionBatchesPage />,
   '/quality-inspections': <QualityInspectionsPage />,
   '/finished-goods': <FinishedGoodsPage />,
+  '/yield-tracking': <YieldTrackingPage />,
   // Zone 4 — Sales & Distribution (FRD Sections 24-28)
-  '/customers': <CustomersPage />,
+  '/productlists': <ProductListsPage />,
+  '/banners': <BannersPage />,
+  '/schemes': <SchemesPage />,
+  '/categories': <MainCategoriesPage />,
+  '/subcategories': <SubCategoriesPage />,
+  '/inventory': <InventoryPage />,
+  '/outlets': <OutletsPage />,
+  '/pos-sale': <PosNewSalePage />,
+  '/pos-orders': <PosOrdersPage />,
+  '/pos-reports': <PosReportsPage />,
+  '/b2c-customers': <CustomersPage />,
   '/price-lists': <PriceListsPage />,
-  '/orders': <OrdersPage />,
+  '/b2c-orders': <OrdersPage />,
+  '/b2b-orders': <B2BOrdersPage />,
+  '/franchise-orders': <FranchiseOrdersPage />,
+  '/franchises': <FranchiseOrdersPage />,
+  '/complaints': <ComplaintsPage />,
+  '/b2b-accounts': <CustomerAccountsPage />,
+  '/earnings': <EarningsFinancePage />,
+  '/finance': <EarningsFinancePage />,
   // Farm-to-fork trace (FRD Section 30)
   '/trace': <TracePage />,
   // Administration
   '/settings/roles': <RolesPermissionsPage />,
+  '/settings/referrals': <ReferralSettingsPage />,
+  '/referrals': <ReferralsPage />,
   '/profile': <ProfilePage />,
 };
 
@@ -249,6 +351,10 @@ export function App() {
           ))}
 
           <Route path="/profile" element={SCREENS['/profile']} />
+          <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
+          <Route path="/add-product" element={<AddEditProductPage />} />
+          <Route path="/products/edit/:id" element={<AddEditProductPage />} />
+          <Route path="/edit-product/:id" element={<AddEditProductPage />} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

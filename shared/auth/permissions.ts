@@ -126,6 +126,10 @@ export const PERMISSIONS = {
   PRODUCT_CREATE: 'products.create',
   PRODUCT_MANAGE: 'products.edit',
   PRODUCT_DELETE: 'products.delete',
+  CATEGORY_VIEW: 'categories.view',
+  CATEGORY_CREATE: 'categories.create',
+  CATEGORY_MANAGE: 'categories.edit',
+  CATEGORY_DELETE: 'categories.delete',
   RECIPE_VIEW: 'recipes.view',
   RECIPE_CREATE: 'recipes.create',
   RECIPE_APPROVE: 'recipes.approve',
@@ -144,6 +148,7 @@ export const PERMISSIONS = {
   PACKAGING_VIEW: 'finishedGoods.view',
   PACKAGING_CREATE: 'finishedGoods.create',
   PACKAGING_STOCK_IN: 'finishedGoods.stockIn',
+  SUPPLY_CHAIN_YIELD_VIEW: 'supplyChain.yieldView',
 
   // --- Sales ----------------------------------------------------------------
   CUSTOMER_VIEW: 'customers.view',
@@ -163,6 +168,22 @@ export const PERMISSIONS = {
   ORDER_DELIVER: 'orders.deliver',
   ORDER_CANCEL: 'orders.cancel',
   ORDER_PAYMENT: 'orders.payment',
+
+  // --- Storefront -------------------------------------------------------------
+  CUSTOMER_ACCOUNT_VIEW: 'customerAccounts.view',
+  CUSTOMER_ACCOUNT_REVIEW: 'customerAccounts.review',
+  REFERRAL_SETTINGS_VIEW: 'referralSettings.view',
+  REFERRAL_SETTINGS_MANAGE: 'referralSettings.manage',
+  REFERRALS_VIEW: 'referrals.view',
+  REFERRALS_ADJUST: 'referrals.adjust',
+  BANNER_VIEW: 'banners.view',
+  BANNER_CREATE: 'banners.create',
+  BANNER_MANAGE: 'banners.edit',
+  BANNER_DELETE: 'banners.delete',
+  SCHEME_VIEW: 'schemes.view',
+  SCHEME_CREATE: 'schemes.create',
+  SCHEME_MANAGE: 'schemes.edit',
+  SCHEME_DELETE: 'schemes.delete',
 
   // --- Screens with no endpoint of their own --------------------------------
   DASHBOARD_VIEW: 'dashboard.view',

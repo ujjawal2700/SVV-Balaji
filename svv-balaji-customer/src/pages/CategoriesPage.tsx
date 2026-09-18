@@ -1,12 +1,53 @@
 import { ArrowLeftOutlined } from '@ant-design/icons';
-import { Breadcrumb, Button, Tag, Typography } from 'antd';
+import { Breadcrumb, Button, Carousel, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { categories, popularProducts } from '../mock/homeMockData';
+import { useStorefrontBanners } from '@shared/hooks/useBanners';
+import { api as storefrontApi } from '../api/client';
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useCategoryTree } from '../hooks/useCategoryTree';
+import { popularProducts } from '../mock/homeMockData';
+
+interface CategoryPageBanner {
+  id: string;
+  title: string;
+  badgeText?: string | null;
+  description: string;
+  imageUrl: string;
+  ctaTextPrimary: string;
+  ctaLinkPrimary: string;
+  ctaTextSecondary?: string | null;
+  ctaLinkSecondary?: string | null;
+  backgroundColor: string;
+}
+
+/** Shown only while no CATEGORIES_PAGE banner has been published from Admin > Banner Management yet. */
+const DEFAULT_CAT_BANNER: CategoryPageBanner = {
+  id: 'fallback-cat',
+  title: 'Direct Bulk Supply & Verified Mandi Quality',
+  badgeText: 'CATEGORY SPECIAL PROMO',
+  description: 'Up to 20% Wholesale Margin • Mandi Grade Assured Across All Verticals',
+  imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+  ctaTextPrimary: 'Explore All Categories',
+  ctaLinkPrimary: '/categories',
+  ctaTextSecondary: 'Bulk B2B Rates',
+  ctaLinkSecondary: '/price-lists',
+  backgroundColor: '#ea580c',
+};
 
 export function CategoriesPage() {
   const navigate = useNavigate();
+  const { role } = useCustomerAuth();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | 'for-you'>('for-you');
+  const categories = useCategoryTree();
+
+  const { data: publishedBanners } = useStorefrontBanners(
+    'CATEGORIES_PAGE',
+    role === 'RETAILER' ? 'B2B' : 'B2C',
+    storefrontApi,
+  );
+  const catBanners: CategoryPageBanner[] =
+    publishedBanners && publishedBanners.length > 0 ? publishedBanners : [DEFAULT_CAT_BANNER];
 
   const selectedCatData = categories.find((c) => c.id === selectedCategoryId);
 
@@ -184,6 +225,51 @@ export function CategoriesPage() {
           <div className="hide-scrollbar" style={{ flex: 1, padding: '16px 16px 40px', overflowY: 'auto', background: '#f5f4f2' }}>
             {selectedCategoryId === 'for-you' ? (
               <>
+                {/* Top Banner Carousel — Managed via Admin > Banner Management */}
+                {catBanners.length > 0 && (
+                  <div style={{ marginBottom: 20, borderRadius: 14, overflow: 'hidden' }}>
+                    <Carousel autoplay dotPosition="bottom">
+                      {catBanners.map((banner) => (
+                        <div key={banner.id}>
+                          <Link to={banner.ctaLinkPrimary || '/categories'} style={{ textDecoration: 'none' }}>
+                            <div
+                              style={{
+                                background: banner.backgroundColor || '#ea580c',
+                                padding: '16px 18px',
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 12,
+                                minHeight: 110,
+                              }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                {banner.badgeText && (
+                                  <div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+                                    {banner.badgeText}
+                                  </div>
+                                )}
+                                <Typography.Title level={5} style={{ margin: '0 0 4px 0', color: '#ffffff', fontWeight: 800, fontSize: 15 }}>
+                                  {banner.title}
+                                </Typography.Title>
+                                <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11 }}>
+                                  {banner.description}
+                                </Typography.Text>
+                              </div>
+                              {banner.imageUrl && (
+                                <div style={{ width: 78, height: 78, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#fff' }}>
+                                  <img src={banner.imageUrl} alt={banner.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                              )}
+                            </div>
+                          </Link>
+                        </div>
+                      ))}
+                    </Carousel>
+                  </div>
+                )}
+
                 {/* Trending */}
                 <div style={{ marginBottom: 24 }}>
                   <Typography.Title level={5} style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 700 }}>
@@ -435,6 +521,76 @@ export function CategoriesPage() {
 
             {/* Right Display Area */}
             <div>
+              {/* Top Banner Carousel — Managed via Admin > Banner Management */}
+              {catBanners.length > 0 && (
+                <div style={{ marginBottom: 24, borderRadius: 16, overflow: 'hidden', boxShadow: '0 6px 20px rgba(0,0,0,0.12)' }}>
+                  <Carousel autoplay dotPosition="bottom">
+                    {catBanners.map((banner) => (
+                      <div key={banner.id}>
+                        <div
+                          style={{
+                            background: banner.backgroundColor || '#ea580c',
+                            padding: '24px 28px',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 20,
+                            minHeight: 158,
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            {banner.badgeText && (
+                              <div
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '3px 10px',
+                                  borderRadius: 12,
+                                  background: 'rgba(255,255,255,0.2)',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  marginBottom: 8,
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {banner.badgeText}
+                              </div>
+                            )}
+                            <Typography.Title level={3} style={{ margin: '0 0 6px 0', color: '#ffffff', fontWeight: 800, fontSize: 20 }}>
+                              {banner.title}
+                            </Typography.Title>
+                            <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, display: 'block', marginBottom: 16 }}>
+                              {banner.description}
+                            </Typography.Text>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                              {banner.ctaTextPrimary && (
+                                <Link to={banner.ctaLinkPrimary || '/categories'}>
+                                  <Button style={{ background: '#f59e0b', borderColor: '#f59e0b', color: '#000', fontWeight: 700, borderRadius: 8 }}>
+                                    {banner.ctaTextPrimary}
+                                  </Button>
+                                </Link>
+                              )}
+                              {banner.ctaTextSecondary && banner.ctaLinkSecondary && (
+                                <Link to={banner.ctaLinkSecondary}>
+                                  <Button style={{ background: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.4)', color: '#fff', fontWeight: 600, borderRadius: 8 }}>
+                                    {banner.ctaTextSecondary}
+                                  </Button>
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                          {banner.imageUrl && (
+                            <div style={{ width: 140, height: 110, borderRadius: 12, overflow: 'hidden', flexShrink: 0, background: '#fff' }}>
+                              <img src={banner.imageUrl} alt={banner.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </Carousel>
+                </div>
+              )}
+
               {selectedCategoryId === 'for-you' ? (
                 <div>
                   {/* Category Grid */}

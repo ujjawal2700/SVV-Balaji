@@ -514,6 +514,9 @@ export class ProductionService {
       data: {
         actualQuantity: dto.actualQuantity,
         productionLoss,
+        byProductQuantity: dto.byProductQuantity,
+        byProductName: dto.byProductName,
+        byProductRevenue: dto.byProductRevenue,
         status: ProductionStatus.COMPLETED,
       },
       include: { consumptions: true },

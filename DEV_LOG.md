@@ -16,6 +16,913 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-18 (later still) — Raunak
+
+**Did:** Closed a gap in the Loss & Yield Tracking work below: the by-product fields
+(`byProductQuantity`/`byProductName` on cleaning, plus `byProductRevenue` on production) existed
+in the schema and DTOs but had no capture UI anywhere — Yield Tracking would have always shown them
+blank. Added the input fields to the two existing phase forms instead of the tracking page itself,
+per the client's clarification that Loss & Yield Tracking must stay read-only and pull from the
+actual phase-wise records, not be a second place to re-enter the same numbers:
+- `CleaningGradingPage.tsx` — "By-product recovered" quantity/name fields in the cleaning &
+  grading form, plus a table column.
+- `ProductionBatchesPage.tsx` (complete-run modal) — by-product quantity/name/revenue fields, plus
+  a table column; `ProductionBatchDetailDrawer.tsx` shows all three too.
+- `shared/api/types.ts` — added the missing fields to `CleaningGradingRecord`,
+  `CreateCleaningGradingInput`, and `ProductionBatch`; added a `CompleteProductionInput` type.
+- `shared/api/production.ts` / `shared/hooks/useProduction.ts` — `complete()` and
+  `useCompleteProduction` now take the full input object instead of just `actualQuantity`.
+
+**Contract changes:** none new — this only wires the frontend up to fields the backend DTOs
+(`CreateCleaningGradingDto`, `CompleteProductionDto`) already accepted.
+
+**Other developer needs to know:** `PATCH /production-batches/:id/complete` now gets called with
+`{ actualQuantity, byProductQuantity?, byProductName?, byProductRevenue? }` instead of a bare
+number — already supported server-side, no backend change needed.
+
+**Next:** none pending on this feature.
+
+---
+
+## 2026-09-18 (even later) — Raunak
+
+**Did:** Loss & Yield Tracking, built on top of the existing Cleaning & Grading / Production /
+Finished Goods phases — no new processing phase, additive only. Read-only aggregation walking the
+traceability chain each phase already records (RawMaterialBatch → CleaningGradingRecord,
+ProductionConsumption → ProductionBatch, ProductionBatch → FinishedGoodsBatch): stage-wise loss
+quantity/%, chain totals (input, loss, by-product, final output, overall yield %), an alert when
+total loss exceeds the 4-8% normal band (>8% → `HIGH`), a supplier/farmer quality signal extending
+the existing `FarmerPerformanceService` pattern (average loss % pooled across cleaning wastage +
+the production runs a farmer's batches fed, highest first), and a machine health signal (each
+machine's historical average loss %, flagging a run at >1.5x that average as a maintenance
+candidate).
+
+New admin screen at `/yield-tracking` (Super Admin → Supply Chain → Processing section, after
+Finished Goods): a chain list with expandable stage-wise rows, alert badges, and two summary
+panels (farmer/supplier quality flags, machine health flags). AntD table conventions match
+`ProductionBatchesPage`; the one shared change is `DataTable` (`shared/components/DataTable.tsx`)
+now accepts an optional `expandable` prop, passed straight through to antd's `Table` — backward
+compatible, nothing else uses it yet.
+
+**Contract changes (Ujjawal, please read):**
+- **New Prisma migration** `20260918160000_add_byproduct_yield_tracking_fields`, applied to the
+  live dev DB (`npx prisma migrate deploy`, not `migrate dev` — this environment is non-interactive,
+  so I generated the SQL via `prisma migrate diff` against the live DB and hand-placed it in
+  `prisma/migrations/`; verify it lines up if you also run `migrate dev` locally, there should be
+  no drift). Adds, purely additive, nothing existing renamed or reinterpreted:
+  - `CleaningGradingRecord.byProductQuantity` (Decimal?), `.byProductName` (String?) — material
+    recovered during cleaning with resale value (bran/choker/husk), distinct from `wastageQuantity`
+    which stays pure loss.
+  - `ProductionBatch.byProductQuantity` (Decimal?), `.byProductName` (String?),
+    `.byProductRevenue` (Decimal?) — same idea at the production stage (e.g. oil cake). Revenue is
+    just a recorded figure, not a new sales workflow.
+  - Wired into `CreateCleaningGradingDto` (already passed through via the existing `{...dto}`
+    spread in `recordCleaningGrading`) and `CompleteProductionDto` → `completeProduction()`.
+- **New module** `src/yield-tracking/` (service + controller + DTO), registered in `app.module.ts`
+  after `PackagingModule`. New routes, all `GET`, all behind the new permission
+  `supplyChain.yieldView` (frontend constant `SUPPLY_CHAIN_YIELD_VIEW`, granted by default to
+  Branch Manager / Production Manager / QA Manager — adjust from Roles & Permissions if that's
+  wrong):
+  - `GET /api/v1/supply-chain/yield` — paginated list, filters `productId`/`branchId`/`from`/`to`.
+  - `GET /api/v1/supply-chain/yield/chain?productionBatchId=` or `?fgBatchNumber=` — single chain
+    detail, reuses the trace-resolution idea from `GET /trace/:fgBatchNumber` but stays a
+    loss/yield view, not the public trace.
+  - `GET /api/v1/supply-chain/yield/farmer-quality` — per-farmer average loss %, worst first.
+  - `GET /api/v1/supply-chain/yield/machine-health` — per-machine historical average loss % and
+    flagged runs.
+- **Permission registry**: new group `yieldTracking` in `src/auth/permissions/registry.ts`, one
+  key `supplyChain.yieldView`. Mirrored in `shared/auth/permissions.ts` as
+  `SUPPLY_CHAIN_YIELD_VIEW`.
+- **`shared/api/types.ts`**: new `YieldChain`/`YieldStageBreakdown`/`FarmerYieldQuality`/
+  `MachineYieldHealth`/etc. interfaces. New file `shared/api/yieldTracking.ts` (API client) and
+  `shared/hooks/useYieldTracking.ts` (React Query hooks) — kept as their own per-domain files
+  rather than folded into `production.ts`/`useProduction.ts`, matching how `banners.ts` sits apart
+  from `production.ts`.
+
+**Test:** `src/yield-tracking/yield-tracking.service.spec.ts` — 4 tests: stage-wise loss %/chain
+totals arithmetic across a 3-stage fixture, the >8% HIGH alert firing, a within-band chain staying
+`NORMAL`, and the traceability chain resolving identically whether entered by `productionBatchId`
+or `fgBatchNumber` (per CLAUDE.md's traceability-test rule). Full backend suite: 375 passing (was
+371), all green. `tsc --noEmit` and `npm run build` clean in both `svv-balaji-backend` and
+`svv-balaji-admin`.
+
+**Other developer needs to know:** I had to kill three locally-running `nest start`/`dist/main`
+node processes to get `prisma generate` past an `EPERM` file lock on the query engine DLL — if
+you're running a dev server locally when you pull this, expect the same and just restart it
+after `npm install`/`prisma generate`. Also: `farmerQuality()` and `machineHealth()` do a full
+table scan over `RawMaterialBatch`/`ProductionBatch` with no caching — fine at current data volume,
+worth an index/materialized view if the farmer or run count grows a lot before this gets revisited.
+
+**Next:** nothing blocking. Possible follow-up (not asked for, not built): wiring
+`byProductRevenue` into an actual by-product sales record if the client wants that tracked
+end-to-end rather than as a single figure.
+
+---
+
+## 2026-09-18 (latest) — Raunak
+
+**Did:** Same pattern a third time, for the homepage's "Today's Schemes & Offers" tiles
+(`Buy 10 Get 1 Free`, `₹300 Off`) — previously hardcoded `MockScheme[]` in `homeMockData.ts`, no
+backend, no admin screen. One deliberate difference from banners/categories this time, per explicit
+ask: **no mock fallback when the list is empty** — unpublishing (or deleting) every scheme is how
+Super Admin hides the whole section, and the customer app renders nothing rather than falling back
+to placeholder content. `displayOrder` is the "which row" control asked for.
+
+**Schema** (migration `20260918150000_schemes`, applied): new `Scheme` model — `tag`, `title`,
+`subtitle`, `ctaText`/`ctaLink`, six color fields (`backgroundColor`/`textColor`/`badgeColor`/
+`badgeTextColor`/`buttonColor`/`buttonTextColor` - simplified from the mock's 7 down to 6 by
+dropping the near-duplicate `subtitleFg`), `targetAudience` (reuses the existing `BannerAudience`
+enum rather than declaring a new one), `displayOrder`, `isActive`.
+
+**Backend** (`src/schemes/schemes.module.ts`, same single-file shape as banners/categories): staff
+CRUD at `/schemes` (`schemes.view/create/edit/delete`, new permission group, granted to BM/ST by
+hand - same A-14 gap, same fix, fourth time now) plus unguarded `GET /storefront/schemes?audience=`.
+
+**Seed:** `seedDefaultSchemes()` — the same 2 schemes that were hardcoded, as real rows, same
+idempotent-on-count pattern as the other three seed functions now in this file.
+
+**Frontend:** `shared/api/schemes.ts` + `shared/hooks/useSchemes.ts`, same shape as banners' (admin
+CRUD + `storefrontSchemesApi` taking the caller's axios instance). New admin screen
+`/schemes` (`SchemesPage.tsx`) — table, a live 3-up preview card, and a form drawer with an
+antd `ColorPicker`-backed `ColorField` for the six color inputs; the preview card doubles as
+visible proof of the "hide the whole section" behavior (shows an amber alert instead of the grid
+when zero schemes are live). `HomePage.tsx`'s schemes section now reads `useStorefrontSchemes` and
+the whole `<section>` is conditional on `schemes.length > 0` - no fallback branch. `homeMockData.ts`
+itself was not touched; `schemes` is simply no longer imported into `HomePage.tsx`.
+
+**Verified:** `tsc --noEmit` clean on backend/admin/customer. Full backend suite still 371/371. Live
+curl pass: deactivated every scheme via the admin API, confirmed `/storefront/schemes` returned
+`[]`, reactivated, confirmed both came back. Vite transform-checked the new/edited files. Visual
+click-through still not done here (no headless browser available).
+
+**Other developer needs to know:** Nothing outside `schemes`/`homeMockData.ts`'s import list
+touched. Reused `BannerAudience` rather than adding a fourth near-identical enum - if that enum
+ever needs a value specific to one of banners/schemes/categories and not the others, it should be
+split apart then, not before.
+
+**Next:** Admin's scheme color fields are six separate pickers; if that turns out to be too fiddly
+in practice, worth revisiting with fewer, derived colors instead (e.g. auto-contrast text from one
+background pick).
+
+---
+
+## 2026-09-18 (even later) — Raunak
+
+**Did:** Same treatment as the banner work, applied to categories/subcategories. The customer app's
+category rail (`HomePage.tsx`), `/categories` page, `DesktopHeader`'s mega-menu, and
+`ProductsPage.tsx`'s category routing all imported one hardcoded `categories` array from
+`src/mock/homeMockData.ts` — Admin's existing Manage Category screens (`MainCategoriesPage`,
+`SubCategoriesPage`) had nothing to do with what a shopper actually saw. Wired them together.
+
+**Backend** (`categories.module.ts`): new `CategoriesService.listPublicTree()` + unguarded
+`GET /storefront/categories` (`StorefrontCategoriesController`) — active categories only, nested
+two levels deep (parent → children), same unguarded-read pattern as storefront banners/catalogue.
+No schema change: `Category` already had `slug`, `imageUrl`, `parentId`/`children` and `isActive`,
+built for exactly this.
+
+**Seed:** `seedDefaultCategories()` in `prisma/seed.ts` (idempotent on count) — the same 4
+categories/12 subcategories that were hardcoded, created as real rows, **with slugs identical to
+the old mock ids** (`atta-flour`, `namkeen`, `chakki-atta`, ...) specifically so every existing
+`/products/:categorySlug` link keeps resolving once the frontend switched over. Ran it against the
+dev DB; confirmed via curl the slugs match exactly.
+
+**Frontend:** `shared/api/categories.ts` gained `storefrontCategoriesApi.tree(client)`,
+`shared/hooks/useCategories.ts` gained `useStorefrontCategoryTree(client?)` — both follow the same
+"caller passes its own axios instance" shape as the banner equivalents. New
+`svv-balaji-customer/src/hooks/useCategoryTree.ts` is the adapter: calls the real endpoint, maps it
+into the exact `MockCategory` shape the mock array always had (so every existing consumer needed
+zero prop-shape changes), and **falls back to the untouched mock `categories` array** when zero
+categories are published — same fallback pattern as banners, and per the client's explicit
+instruction, `homeMockData.ts` was not touched or deleted. `HomePage.tsx`, `CategoriesPage.tsx`,
+`ProductsPage.tsx` and `DesktopHeader.tsx` now call `useCategoryTree()` inside the component instead
+of importing the static array.
+
+**Verified:** `tsc --noEmit` clean on backend + customer. Full backend suite still 371/371. Live curl
+confirmed `/storefront/categories` returns the seeded tree with slugs matching the old mock ids
+exactly. Vite transform-checked all five edited/added files (200 on direct fetch). Visual
+click-through still not done — no headless browser available here.
+
+**Other developer needs to know:** Nothing outside `categories`/customer-app touched. Admin's
+existing `MainCategoriesPage`/`SubCategoriesPage` (already built, already CRUD against
+`/categories`) now double as the CMS for what the customer app shows — no admin-side change was
+needed, they were just disconnected from the storefront until this session.
+
+**Next:** Category `color` (the icon-tile background swatch) isn't an admin-editable field — the
+frontend adapter assigns it from a fixed palette by position instead, since `Category` has no such
+column. Fine for now; would need a schema field if Super Admin ever wants to control it directly.
+
+---
+
+## 2026-09-18 (later) — Raunak
+
+**Did:** Three follow-ups on the same session's banner work, all from client/user feedback on the
+first pass.
+
+1. **Direct image upload.** The banner form's image field was a plain URL text input. Added
+   `banners` to `UPLOAD_FOLDERS` (`storage.service.ts`) and the shared `UploadFolder` type, and
+   swapped the admin form's `Input` for the existing `FileUploadField` — same component
+   `CategoryFormModal` already uses for `Category.imageUrl`, so this is the established pattern,
+   not a new one. On mobile it's "Take a photo" / "Choose an existing file" (gallery); on desktop a
+   drag-and-drop zone. No manual URL entry anymore, matching how Category's single-image field
+   already works.
+2. **Categories page banner is now a carousel, not one banner.** `CategoriesPage.tsx` only ever
+   rendered `publishedBanners[0]` — if Super Admin published three CATEGORIES_PAGE banners, two
+   were invisible. Now renders all of them in an antd `Carousel` (desktop: full card in the right
+   panel; mobile: a compact version above "Trending" on the default tab), same shape as the
+   homepage hero.
+3. **Seeded the old hardcoded banners as real, editable rows.** Before this, the fallback content
+   baked into `HomePage.tsx`/`CategoriesPage.tsx` (used only when zero banners are published) was
+   invisible to Super Admin — nothing to click on in `/banners` to change it. Added
+   `seedDefaultBanners()` to `prisma/seed.ts` (idempotent on count, same pattern as
+   `seedDefaultBranch`) and ran it once against the dev database: the same 2 homepage + 1 categories
+   banners that used to be hardcoded now exist as ordinary rows, editable/deletable from the admin
+   screen like any banner created from scratch.
+
+**Contract changes:** `UploadFolder` gained `'banners'` (backend and `shared/api/uploads.ts`). No
+new routes.
+
+**Verified:** `tsc --noEmit` clean on all three apps. Re-ran the seed against the live dev DB and
+confirmed via curl that all three seeded rows resolve correctly on `/storefront/banners` for both
+placements. Upload path not exercised end-to-end (would need an actual file picked in a browser —
+still no headless browser available here); it is the same `FileUploadField`/`/uploads/:folder`
+path every other image field in this app already uses, so risk is low, but worth a manual click
+before calling it done.
+
+**Other developer needs to know:** Nothing outside `banners`/`uploads`/the two customer pages
+touched.
+
+**Next:** Same as before — `ProductsPage.tsx` doesn't read `PRODUCTS_PAGE` banners yet even though
+the admin form offers that placement.
+
+---
+
+## 2026-09-18 — Raunak
+
+**Did:** Made the customer storefront's homepage hero (and the Categories page top banner) real.
+`BannersPage.tsx` (admin) existed but was 100% `localStorage` — no backend, and the customer app's
+hero carousel was hardcoded JSX reading nothing from it. Built the missing backend slice and wired
+both ends to it.
+
+**Schema** (migration `20260918120000_storefront_banners`, applied): new `Banner` model — title,
+badge text, description, image URL, primary/secondary CTA text+link, background/text color,
+`targetAudience` (ALL/B2C/B2B), `placement` (HOMEPAGE/CATEGORIES_PAGE/PRODUCTS_PAGE),
+`displayOrder`, `isActive`. No backfill needed — nothing referenced banner data before this.
+
+**Backend** (`src/banners/banners.module.ts`, single-file like `categories.module.ts`): staff CRUD
+at `/banners` (`banners.view/create/edit/delete`, same publish-don't-delete pattern as Category/
+Product) plus a second, deliberately unguarded controller at `/storefront/banners` — same reasoning
+as `StorefrontCatalogueController`: this is read before a shopper signs in, and only ever returns
+what staff have published (`isActive: true`, matching `placement`, and `targetAudience` either ALL
+or the caller's own channel).
+
+**New permission group `banners`** (`banners.view/create/edit/delete`, defaults BM view+manage, ST
+view) — **hit the same A-14 seeding gap again** (new permission keys don't auto-grant to
+already-configured roles). Granted to BM/ST by hand via a one-off script against `RolePermission`,
+same as every previous instance of this gap. Super Admin is unaffected either way (bypasses the
+permission check entirely), so this only matters once someone wants a non-Super-Admin role managing
+banners.
+
+**Frontend:**
+- `shared/api/banners.ts` + `shared/hooks/useBanners.ts` — `bannersApi` (admin CRUD, mirrors
+  `categoriesApi`) and `storefrontBannersApi` (public). The storefront half takes the caller's own
+  axios instance (defaults to the staff panel's `@shared/api/client`) because the customer app runs
+  a separate client bound to its own OTP refresh flow — passing the wrong one would silently route
+  through staff-session refresh logic on a 401 that can never actually happen here (the endpoint is
+  unguarded), but would still be wrong to leave coupled that way.
+- `svv-balaji-admin/src/pages/banners/BannersPage.tsx` rewritten off `useBanners`/mutations instead
+  of `localStorage`; same UI (table, live preview, drawer form) unchanged. Permission checks moved
+  off borrowed `PRODUCT_*` keys onto the new `BANNER_*` ones; nav's `viewKey` likewise.
+- `svv-balaji-customer`: `HomePage.tsx`'s desktop + mobile hero carousels and `CategoriesPage.tsx`'s
+  top banner now call `useStorefrontBanners(placement, audience, storefrontApi)` — `audience` is
+  B2B for a signed-in retailer, B2C otherwise. Each keeps a small hardcoded fallback (the previous
+  hardcoded copy) shown only while zero banners are published for that slot/audience, so the
+  homepage is never blank on a fresh environment before Super Admin adds anything.
+
+**Verified:** `tsc --noEmit` clean on backend/admin/customer. Backend dev server restarted (had to
+stop and restart it myself — the Prisma query-engine `.dll` was locked by the running `nest --watch`
+process, which is why `prisma generate` needs the dev server down first) and confirmed all new
+routes mapped. Live curl pass: created a banner via `/banners` as Super Admin, confirmed it appeared
+on `/storefront/banners?placement=HOMEPAGE&audience=B2C`, confirmed unpublishing removed it from
+that list immediately, confirmed delete. Admin/customer Vite dev servers confirmed transforming the
+edited files without error (200 on direct fetch). **Visual rendering not verified** — no headless
+browser available in this environment; screenshot/click-through still worth doing before calling
+this client-demo-ready.
+
+**Other developer needs to know:** New backend module + one new permission group + one migration,
+all additive — nothing in `SalesModule`, `StorefrontCatalogueModule` or anything WS1.x touched.
+
+**Next:** Same banner slot pattern (`useStorefrontBanners`) is ready to reuse for
+`PRODUCTS_PAGE` placement if/when that page gets a top banner too — the admin form already offers
+it, only `ProductsPage.tsx` doesn't read it yet.
+
+---
+
+## 2026-09-17 (latest) — Raunak
+
+**Did:** Referral Management — the Super Admin reporting screen the client asked for on top of the
+last two sessions' referral program: who referred whom, whether it qualified, what each side
+earned, a full per-customer coin ledger, and manual refund/reversal/adjustment.
+
+**Schema** (migration `20260917180000_referral_ledger_detail`, applied - purely additive, no
+backfill needed): `CoinTransaction` gained `orderId` (the order whose CONFIRMED/DELIVERED
+transition paid a FIRST_ORDER/FIRST_DELIVERY reward - null for the other two triggers, which have
+no order), `note` (required at the API layer for `MANUAL_ADJUSTMENT`, optional elsewhere), and
+`performedById` (which staff member made a manual adjustment - null for system-generated rewards).
+New enum value `CoinTransactionReason.MANUAL_ADJUSTMENT`.
+
+**Backend (`ReferralService`, extended again):**
+
+- `onOrderConfirmed`/`onOrderDelivered` now thread the qualifying `orderId` through to the reward
+  transactions they create, so "which order qualified this referral" is answered by the ledger
+  itself rather than needing to be reconstructed.
+- `listReferrals(prisma, filters)` - one row per `Referral`, `search` matching either the referrer
+  or referee by name/phone/referral code/customer code (a Super Admin doesn't know in advance which
+  side they're looking for), plus status (qualified/pending), channel and date-range filters. New
+  `GET /referrals`.
+- `getCoinLedger(prisma, customerId)` - a customer's complete coin history, both roles (rewards
+  earned referring people, the one reward earned by being referred) plus every manual adjustment,
+  newest first, with balance/totalEarned/totalAdjusted summary stats. New
+  `GET /referrals/ledger/:customerId`.
+- `adjustBalance(prisma, customerId, {amount, note}, performedById)` - the one write path for a
+  refund, reversal or correction. `amount` carries the sign (positive credits, negative claws
+  back); refused if it would take the balance below zero, if it's zero, or without a reason. New
+  `POST /referrals/ledger/:customerId/adjust`, its own permission (`referrals.adjust`, separate
+  from `referrals.view` - reporting and correcting are different levels of access).
+- New permission group `referrals` (`referrals.view`, `referrals.adjust`) - **hit the same A-14
+  seeding gap a fourth and fifth time; granted to BM/ST by hand again.** Looked seriously at fixing
+  the root cause this time rather than deferring it again: it turns out the current behaviour
+  (a role's grants freeze once a Super Admin has ever touched them, so a new permission never
+  auto-expands what a configured role can do) is correct on purpose, not a bug - the real gap is
+  that nothing surfaces "N new permissions exist that this role hasn't been asked about" on the
+  Roles & Permissions screen. That's a real feature, not a quick fix, so it's staying as A-14 with
+  this reasoning attached rather than getting rushed in sideways here.
+- **31 new/updated tests** in `common/referral.service.spec.ts` (was 371 project-wide, still 371 -
+  this session only added tests, no new call sites in Sales or Storefront needed changing) covering
+  `listReferrals` (shape, qualified/pending filter, search matching either side, search by code, no
+  match), `getCoinLedger` (balance/totals/ordering, unknown customer), and `adjustBalance` (credit,
+  debit, negative-balance refusal, zero-amount refusal, blank-reason refusal, unknown customer).
+
+**Frontend:** New screen `/referrals` (permission `referrals.view`) - a filterable, searchable
+table (status, channel, date range, free-text search across both parties) with each name opening a
+`CoinLedgerDrawer`: balance/earned/adjusted stats, the full transaction table (reason, signed
+amount, related referral, qualifying order, note and who performed a manual one), and - gated
+behind `referrals.adjust` - the correction form itself.
+
+**Worth flagging, not something I did:** `CustomersPage.tsx`, `CustomerAccountReviewDrawer.tsx` and
+`navigation.tsx` changed significantly on disk mid-session (new pages: Complaints, Outlets,
+B2BOrders, Banners, ProductLists, Main/SubCategories, a `Customer360Drawer`) - presumably your other
+session's work landing concurrently. `CustomersPage.tsx` now reads from a `MOCK_CUSTOMERS` array
+rather than only `useCustomers()`, which is worth a look before anyone treats what it shows as
+live data. Left it alone rather than reconciling it - not part of this task and risky to touch
+without knowing what's mid-flight there.
+
+**Next:** nothing referral-specific queued. A-14 (permission seeding) is worth actually fixing now
+that it's been hit five times - see the reasoning above for what the real fix looks like.
+
+---
+
+## 2026-09-17 (even later) — Raunak
+
+**Did:** Referral & Reward Settings — the admin screen the client asked for, wired to real coin
+crediting on top of last session's refer-a-friend relationships. **Touches `SalesModule`
+(WS1.5, Ujjawal's) — flagging per the cross-workstream rule.**
+
+**Schema** (migration `20260917140000_referral_rewards`, applied - purely additive, no backfill
+needed unlike `referral_program`): `ReferralSettings` (singleton, lazily created on first read -
+100/50 coins, `REGISTRATION` trigger, active, by default), `CoinTransaction` (the ledger -
+`Customer.coinBalance` is a denormalised total, never written to outside
+`ReferralService.creditReward`, same invariant this project already holds for warehouse stock and
+`StockMovement`), `Referral.rewardedAt` (null until paid, blocks a second payout), new enums
+`ReferralRewardTrigger` and `CoinTransactionReason`.
+
+**Backend (`ReferralService`, extended, not a new service):**
+
+- `getSettings`/`updateSettings` - the settings CRUD behind the new `GET/PATCH /referral-settings`
+  (`src/referral-settings/`, permissions `referralSettings.view`/`.manage` - **hit the same A-14
+  seeding gap as `customerAccounts`/`categories` before it; granted to BM/ST by hand again, still
+  no migration-based fix**).
+- Four named triggers, two real moments to hang them on - worth understanding before touching this
+  again: **REGISTRATION and ACCOUNT_VERIFICATION both credit at the instant a `Referral` row is
+  created** (`onAccountVerified`, called from `attachConsumerCustomerRecord` for B2C and
+  `approveAccount` for B2B). There is no later, more-verified moment in this system for either
+  channel to hang a separate trigger on - a B2C consumer's OTP verification *is* their account
+  creation, and a B2B applicant's phone is verified at *registration submission*, in the same write
+  as the rest of the form, well before there's a Customer/wallet to credit. Building a fake second
+  trigger point with nothing behind it seemed worse than sharing the one that's real. **FIRST_ORDER
+  and FIRST_DELIVERY are genuinely distinct** - `onOrderConfirmed`/`onOrderDelivered`, called from
+  `SalesService.confirm()` and the `DELIVERED` branch of `advance()`.
+- `validate()` now also checks `settings.isActive` - the program's on/off switch blocks new
+  referral relationships from being *created* at all while off, not just new rewards from being
+  paid on old ones.
+- **Every trigger call site is best-effort, deliberately outside whatever transaction created the
+  thing that fired it** - wrapped in try/catch, logged as a warning on failure. A bug in coin
+  crediting must never be able to undo a signup, a B2B approval, or an order confirmation. This is
+  why `onAccountVerified`/`onOrderConfirmed`/`onOrderDelivered` are typed against the real
+  `PrismaService` rather than `Prisma.TransactionClient` like the rest of `ReferralService` - each
+  wraps its own 5-write payout (two balances, two ledger rows, one `rewardedAt` stamp) in its own
+  transaction, and Prisma cannot nest one transaction inside another.
+- **Found a real bug while wiring this, same shape as last session's**: the very first draft
+  credited a B2C signup's reward *inside* the same code path as `attachConsumerCustomerRecord`
+  before I'd separated it out - fixed before it shipped, but worth restating the lesson since it's
+  now the second time: reward/bonus logic must never share a transaction with the business-critical
+  write it's reacting to.
+- **357 backend tests** (was 343): full unit coverage on `getSettings`/`updateSettings` and the
+  `isActive` gate in `common/referral.service.spec.ts`; integration coverage for both order triggers
+  in `sales.service.spec.ts` (first-confirm credits, second order doesn't, wrong trigger doesn't,
+  program-off doesn't, a crediting failure never blocks the transition) and for both
+  registration/verification paths in `storefront-auth.service.spec.ts`.
+
+**Frontend:** New admin screen `/settings/referrals` (permission-gated, `Can`-wrapped Save,
+disabled inputs for view-only) - exactly the four sections asked for: reward amounts in coins,
+trigger radio group, active switch, save. `CustomersPage` gained a Coins column so the loop is
+visible without a database console.
+
+**Other developer needs to know (Ujjawal):** `SalesService.confirm()` and `.advance()` now call
+into `ReferralService` after their own writes complete - both calls are try/catch-wrapped and
+cannot fail your order flow, but you'll see a `[SalesService] Referral reward check failed...`
+warning in the log if something's wrong on that side; it is never your bug to chase. If you add
+another order-lifecycle transition later, this is the pattern to extend, not a new one to invent.
+
+**Next:** nothing referral-specific queued. The coin balance is visible in admin only - no
+customer-facing "you have N coins" surface yet (ProfilePage still shows the referral *code*, not
+the *balance* - see 17 Sep's earlier entry). Raise as a decision if the client wants it spent on
+anything; right now it can only ever go up.
+
+---
+
+## 2026-09-17 (later) — Raunak
+
+**Did:** Built the refer-a-friend program end to end: every customer gets a unique auto-generated
+code, a new signup can enter someone else's to create a tracked referral relationship, and the
+admin Customers screen shows both. Full validation per the client-style spec this was built
+against — unique/no-duplicate codes, code must belong to a real active customer, self-referral
+rejected (by phone and by email), and explicitly **no** IP or device fraud checks (families on a
+shared connection are not abuse).
+
+**Schema** (migration `20260917090000_referral_program`, applied): `Customer.referralCode` -
+`String @unique`, NOT NULL. Added nullable, backfilled from each existing row's own id
+(`customers` was not empty - 1 live row - so this needed a real backfill, unlike the two
+catalogue migrations from 16 Sep), then locked down. New `Referral` model - `referrerId`,
+`refereeId` (`@unique` - one referral relationship per customer, enforced by the database, not
+just application logic), `code` (the code as entered, kept even if the referrer's own code is
+later regenerated). `CustomerAccount.referralCode` (nullable) holds a B2B applicant's code between
+registration and approval, since that channel's Customer row doesn't exist until staff approve it.
+
+**Backend:**
+
+- New `src/common/referral.service.ts` (`ReferralService`, global via `CommonModule` - same
+  pattern as `SequenceService`, for the same reason: no single owning module).
+  `generateCode(tx, seedName)` derives a code from the name plus a random 4-digit suffix
+  (`RAUNAK4821`, not sequential - a sequence would make every code after it guessable) and retries
+  on collision. `validate(tx, code, {phone, email})` is every rule in one place: exists, referrer
+  `ACTIVE`, and not the applicant's own code by phone or (when both sides have one) email -
+  nothing about IP or device. `createRelationship` writes the `Referral` row, called only once a
+  `refereeId` Customer actually exists.
+- `CustomersService.create` (staff "Register a customer") now generates a code for every new
+  customer, any channel - so a staff-created customer can refer people too.
+- `StorefrontAuthService`: B2C (`attachConsumerCustomerRecord`, reached from a first OTP verify)
+  validates a referral code *before* creating anything and creates the `Referral` row atomically
+  with the `Customer`. B2B (`registerRetailer` / `approveAccount`) validates the code immediately
+  at submission (fail fast, applicant can fix a typo) and **re-validates at approval time**,
+  creating the relationship there - because that's the actual "successful registration" for a
+  channel with a review gate, and because a code that stops resolving between submission and
+  approval (referrer went inactive) must not block the retailer's own legitimate approval. That
+  path logs a warning and skips the referral rather than failing.
+- **Found and fixed a real bug while writing tests for this**: the first draft validated the B2C
+  referral code *inside* `attachConsumerCustomerRecord`'s transaction, but the `CustomerAccount`
+  row is created just *before* that call, outside any transaction, already marked `ACTIVE`. A bad
+  code would roll back the `Customer` creation but leave that `ACTIVE`, `customerId: null` account
+  behind - and because the retry path only re-attempts attachment for `PENDING_VERIFICATION`
+  accounts, that number would be permanently stuck signed-in-but-customerless. Fixed by validating
+  before the `CustomerAccount` row is created at all, so a bad code leaves nothing behind. Worth
+  the reminder: a multi-step signup where only the last step is transactional can still leave a
+  half-created identity if an earlier step already committed.
+- New `GET /storefront/auth/referral/check?code&phone` - public, live feedback on a code before
+  submitting (exists, active, whose it is), creates nothing. Not wired into a debounced "as you
+  type" UI yet - the two forms validate at submission instead, where the same rules produce a
+  clear error either way.
+- `/storefront/auth/me` and the session response now carry the signed-in account's own
+  `referralCode` (via a small `Customer` lookup added to `sessionFor`, since the account object
+  callers pass in doesn't have that relation loaded) - the whole point of generating one is that
+  the person can see and share it immediately.
+- `CustomersService.findAll`/`findOne` now include `referredAs.referrer` (who referred this
+  customer, if anyone) for the admin screen.
+- **128 → 343 backend tests** (15 new: `referral.service.spec.ts` unit tests for every validation
+  rule, plus integration tests in `storefront-auth.service.spec.ts` covering the B2C/B2B happy
+  paths, the self-referral rejection, the "invalid code fails the whole sign-in rather than
+  silently dropping it" behavior, and the approval-time best-effort skip).
+
+**Frontend:**
+
+- **Admin** (`svv-balaji-admin`): Customers screen gained a Referral column - the customer's own
+  code (copyable) plus "Referred by X" when applicable. `CustomerAccountReviewDrawer` (the B2B
+  approval queue) shows the code an applicant entered at signup and, once approved, their own new
+  code.
+- **Storefront** (`svv-balaji-customer`): `LoginPage`'s OTP step gained an optional referral code
+  field for a brand-new consumer only (existing accounts ignore it - the backend does too).
+  `RegisterPage` gained the same for retailers, sent with the final submit. Both prefill from a
+  `?ref=CODE` query param, so a shared link (`/login?ref=RAUNAK4821`,
+  `/retailers/register?ref=RAUNAK4821`) carries the code in - opening the link is not itself
+  treated as a successful referral, per the spec this was built against; only a completed
+  registration creates the relationship. `ProfilePage` gained a "Refer & Earn" / "Refer a Store
+  Partner" item that copies the signed-in user's own link to the clipboard.
+
+**Other developer needs to know:** `Customer.referralCode` is now a required field on create -
+if `SalesService` or anything else in your WS4.x work constructs a `Customer` directly (rather
+than through `CustomersService`/`StorefrontAuthService`), it needs a code too; reuse
+`ReferralService.generateCode` rather than inventing another generator. No reward or incentive is
+wired to a successful referral yet (no wallet, points or discount - those subsystems don't exist
+on the storefront side yet either) - this session only builds the relationship and its validation,
+not what a referral is worth.
+
+**Next:** nothing referral-specific queued. If the client wants an incentive (wallet credit,
+discount) attached to a successful referral, that's new scope once wallet/loyalty have a real
+backend - flag it as a decision rather than guessing an amount.
+
+---
+
+## 2026-09-17 — Raunak
+
+**Did:** Wired the customer storefront (`svv-balaji-customer`) to the real `/storefront/auth/*`
+API the backend already had (built 16 Sep, but the frontend still made zero HTTP calls — see
+`svv_balaji_project_shape` gap). Login, retailer registration and session restore are now real.
+
+- **New `svv-balaji-customer/src/api/`** (`client.ts`, `tokenStore.ts`, `storefrontAuth.ts`,
+  `types.ts`) — its own axios instance and refresh-token store, deliberately separate from
+  `@shared/api/client`. That client is the **staff** one (`/auth/login`, `/auth/refresh`, staff
+  JWT secret); a customer has no `User` row and no password, so it could never have authenticated
+  anyone. `VITE_TOKEN_KEY` (`svv.customer.refreshToken`) already existed in `.env` for exactly this
+  and was unused until now.
+- **Found and fixed a wiring bug while doing this:** `main.tsx` wrapped the whole app in
+  `@shared/auth/AuthProvider` (the staff provider) and `RequireAccount.tsx` gated checkout/orders
+  on `@shared/auth/useAuth()` — i.e. the three account-gated screens were checking a staff session
+  that this app has no way to create, not the customer one. Removed `AuthProvider` from `main.tsx`;
+  `RequireAccount` now reads `useCustomerAuth()`.
+- **`CustomerAuthContext`** rewritten: `login`/`registerPartner` (sync, fake, hardcoded OTP `1234`)
+  replaced with `requestOtp`/`verifyOtp`/`registerRetailer` (async, call the real API) plus boot-time
+  session restore (refresh-token-in-storage → `/storefront/auth/refresh` → `/storefront/auth/me`,
+  same pattern as the staff `AuthProvider`). Interface kept backward-compatible
+  (`role`/`customerProfile`/`retailerProfile`/`switchRole`/`isLoggedIn`) so `HomePage`,
+  `ProfilePage`, `DesktopHeader`, `ProductDetailPage` and `LoyaltyProvider` needed no changes —
+  they still read demo numbers (wallet, credit limit, orders) as fallback, since wallet/loyalty/
+  orders have no backend yet; only name/phone/email/GSTIN are now real. `switchRole` (the "preview
+  as Customer/Retailer" demo toggle on a few screens) is unchanged — front-end-only, never touches
+  the server.
+- **`LoginPage`**: real 10-digit phone + 6-digit OTP validation (was 4-digit, matching neither the
+  backend's `OTP_LENGTH=6` nor anything real). A retailer-tab login on an unregistered number is
+  now redirected to `/retailers/register` instead of silently self-provisioning as a B2C consumer —
+  that's what `POST /storefront/auth/otp/verify` would otherwise do to any unknown phone, retailer
+  tab or not. Handles the `pending` response (a retailer who registered but isn't approved yet)
+  with the server's own message. Shows the mock-mode `devCode` inline instead of a hardcoded
+  "1234" hint, since there's no SMS vendor yet (A-11-shaped gap, mirrored on the storefront).
+- **`RegisterPage`**: rebuilt to match `RegisterRetailerDto` field-for-field — dropped `fssai` and
+  the trade-license upload (backend accepts neither, and silently discarding entered data is worse
+  than not asking), added `district` (backend has it, form didn't). Added the OTP step the backend
+  actually requires: `register-retailer` consumes an OTP challenge itself, so step 1 now sends one
+  and collects the code, carried through to the final submit rather than verified separately —
+  calling `/otp/verify` here would self-provision the number as B2C and consume the code before
+  registration could use it. **Success screen no longer claims instant approval + welcome wallet
+  credit** — it never was instant (the backend creates `PENDING_APPROVAL`, no session), the old
+  copy was simply wrong. Now says what actually happens: submitted, staff review the GSTIN, sign in
+  once approved.
+- Admin side (`/b2b-accounts`, `CustomerAccountsPage`) was already built and wired to
+  `GET/PATCH /storefront/accounts` in an earlier 16 Sep session (uncommitted) — confirmed the route,
+  nav entry (`permission: 'CUSTOMER_ACCOUNT_VIEW'` → `customerAccounts.view`) and hooks all resolve
+  correctly end to end. No changes needed there; a retailer registered through the fixed
+  `RegisterPage` now shows up in that queue for real, and approving it there is what lets them sign
+  in on the storefront.
+
+**Contract changes:** none — `/storefront/auth/*` already existed. This session is the frontend
+catching up to it.
+
+**Other developer needs to know:** if you're testing end-to-end — register a retailer on
+`/retailers/register`, approve it from the admin panel's B2B Companies screen, then sign in on
+`/retailers/login`. `CUSTOMER_OTP_MODE=mock` (the `.env.example` default) returns the code in the
+API response and in the UI as "Dev OTP: ######"; nothing is auto-filled. Wallet balance, credit
+limit, order counts etc. shown on `ProfilePage`/`DesktopHeader` are still demo fallback numbers for
+every account, real or not — those subsystems (wallet, loyalty, orders) have no backend yet, only
+identity does.
+
+**Next:** wire order placement (`ProductDetailPage`/`CartPage`/`CheckoutPage`) against
+`SalesModule` once there's appetite for it — that's the next real chunk of "connect the storefront"
+and is a bigger job than auth was. Cart/wallet/loyalty stay mock until then.
+
+---
+
+## 2026-09-16 (even later) — Raunak
+
+**Did:** First slice of the "customer side module" the user spec'd out (dashboard, catalog,
+pricing, taxonomy, inventory, B2C+B2B orders, CRM, promotions, invoicing, analytics - about ten
+subsystems). Agreed to build Catalog + Inventory first and explicitly skip Invoicing & Payments
+(overlaps Ujjawal's WS4.4/4.5). This session: **Category & Taxonomy Manager**, **Product editor
+enhancements**, and an **Inventory** screen.
+
+**Schema** (migration `20260916140000_catalog_taxonomy_inventory`, applied - `products` table was
+empty, zero migration risk):
+
+- New `Category` model - two-level self-relation (`parentId`), unique `slug`, `imageUrl`,
+  `displayOrder`, `isActive`. Deliberately not "add a hierarchy later" - the free-text
+  `Product.category` string it replaces had no uniqueness and no way to render a collection page,
+  so it was a straight replacement (`categoryId` FK), not a dual-write. Only 3 call sites
+  referenced the old field (`recipes.service.ts`'s `category` is a *different*, unrelated Recipe
+  field - checked before touching anything).
+- `Product` gained `slug` (unique, auto-derived from name, collision-suffixed `-2`/`-3`/...),
+  `metaTitle`, `metaDescription`, and three inventory fields: `reorderPoint`, `safetyStock`,
+  `allowBackorder` - product-level, not per-warehouse (nothing asks for per-warehouse thresholds
+  yet; the catalogue asks "should this be flagged low" as one number).
+- Two new upload folders (`products`, `categories` in `UPLOAD_FOLDERS`) - no other uploads-module
+  change needed, per its own design (`src/uploads/README` intent: a new class + one line).
+
+**Backend:**
+
+- New `src/categories/categories.module.ts` (single-file, matching `products.module.ts`'s
+  convention) - full CRUD, `assertDeletable` guard (refuses delete with children or products
+  assigned, same 409 pattern as every other master), and three hierarchy rules with dedicated
+  tests: a category can't be its own parent, can't complete a 2-cycle with its child, and a
+  missing parent 404s rather than silently creating an orphan. 10/10 new tests.
+- `ProductsService` gained the same slug auto-generation, plus
+  `GET /products/stock-summary` - every active product's QA-released sellable quantity aggregated
+  across all warehouses (same aggregation shape as `StorefrontCatalogueService.availability()`),
+  against `reorderPoint`/`safetyStock`, computing `OK`/`LOW`/`CRITICAL`.
+- `StorefrontCatalogueService`'s category filter moved from a free-text `category` query param to
+  `categorySlug`, matching the new relation.
+- New permission group `categories.{view,create,edit,delete}` (registry defaults: view → BM/ST/
+  PROD, the rest → BM). **Same seeding gap as `customerAccounts` earlier today - BM/ST/PROD
+  already had a `role_permission_state` row from 16 Aug, so a brand-new key doesn't backfill on
+  boot. Granted directly in the DB again, logging it here for the same reason as last time: there
+  is still no migration-based mechanism for this, only a by-hand grant.** Worth fixing properly
+  if a third one of these comes up.
+
+**Frontend:**
+
+- New **Categories** screen (`/categories`) - flat table read as a two-level tree (parent then its
+  children indented beneath), image via the existing `FileUploadField`, delete-guard errors
+  surfaced verbatim.
+- New **Inventory** screen (`/inventory`) - one row per active product, available quantity as a
+  progress bar against reorder/safety thresholds, OK/Low/Critical filter, inline threshold editor
+  that PATCHes just the three inventory fields rather than opening the full product form.
+- **Product editor rebuilt**: `CategorySelect` (indents children under their parent's label),
+  description, a small `ProductImagesField` (N stacked `FileUploadField` slots reduced to a plain
+  `string[]`, since the existing upload component only knows a single URL), storefront toggle,
+  SEO fields, inventory thresholds. The backend accepted `description`/`images`/
+  `showOnStorefront` since the first storefront-foundation session today - **the admin form never
+  had inputs for them until now**, so they were write-only via the API until this pass.
+- `shared/` gained: `Category`/`CategoryRef`/`ProductStockSummary` types, `categories.ts` API
+  client, `useCategories.ts` hooks, `useProductStockSummary`, a `CategorySelect` picker, and
+  `CATEGORY_*` names in `shared/auth/permissions.ts`. `Product`/`CreateProductInput` types updated
+  to match the new schema (`category: string` is gone from both).
+- Both new screens tagged `zone: 'commerce'` in `navigation.tsx`, under the existing Sales
+  section, ahead of Customers.
+
+**Contract changes:** `POST/GET/PATCH/DELETE /categories[/:id]`, `GET /products/stock-summary`.
+`CreateProductDto`/`UpdateProductDto` gained `categoryId` (replacing `category`), `slug`,
+`metaTitle`, `metaDescription`, `reorderPoint`, `safetyStock`, `allowBackorder` - additive except
+`category` → `categoryId`, and nothing had data yet.
+
+**Verified:** backend - `tsc` clean, lint clean, 26/26 suites / 323/323 tests (313 + 10 new), full
+`nest build`, booted a real server and drove category creation → hierarchy → product-with-category
+→ stock-summary → delete-guard-refusal with curl against Postgres, cleaned up after. Frontend -
+`tsc` clean, lint clean, `vite build` succeeds and code-splits all three touched/new pages, then
+re-ran the same curl flow through the **admin dev server's `/api` proxy** (not straight to the
+backend) so the request/response shapes are confirmed against what the components actually call.
+**Visual rendering still not verified** - no headless browser available in this environment, same
+limitation as the Storefront Accounts screen earlier today. Both dev servers left running
+(backend :3000, admin :5174) for a manual pass.
+
+**Other developer needs to know:** `Product.category` (the free-text string) no longer exists -
+anything else touching it needs `categoryId`/the `category` relation now. If you're mid-work on
+something that read `product.category` as a string, it will now be `product.category?.name`.
+
+**Next:** the manual browser pass, then Order Management (B2C + B2B quotes/POs) or CRM
+(B2B company hierarchies, credit) per the user's stated priority order - not yet asked which of
+those two comes after Catalog + Inventory.
+
+---
+
+## 2026-09-16 (later still) — Raunak
+
+**Did:** Two additions to the admin panel, on top of the backend commerce foundation from earlier
+today.
+
+**Storefront Accounts screen** (`svv-balaji-admin/src/pages/customer-accounts/`) - a real UI for
+the `/storefront/accounts` endpoints: `CustomerAccountsPage.tsx` (list, filterable by channel and
+status, defaults to the pending-approval queue) and `CustomerAccountReviewDrawer.tsx` (shows the
+GSTIN/business/address a retailer submitted, Approve/Reject). Wired into `navigation.tsx` and
+`App.tsx` the same way every other screen is - one nav entry, one lazy route. New shared-layer
+files: `shared/api/customerAccounts.ts`, `shared/hooks/useCustomerAccounts.ts`, plus the
+`CustomerAccount*` types in `shared/api/types.ts` and two new permission-name mappings in
+`shared/auth/permissions.ts` (`CUSTOMER_ACCOUNT_VIEW`/`CUSTOMER_ACCOUNT_REVIEW`).
+
+While verifying this against a live server (not just typechecking), found the list/approve/reject
+endpoints were returning `refreshTokenHash` in the JSON body - a bcrypt hash, not the live token,
+but it had no business leaving the database in a staff-facing list. Fixed in
+`storefront-auth.service.ts` with an explicit `ACCOUNT_STAFF_SELECT` used by all three methods.
+Backend tests still 30/30.
+
+**Supply/Commerce zone toggle** - the "two parts" split of the admin panel the user asked for:
+farmer/supplier/raw-material screens vs. customer/retail screens, as one app with a switch rather
+than two separate deployments (matches what was discussed - keeps one login session and one
+`shared/` layer, reversible later if it ever needs to be two real apps). Mechanically:
+
+- `NavItem` in `navigation.tsx` gained an optional `zone?: 'supply' | 'commerce'`. Every item in
+  Farm Sourcing, Supplier Sourcing, Procurement, Warehouse and Processing & QA is tagged `supply`;
+  everything in Sales (customers, price lists, orders, storefront accounts) is tagged `commerce`;
+  Dashboard, Trace and Administration are left untagged (`undefined` = shown in both, since they
+  cut across the whole business).
+- **This is a navigation filter layered on top of the permission check, not a replacement for
+  it.** `AppLayout.tsx`'s menu builder now filters on `can(item.permission) && (!item.zone ||
+  item.zone === zone)` - the permission check still runs first and still removes anything the role
+  cannot open, exactly as before. A role with no sales access gains nothing by switching to
+  "Customer & Retail"; it just stops seeing sourcing screens it already had no special reason to
+  browse while working orders.
+- A `Segmented` control (`useAdminZone.ts`) sits at the top of the sidebar - "Supply Chain" /
+  "Customer & Retail" - persisted to `localStorage` **per browser, not per account**, since it is
+  about wayfinding, not security. Switching zones while on a screen that belongs to the other one
+  navigates to `/` (the shared dashboard) rather than leaving the user on a page with no matching
+  menu entry.
+
+**Contract changes:** none to the backend. Frontend-only: new route `/customer-accounts` (already
+existed as an API surface from the earlier session today), new `zone` field on `NavItem` (additive,
+optional).
+
+**Verified:** `tsc --noEmit` clean on the whole admin app, lint clean on every file touched,
+production `vite build` succeeds and code-splits `CustomerAccountsPage` as its own chunk. Drove the
+actual data path end-to-end with curl through the dev server's `/api` proxy (not straight to the
+backend) - login, list filtered by channel, approve, re-list showing the new customer code - so the
+request/response shapes are confirmed to match what the components expect. **Not verified: visual
+rendering.** No headless browser (`chromium-cli`, Playwright) is available in this environment, so
+the drawer, the segmented toggle and the zone-switch redirect have not actually been seen rendering
+in a browser - only reasoned through and confirmed via the API layer. Left both dev servers running
+(backend :3000, admin :5174) for a manual pass.
+
+**Other developer needs to know:** the `zone` tagging on `navigation.tsx` is a manual judgement
+call per screen, not derived from anything - if a new Sales-zone screen is added later, tag it
+`zone: 'commerce'` or it will silently show in both (which is a safe default, not a broken one, but
+worth doing deliberately). `/settings/roles`, `/users`, `/branches` were left shared rather than
+put in either zone; Administration felt wrong to hide behind a toggle a Super Admin might not think
+to flip.
+
+**Next:** the manual browser pass above, then continue wiring `svv-balaji-customer` to the backend
+identity/catalogue endpoints built earlier today.
+
+---
+
+## 2026-09-16 (later) — Raunak
+
+**Did:** Built the backend commerce foundation for the storefront - self-service identity and a
+public read-only catalogue on top of the existing staff-operated sales module. Nothing here changes
+what staff can already do; it adds a door for customers that did not exist before.
+
+**New: storefront identity (`src/storefront/`, migration `20260916120000_storefront_identity`)**
+
+- `CustomerAccount` is the *login*; `Customer` (existing, Phase 4) stays the *commercial record*.
+  Separate on purpose - a B2B retailer needs somewhere to exist while their registration is pending
+  review, without occupying a `customerCode` or showing up in the customer master as a live account.
+  A B2C consumer gets both at once, since there is nothing to approve.
+- **Universal OTP login** (`POST /storefront/auth/otp/request`, `.../otp/verify`): an unknown phone
+  self-provisions as B2C and gets a `Customer` row immediately (`CUST-B2C-NNNNNN`, same sequence
+  series `CustomersService` already uses). A known phone signs in as whatever channel it already is
+  - **the client decides nothing; the account row does.** That is the replacement for the storefront's
+    mock CUSTOMER/RETAILER toggle.
+- **Retailer registration** (`POST /storefront/auth/register-retailer`): OTP-verified, creates
+  `PENDING_APPROVAL` with GSTIN/business details, no session and no `Customer` row until staff
+  review it. New staff screen surface: `GET/PATCH /storefront/accounts` behind two new permission
+  keys, `customerAccounts.view` (BM, ST) and `customerAccounts.review` (BM) - approving creates the
+  `Customer` (`CUST-B2B-NNNNNN`) the account then orders against, same GSTIN-clash check
+  `CustomersService.create` already does.
+- **OTP is mock-mode only for now** (no SMS vendor procured - same shape of gap as A-11's GSP). Fixed
+  code `123456` for any number, returned in the API response as `devCode`. `otp.config.ts` **refuses
+  to boot** if `CUSTOMER_OTP_MODE=mock` and `NODE_ENV=production` together - pinned by a test, not
+  left to review. Codes are hashed (bcrypt), rate-limited (5 requests / 15 min per number), attempt-
+  capped (5 wrong guesses spends the challenge), and never stored in plaintext.
+- **Customer tokens are signed with their own secret pair**
+  (`CUSTOMER_JWT_ACCESS_SECRET`/`CUSTOMER_JWT_REFRESH_SECRET`, new required env vars - see
+  `.env.example`), deliberately not the staff `JWT_ACCESS_SECRET`. Reason, in case anyone is tempted
+  to simplify this later: `JwtStrategy.validate()` in `src/auth` trusts any payload with a valid
+  signature without re-reading the user, so a customer token signed with the staff secret would pass
+  `JwtAuthGuard` outright and become a staff session. Verified by hand against a running server: a
+  storefront token 401s on `/auth/me` and `/customers`; a staff token was never tested against
+  storefront routes because the reverse direction was never the risk.
+
+**New: public catalogue (`storefront-catalogue.{service,controller,module}.ts`)** - the first
+unguarded read surface in this API. `GET /storefront/catalogue/products[/:id]` returns only products
+staff have marked `showOnStorefront` (new field, default `false` - nothing existing becomes visible
+by accident), resolves the caller's price via the existing `PricingService.resolve()` (a missing
+price rule returns `price: null` here instead of the 400 the order-taking path correctly throws),
+and aggregates sellable stock across warehouses (QA-released, not expired, minus reservations) -
+no staff endpoint aggregates this today, it is all per-warehouse-per-batch.
+
+**Schema (both migrations additive, applied to the dev database, zero data loss):**
+`Product` gained `description`, `images String[]`, `showOnStorefront Boolean @default(false)`.
+`ProductsService`/DTOs already forward whatever fields are on the DTO to Prisma, so the existing
+create/update endpoints accept the new fields with no other change.
+
+**Contract changes:** new module, additive only.
+`POST /storefront/auth/{otp/request,otp/verify,register-retailer,refresh,logout}`,
+`GET /storefront/auth/me`, `PATCH /storefront/auth/profile`,
+`GET/PATCH /storefront/accounts[/:id/approve,/:id/reject]`,
+`GET /storefront/catalogue/products[/:id]`. New enums `CustomerAccountStatus`, `CustomerOtpPurpose`.
+New permission keys `customerAccounts.view`, `customerAccounts.review` - **granted directly to
+BRANCH_MANAGER/SALES_TEAM in the database** rather than left to the boot seeder, because
+`seedUnconfiguredRoles` only backfills a role's defaults the first time it has *never* been
+configured; BM/ST already have a `role_permission_state` row from 16 Aug, so a new key added to
+their `defaultRoles` would otherwise sit ungranted until someone noticed. Same gap will bite the
+next person who adds a permission to an existing role - there is no migration-based mechanism for
+it, only this by-hand grant, same as how `users.create` moving to Branch Manager was handled.
+
+**Verified, not just typechecked:** built, booted the server for real, and ran the full flow with
+curl against a live Postgres - OTP request/verify provisioning a B2C consumer + `Customer` row,
+wrong-code rejection, rate limiting (6th request in 15 min correctly 429s), retailer register →
+staff approve → retailer login, and confirmed a storefront token 401s against both `/auth/me` and
+`/customers` (the staff guard). Test data cleaned from the dev DB afterward. 283 pre-existing tests
+still pass unmodified; added 30 new ones (`storefront-auth.service.spec.ts`,
+`otp.config.spec.ts`, `customer-token.config.spec.ts`) covering phone normalisation, OTP replay/
+expiry/lockout, the B2B pending-approval gate, and the secret-isolation refusal. Lint clean on
+everything touched.
+
+**Other developer needs to know:**
+
+- **New required env vars** or the app won't boot: `CUSTOMER_JWT_ACCESS_SECRET`,
+  `CUSTOMER_JWT_REFRESH_SECRET` (must differ from the staff ones - the app throws at first use if
+  not), `CUSTOMER_OTP_MODE`, `CUSTOMER_OTP_MOCK_CODE`. Added to `.env.example` with the values used
+  here.
+- Two new tables (`customer_accounts`, `customer_otp_challenges`), two new enums, three new columns
+  on `products`. `npx prisma migrate deploy` before starting the API.
+- **What this is not:** order placement. `/orders` still takes a `customerId` and is staff-guarded;
+  a storefront session resolves to a `customerId` on its own token now, but nothing calls the sales
+  module from a customer session yet. That, plus wiring the actual `svv-balaji-customer` React app
+  (currently 100% mock, zero HTTP calls anywhere) to any of this, is the next piece.
+- A-10 (written client agreement on B2C scope) was still open in `PROJECT_STATE.md` when this
+  session started - flagged to the user before building, who chose to proceed. Ravi still needs this
+  in writing.
+
+**Next:** wire the `svv-balaji-customer` app to these endpoints (real login replacing
+`CustomerAuthContext`'s mock toggle, real catalogue on the home/PDP screens), then a storefront
+order-placement endpoint that reuses `SalesService`'s allocation/pricing rather than duplicating it.
+`PROJECT_STATE.md` updated to match.
+
+---
+
+## 2026-09-16 — Raunak
+
+**Did:** ⚠️ **The malware came back on `origin/main`, and `main` has been force-pushed to remove it.
+Re-clone or `git fetch origin && git reset --hard origin/main` before you do anything else.**
+
+Commit `baceaf3` "reatiler ui" (authored under my name, 7 Sep 17:07, pushed to `origin/main`)
+reintroduced all three pieces Ujjawal purged on 7 Sep: the payload at
+`public/fonts/fa-solid-500.woff2` (7,592 bytes of tab-padded obfuscated Node.js), the
+`.vscode/tasks.json` hidden `runOn: folderOpen` task that executes it through `node` with output
+suppressed, and the `.vscode/settings.json` flip of `task.allowAutomaticTasks` from `"off"` back to
+`true`. It came in exactly the way the 7 Sep entry warned it would — an old clone carrying the
+poisoned `.vscode/` skeleton, committed and pushed.
+
+Found it because a half-finished merge of `origin/main` was sitting in my working tree with all
+three files **staged**. The trigger was live on disk while the folder was open in VS Code; what
+prevented execution is that the payload blob was never materialised to the working tree
+(`AD` in `git status`), so the task hit a missing file and the trailing `|| echo ''` swallowed it.
+
+Remediation:
+
+- `git merge --abort` — back to `f7055ec`, clean tree, payload absent, `tasks.json` gone,
+  `allowAutomaticTasks` back to `"off"`.
+- Confirmed the payload exists in **exactly one commit repo-wide** (`baceaf3`) — the filter-repo
+  purge of 7 Sep held, this was a single reintroduction, so no history rewrite was needed.
+- Verified `f7055ec` and `baceaf3` have byte-identical trees apart from those three files, so
+  replacing the remote loses no real work.
+- `git push --force-with-lease` → `origin/main` is now `f7055ec`. Verified on the remote: payload
+  gone, `tasks.json` gone, `allowAutomaticTasks: "off"`, and the only fonts left are the genuine
+  400/900 families (checked `wOF2`/`wOFF`/TTF magic bytes).
+- Swept the tree: no `preinstall`/`postinstall`/`prepare` scripts in any `package.json`, no
+  `.npmrc`, no agent autorun configs, no `.codebuddy`/`.gemini`/`.kiro`/`.qoder` directories.
+
+`baceaf3` stays reachable on GitHub by direct SHA until their GC runs — same caveat as the 7 Sep
+purge. Still worth scanning your own machine and every other project's `.vscode/tasks.json`.
+
+Also of note: the merge conflict that exposed this was spurious. `04d6904` (local) and `baceaf3`
+(remote) were the same work committed twice with byte-identical `svv-balaji-customer/` trees, so
+git concatenated two copies of `CartPage.tsx`, `ProfilePage.tsx` and `main.tsx` — that is where the
+duplicate imports and duplicate JSX blocks came from, not from anyone's edits. Gone now; the
+customer app typechecks clean (`tsc --noEmit`, exit 0).
+
+Leftover from the poisoned skeleton, inert but not ours: `public/fonts/README.md` describes a
+"Blockchain Explorer application" and `.vscode/launch.json` references `sst` and
+`AWS_PROFILE: flo-ct-flo360`. Not deleted yet.
+
+**Contract changes:** none — no application code touched.
+
+**Other developer needs to know:** **your clone will not fast-forward.** `origin/main` moved from
+`baceaf3` to `f7055ec` (non-fast-forward). Do not merge or push an old clone — that is exactly how
+this recurred. If you pulled `origin/main` between 7 and 16 Sep you had the loader on disk; check
+whether `.vscode/tasks.json` exists locally and whether `public/fonts/fa-solid-500.woff2` was ever
+written.
+
+**Next:** starting the backend commerce foundation for the B2C/B2B storefront — customer
+authentication (phone+OTP for consumers, registration flow for retailers), public catalogue and
+price endpoints, and product catalogue metadata. Note A-10 (written agreement on B2C scope) is
+still open.
+
+---
+
 ## 2026-09-07 (later still) — Raunak
 
 **Did:** Added a Loyalty Program to `svv-balaji-customer` for both the Customer (B2C) and Retailer
