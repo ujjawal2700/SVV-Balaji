@@ -31,10 +31,8 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 const mockOrders = [
   {
@@ -765,11 +763,11 @@ export function OrdersPage() {
                           </Typography.Text>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                             <Typography.Text strong style={{ fontSize: 13, color: item.priceChanged && !item.isOOS ? (livePrice > item.price ? '#dc2626' : '#16a34a') : '#212121' }}>
-                              ₹{livePrice}
+                              {formatInr(livePrice)}
                             </Typography.Text>
                             {item.priceChanged && !item.isOOS && (
                               <Typography.Text delete style={{ fontSize: 12, color: '#878787' }}>
-                                ₹{item.price}
+                                {formatInr(item.price)}
                               </Typography.Text>
                             )}
                             {item.priceChanged && !item.isOOS && livePrice > item.price && (

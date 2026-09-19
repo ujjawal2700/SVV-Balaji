@@ -25,16 +25,39 @@ import {
   TruckFilled,
   TruckOutlined,
 } from '@ant-design/icons';
-import { Badge, Button, Carousel, Collapse, Divider, Input, InputNumber, Switch, Table, Tag, Typography, message } from 'antd';
-import { useMemo, useState } from 'react';
+import { Badge, Button, Carousel, Collapse, Divider, Input, InputNumber, Spin, Switch, Table, Tag, Typography, message } from 'antd';
+import type { StorefrontPriceTier, StorefrontVariant } from '@shared/api/types';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
-import { useLoyalty } from '../loyalty/useLoyalty';
-import { bestOfBasics, buyAgainProducts, popularProducts } from '../mock/homeMockData';
+import { useCatalogueProduct, useCatalogueProducts } from '../hooks/useCatalogue';
+import { useLoyalty } from '../loyalty/useLoyalty';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
+
+/** One buyable pack size: the product's own pack, or one of its variants. */
+interface Pack {
+  /** What the cart keys on - the product id for the primary pack, the variant id otherwise. */
+  id: string;
+  name: string;
+  sku: string;
+  images: string[];
+  /** GST-inclusive reference price, or null when the pack carries none. */
+  mrp: number | null;
+  /** GST-inclusive consumer/retailer entry price for the current channel. */
+  price: number | null;
+  priceTiers: StorefrontPriceTier[];
+}
+
+/** Ladder in the shape the cart prices from - GST-inclusive, as displayed. */
+const toCartTiers = (tiers: StorefrontPriceTier[]) =>
+  tiers.map((t) => ({ minQuantity: t.minQuantity, unitPrice: t.unitPriceInclGst }));
+
+/** The tier a quantity falls into: the highest break at or below it, else the lowest. */
+function tierFor(tiers: StorefrontPriceTier[], quantity: number): StorefrontPriceTier | undefined {
+  const sorted = [...tiers].sort((a, b) => a.minQuantity - b.minQuantity);
+  return [...sorted].reverse().find((t) => quantity >= t.minQuantity) ?? sorted[0];
 }
 
 export function ProductDetailPage() {
@@ -44,6 +67,11 @@ export function ProductDetailPage() {
   const { role, switchRole } = useCustomerAuth();
   const loyalty = useLoyalty();
   const isRetailer = role === 'RETAILER';
+
+  // Every section below renders from this one response. The channel is part of
+  // the query, so flipping the role switcher refetches with the other price list.
+  const catalogue = useCatalogueProduct(productId);
+  const detail = catalogue.data;
 
   // Pincode mock state
   const [pincode, setPincode] = useState('');
@@ -55,121 +83,183 @@ export function ProductDetailPage() {
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [showGstInclusive, setShowGstInclusive] = useState(true);
 
-  // Mock finding the product
-  const allMockProducts = [...popularProducts, ...bestOfBasics, ...buyAgainProducts];
-  const product = allMockProducts.find((p) => p.id === productId) || allMockProducts[0];
-
-  // Variant Management
-  const hasVariants = 'variants' in product && Array.isArray((product as any).variants) && (product as any).variants.length > 0;
-  const defaultVariantId = hasVariants ? (product as any).variants[0].id : null;
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(defaultVariantId);
-
-  // Multi-Variant Quantity Matrix State
+  // Pack size. Null = the product's own (primary) pack.
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [variantQuantities, setVariantQuantities] = useState<{ [variantId: string]: number }>({});
 
-  // Active Variant / Product Details
-  const activeProduct = useMemo(() => {
-    if (hasVariants && selectedVariantId) {
-      const variant = (product as any).variants.find((v: any) => v.id === selectedVariantId);
-      if (variant) {
-        return {
-          ...product,
-          id: variant.id,
-          sku: variant.sku || (product as any).sku,
-          price: variant.price,
-          mrp: variant.mrp,
-          images: variant.images || [variant.image],
-          image: variant.images ? variant.images[0] : variant.image,
-          variant: variant.name,
-        };
-      }
-    }
-    return {
-      ...product,
-      images: (product as any).images || [product.image],
-    };
-  }, [product, hasVariants, selectedVariantId]);
-
-  // Pricing Base
-  const consumerPrice = (activeProduct as any).price || 185;
-  const mrp = (activeProduct as any).mrp || Math.round(consumerPrice * 1.25);
-  const consumerDiscount = mrp > consumerPrice ? Math.round(((mrp - consumerPrice) / mrp) * 100) : 0;
-
-  // Wholesale Specs & Order Parameters
-  const moq = 10; // Minimum Order Quantity: 10 pcs
-  const maxOrderLimit = 500; // Maximum Order Quantity
-  const packBoxSize = 10; // 10 pcs/box
-  const availableStock = 1450; // Available stock
-
-  // Selected Quantities
-  const [wholesaleQty, setWholesaleQty] = useState<number>(10);
+  const [wholesaleQty, setWholesaleQty] = useState<number>(1);
   const [selectedUnits, setSelectedUnits] = useState<number>(1);
 
-  // Tier-Based Pricing Matrix (Proportional to Base Price)
-  // Example base scale:
-  // 1-9 pcs: Tier 1 (~90% of MRP)
-  // 10-49 pcs: Tier 2 (~80% of MRP)
-  // 50-99 pcs: Tier 3 (~72% of MRP)
-  // 100+ pcs: Tier 4 (~65% of MRP)
-  const tierPricing = useMemo(() => {
-    const tier1 = Math.round(mrp * 0.9);
-    const tier2 = Math.round(mrp * 0.8);
-    const tier3 = Math.round(mrp * 0.72);
-    const tier4 = Math.round(mrp * 0.65);
-    return [
-      { key: '1-9', label: '1–9 pcs', min: 1, max: 9, price: tier1, discount: Math.round(((mrp - tier1) / mrp) * 100) },
-      { key: '10-49', label: '10–49 pcs', min: 10, max: 49, price: tier2, discount: Math.round(((mrp - tier2) / mrp) * 100) },
-      { key: '50-99', label: '50–99 pcs', min: 50, max: 99, price: tier3, discount: Math.round(((mrp - tier3) / mrp) * 100) },
-      { key: '100+', label: '100+ pcs', min: 100, max: 99999, price: tier4, discount: Math.round(((mrp - tier4) / mrp) * 100) },
-    ];
-  }, [mrp]);
+  // Related products: same category (parent included), never the product itself.
+  const relatedQuery = useCatalogueProducts({
+    categorySlug: detail?.category?.parent?.slug ?? detail?.category?.slug,
+    limit: 8,
+  });
+  const related = relatedQuery.products.filter((p) => p.id !== detail?.id).slice(0, 6);
 
-  // Active Price Tier based on selected quantity
-  const activeTier = useMemo(() => {
-    return tierPricing.find((t) => wholesaleQty >= t.min && wholesaleQty <= t.max) || tierPricing[1];
-  }, [tierPricing, wholesaleQty]);
+  // Order limits come from the product, not from constants in this file.
+  const moq = detail?.orderLimits.moqB2B ?? 1;
+  const maxOrderLimit = detail?.orderLimits.maxOrderQuantityB2B ?? 10000;
+  const packBoxSize = detail?.orderLimits.packBoxSize ?? null;
+  // Retailers order in master boxes when the product defines one, otherwise by the unit.
+  const qtyStep = packBoxSize ?? 1;
+  const consumerMin = detail?.orderLimits.minOrderQuantity ?? 1;
+  const consumerMax = detail?.orderLimits.maxOrderQuantity ?? 99;
+  const allowBackorder = detail?.orderLimits.allowBackorder ?? false;
+  const availableStock = detail?.availableQuantity ?? 0;
 
-  // GST & Tax Calculations
-  const gstRate = 5; // 5% GST
-  const activeWholesalePriceInclGst = activeTier.price;
-  const activeWholesalePriceExclGst = +(activeWholesalePriceInclGst / (1 + gstRate / 100)).toFixed(2);
+  // Start a fresh product at its own minimums, not the previous product's quantity.
+  useEffect(() => {
+    if (!detail) return;
+    setSelectedVariantId(null);
+    setVariantQuantities({});
+    setWholesaleQty(detail.orderLimits.moqB2B ?? 1);
+    setSelectedUnits(detail.orderLimits.minOrderQuantity ?? 1);
+  }, [detail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Packs: the product's own, then each additional variant.
+  const allPacks: Pack[] = useMemo(() => {
+    if (!detail) return [];
+    const primary: Pack = {
+      id: detail.id,
+      name: detail.packLabel ?? 'Standard pack',
+      sku: detail.sku,
+      images: detail.images,
+      mrp: detail.mrp,
+      price: detail.price ? detail.price.unitPriceInclGst : null,
+      priceTiers: detail.priceTiers,
+    };
+    const extra = detail.variants.map((v: StorefrontVariant): Pack => ({
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      // A variant with no photos of its own shows the product's, not a blank.
+      images: v.images.length > 0 ? v.images : detail.images,
+      mrp: v.mrp,
+      price: v.price ? v.price.unitPriceInclGst : null,
+      priceTiers: v.priceTiers,
+    }));
+    return [primary, ...extra];
+  }, [detail]);
+
+  const hasVariants = allPacks.length > 1;
+  const activePack: Pack | undefined = allPacks.find((p) => p.id === selectedVariantId) ?? allPacks[0];
+  // Shape the variant selector below already reads.
+  const product = { variants: allPacks };
+
+  // Specification rows, plus manufacturer / origin / shelf life when staff filled
+  // those fields in but did not also repeat them as a row - so no field a Super
+  // Admin enters silently fails to appear.
+  const baseSpecs = detail?.specifications ?? [];
+  const hasSpec = (label: string) => baseSpecs.some((s) => s.label.trim().toLowerCase() === label.toLowerCase());
+  const specRows: Array<{ label: string; value: string }> = detail
+    ? [
+        ...baseSpecs,
+        ...(detail.manufacturer && !hasSpec('Manufacturer') ? [{ label: 'Manufacturer', value: detail.manufacturer }] : []),
+        ...(detail.countryOfOrigin && !hasSpec('Country of Origin') ? [{ label: 'Country of Origin', value: detail.countryOfOrigin }] : []),
+        ...(detail.shelfLife && !hasSpec('Shelf Life') ? [{ label: 'Shelf Life', value: detail.shelfLife }] : []),
+      ]
+    : [];
+
+  // Everything the JSX reads about "the thing being viewed", for the active pack.
+  const activeProduct = {
+    id: activePack?.id ?? '',
+    name: detail?.name ?? '',
+    sku: activePack?.sku,
+    brand: detail?.brand ?? undefined,
+    badge: detail?.badge ?? undefined,
+    rating: detail?.rating ?? undefined,
+    reviewCount: detail?.reviewCount ?? undefined,
+    images: activePack && activePack.images.length > 0 ? activePack.images : ['/images/cat_namkeen.jpg'],
+    image: activePack?.images[0] ?? '/images/cat_namkeen.jpg',
+    description: detail?.description ?? undefined,
+    disclaimer: detail?.disclaimer ?? undefined,
+    // Empty lists become undefined so the existing "render only if present" checks hide the section.
+    specifications: specRows.length > 0 ? specRows : undefined,
+    highlights: detail && detail.highlights.length > 0 ? detail.highlights : undefined,
+    offers: detail && detail.offers.length > 0 ? detail.offers : undefined,
+    faqs: detail && detail.faqs.length > 0 ? detail.faqs : undefined,
+    returnPolicy: detail?.returnPolicy ?? undefined,
+    warranty: detail?.warranty ?? undefined,
+    variant: activePack?.name,
+  };
+
+  // Pricing - GST-inclusive throughout, converted server-side once.
+  const consumerPrice = activePack?.price ?? null;
+  const mrp = activePack?.mrp ?? null;
+  const consumerDiscount =
+    mrp !== null && consumerPrice !== null && mrp > consumerPrice ? Math.round(((mrp - consumerPrice) / mrp) * 100) : 0;
+
+  // Wholesale ladder for the active pack, straight from the price rules staff defined.
+  const tierPricing = useMemo(
+    () =>
+      (activePack?.priceTiers ?? []).map((t) => ({
+        key: String(t.minQuantity),
+        label: t.maxQuantity ? `${t.minQuantity}–${t.maxQuantity} pcs` : `${t.minQuantity}+ pcs`,
+        min: t.minQuantity,
+        max: t.maxQuantity ?? Number.POSITIVE_INFINITY,
+        price: t.unitPriceInclGst,
+        priceExcl: t.unitPrice,
+        gstRate: t.gstRatePercent,
+        // Computed server-side on the per-pack price vs MRP - never re-derived here,
+        // and never from a tier total (a total is not a per-pack price).
+        discount: t.discountPercent ?? 0,
+        total: t.tierTotal,
+      })),
+    [activePack],
+  );
+
+  const activeTier = useMemo(
+    () => [...tierPricing].reverse().find((t) => wholesaleQty >= t.min) ?? tierPricing[0],
+    [tierPricing, wholesaleQty],
+  );
+  const hasWholesalePrice = Boolean(activeTier);
+
+  const gstRate = activeTier?.gstRate ?? detail?.price?.gstRatePercent ?? 5;
+  const activeWholesalePriceInclGst = activeTier?.price ?? 0;
+  const activeWholesalePriceExclGst = activeTier?.priceExcl ?? 0;
   const gstAmountPerUnit = +(activeWholesalePriceInclGst - activeWholesalePriceExclGst).toFixed(2);
 
-  const totalWholesaleOrderAmount = activeWholesalePriceInclGst * wholesaleQty;
-  const totalWholesaleDiscountAmount = (mrp - activeWholesalePriceInclGst) * wholesaleQty;
-  const hsnCode = (activeProduct as any).hsn || '1101 00 00';
+  const totalWholesaleOrderAmount = +(activeWholesalePriceInclGst * wholesaleQty).toFixed(2);
+  const hsnCode = detail?.hsnCode ?? null;
 
-  // Multi-Variant Matrix Calculations
-  const allVariantsList = useMemo(() => {
-    if (hasVariants && Array.isArray((product as any).variants)) {
-      return (product as any).variants;
-    }
-    return [
-      {
-        id: product.id,
-        name: (product as any).variant || 'Standard Pack',
-        sku: (product as any).sku || 'DT-STD-01',
-        price: (product as any).price || 185,
-        mrp: (product as any).mrp || 220,
-        image: (product as any).image,
-      },
-    ];
-  }, [hasVariants, product]);
+  // A product is buyable when it has a price for this channel AND is either in
+  // stock or explicitly open to backorder. Nothing here invents stock.
+  const hasPrice = isRetailer ? hasWholesalePrice : consumerPrice !== null;
+  const purchasable = hasPrice && (availableStock > 0 || allowBackorder);
+  const stockLabel =
+    availableStock > 0
+      ? `🟢 ${availableStock.toLocaleString()} pcs in Stock`
+      : allowBackorder
+        ? '🟡 Made to order — dispatched on confirmation'
+        : '🔴 Out of stock';
+  const stockColor = availableStock > 0 ? '#16a34a' : allowBackorder ? '#b45309' : '#dc2626';
+
+  // Each pack size is priced by the quantity entered for THAT pack - the same
+  // way the pricing engine resolves an order line.
+  const allVariantsList = allPacks;
+  const rateFor = (pack: Pack, quantity: number) => tierFor(pack.priceTiers, quantity || moq)?.unitPriceInclGst ?? pack.price ?? 0;
 
   const totalMultiVariantQty = Object.values(variantQuantities).reduce((a, b) => a + (b || 0), 0);
-  const totalMultiVariantAmount = useMemo(() => {
-    return Object.entries(variantQuantities).reduce((total, [varId, qty]) => {
-      if (!qty) return total;
-      const v = allVariantsList.find((item: any) => item.id === varId);
-      const vMrp = v?.mrp || mrp;
-      const vTierPrice = Math.round(vMrp * (activeTier.price / mrp));
-      return total + vTierPrice * qty;
-    }, 0);
-  }, [variantQuantities, allVariantsList, mrp, activeTier]);
+  const totalMultiVariantAmount = useMemo(
+    () =>
+      Object.entries(variantQuantities).reduce((total, [packId, qty]) => {
+        if (!qty) return total;
+        const pack = allPacks.find((p) => p.id === packId);
+        return pack ? total + rateFor(pack, qty) * qty : total;
+      }, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [variantQuantities, allPacks, moq],
+  );
 
   // Cart syncing
-  const cartLine = cart.lines.find((line) => line.productId === (activeProduct as any).id);
-  const variantText = (activeProduct as any).variant || (activeProduct as any).weight || '1 unit';
+  const cartLine = cart.lines.find((line) => line.productId === activePack?.id);
+  const variantText = activePack?.name || '1 unit';
+
+  // Breadcrumb: Home > [main category] > [subcategory] > product. A crumb only
+  // links where it lands on a real category page (`/products/:mainSlug`).
+  const category = detail?.category ?? null;
+  const parentCategory = category?.parent ?? null;
 
   const handleCheckPincode = () => {
     if (pincode.length !== 6) return;
@@ -197,21 +287,31 @@ export function ProductDetailPage() {
   };
 
   const handleAddToCart = () => {
+    if (!activePack || !detail || !purchasable) return;
     const qtyToAdd = isRetailer ? wholesaleQty : selectedUnits;
     const unitPrice = isRetailer ? activeWholesalePriceInclGst : consumerPrice;
 
-    if (cartLine) {
-      cart.setQuantity((activeProduct as any).id, cartLine.quantity + qtyToAdd);
-    } else {
-      cart.add({
-        productId: (activeProduct as any).id,
-        productName: (activeProduct as any).name,
-        unit: isRetailer ? `${wholesaleQty} pcs (${Math.ceil(wholesaleQty / packBoxSize)} Boxes)` : variantText,
+    // Always through cart.add, never setQuantity: add() tops up an existing line
+    // AND refreshes its price. Topping up with setQuantity left a line added
+    // before a price change quoting the old rate, so the cart and header total
+    // kept showing a price the catalogue no longer had.
+    cart.add(
+      {
+        productId: activePack.id,
+        productName: activePack.id === detail.id ? detail.name : `${detail.name} - ${activePack.name}`,
+        // Names the unit, not the quantity: the quantity is its own field, and a
+        // label like "6 pcs" goes stale the moment the line is topped up.
+        unit: isRetailer ? 'pack' : variantText,
         displayUnitPrice: unitPrice,
-        imageUrl: (activeProduct as any).image,
-        mrp: mrp,
-      });
-    }
+        // Retailer lines carry the ladder so the cart prices the WHOLE line by its
+        // final quantity - adding 6 then 6 more is a 12-pack line at the 12+ rate.
+        priceTiers: isRetailer ? toCartTiers(activePack.priceTiers) : null,
+        imageUrl: activeProduct.image,
+        mrp,
+      },
+      // The quantity the shopper actually chose (in packs).
+      qtyToAdd,
+    );
     message.success(isRetailer ? `Added ${wholesaleQty} pcs at wholesale Tier rate (${formatInr(activeWholesalePriceInclGst)}/pc)` : 'Added to Cart');
   };
 
@@ -221,25 +321,50 @@ export function ProductDetailPage() {
       return;
     }
 
-    Object.entries(variantQuantities).forEach(([varId, qty]) => {
-      if (qty && qty > 0) {
-        const v = allVariantsList.find((item: any) => item.id === varId);
-        const vMrp = v?.mrp || mrp;
-        const vPrice = Math.round(vMrp * (activeTier.price / mrp));
-        cart.add({
-          productId: varId,
-          productName: `${(activeProduct as any).name} - ${v?.name || 'Variant'}`,
-          unit: `${qty} pcs`,
-          displayUnitPrice: vPrice,
-          imageUrl: v?.image || (activeProduct as any).image,
-          mrp: vMrp,
-        });
+    Object.entries(variantQuantities).forEach(([packId, qty]) => {
+      const pack = allPacks.find((p) => p.id === packId);
+      if (qty && qty > 0 && pack && detail) {
+        cart.add(
+          {
+            productId: pack.id,
+            productName: pack.id === detail.id ? detail.name : `${detail.name} - ${pack.name}`,
+            unit: `${qty} pcs`,
+            displayUnitPrice: rateFor(pack, qty),
+            priceTiers: toCartTiers(pack.priceTiers),
+            imageUrl: pack.images[0] ?? activeProduct.image,
+            mrp: pack.mrp,
+          },
+          qty,
+        );
       }
     });
 
     message.success(`Added ${totalMultiVariantQty} pcs across variants to cart!`);
     setVariantQuantities({});
   };
+
+  // All hooks are above this line, so these early returns cannot change hook order.
+  if (catalogue.isLoading) {
+    return (
+      <div className="pdp-wrapper" style={{ padding: '96px 0', textAlign: 'center' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (catalogue.isError || !detail) {
+    return (
+      <div className="pdp-wrapper" style={{ padding: '96px 16px', textAlign: 'center' }}>
+        <Typography.Title level={4}>We couldn&apos;t find that product</Typography.Title>
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          It may have been removed or is no longer available.
+        </Typography.Text>
+        <Button type="primary" onClick={() => navigate('/categories')}>
+          Browse categories
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="pdp-wrapper">
@@ -349,7 +474,25 @@ export function ProductDetailPage() {
       <div style={{ padding: '12px 20px', background: '#fff', fontSize: 13, color: '#878787', borderBottom: '1px solid #e2e8f0' }}>
         <div style={{ maxWidth: 1340, margin: '0 auto' }}>
           <Link to="/" style={{ color: '#878787', textDecoration: 'none' }}>Home</Link> &gt;{' '}
-          <Link to="/categories" style={{ color: '#878787', textDecoration: 'none' }}>Groceries</Link> &gt;{' '}
+          {parentCategory && (
+            <>
+              <Link to={`/products/${parentCategory.slug}`} style={{ color: '#878787', textDecoration: 'none' }}>{parentCategory.name}</Link> &gt;{' '}
+            </>
+          )}
+          {category ? (
+            <>
+              {parentCategory ? (
+                <span>{category.name}</span>
+              ) : (
+                <Link to={`/products/${category.slug}`} style={{ color: '#878787', textDecoration: 'none' }}>{category.name}</Link>
+              )}{' '}
+              &gt;{' '}
+            </>
+          ) : (
+            <>
+              <Link to="/categories" style={{ color: '#878787', textDecoration: 'none' }}>Categories</Link> &gt;{' '}
+            </>
+          )}
           <span style={{ color: '#212121', fontWeight: 600 }}>{(activeProduct as any).name}</span>
         </div>
       </div>
@@ -517,30 +660,45 @@ export function ProductDetailPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            SKU: {(activeProduct as any).sku || 'DT-GR-8842'}
+            SKU: {activeProduct.sku}
           </Typography.Text>
-          <span style={{ color: '#cbd5e1' }}>•</span>
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            HSN: {hsnCode}
-          </Typography.Text>
+          {hsnCode && (
+            <>
+              <span style={{ color: '#cbd5e1' }}>•</span>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                HSN: {hsnCode}
+              </Typography.Text>
+            </>
+          )}
         </div>
 
-        {/* Rating */}
+        {/* Rating - only shown when staff have entered one; nothing is invented. */}
         {(activeProduct as any).rating && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 14 }}>
             <div style={{ background: '#388e3c', color: '#fff', padding: '2px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}>
               {(activeProduct as any).rating} <StarFilled style={{ fontSize: 10 }} />
             </div>
-            <Typography.Text style={{ color: '#878787', fontSize: 13 }}>
-              {(activeProduct as any).reviewCount || 148} Ratings &amp; Reviews
-            </Typography.Text>
+            {(activeProduct as any).reviewCount ? (
+              <Typography.Text style={{ color: '#878787', fontSize: 13 }}>
+                {(activeProduct as any).reviewCount} Ratings &amp; Reviews
+              </Typography.Text>
+            ) : null}
           </div>
         )}
 
         {/* ========================================================================= */}
         {/* 🏪 WHOLESALE PRICING & TIER TABLE (MOST IMPORTANT B2B SECTION)             */}
         {/* ========================================================================= */}
-        {isRetailer ? (
+        {isRetailer && !hasWholesalePrice ? (
+          <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+            <Typography.Text strong style={{ color: '#9a3412', display: 'block' }}>
+              Wholesale price not available yet
+            </Typography.Text>
+            <Typography.Text style={{ color: '#7c2d12', fontSize: 12 }}>
+              This product has no wholesale rate set. Contact your distributor desk to enquire.
+            </Typography.Text>
+          </div>
+        ) : isRetailer ? (
           <div>
             {/* Wholesale Overview Card */}
             <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 14, padding: 16, marginBottom: 16 }}>
@@ -570,11 +728,13 @@ export function ProductDetailPage() {
               </div>
 
               {/* Price Metrics Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, background: '#fff', padding: '12px 10px', borderRadius: 10, border: '1px solid #fed7aa', marginBottom: 12, textAlign: 'center' }}>
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MRP</Typography.Text>
-                  <Typography.Text delete style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>{formatInr(mrp)}</Typography.Text>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${mrp !== null ? 4 : 2}, 1fr)`, gap: 10, background: '#fff', padding: '12px 10px', borderRadius: 10, border: '1px solid #fed7aa', marginBottom: 12, textAlign: 'center' }}>
+                {mrp !== null && (
+                  <div>
+                    <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MRP</Typography.Text>
+                    <Typography.Text delete style={{ fontSize: 14, color: '#94a3b8', fontWeight: 600 }}>{formatInr(mrp)}</Typography.Text>
+                  </div>
+                )}
                 <div>
                   <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>WHOLESALE</Typography.Text>
                   <Typography.Text strong style={{ fontSize: 16, color: '#ea580c' }}>
@@ -582,17 +742,19 @@ export function ProductDetailPage() {
                   </Typography.Text>
                 </div>
                 <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>GST (5%)</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>GST ({gstRate}%)</Typography.Text>
                   <Typography.Text strong style={{ fontSize: 14, color: '#c2410c' }}>
-                    ₹{gstAmountPerUnit}
+                    {formatInr(gstAmountPerUnit)}
                   </Typography.Text>
                 </div>
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>DISCOUNT</Typography.Text>
-                  <Tag color="orange" style={{ margin: 0, fontSize: 11, fontWeight: 700 }}>
-                    {activeTier.discount}% OFF
-                  </Tag>
-                </div>
+                {mrp !== null && (
+                  <div>
+                    <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>DISCOUNT</Typography.Text>
+                    <Tag color="orange" style={{ margin: 0, fontSize: 11, fontWeight: 700 }}>
+                      {activeTier.discount}% OFF
+                    </Tag>
+                  </div>
+                )}
               </div>
 
               {/* Tier-Based Pricing Table */}
@@ -606,14 +768,16 @@ export function ProductDetailPage() {
                     <tr style={{ background: '#ffedd5', borderBottom: '1px solid #fed7aa', color: '#7c2d12' }}>
                       <th style={{ padding: '8px 12px' }}>Quantity</th>
                       <th style={{ padding: '8px 12px' }}>Price / Unit ({showGstInclusive ? 'Incl. GST' : 'Excl. GST'})</th>
-                      <th style={{ padding: '8px 12px' }}>Discount</th>
+                      {mrp !== null && <th style={{ padding: '8px 12px' }}>Discount</th>}
                       <th style={{ padding: '8px 12px', textAlign: 'right' }}>Tier Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tierPricing.map((tier) => {
                       const isActive = activeTier.key === tier.key;
-                      const displayPrice = showGstInclusive ? tier.price : +(tier.price / (1 + gstRate / 100)).toFixed(2);
+                      // Both figures come from the server (exclusive is what is billed;
+                      // inclusive is exclusive + GST, rounded once) - never re-derived here.
+                      const displayPrice = showGstInclusive ? tier.price : tier.priceExcl;
                       return (
                         <tr
                           key={tier.key}
@@ -624,13 +788,22 @@ export function ProductDetailPage() {
                             color: isActive ? '#9a3412' : '#334155',
                           }}
                         >
-                          <td style={{ padding: '8px 12px' }}>{tier.label}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {tier.label}
+                            {tier.total !== null && (
+                              <span style={{ display: 'block', fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>
+                                {formatInr(tier.total)} for {tier.min} (excl. GST)
+                              </span>
+                            )}
+                          </td>
                           <td style={{ padding: '8px 12px', color: isActive ? '#ea580c' : '#1e293b' }}>
                             {formatInr(displayPrice)}
                           </td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <span style={{ color: '#ea580c', fontWeight: 600 }}>{tier.discount}% OFF</span>
-                          </td>
+                          {mrp !== null && (
+                            <td style={{ padding: '8px 12px' }}>
+                              <span style={{ color: '#ea580c', fontWeight: 600 }}>{tier.discount}% OFF</span>
+                            </td>
+                          )}
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
                             {isActive ? (
                               <Tag color="orange" style={{ margin: 0, fontWeight: 700, fontSize: 10 }}>
@@ -654,7 +827,7 @@ export function ProductDetailPage() {
                     Select Order Quantity (MOQ: {moq} pcs)
                   </Typography.Text>
                   <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
-                    Applied: <strong>{activeTier.label}</strong> ({activeTier.discount}% off) • Total: <strong>{formatInr(totalWholesaleOrderAmount)}</strong>
+                    Applied: <strong>{activeTier.label}</strong>{mrp !== null ? ` (${activeTier.discount}% off)` : ''} • Total: <strong>{formatInr(totalWholesaleOrderAmount)}</strong>
                   </Typography.Text>
                   <Typography.Text style={{ fontSize: 11, color: '#b45309', display: 'block', marginTop: 4 }}>
                     <GiftOutlined /> Earn {loyalty.estimateLinePoints(activeWholesalePriceInclGst, wholesaleQty)} loyalty pts on this order
@@ -666,12 +839,12 @@ export function ProductDetailPage() {
                     shape="circle"
                     icon={<MinusOutlined />}
                     disabled={wholesaleQty <= moq}
-                    onClick={() => setWholesaleQty((prev) => Math.max(moq, prev - 10))}
+                    onClick={() => setWholesaleQty((prev) => Math.max(moq, prev - qtyStep))}
                   />
                   <InputNumber
                     min={moq}
                     max={maxOrderLimit}
-                    step={10}
+                    step={qtyStep}
                     value={wholesaleQty}
                     onChange={(val) => setWholesaleQty(val || moq)}
                     style={{ width: 64, textAlign: 'center', fontWeight: 700 }}
@@ -680,7 +853,7 @@ export function ProductDetailPage() {
                     shape="circle"
                     icon={<PlusOutlined />}
                     disabled={wholesaleQty >= maxOrderLimit}
-                    onClick={() => setWholesaleQty((prev) => Math.min(maxOrderLimit, prev + 10))}
+                    onClick={() => setWholesaleQty((prev) => Math.min(maxOrderLimit, prev + qtyStep))}
                   />
                 </div>
               </div>
@@ -696,22 +869,26 @@ export function ProductDetailPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, fontSize: 12 }}>
                 <div style={{ background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MINIMUM ORDER QTY (MOQ)</Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{moq} pcs (1 Box)</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{moq} pcs{packBoxSize && moq === packBoxSize ? ' (1 Box)' : ''}</Typography.Text>
                 </div>
 
                 <div style={{ background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MAXIMUM ORDER QTY</Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{maxOrderLimit} pcs / Order</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                    {detail.orderLimits.maxOrderQuantityB2B ? `${detail.orderLimits.maxOrderQuantityB2B} pcs / Order` : 'No limit'}
+                  </Typography.Text>
                 </div>
 
-                <div style={{ background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MASTER PACK SIZE</Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{packBoxSize} pcs / Corrugated Box</Typography.Text>
-                </div>
+                {packBoxSize && (
+                  <div style={{ background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>MASTER PACK SIZE</Typography.Text>
+                    <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{packBoxSize} pcs / Corrugated Box</Typography.Text>
+                  </div>
+                )}
 
                 <div style={{ background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>AVAILABLE STOCK</Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 14, color: '#16a34a' }}>🟢 {availableStock.toLocaleString()} pcs in Stock</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 14, color: stockColor }}>{stockLabel}</Typography.Text>
                 </div>
               </div>
             </div>
@@ -748,25 +925,25 @@ export function ProductDetailPage() {
                     <tbody>
                       {allVariantsList.map((v: any) => {
                         const vQty = variantQuantities[v.id] || 0;
-                        const vMrp = v.mrp || mrp;
-                        const vPrice = Math.round(vMrp * (activeTier.price / mrp));
+                        // Priced by the quantity entered for THIS pack, from its own ladder.
+                        const vPrice = rateFor(v, vQty);
                         return (
                           <tr key={v.id} style={{ borderBottom: '1px solid #fed7aa' }}>
                             <td style={{ padding: '8px 10px' }}>
                               <Typography.Text strong style={{ fontSize: 12, display: 'block' }}>{v.name}</Typography.Text>
-                              <span style={{ fontSize: 10, color: '#64748b' }}>SKU: {v.sku || 'DT-SKU'}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>SKU: {v.sku}</span>
                             </td>
                             <td style={{ padding: '8px 10px', color: '#065f46', fontWeight: 600 }}>
                               {formatInr(vPrice)}
                             </td>
-                            <td style={{ padding: '8px 10px', color: '#16a34a', fontSize: 11 }}>
-                              🟢 In Stock
+                            <td style={{ padding: '8px 10px', color: stockColor, fontSize: 11 }}>
+                              {availableStock > 0 ? '🟢 In Stock' : allowBackorder ? '🟡 On order' : '🔴 Out of stock'}
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                               <InputNumber
                                 min={0}
                                 max={maxOrderLimit}
-                                step={10}
+                                step={qtyStep}
                                 value={vQty}
                                 placeholder="0"
                                 onChange={(val) => setVariantQuantities((prev) => ({ ...prev, [v.id]: val || 0 }))}
@@ -810,9 +987,9 @@ export function ProductDetailPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 4 }}>
               <Typography.Text strong style={{ fontSize: 26, lineHeight: 1, color: '#212121' }}>
-                {formatInr(consumerPrice)}
+                {consumerPrice !== null ? formatInr(consumerPrice) : 'Price on request'}
               </Typography.Text>
-              {mrp > consumerPrice && (
+              {mrp !== null && consumerPrice !== null && mrp > consumerPrice && (
                 <>
                   <Typography.Text delete style={{ fontSize: 16, color: '#878787', marginBottom: 2 }}>
                     {formatInr(mrp)}
@@ -826,10 +1003,10 @@ export function ProductDetailPage() {
               )}
             </div>
             <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
-              Inclusive of all taxes • 100% Farm Milled
+              Inclusive of all taxes
             </Typography.Text>
             <Typography.Text style={{ fontSize: 12, color: '#b45309', display: 'block', marginTop: 4, fontWeight: 500 }}>
-              <GiftOutlined /> Earn {loyalty.estimateLinePoints(consumerPrice, selectedUnits)} loyalty pts on this order
+              <GiftOutlined /> Earn {loyalty.estimateLinePoints(consumerPrice ?? 0, selectedUnits)} loyalty pts on this order
             </Typography.Text>
 
             {/* Consumer Quantity Stepper */}
@@ -839,7 +1016,7 @@ export function ProductDetailPage() {
                   Quantity
                 </Typography.Text>
                 <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
-                  Total: <strong>{formatInr(consumerPrice * selectedUnits)}</strong>
+                  Total: <strong>{formatInr((consumerPrice ?? 0) * selectedUnits)}</strong>
                 </Typography.Text>
               </div>
 
@@ -847,8 +1024,8 @@ export function ProductDetailPage() {
                 <Button
                   shape="circle"
                   icon={<MinusOutlined />}
-                  disabled={selectedUnits <= 1}
-                  onClick={() => setSelectedUnits((prev) => Math.max(1, prev - 1))}
+                  disabled={selectedUnits <= consumerMin}
+                  onClick={() => setSelectedUnits((prev) => Math.max(consumerMin, prev - 1))}
                 />
                 <span style={{ fontSize: 15, fontWeight: 700, minWidth: 24, textAlign: 'center' }}>
                   {selectedUnits}
@@ -856,7 +1033,8 @@ export function ProductDetailPage() {
                 <Button
                   shape="circle"
                   icon={<PlusOutlined />}
-                  onClick={() => setSelectedUnits((prev) => Math.min(10, prev + 1))}
+                  disabled={selectedUnits >= consumerMax}
+                  onClick={() => setSelectedUnits((prev) => Math.min(consumerMax, prev + 1))}
                 />
               </div>
             </div>
@@ -880,7 +1058,7 @@ export function ProductDetailPage() {
                   🏪 Own a Grocery Store?
                 </Typography.Text>
                 <Typography.Text style={{ color: '#c2410c', fontSize: 11 }}>
-                  Get wholesale tier pricing up to <strong>{tierPricing[3].discount}% OFF</strong> with GST invoices.
+                  Get wholesale tier pricing with GST invoices.
                 </Typography.Text>
               </div>
               <Button
@@ -936,12 +1114,13 @@ export function ProductDetailPage() {
               justifyContent: 'center',
               gap: 8,
             }}
+            disabled={!purchasable}
             onClick={handleAddToCart}
           >
             <ShoppingCartOutlined />
             {isRetailer
               ? `Add ${wholesaleQty} pcs • ${formatInr(totalWholesaleOrderAmount)}`
-              : `Add to Cart • ${formatInr(consumerPrice * selectedUnits)}`}
+              : `Add to Cart • ${formatInr((consumerPrice ?? 0) * selectedUnits)}`}
           </Button>
 
           <Button
@@ -962,6 +1141,7 @@ export function ProductDetailPage() {
               gap: 8,
               boxShadow: '0 4px 14px rgba(234, 88, 12, 0.3)',
             }}
+            disabled={!purchasable}
             onClick={() => {
               handleAddToCart();
               navigate('/cart');
@@ -1045,7 +1225,11 @@ export function ProductDetailPage() {
                       Order Limits:
                     </Typography.Text>
                     <Typography.Text style={{ color: '#212121', flex: 1 }}>
-                      Min {isRetailer ? moq : 1} - Max {isRetailer ? maxOrderLimit : 10} pcs
+                      Min {isRetailer ? moq : consumerMin}
+                      {isRetailer
+                        ? detail.orderLimits.maxOrderQuantityB2B ? ` - Max ${detail.orderLimits.maxOrderQuantityB2B}` : ''
+                        : detail.orderLimits.maxOrderQuantity ? ` - Max ${detail.orderLimits.maxOrderQuantity}` : ''}{' '}
+                      pcs
                     </Typography.Text>
                   </div>
                 </div>
@@ -1155,7 +1339,7 @@ export function ProductDetailPage() {
                         {deliveryInfo.eta}
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#616161', fontSize: 12 }}>
-                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : `₹${deliveryInfo.charge}`}
+                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}
                       </Typography.Text>
                     </div>
                   </div>
@@ -1170,7 +1354,7 @@ export function ProductDetailPage() {
                         {deliveryInfo.eta}
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#616161', fontSize: 12 }}>
-                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : `₹${deliveryInfo.charge}`}
+                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}
                       </Typography.Text>
                     </div>
                   </div>
@@ -1232,30 +1416,38 @@ export function ProductDetailPage() {
                 label: <Typography.Text strong style={{ fontSize: 14 }}>Business &amp; GST Compliance</Typography.Text>,
                 children: (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                      <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>GST Invoice</Typography.Text>
-                      <Typography.Text strong style={{ flex: 2, color: '#16a34a', fontSize: 13 }}>
-                        Available with 100% Input Tax Credit (ITC)
-                      </Typography.Text>
-                    </div>
-                    <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                      <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>HSN Classification</Typography.Text>
-                      <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
-                        {hsnCode} (5% GST)
-                      </Typography.Text>
-                    </div>
-                    <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                      <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>Business Support</Typography.Text>
-                      <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
-                        Dedicated Distributor Desk: +91 1800-BALAJI
-                      </Typography.Text>
-                    </div>
-                    <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                      <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>Delivery Terms</Typography.Text>
-                      <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
-                        Direct Dispatch from Nizamabad Milling Unit to Storefront
-                      </Typography.Text>
-                    </div>
+                    {detail.businessInfo.gstInvoiceAvailable && (
+                      <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                        <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>GST Invoice</Typography.Text>
+                        <Typography.Text strong style={{ flex: 2, color: '#16a34a', fontSize: 13 }}>
+                          Available with 100% Input Tax Credit (ITC)
+                        </Typography.Text>
+                      </div>
+                    )}
+                    {hsnCode && (
+                      <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                        <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>HSN Classification</Typography.Text>
+                        <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
+                          {hsnCode} ({gstRate}% GST)
+                        </Typography.Text>
+                      </div>
+                    )}
+                    {detail.businessInfo.businessSupportContact && (
+                      <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                        <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>Business Support</Typography.Text>
+                        <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
+                          {detail.businessInfo.businessSupportContact}
+                        </Typography.Text>
+                      </div>
+                    )}
+                    {detail.businessInfo.deliveryTerms && (
+                      <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                        <Typography.Text style={{ flex: 1, color: '#878787', fontSize: 13 }}>Delivery Terms</Typography.Text>
+                        <Typography.Text style={{ flex: 2, color: '#212121', fontSize: 13 }}>
+                          {detail.businessInfo.deliveryTerms}
+                        </Typography.Text>
+                      </div>
+                    )}
                   </div>
                 ),
               },
@@ -1296,11 +1488,12 @@ export function ProductDetailPage() {
         </div>
       </div>
 
-      {/* Frequently Bought Together (Full width container on desktop) */}
+      {/* More from the same category - real products, hidden when there are none (full width on desktop) */}
+      {related.length > 0 && (
       <div style={{ marginTop: 16, background: '#fff', padding: '24px 0 32px', borderTop: '1px solid #e2e8f0' }}>
         <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 20px' }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 18, marginBottom: 16, color: '#0f172a' }}>
-            Frequently Bought Together
+            You May Also Like
           </Typography.Text>
           <div className="pdp-related-grid" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 4px 10px' }}>
             <style>{`
@@ -1308,9 +1501,10 @@ export function ProductDetailPage() {
               .product-dots li button { background: #c2c2c2 !important; height: 6px !important; border-radius: 4px !important; }
               .product-dots li.slick-active button { background: #f97316 !important; width: 16px !important; }
             `}</style>
-            {popularProducts.slice(0, 6).map((related) => {
+            {related.map((related) => {
               const relatedCartLine = cart.lines.find((line) => line.productId === related.id);
-              const relatedPrice = isRetailer ? Math.round(related.price * 0.8) : related.price;
+              // Already priced for this channel by the API - no client-side "x 0.8" guess.
+              const relatedPrice = related.price;
               return (
                 <div
                   key={related.id}
@@ -1326,7 +1520,7 @@ export function ProductDetailPage() {
                     boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
                   }}
                 >
-                  <Link to={`/product-detail/${related.id}`} style={{ textDecoration: 'none' }}>
+                  <Link to={`/product-detail/${related.slug}`} style={{ textDecoration: 'none' }}>
                     <div style={{ width: '100%', height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#fafaf9', borderRadius: 6 }}>
                       <img src={related.image} alt={related.name} style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} />
                     </div>
@@ -1336,7 +1530,7 @@ export function ProductDetailPage() {
                   </Link>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
                     <Typography.Text strong style={{ fontSize: 14, color: isRetailer ? '#065f46' : '#212121' }}>
-                      {formatInr(relatedPrice)}
+                      {relatedPrice !== null ? formatInr(relatedPrice) : 'N/A'}
                     </Typography.Text>
 
                     {relatedCartLine ? (
@@ -1362,15 +1556,16 @@ export function ProductDetailPage() {
                     ) : (
                       <Button
                         size="small"
+                        disabled={!related.purchasable}
                         style={{ border: '1px solid #f97316', color: '#f97316', borderRadius: 6, padding: '0 8px', fontSize: 11, fontWeight: 600, height: 24 }}
                         onClick={() =>
                           cart.add({
                             productId: related.id,
                             productName: related.name,
-                            unit: (related as any).variant || (related as any).weight || '1 pack',
+                            unit: related.variant || '1 pack',
                             displayUnitPrice: relatedPrice,
                             imageUrl: related.image,
-                            mrp: (related as any).mrp,
+                            mrp: related.mrp,
                           })
                         }
                       >
@@ -1384,6 +1579,7 @@ export function ProductDetailPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Sticky Bottom Bar for Actions (Mobile only - on tablet/desktop, inline buy panel is used) */}
       <div
@@ -1414,11 +1610,12 @@ export function ProductDetailPage() {
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onClick={handleAddToCart}
+          disabled={!purchasable}
+            onClick={handleAddToCart}
         >
           {isRetailer
             ? `Add ${wholesaleQty} pcs • ${formatInr(totalWholesaleOrderAmount)}`
-            : `Add to Cart • ${formatInr(consumerPrice * selectedUnits)}`}
+            : `Add to Cart • ${formatInr((consumerPrice ?? 0) * selectedUnits)}`}
         </Button>
 
         <Button
@@ -1436,6 +1633,7 @@ export function ProductDetailPage() {
             alignItems: 'center',
             justifyContent: 'center',
           }}
+          disabled={!purchasable}
           onClick={() => {
             handleAddToCart();
             navigate('/cart');

@@ -36,6 +36,8 @@ export function useCreateProduct() {
     mutationFn: (input: CreateProductInput) => productsApi.create(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
+      // A save writes dated price rules, so the Price Lists screen is stale too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.priceLists.all });
     },
   });
 }
@@ -49,6 +51,7 @@ export function useUpdateProduct() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
       // Recipes render the product name, so a rename has to reach them too.
       void queryClient.invalidateQueries({ queryKey: queryKeys.recipes.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.priceLists.all });
     },
   });
 }

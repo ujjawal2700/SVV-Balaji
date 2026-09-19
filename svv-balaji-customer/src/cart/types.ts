@@ -7,6 +7,12 @@
  * become one. Reusing the server type here would invite code that treats them as
  * interchangeable, and the first bug from that is a price the customer chose.
  */
+/** One quantity break of a wholesale ladder: this price applies from this quantity up. GST-inclusive, as displayed. */
+export interface CartPriceTier {
+  minQuantity: number;
+  unitPrice: number;
+}
+
 export interface CartLine {
   /** Finished product, not a batch. The batch is chosen by allocation at checkout. */
   productId: string;
@@ -29,6 +35,14 @@ export interface CartLine {
    * dev tools. If the two differ at checkout the customer is told before paying.
    */
   displayUnitPrice: number | null;
+
+  /**
+   * The wholesale ladder for this line, when it has one. Present, it makes
+   * `displayUnitPrice` a DERIVED value: the cart re-prices the whole line from
+   * it whenever the quantity changes, so the price always matches the final
+   * quantity rather than the quantity of the last add.
+   */
+  priceTiers?: CartPriceTier[] | null;
 }
 
 export interface CartState {

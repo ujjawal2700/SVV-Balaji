@@ -17,11 +17,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
 import { useLoyalty } from '../loyalty/useLoyalty';
 import { couponsApi } from '@shared/api/coupons';
-import type { Coupon } from '@shared/api/types';
+import type { Coupon } from '@shared/api/types';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 export function CartPage() {
   const navigate = useNavigate();

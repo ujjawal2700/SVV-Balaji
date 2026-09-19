@@ -13,11 +13,9 @@ import {
 } from '@ant-design/icons';
 import { Button, Divider, Drawer, Rate, Typography, message } from 'antd';
 import { useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 const allMockOrders = [
   {

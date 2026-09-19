@@ -33,6 +33,7 @@ async function main() {
   await seedDefaultBanners();
   await seedDefaultCategories();
   await seedDefaultSchemes();
+  await seedDefaultProducts();
 }
 
 async function seedSuperAdmin(email: string, password: string, resetPassword: boolean) {
@@ -326,6 +327,421 @@ async function seedDefaultSchemes() {
     ],
   });
   console.log('Seeded 2 default schemes');
+}
+
+/**
+ * The customer app's product pages, listings and homepage shelves used to read
+ * arrays hardcoded in its mock data file (`src/mock/homeMockData.ts`) - six
+ * products a retailer or shopper could see and Super Admin could not touch.
+ * Migrated here as real, editable rows: same names, copy, images and prices,
+ * now managed from the admin Add/Edit Product screen.
+ *
+ * Slugs are the OLD mock ids (`premium-atta`, `classic-namkeen-100x20`, ...),
+ * so every existing `/product-detail/:id` link, bookmark and stored cart line
+ * keeps resolving - the same trick the category seed uses.
+ *
+ * Idempotent per SKU, not per table: a product that already exists is left
+ * completely alone, so re-running the seed never overwrites what Super Admin
+ * has edited since. (Count-based idempotency, as the banner seed uses, would
+ * skip the whole migration the moment ANY product existed.)
+ *
+ * Prices are written as dated PriceList rules, never as product columns:
+ * the B2C rate, and a B2B quantity ladder at the same 90/80/72/65% of MRP the
+ * storefront used to compute on the fly - so what a retailer sees is
+ * unchanged, but each tier is now a rule an admin can supersede.
+ */
+async function seedDefaultProducts() {
+  const admin = await prisma.user.findFirst({ where: { role: UserRole.SUPER_ADMIN } });
+  if (!admin) {
+    console.warn('No Super Admin found - skipping product migration (price rules need a creator)');
+    return;
+  }
+
+  const categoryId = async (slug?: string) => {
+    if (!slug) return null;
+    const found = await prisma.category.findUnique({ where: { slug }, select: { id: true } });
+    if (!found) console.warn(`  category "${slug}" not found - product will be uncategorised`);
+    return found?.id ?? null;
+  };
+
+  const GST_PERCENT = 5;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  /**
+   * PriceList.unitPrice is EXCLUSIVE of GST - the order engine adds
+   * `subtotal x gst%` on top (SalesService lineTotal). The storefront, though,
+   * has always displayed GST-INCLUSIVE prices ("Inclusive of all taxes"), and
+   * every figure in the old mock data is one of those. Storing them as-is would
+   * charge tax twice at checkout, so each is converted to its exclusive base.
+   *
+   * The paisa is chosen so the round trip holds: base x (1 + gst) must land back
+   * on the exact rupee figure a shopper saw, not one paisa either side of it.
+   */
+  const exclusive = (inclusive: number) => {
+    const base = round2(inclusive / (1 + GST_PERCENT / 100));
+    for (const candidate of [base, round2(base - 0.01), round2(base + 0.01)]) {
+      if (round2(candidate * (1 + GST_PERCENT / 100)) === inclusive) return candidate;
+    }
+    return base;
+  };
+
+  /** 1-9 / 10-49 / 50-99 / 100+ pcs, as % of the reference (inclusive) price. Mirrors the old PDP arithmetic. */
+  const LADDER: [number, number][] = [
+    [1, 0.9],
+    [10, 0.8],
+    [50, 0.72],
+    [100, 0.65],
+  ];
+  const ladderFor = (reference: number) =>
+    LADDER.map(([minQuantity, share]) => ({
+      minQuantity,
+      // The shopper-facing (inclusive) tier price is what the old page showed;
+      // what is stored is its exclusive base.
+      unitPrice: exclusive(Math.round(reference * share)),
+    }));
+
+  // Shared across all six: what the old product page hardcoded for every
+  // product, so the migrated pages behave the same until an admin changes them.
+  const COMMON = {
+    minOrderQuantity: 1,
+    maxOrderQuantity: 10,
+    moqB2B: 10,
+    maxOrderQuantityB2B: 500,
+    packBoxSize: 10,
+    gstInvoiceAvailable: true,
+    businessSupportContact: 'Dedicated Distributor Desk: +91 1800-BALAJI',
+    // No finished-goods stock exists yet, so a computed "0 in stock" would make
+    // every migrated product unbuyable. Backorder keeps them orderable, exactly
+    // as they were, without inventing a stock figure.
+    allowBackorder: true,
+    reorderPoint: 0,
+    safetyStock: 0,
+  };
+  const DISCLAIMER =
+    'Every effort is made to maintain accuracy of all information. However, actual product packaging and materials may contain more and/or different information. It is recommended not to solely rely on the information presented.';
+
+  const products: {
+    slug: string;
+    name: string;
+    sku: string;
+    unit: string;
+    categorySlug?: string;
+    brand?: string;
+    packLabel: string;
+    mrp?: number;
+    b2cPrice: number;
+    badge?: string;
+    hsnCode?: string;
+    images: string[];
+    rating?: number;
+    reviewCount?: number;
+    highlights?: string[];
+    description: string;
+    disclaimer?: string;
+    manufacturer?: string;
+    countryOfOrigin?: string;
+    shelfLife?: string;
+    returnPolicy?: string;
+    warranty?: string;
+    deliveryTerms?: string;
+    bulkAvailable?: boolean;
+    isTopPick?: boolean;
+    isDailyStaple?: boolean;
+    specifications?: { label: string; value: string }[];
+    faqs?: { question: string; answer: string }[];
+    offers?: { title: string; description: string }[];
+    variants?: {
+      name: string;
+      sku: string;
+      mrp: number;
+      b2cPrice: number;
+      images: string[];
+    }[];
+  }[] = [
+    {
+      slug: 'classic-namkeen-100x20',
+      name: 'Classic Namkeen',
+      sku: 'BJ-NAM-100G',
+      unit: 'PACK',
+      categorySlug: 'mixtures',
+      brand: 'Balaji',
+      packLabel: '100g x 20',
+      mrp: 200,
+      b2cPrice: 180,
+      badge: 'Buy 10 Get 1',
+      images: ['/images/classic_namkeen.jpg', '/images/aloo_bhujia.jpg'],
+      rating: 4.5,
+      reviewCount: 320,
+      highlights: [
+        'Premium quality',
+        'Suitable for retail & wholesale',
+        'Hygienically packed',
+        'Long shelf life',
+        'Bulk ordering available',
+      ],
+      description:
+        'Our classic Namkeen is made with the finest ingredients, perfectly spiced and crisped to deliver an authentic taste. Ideal for parties, snacks, and bulk retail.',
+      isTopPick: true,
+    },
+    {
+      slug: 'premium-atta',
+      name: 'Premium Chakki Atta',
+      sku: 'DT-ATTA-10KG',
+      unit: 'KG',
+      categorySlug: 'chakki-atta',
+      brand: 'Desi Tokri',
+      packLabel: '10kg Bag',
+      mrp: 480,
+      b2cPrice: 450,
+      badge: '100% Sharbati',
+      // 1101 00 00 is the wheat-flour HSN. The old page showed it on EVERY
+      // product as a placeholder; it is only set where it is actually correct.
+      hsnCode: '1101 00 00',
+      images: ['/images/premium_atta.jpg', '/images/cat_atta_flour.jpg'],
+      rating: 4.8,
+      reviewCount: 1240,
+      highlights: [
+        '100% MP Sharbati Wheat',
+        'Ground using traditional stone chakki',
+        'No added preservatives or colors',
+        'High in fiber and nutrients',
+      ],
+      description:
+        'Our Premium Chakki Atta is made from the finest quality MP Sharbati wheat grains, carefully selected and ground using traditional stone chakki to retain its natural aroma, texture, and nutritional value. Perfect for making soft, fluffy, and delicious rotis that stay fresh longer.',
+      disclaimer: DISCLAIMER,
+      manufacturer: 'Balaji Agro Industries Pvt Ltd',
+      countryOfOrigin: 'India',
+      shelfLife: '12 Months',
+      returnPolicy: '7 Days Replacement Policy',
+      warranty: 'Not Applicable',
+      deliveryTerms: 'Dispatch within 24 hours. Wholesale rates applied automatically.',
+      bulkAvailable: true,
+      isTopPick: true,
+      specifications: [
+        { label: 'Brand', value: 'Balaji' },
+        { label: 'Product Type', value: 'Whole Wheat Atta' },
+        { label: 'Net Weight', value: '10 KG' },
+        { label: 'Packaging', value: 'PP Bag' },
+        { label: 'Country of Origin', value: 'India' },
+        { label: 'Shelf Life', value: '12 Months' },
+      ],
+      faqs: [
+        {
+          question: 'Is this 100% whole wheat?',
+          answer: 'Yes, it is made from 100% MP Sharbati wheat without any mixing or maida.',
+        },
+        {
+          question: 'How long does the atta stay fresh?',
+          answer: 'It is best consumed within 3 months of packaging if stored in an airtight container.',
+        },
+      ],
+      offers: [
+        { title: 'Bank Offer', description: '5% Unlimited Cashback on Axis Bank Credit Card' },
+        { title: 'Special Price', description: 'Get extra 5% off (price inclusive of cashback/coupon)' },
+      ],
+      // The 10kg pack IS the product above; only the additional size is a variant.
+      variants: [
+        {
+          name: '5kg Bag',
+          sku: 'DT-ATTA-5KG',
+          mrp: 260,
+          b2cPrice: 240,
+          images: ['/images/cat_atta_flour.jpg', '/images/premium_atta.jpg'],
+        },
+      ],
+    },
+    {
+      slug: 'aloo-bhujia-500g',
+      name: 'Aloo Bhujia (500g)',
+      // The mock carried no SKU for this one; invented so the column can be unique.
+      sku: 'BJ-ALO-500G',
+      unit: 'PACK',
+      categorySlug: 'bhujia',
+      brand: 'Balaji',
+      packLabel: '500g',
+      mrp: 200,
+      b2cPrice: 180,
+      images: ['/images/aloo_bhujia.jpg'],
+      description:
+        'Crispy and spicy potato noodles, perfect for snacking. Made with real potatoes and traditional Indian spices.',
+      disclaimer:
+        'Actual product packaging and materials may contain more and different information than what is shown.',
+      manufacturer: 'Balaji Agro Industries',
+      countryOfOrigin: 'India',
+      shelfLife: '6 Months',
+      deliveryTerms: 'Dispatch within 48 hrs.',
+      specifications: [
+        { label: 'Brand', value: 'Balaji' },
+        { label: 'Type', value: 'Namkeen' },
+        { label: 'Net Weight', value: '500g' },
+      ],
+    },
+    {
+      slug: 'santa-cruz',
+      name: 'Santa Cruz Organic Fruit Spread',
+      sku: 'SC-SPR-95OZ',
+      unit: 'PIECE',
+      packLabel: '9.5 oz',
+      b2cPrice: 750,
+      images: ['/images/santa_cruz.jpg'],
+      description: 'Delicious organic fruit spread made with fresh apricots.',
+      manufacturer: 'Santa Cruz Organic',
+      countryOfOrigin: 'USA',
+      shelfLife: '12 Months',
+      isDailyStaple: true,
+      specifications: [
+        { label: 'Brand', value: 'Santa Cruz' },
+        { label: 'Flavor', value: 'Apricot' },
+      ],
+    },
+    {
+      slug: 'tony-bs',
+      name: "Tony B's Steak Chips Gochu Bang!",
+      sku: 'TB-CHP-125OZ',
+      unit: 'PIECE',
+      categorySlug: 'tortilla',
+      packLabel: '1.25 oz',
+      b2cPrice: 550,
+      images: ['/images/tonys_chips.jpg'],
+      description: 'Crispy and savory steak chips with a spicy gochujang kick.',
+      manufacturer: "Tony B's",
+      countryOfOrigin: 'USA',
+      shelfLife: '6 Months',
+      isDailyStaple: true,
+      specifications: [
+        { label: 'Brand', value: "Tony B's" },
+        { label: 'Type', value: 'Chips' },
+      ],
+    },
+    {
+      slug: 'califia-farms',
+      name: 'Califia Farms Pure Black Medium Roast',
+      sku: 'CF-COF-48FLOZ',
+      unit: 'PIECE',
+      packLabel: '48 fl oz',
+      b2cPrice: 500,
+      images: ['/images/califia.jpg'],
+      description: 'Smooth, rich, and pure black medium roast cold brew coffee.',
+      manufacturer: 'Califia Farms',
+      countryOfOrigin: 'USA',
+      shelfLife: '6 Months',
+      isDailyStaple: true,
+      specifications: [
+        { label: 'Brand', value: 'Califia' },
+        { label: 'Roast', value: 'Medium' },
+      ],
+    },
+  ];
+
+  let created = 0;
+  for (const p of products) {
+    const exists = await prisma.product.findFirst({
+      where: { OR: [{ sku: p.sku }, { slug: p.slug }] },
+      select: { id: true },
+    });
+    if (exists) {
+      console.log(`  product ${p.sku} already present - leaving it alone`);
+      continue;
+    }
+
+    // The old page fell back to price x 1.25 when a product carried no MRP, and
+    // showed the invented figure as a struck-through price. The MRP column is
+    // left empty for those (an MRP is a legal figure printed on the pack), but
+    // the wholesale ladder is still derived from the same reference so the
+    // B2B rates a retailer sees do not move.
+    const reference = p.mrp ?? Math.round(p.b2cPrice * 1.25);
+
+    await prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          name: p.name,
+          sku: p.sku,
+          slug: p.slug,
+          unit: p.unit,
+          categoryId: await categoryId(p.categorySlug),
+          brand: p.brand,
+          packLabel: p.packLabel,
+          mrp: p.mrp,
+          badge: p.badge,
+          hsnCode: p.hsnCode,
+          images: p.images,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+          highlights: p.highlights ?? [],
+          description: p.description,
+          disclaimer: p.disclaimer,
+          manufacturer: p.manufacturer,
+          countryOfOrigin: p.countryOfOrigin,
+          shelfLife: p.shelfLife,
+          returnPolicy: p.returnPolicy,
+          warranty: p.warranty,
+          deliveryTerms: p.deliveryTerms,
+          bulkAvailable: p.bulkAvailable ?? false,
+          isTopPick: p.isTopPick ?? false,
+          isDailyStaple: p.isDailyStaple ?? false,
+          showOnStorefront: true,
+          ...COMMON,
+          specifications: {
+            create: (p.specifications ?? []).map((s, displayOrder) => ({ ...s, displayOrder })),
+          },
+          faqs: { create: (p.faqs ?? []).map((f, displayOrder) => ({ ...f, displayOrder })) },
+          offers: { create: (p.offers ?? []).map((o, displayOrder) => ({ ...o, displayOrder })) },
+          variants: {
+            create: (p.variants ?? []).map((v, displayOrder) => ({
+              name: v.name,
+              sku: v.sku,
+              mrp: v.mrp,
+              images: v.images,
+              displayOrder,
+            })),
+          },
+        },
+        include: { variants: { orderBy: { displayOrder: 'asc' } } },
+      });
+
+      const rule = (
+        variantId: string | null,
+        channel: 'B2C' | 'B2B',
+        minQuantity: number,
+        unitPrice: number,
+      ) => ({
+        productId: product.id,
+        variantId,
+        channel,
+        minQuantity,
+        unitPrice,
+        gstRatePercent: GST_PERCENT,
+        effectiveFrom: new Date(),
+        createdById: admin.id,
+      });
+
+      await tx.priceList.createMany({
+        data: [
+          rule(null, 'B2C', 1, exclusive(p.b2cPrice)),
+          ...ladderFor(reference).map((t) => rule(null, 'B2B', t.minQuantity, t.unitPrice)),
+        ],
+      });
+
+      for (const [index, v] of (p.variants ?? []).entries()) {
+        const variantId = product.variants[index].id;
+        await tx.priceList.createMany({
+          data: [
+            rule(variantId, 'B2C', 1, exclusive(v.b2cPrice)),
+            ...ladderFor(v.mrp).map((t) => rule(variantId, 'B2B', t.minQuantity, t.unitPrice)),
+          ],
+        });
+      }
+    });
+
+    created += 1;
+    console.log(`  migrated product ${p.sku} (${p.name})`);
+  }
+
+  console.log(
+    created > 0
+      ? `Migrated ${created} storefront product(s) into the catalogue`
+      : 'Storefront products already present - nothing to migrate',
+  );
 }
 
 main()

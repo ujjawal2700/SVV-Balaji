@@ -132,6 +132,16 @@ export const queryKeys = {
     stockSummary: () => [...queryKeys.products.all, 'stock-summary'] as const,
   },
 
+  // Unauthenticated storefront catalogue. Its own root, not under `products`:
+  // saving a product in the admin invalidates `products.all`, and the
+  // storefront cache must not be dragged along by that (or the reverse).
+  storefrontCatalogue: {
+    all: ['storefront-catalogue'] as const,
+    list: (query: object) => [...queryKeys.storefrontCatalogue.all, 'list', query] as const,
+    detail: (idOrSlug: string, channel: string) =>
+      [...queryKeys.storefrontCatalogue.all, 'detail', idOrSlug, channel] as const,
+  },
+
   categories: {
     all: ['categories'] as const,
     list: (includeInactive = false) =>

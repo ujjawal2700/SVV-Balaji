@@ -1325,9 +1325,79 @@ model Product {
   safetyStock    Int?    @default(0)
   allowBackorder Boolean @default(false)
 
+  // --- Product detail page content (added 19 Sep) -----------------------
+  // Everything below drives a section of the storefront product page, which
+  // until now read a hardcoded mock array in the customer app. All optional
+  // and additive: a product with none of it still renders, it just shows
+  // fewer sections. Prices are deliberately NOT here - they stay dated
+  // PriceList rules so historical invoices reproduce (see PriceList).
+
+  /// Marketing brand, distinct from the manufacturer entity below.
+  brand String?
+  /// The pack descriptor a shopper reads under the name - "10kg Bag",
+  /// "100g x 20". Not `unit`, which is the operational measure (KG/PACK).
+  packLabel String?
+  /// Struck-through reference price. The sell price is a PriceList rule;
+  /// this is the "was" figure a discount is calculated against, and it is a
+  /// property of the pack, not of a channel.
+  mrp Decimal? @db.Decimal(12, 2)
+  /// Small overlay on the product card - "Buy 10 Get 1", "100% Sharbati".
+  badge   String?
+  hsnCode String?
+
+  /// Display-only until a real review subsystem exists. Staff-entered, so a
+  /// seeded catalogue does not show "0 ratings" on every card.
+  rating      Decimal? @db.Decimal(3, 2)
+  reviewCount Int?
+
+  /// Bullet list above the fold on the product page.
+  highlights String[] @default([])
+
+  manufacturer    String?
+  countryOfOrigin String?
+  shelfLife       String?
+  disclaimer      String?
+  returnPolicy    String?
+  warranty        String?
+
+  /// B2C order limits, per order line.
+  minOrderQuantity Int?
+  maxOrderQuantity Int?
+
+  /// B2B wholesale order parameters - the MOQ / max / master-pack trio the
+  /// retailer view of the product page is built around.
+  moqB2B              Int?
+  maxOrderQuantityB2B Int?
+  packBoxSize         Int?
+  bulkAvailable       Boolean @default(false)
+
+  /// The "Business & GST Compliance" panel, shown only to retailers.
+  gstInvoiceAvailable    Boolean @default(true)
+  businessSupportContact String?
+  deliveryTerms          String?
+
+  /// Which curated storefront shelves this product is pinned to. Homepage
+  /// sections read these rather than a hardcoded list, so a Super Admin
+  /// changing a product's price or name changes it everywhere it appears.
+  /// `isTopPick` feeds "Popular Products" and each category's Top Picks tab;
+  /// `isDailyStaple` feeds "Best of the Basics".
+  /// How the B2B tier table is ENTERED. false = each tier is a per-unit price;
+  /// true = each tier is the TOTAL for that quantity (5 packs -> 2750), and the
+  /// per-unit price is derived from it. Either way PriceList.unitPrice holds the
+  /// per-unit figure the order engine multiplies by quantity - see PriceList.tierTotal.
+  b2bTiersAreTotals Boolean @default(false)
+
+  isTopPick     Boolean @default(false)
+  isDailyStaple Boolean @default(false)
+
   recipes              Recipe[]
   productionBatches    ProductionBatch[]
   finishedGoodsBatches FinishedGoodsBatch[]
+
+  variants       ProductVariant[]
+  specifications ProductSpecification[]
+  faqs           ProductFaq[]
+  offers         ProductOffer[]
 
   // Phase 4
   priceLists PriceList[]
@@ -1367,6 +1437,93 @@ model Category {
 
   @@index([parentId])
   @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// Product detail page content (added 19 Sep)
+//
+// Four child tables rather than JSON columns on Product: each is an ordered
+// list a Super Admin edits row by row, and the admin screen needs to reorder
+// and delete individual entries. JSON would make every edit a
+// read-modify-write of the whole blob, and would put no constraint on shape.
+// ---------------------------------------------------------------------------
+
+/// A pack size / SKU variation of the same product - "5kg Bag" vs "10kg Bag".
+///
+/// A variant carries its own SKU and MRP, but NOT its own price column:
+/// prices are PriceList rules keyed on (product, variant, channel, quantity),
+/// so a variant's rate is superseded and dated exactly like a product's.
+model ProductVariant {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name String
+  /// Unique across the catalogue, same rule as Product.sku - a variant is a
+  /// distinct sellable unit and a picking slip has to resolve it.
+  sku String @unique
+  /// Falls back to the parent product's unit when null.
+  unit   String?
+  mrp    Decimal? @db.Decimal(12, 2)
+  images String[] @default([])
+
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
+
+  priceLists PriceList[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, displayOrder])
+  @@map("product_variants")
+}
+
+/// One row of the specifications table - "Net Weight" / "10 KG".
+model ProductSpecification {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  label        String
+  value        String
+  displayOrder Int    @default(0)
+
+  @@index([productId, displayOrder])
+  @@map("product_specifications")
+}
+
+/// One question and answer in the product page's FAQ accordion.
+model ProductFaq {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  question     String
+  answer       String
+  displayOrder Int    @default(0)
+
+  @@index([productId, displayOrder])
+  @@map("product_faqs")
+}
+
+/// A bank/promotional offer line shown on the product page. Distinct from
+/// `Scheme`, which is a homepage tile and belongs to no product.
+model ProductOffer {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  title        String
+  description  String
+  displayOrder Int    @default(0)
+
+  @@index([productId, displayOrder])
+  @@map("product_offers")
 }
 
 // ---------------------------------------------------------------------------
@@ -1673,6 +1830,16 @@ model PriceList {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
+  /// Which pack size this rate is for. Null means the rule prices the product
+  /// itself, which is every row written before 19 Sep 2026 and every row an
+  /// order line resolves today.
+  ///
+  /// Resolution treats null as a value, not a wildcard: a product-level
+  /// lookup matches ONLY null rows, so a variant rate can never leak into a
+  /// line that did not ask for that variant.
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
   channel SalesChannel
 
   /// Optional refinement within a channel - e.g. distributors get a keener
@@ -1690,6 +1857,11 @@ model PriceList {
   /// when the line qualifies.
   minQuantity Int @default(1)
 
+  /// Set only when the tier was entered as a total for minQuantity units. Kept so
+  /// the admin form shows back exactly what was typed (1000 over 3 units is 333.33
+  /// per unit, and 333.33 x 3 would read 999.99). unitPrice = tierTotal / minQuantity.
+  tierTotal Decimal? @db.Decimal(12, 2)
+
   effectiveFrom DateTime
   effectiveTo   DateTime?
 
@@ -1704,6 +1876,7 @@ model PriceList {
   updatedAt DateTime @updatedAt
 
   @@index([productId, channel, effectiveFrom])
+  @@index([variantId])
   @@index([channel])
   @@map("price_lists")
 }

@@ -9,16 +9,14 @@ import {
   SortAscendingOutlined,
   TagOutlined,
 } from '@ant-design/icons';
-import { Badge, Breadcrumb, Button, InputNumber, Tag, Typography } from 'antd';
+import { Badge, Breadcrumb, Button, InputNumber, Spin, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
+import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import { bestOfBasics, popularProducts } from '../mock/homeMockData';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 export function ProductsPage() {
   const { categoryId } = useParams();
@@ -34,12 +32,45 @@ export function ProductsPage() {
 
   const mainCategory = categories.find((c) => c.id === categoryId);
 
+  // What the shopper picked decides what is fetched: Top Picks = the pinned
+  // shelf within this category, All = everything in it (subcategories
+  // included, resolved server-side), and a subcategory = only that one.
+  // Called before the early return below so the hook order never changes.
+  const isTopPicks = selectedSub === 'top-picks';
+  const activeCategorySlug = selectedSub === 'top-picks' || selectedSub === 'all' ? categoryId : selectedSub;
+  const catalogue = useCatalogueProducts({ categorySlug: activeCategorySlug, topPick: isTopPicks });
+
   if (!mainCategory) {
     return <Navigate to={`/products/${categories[0]?.id || 'atta-flour'}`} replace />;
   }
 
-  const allProducts = selectedSub === 'top-picks' ? popularProducts : [...popularProducts, ...bestOfBasics];
-  const productsToDisplay = maxPrice ? allProducts.filter((p) => p.price <= maxPrice) : allProducts;
+  const productsToDisplay = maxPrice
+    ? catalogue.products.filter((p) => p.price !== null && p.price <= maxPrice)
+    : catalogue.products;
+
+  /** Shared by both layouts so loading / empty / failed read the same on a phone and a desktop. */
+  const listState = catalogue.isLoading ? (
+    <div style={{ padding: '48px 0', textAlign: 'center' }}>
+      <Spin />
+    </div>
+  ) : catalogue.isError ? (
+    <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+        We couldn&apos;t load these products.
+      </Typography.Text>
+      <Button onClick={() => void catalogue.refetch()}>Try again</Button>
+    </div>
+  ) : productsToDisplay.length === 0 ? (
+    <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+      <Typography.Text type="secondary">
+        {isTopPicks
+          ? 'No top picks here yet — open All Products to see everything in this category.'
+          : maxPrice
+            ? `Nothing here is priced under ${formatInr(maxPrice)}.`
+            : 'No products in this category yet.'}
+      </Typography.Text>
+    </div>
+  ) : null;
 
   return (
     <div>
@@ -322,6 +353,7 @@ export function ProductsPage() {
 
           {/* Right Mobile Products Grid */}
           <div className="hide-scrollbar" style={{ flex: 1, padding: '12px 10px 40px', overflowY: 'auto', background: '#f5f4f2' }}>
+            {listState}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               {productsToDisplay.map((product, idx) => {
                 const cartLine = cart.lines.find((line) => line.productId === product.id);
@@ -339,7 +371,7 @@ export function ProductsPage() {
                       boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                     }}
                   >
-                    <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                    <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
                       <div style={{ position: 'relative', height: 110, background: '#f8f7f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8 }}>
                         <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                         {product.badge && (
@@ -371,7 +403,7 @@ export function ProductsPage() {
 
                         <div style={{ margin: '6px 0 8px', display: 'flex', alignItems: 'baseline', gap: 4 }}>
                           <Typography.Text strong style={{ fontSize: 14, color: '#065f46' }}>
-                            {formatInr(product.price)}
+                            {product.price !== null ? formatInr(product.price) : 'Price on request'}
                           </Typography.Text>
                           {product.mrp && (
                             <Typography.Text delete type="secondary" style={{ fontSize: 10 }}>
@@ -417,7 +449,8 @@ export function ProductsPage() {
                         <Button
                           block
                           size="small"
-                          style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 700, borderRadius: 8, height: 30, fontSize: 12 }}
+                          disabled={!product.purchasable}
+                          style={product.purchasable ? { background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 700, borderRadius: 8, height: 30, fontSize: 12 } : { borderRadius: 8, height: 30, fontSize: 12 }}
                           onClick={() =>
                             cart.add({
                               productId: product.id,
@@ -429,7 +462,7 @@ export function ProductsPage() {
                             })
                           }
                         >
-                          ADD
+                          {product.purchasable ? 'ADD' : product.price === null ? 'UNAVAILABLE' : 'OUT OF STOCK'}
                         </Button>
                       )}
                     </div>
@@ -600,6 +633,7 @@ export function ProductsPage() {
               )}
 
               {/* Product Grid */}
+              {listState}
               <div
                 style={{
                   display: 'grid',
@@ -624,7 +658,7 @@ export function ProductsPage() {
                         boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                       }}
                     >
-                      <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                      <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ position: 'relative', height: 150, background: '#f8f7f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
                           <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                           {product.badge && (
@@ -655,7 +689,7 @@ export function ProductsPage() {
 
                           <div style={{ margin: '8px 0 12px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
                             <Typography.Text strong style={{ fontSize: 16, color: '#065f46' }}>
-                              {formatInr(product.price)}
+                              {product.price !== null ? formatInr(product.price) : 'Price on request'}
                             </Typography.Text>
                             {product.mrp && (
                               <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
@@ -703,7 +737,8 @@ export function ProductsPage() {
                         ) : (
                           <Button
                             block
-                            style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10 }}
+                            disabled={!product.purchasable}
+                            style={product.purchasable ? { background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10 } : { borderRadius: 10 }}
                             onClick={() =>
                               cart.add({
                                 productId: product.id,
@@ -715,7 +750,7 @@ export function ProductsPage() {
                               })
                             }
                           >
-                            Add to Cart
+                            {product.purchasable ? 'Add to Cart' : product.price === null ? 'Unavailable' : 'Out of stock'}
                           </Button>
                         )}
                       </div>

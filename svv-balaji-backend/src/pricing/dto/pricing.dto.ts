@@ -16,6 +16,15 @@ export class CreatePriceListDto {
   @IsString()
   productId: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Prices one pack size rather than the product itself. Omit for a product-level rate, ' +
+      'which is what an order line resolves unless it names a variant.',
+  })
+  @IsOptional()
+  @IsString()
+  variantId?: string;
+
   @ApiProperty({ enum: SalesChannel })
   @IsEnum(SalesChannel)
   channel: SalesChannel;

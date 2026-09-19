@@ -16,6 +16,55 @@ import type {
   UpdateProductInput,
 } from './types';
 
+/**
+ * Optional columns an operator can empty out. `pruneEmpty` drops blank strings
+ * and nulls in transit - right for a create, where blank means "not provided" -
+ * but on an edit it silently keeps the old value, so a Super Admin blanking a
+ * disclaimer or an MRP would see the field snap back on the next load.
+ *
+ * Deliberately a whitelist: name, SKU, unit and slug are required or
+ * identity-bearing, and a stray blank must never be read as "clear this".
+ */
+const CLEARABLE_PRODUCT_FIELDS = [
+  'categoryId',
+  'description',
+  'metaTitle',
+  'metaDescription',
+  'brand',
+  'packLabel',
+  'mrp',
+  'badge',
+  'hsnCode',
+  'rating',
+  'reviewCount',
+  'manufacturer',
+  'countryOfOrigin',
+  'shelfLife',
+  'disclaimer',
+  'returnPolicy',
+  'warranty',
+  'minOrderQuantity',
+  'maxOrderQuantity',
+  'moqB2B',
+  'maxOrderQuantityB2B',
+  'packBoxSize',
+  'businessSupportContact',
+  'deliveryTerms',
+] as const;
+
+/** A blank or null on a clearable field becomes an explicit `null`; `undefined` still means "untouched". */
+function toProductUpdateBody(input: UpdateProductInput): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...pruneEmpty(input) };
+  const raw = input as Record<string, unknown>;
+  for (const field of CLEARABLE_PRODUCT_FIELDS) {
+    const value = raw[field];
+    if (value === null || (typeof value === 'string' && value.trim() === '')) {
+      body[field] = null;
+    }
+  }
+  return body;
+}
+
 export const productsApi = {
   /**
    * Discontinued products are excluded server-side unless `includeInactive` is
@@ -40,7 +89,7 @@ export const productsApi = {
   },
 
   async update(id: string, input: UpdateProductInput): Promise<Product> {
-    const response = await api.patch<Product>(`/products/${id}`, pruneEmpty(input));
+    const response = await api.patch<Product>(`/products/${id}`, toProductUpdateBody(input));
     return unwrap<Product>(response.data);
   },
 

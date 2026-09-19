@@ -27,16 +27,14 @@ import { useStorefrontSchemes } from '@shared/hooks/useSchemes';
 import { api as storefrontApi } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
+import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import {
-  bestOfBasics,
-  buyAgainProducts,
-  popularProducts,
-} from '../mock/homeMockData';
+// Order history is still mock (no storefront order backend yet). Only its
+// "what and how much was last ordered" survives - names, prices and images are
+// re-read from the live catalogue below, so an admin edit reaches this shelf too.
+import { buyAgainProducts as buyAgainHistory } from '../mock/homeMockData';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 interface HeroSlide {
   id: string;
@@ -84,6 +82,17 @@ export function HomePage() {
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
   const categories = useCategoryTree();
+
+  // The three product shelves, all live. A shelf with nothing in it renders
+  // nothing (no mock fallback): the products that used to be hardcoded here are
+  // real catalogue rows now, so a fallback would resurrect deleted ones.
+  const staples = useCatalogueProducts({ dailyStaple: true, limit: 12 }).products;
+  const popular = useCatalogueProducts({ topPick: true, limit: 12 }).products;
+  const wholeCatalogue = useCatalogueProducts({ limit: 100 }).products;
+  const buyAgain = buyAgainHistory.flatMap((entry) => {
+    const live = wholeCatalogue.find((p) => p.slug === entry.id || p.id === entry.id);
+    return live ? [{ ...live, lastOrdered: entry.lastOrdered }] : [];
+  });
 
   const { data: publishedBanners } = useStorefrontBanners(
     'HOMEPAGE',
@@ -823,6 +832,7 @@ export function HomePage() {
         {/* ======================================================================= */}
         {/* 5. BEST OF THE BASICS (DAILY STAPLES)                                    */}
         {/* ======================================================================= */}
+        {staples.length > 0 && (
         <section>
           <SectionHeader
             title="Best of the Basics"
@@ -833,7 +843,7 @@ export function HomePage() {
           {/* Mobile horizontal scroll */}
           <div className="mobile-only">
             <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
-              {bestOfBasics.map((product) => (
+              {staples.map((product) => (
                 <div
                   key={product.id}
                   style={{
@@ -847,7 +857,7 @@ export function HomePage() {
                     flexDirection: 'column',
                   }}
                 >
-                  <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                  <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ height: 85, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#f8f7f5', borderRadius: 8 }}>
                       <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                     </div>
@@ -860,7 +870,7 @@ export function HomePage() {
                   </Link>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                     <Typography.Text style={{ fontSize: 14, fontWeight: 800, color: '#1c1917' }}>
-                      {formatInr(product.price)}
+                      {product.price !== null ? formatInr(product.price) : 'N/A'}
                     </Typography.Text>
                     <button
                       style={{
@@ -896,7 +906,7 @@ export function HomePage() {
           {/* Desktop 6-column product grid */}
           <div className="desktop-only">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
-              {bestOfBasics.map((product) => {
+              {staples.map((product) => {
                 const cartLine = cart.lines.find((line) => line.productId === product.id);
                 return (
                   <div
@@ -912,7 +922,7 @@ export function HomePage() {
                       justifyContent: 'space-between',
                     }}
                   >
-                    <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                    <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
                       <div
                         style={{
                           height: 120,
@@ -935,7 +945,7 @@ export function HomePage() {
                       </Typography.Text>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '8px 0 10px' }}>
                         <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
-                          {formatInr(product.price)}
+                          {product.price !== null ? formatInr(product.price) : 'N/A'}
                         </Typography.Text>
                         {product.mrp && (
                           <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
@@ -1004,6 +1014,7 @@ export function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ======================================================================= */}
         {/* 6. PRICE RANGE QUICK BANNERS                                            */}
@@ -1044,6 +1055,7 @@ export function HomePage() {
         {/* ======================================================================= */}
         {/* 7. POPULAR PRODUCTS / BEST SELLERS                                      */}
         {/* ======================================================================= */}
+        {popular.length > 0 && (
         <section>
           <SectionHeader title="Popular Products" to="/products/atta-flour" subtitle="Highest demand products among local grocery retailers" />
 
@@ -1055,7 +1067,7 @@ export function HomePage() {
               gap: 16,
             }}
           >
-            {popularProducts.map((product) => {
+            {popular.map((product) => {
               const cartLine = cart.lines.find((line) => line.productId === product.id);
               return (
                 <div
@@ -1071,7 +1083,7 @@ export function HomePage() {
                     justifyContent: 'space-between',
                   }}
                 >
-                  <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                  <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ position: 'relative' }}>
                       <ProductThumb image={product.image} square />
                       {product.badge && (
@@ -1101,7 +1113,7 @@ export function HomePage() {
                       </Typography.Text>
                       <div style={{ margin: '6px 0 10px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
                         <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
-                          {formatInr(product.price)}
+                          {product.price !== null ? formatInr(product.price) : 'N/A'}
                         </Typography.Text>
                         {product.mrp && (
                           <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
@@ -1170,10 +1182,12 @@ export function HomePage() {
             })}
           </div>
         </section>
+        )}
 
         {/* ======================================================================= */}
         {/* 8. BUY AGAIN / REPEAT ORDERS                                            */}
         {/* ======================================================================= */}
+        {buyAgain.length > 0 && (
         <section>
           <SectionHeader title="Buy Again / Reorder" to="/orders" subtitle="Previously ordered staples ready for one-click replenishment" />
           <div
@@ -1183,7 +1197,7 @@ export function HomePage() {
               gap: 14,
             }}
           >
-            {buyAgainProducts.map((product) => {
+            {buyAgain.map((product) => {
               const cartLine = cart.lines.find((line) => line.productId === product.id);
               return (
                 <div
@@ -1199,7 +1213,7 @@ export function HomePage() {
                     background: '#ffffff',
                   }}
                 >
-                  <Link to={`/product-detail/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+                  <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
                     <ProductThumb image={product.image} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Typography.Text strong style={{ display: 'block', fontSize: 13, color: '#1c1917' }} ellipsis>
@@ -1210,7 +1224,7 @@ export function HomePage() {
                       </Typography.Text>
                       <div style={{ marginTop: 2 }}>
                         <Typography.Text strong style={{ fontSize: 15, color: '#c2410c' }}>
-                          {formatInr(product.price)}
+                          {product.price !== null ? formatInr(product.price) : 'N/A'}
                         </Typography.Text>
                         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                           {' '}
@@ -1244,6 +1258,7 @@ export function HomePage() {
             })}
           </div>
         </section>
+        )}
 
         {/* ======================================================================= */}
         {/* 9. BOTTOM ACCOUNT / PARTNER SUMMARY                                     */}

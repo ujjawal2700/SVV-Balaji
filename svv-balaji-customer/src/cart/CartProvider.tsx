@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { addToLines, linesTotal, repriced, setLineQuantity } from './cartLines';
 import type { CartApi, CartLine } from './types';
 
 /**
@@ -42,7 +43,8 @@ function readStoredCart(): StoredCart {
     if (parsed?.version !== CART_VERSION || !Array.isArray(parsed.lines)) return { version: CART_VERSION, lines: [] };
     return {
       version: CART_VERSION,
-      lines: parsed.lines.filter((line) => line && line.productId && line.quantity > 0),
+      // Re-priced on load: a cart that sat in storage across a price change must not quote the old rate.
+      lines: parsed.lines.filter((line) => line && line.productId && line.quantity > 0).map(repriced),
       deliveryPincode: parsed.deliveryPincode,
       deliveryInfo: parsed.deliveryInfo
     };
@@ -70,24 +72,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [lines, deliveryPincode, deliveryInfo]);
 
   const add = useCallback((line: Omit<CartLine, 'quantity'>, quantity = 1) => {
-    if (quantity <= 0) return;
-    setLines((current) => {
-      const existing = current.find((l) => l.productId === line.productId);
-      if (!existing) return [...current, { ...line, quantity }];
-      // Adding the same product again tops up rather than duplicating the row,
-      // which is what every shopper expects and what the checkout assumes.
-      return current.map((l) =>
-        l.productId === line.productId ? { ...l, ...line, quantity: l.quantity + quantity } : l,
-      );
-    });
+    // Tops up an existing line rather than duplicating the row (what every
+    // shopper expects and what checkout assumes) and re-prices the whole line
+    // for the combined quantity - see cartLines.ts.
+    setLines((current) => addToLines(current, line, quantity));
   }, []);
 
   const setQuantity = useCallback((productId: string, quantity: number) => {
-    setLines((current) =>
-      quantity <= 0
-        ? current.filter((l) => l.productId !== productId)
-        : current.map((l) => (l.productId === productId ? { ...l, quantity } : l)),
-    );
+    setLines((current) => setLineQuantity(current, productId, quantity));
   }, []);
 
   const remove = useCallback((productId: string) => {
@@ -103,10 +95,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CartApi>(() => {
     const count = lines.reduce((sum, l) => sum + l.quantity, 0);
-    const priced = lines.every((l) => typeof l.displayUnitPrice === 'number');
-    const indicativeTotal = priced
-      ? lines.reduce((sum, l) => sum + (l.displayUnitPrice as number) * l.quantity, 0)
-      : null;
+    const indicativeTotal = linesTotal(lines);
 
     return { lines, add, setQuantity, remove, clear, count, indicativeTotal, deliveryPincode, deliveryInfo, setDelivery };
   }, [lines, add, setQuantity, remove, clear, deliveryPincode, deliveryInfo, setDelivery]);

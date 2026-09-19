@@ -16,6 +16,83 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-19 — Raunak — Dynamic Add/Edit Product, real catalogue on the storefront
+
+**Did:** The storefront's product pages, listings and homepage shelves read hardcoded arrays in
+`svv-balaji-customer/src/mock/homeMockData.ts`, and Super Admin's Add Product page saved prices and
+variants to local component state. Both are now real, end to end.
+- **Schema (2 migrations, `20260919090000_product_detail_content`, `…093000_product_merchandising_flags`):**
+  `Product` gained brand/packLabel/mrp/badge/hsnCode/rating/reviewCount/highlights/manufacturer/
+  countryOfOrigin/shelfLife/disclaimer/returnPolicy/warranty, B2C limits (min/maxOrderQuantity), B2B
+  (moqB2B/maxOrderQuantityB2B/packBoxSize/bulkAvailable), retailer panel (gstInvoiceAvailable/
+  businessSupportContact/deliveryTerms), `isTopPick`/`isDailyStaple` shelf flags. New tables:
+  `product_variants`, `product_specifications`, `product_faqs`, `product_offers`.
+- **Backend:** `ProductsService` create/update now take nested `variants`, `specifications`, `faqs`,
+  `offers` and a `pricing` block, in one transaction. Present list = authoritative; omitted = untouched.
+  `GET /products/:id` returns live `pricing`; `GET /products` returns `b2cPrice`/`b2bPrice`/`_count.variants`.
+- **Storefront API:** `GET /storefront/catalogue/products` gained `categorySlug` (a parent slug now includes its
+  subcategories), `topPick`, `dailyStaple`, `limit`. `/products/:idOrSlug` returns every PDP section incl.
+  variants with their own tier ladders, `priceTiers`, order limits, `unitPriceInclGst`.
+- **Admin:** `AddEditProductPage` rebuilt as 7 dynamic tabs (basic/category→subcategory, pricing + B2B tier
+  editor, media/SEO, info/specs, offers/FAQs, inventory, pack sizes) with live preview.
+  `ProductListsPage` now real: removed 8 placeholder rows (`MOCK_PRODUCTS`) and the "Adjust stock" modal
+  that only wrote local state. `/add-product` and `/products/edit/:id` now permission-guarded.
+- **Customer:** `ProductsPage` filters by the selected category/subcategory; `ProductDetailPage`,
+  `HomePage` shelves and `CategoriesPage` strips read the API. No mock fallback (would resurrect deleted
+  products). Shelves hide when empty.
+- **Migration:** `seedDefaultProducts()` in `prisma/seed.ts` moved the 6 mock products (+ the 5kg atta
+  variant) into real rows, idempotent per SKU. Slugs = the old mock ids, so old links/carts still resolve.
+
+**Contract changes:** `PriceList.variantId` (nullable) added; `PricingService.resolve()` now filters
+`variantId: params.variantId ?? null` — **null is a value, not a wildcard**, so product-level order lines
+never see variant rates (Ujjawal's WS1.6; tests added). New `PricingService.syncLadder()`. `CreateProductDto`
+gained the fields above; `ProductsController.create/update` now pass the actor id. `PriceComparison` gained
+per-rule `id` and `variants[]`. `ProductsModule` imports `PricingModule`.
+
+**Other developer needs to know:**
+1. **`PriceList.unitPrice` is GST-EXCLUSIVE** (SalesService adds tax on top). The storefront displays
+   inclusive prices, so it derives them (`inclusiveOf`) — never store a shopper-facing inclusive figure as
+   `unitPrice` or checkout double-charges GST. I hit this myself in the first seed and fixed it.
+2. Run `npx prisma migrate deploy` then `npm run prisma:seed`.
+3. **Variant stock is not tracked**: `FinishedGoodsBatch` has only `productId`, so pack sizes share the
+   product's availability. Real per-pack stock needs `variantId` on FG batches (packaging, WS1.x).
+4. **Cart lines key on `productId` = variant id for a variant pack.** Order placement must map that back to
+   (productId, variantId) before calling `PricingService.resolve`.
+5. Deleting a variant cascades its price rules; fine today (no order references variants), would fail on an
+   `OrderItem` FK once variant orders exist.
+6. Migrated products are `allowBackorder: true` because no FG stock exists yet (else all read "out of stock").
+
+**Known data caveats (seed):** two 5kg-variant B2B tiers are ₹0.01 off the old page (208.01 / 187.01) —
+2-decimal storage at 5% GST can't hit those whole rupees. Invented SKUs for 4 products that had none
+(BJ-ALO-500G, SC-SPR-95OZ, TB-CHP-125OZ, CF-COF-48FLOZ). HSN `1101 00 00` set only on atta (the old page
+showed it on every product). Santa Cruz and Califia left uncategorised (no fitting category). Ratings
+4.8/1240 and 4.5/320 are the old demo numbers, staff-entered, **not from real reviews** — clear before go-live.
+Old copy "100% Farm Milled" (on every product) and the "up to N% OFF" wholesale teaser were dropped.
+Bug fixed in passing: "Add 10 pcs" put 1 unit in the cart.
+
+**Follow-up 2026-09-19 (B2B tier totals):** a product can now enter its B2B tiers as the TOTAL for each
+quantity (`Product.b2bTiersAreTotals`, migration `20260919120000_b2b_tier_totals`, `PriceList.tierTotal`).
+`PriceList.unitPrice` still holds the per-pack, GST-exclusive figure the engine bills (2750 for 5 packs is
+stored as 550 with `tierTotal` 2750), so `SalesService` is unchanged. `PriceTierDto` takes `unitPrice` OR
+`totalPrice`. Storefront tiers now carry `tierTotal` and a server-computed `discountPercent`, measured like
+for like: GST-inclusive MRP vs the per-pack price INCLUDING GST (699 vs 577.50 = 17.38%). Applied to
+DES-PREM (Premium Whole Spices Combo). Cart fix: `ProductDetailPage` now always adds via `cart.add`
+(which refreshes the price) instead of `setQuantity`, so an existing line no longer keeps a stale price;
+retailer cart lines are labelled unit "pack" rather than embedding the quantity. **Cart tier pricing:**
+retailer lines carry their tier ladder (`CartLine.priceTiers`, GST-inclusive) and the cart re-prices the
+WHOLE line from its final quantity on every add, stepper change and on load (`cart/cartLines.ts`), so
+6+6 packs is 12 x 550.20, and 12->8 goes back to 551.25. Cart, header and checkout all read
+`displayUnitPrice x quantity`, so they cannot disagree. First tests in the customer app: `npm test`
+(vitest, `cart/cartLines.test.ts`, 17 cases incl. 4->5, 6->8, 7->8, 11->12).
+
+**Not verified:** B2B (retailer) view rendered only via the API, not in a browser; the admin form was
+typechecked but not clicked through (customer PDP/listing were screenshotted). Buy Again is still mock order
+history joined to live product data. 399 backend tests pass (was 375).
+
+**Next:** click-through of the admin form end to end; wire order placement to real product/variant ids.
+
+---
+
 ## 2026-09-18 (later still) — Raunak
 
 **Did:** Closed a gap in the Loss & Yield Tracking work below: the by-product fields

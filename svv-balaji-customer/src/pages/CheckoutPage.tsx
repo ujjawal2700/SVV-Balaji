@@ -12,11 +12,9 @@ import { Button, Divider, Radio, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { useLoyalty } from '../loyalty/useLoyalty';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 const defaultAddress = {
   id: 'addr-1',

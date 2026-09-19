@@ -16,6 +16,17 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
+**19 Sep (latest) — Add Product made fully dynamic; storefront catalogue is now real.** The
+storefront's product pages/listings/homepage shelves ran on hardcoded mock arrays, and Add Product
+kept prices/variants in local state. Now: 7-tab admin form (category→subcategory, B2C price, B2B tier
+ladder, specs, offers, FAQs, pack sizes, thresholds, preview) saves in one transaction; the six mock
+products were migrated into the DB (`seedDefaultProducts`, old ids kept as slugs); the customer app
+filters by selected category/subcategory and reads everything from `/storefront/catalogue`. Prices stay
+dated `PriceList` rules (stored GST-**exclusive**; storefront derives inclusive). Stock stays computed
+from FG batches. Pricing engine gained a nullable `variantId`. See `DEV_LOG.md` (2026-09-19) for
+contract changes, data caveats and what is **not** verified (B2B view and admin form not
+click-tested).
+
 **18 Sep (latest) — Homepage schemes, made real, with a genuine "hide the section" control.** Same
 pattern as banners/categories, applied to the "Today's Schemes & Offers" tiles: new `Scheme` model,
 staff CRUD at `/schemes` + new admin screen, unguarded `/storefront/schemes` read, `displayOrder`

@@ -24,11 +24,9 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { useLoyalty } from '../loyalty/useLoyalty';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 export function DesktopHeader() {
   const cart = useCart();

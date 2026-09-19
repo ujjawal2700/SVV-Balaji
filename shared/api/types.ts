@@ -1187,12 +1187,94 @@ export type UpdateSchemeInput = Partial<CreateSchemeInput>;
 
 // --- Product master ---------------------------------------------------------
 
+/** The category a product sits in, with its parent so a leaf reads "Atta & Flour > Chakki Atta". */
+export interface CategoryRefWithParent extends CategoryRef {
+  parent?: CategoryRef | null;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  name: string;
+  sku: string;
+  unit: string | null;
+  /** Decimal - serialised as a string by Prisma. */
+  mrp: string | null;
+  images: string[];
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface ProductSpecification {
+  id?: string;
+  label: string;
+  value: string;
+}
+
+export interface ProductFaq {
+  id?: string;
+  question: string;
+  answer: string;
+}
+
+export interface ProductOffer {
+  id?: string;
+  title: string;
+  description: string;
+}
+
+/** One quantity break of a price ladder, as the form edits it. */
+export interface PriceTierInput {
+  minQuantity: number;
+  /** Per-unit price, excl. GST. Send this OR totalPrice. */
+  unitPrice?: number;
+  /** Total for minQuantity units, excl. GST. The server derives the per-unit price. */
+  totalPrice?: number;
+}
+
+/** What one sellable unit (the product itself, or one variant) charges, per channel. */
+export interface ChannelPricingInput {
+  b2cPrice?: number;
+  b2bTiers?: PriceTierInput[];
+}
+
+export interface ProductPricingInput extends ChannelPricingInput {
+  gstRatePercent?: number;
+}
+
+/** One live rule, as GET /products/:id reports it back for the form to prefill. */
+export interface LivePriceRule {
+  id: string;
+  customerType: string | null;
+  minQuantity: number;
+  /** Per-unit, excl. GST - what the order engine bills. */
+  unitPrice: number;
+  /** The total this tier was typed as, when entered as a total for minQuantity units. */
+  tierTotal: number | null;
+  gstRatePercent: number;
+  effectiveFrom: string;
+}
+
+/** GET /products/:id -> `pricing`: what is charged today, by channel, for the product and each variant. */
+export interface ProductLivePricing {
+  asOf: string;
+  B2B: LivePriceRule[];
+  B2C: LivePriceRule[];
+  variants: Array<{
+    id: string;
+    name: string;
+    sku: string;
+    B2B: LivePriceRule[];
+    B2C: LivePriceRule[];
+  }>;
+}
+
 export interface Product {
   id: string;
   name: string;
   sku: string;
   categoryId: string | null;
-  category: CategoryRef | null;
+  category: CategoryRefWithParent | null;
   unit: string;
   isActive: boolean;
 
@@ -1210,13 +1292,67 @@ export interface Product {
   safetyStock: number | null;
   allowBackorder: boolean;
 
+  // --- Product detail page content ---------------------------------------
+  brand: string | null;
+  packLabel: string | null;
+  /** Decimal - serialised as a string by Prisma. */
+  mrp: string | null;
+  badge: string | null;
+  hsnCode: string | null;
+  rating: string | null;
+  reviewCount: number | null;
+  highlights: string[];
+  manufacturer: string | null;
+  countryOfOrigin: string | null;
+  shelfLife: string | null;
+  disclaimer: string | null;
+  returnPolicy: string | null;
+  warranty: string | null;
+  minOrderQuantity: number | null;
+  maxOrderQuantity: number | null;
+  moqB2B: number | null;
+  maxOrderQuantityB2B: number | null;
+  packBoxSize: number | null;
+  bulkAvailable: boolean;
+  gstInvoiceAvailable: boolean;
+  businessSupportContact: string | null;
+  deliveryTerms: string | null;
+  isTopPick: boolean;
+  isDailyStaple: boolean;
+  /** true = the B2B tier table is entered as totals for each quantity. */
+  b2bTiersAreTotals: boolean;
+
   /** Present on GET /products/:id. */
   recipes?: Array<{ id: string; recipeCode: string; version: number; status: RecipeStatus }>;
+  variants?: ProductVariant[];
+  specifications?: ProductSpecification[];
+  faqs?: ProductFaq[];
+  offers?: ProductOffer[];
+  /** Present on GET /products/:id. */
+  pricing?: ProductLivePricing;
+
+  /** Present on the list - headline prices and pack-size count, so the master table needs no per-row call. */
+  b2cPrice?: number | null;
+  b2bPrice?: number | null;
+  _count?: { variants: number };
+
   createdAt: string;
   updatedAt: string;
 }
 
 export type UpdateProductInput = Partial<CreateProductInput>;
+
+export interface ProductVariantInput {
+  /** Omit to create; pass an existing id to update in place. */
+  id?: string;
+  name: string;
+  sku: string;
+  unit?: string;
+  mrp?: number;
+  images?: string[];
+  isActive?: boolean;
+  pricing?: ChannelPricingInput;
+}
 
 export interface CreateProductInput {
   name: string;
@@ -1232,6 +1368,135 @@ export interface CreateProductInput {
   reorderPoint?: number;
   safetyStock?: number;
   allowBackorder?: boolean;
+
+  brand?: string;
+  packLabel?: string;
+  mrp?: number;
+  badge?: string;
+  hsnCode?: string;
+  rating?: number;
+  reviewCount?: number;
+  highlights?: string[];
+  manufacturer?: string;
+  countryOfOrigin?: string;
+  shelfLife?: string;
+  disclaimer?: string;
+  returnPolicy?: string;
+  warranty?: string;
+  minOrderQuantity?: number;
+  maxOrderQuantity?: number;
+  moqB2B?: number;
+  maxOrderQuantityB2B?: number;
+  packBoxSize?: number;
+  bulkAvailable?: boolean;
+  gstInvoiceAvailable?: boolean;
+  businessSupportContact?: string;
+  deliveryTerms?: string;
+  isTopPick?: boolean;
+  isDailyStaple?: boolean;
+  b2bTiersAreTotals?: boolean;
+
+  /** Each list is authoritative when present, and left untouched when omitted. Array order is display order. */
+  variants?: ProductVariantInput[];
+  specifications?: ProductSpecification[];
+  faqs?: ProductFaq[];
+  offers?: ProductOffer[];
+  pricing?: ProductPricingInput;
+}
+
+// --- Storefront catalogue (GET /storefront/catalogue/*) ---------------------
+
+export type StorefrontChannel = 'B2B' | 'B2C';
+
+export interface StorefrontPrice {
+  /** Exclusive of GST - what the order engine bills against. */
+  unitPrice: number;
+  /** Exclusive price plus GST, rounded server-side. This is what a shopper reads. */
+  unitPriceInclGst: number;
+  gstRatePercent: number;
+  currency: string;
+}
+
+export interface StorefrontPriceTier {
+  minQuantity: number;
+  /** Null on the last break - "100+". */
+  maxQuantity: number | null;
+  /** Exclusive of GST. */
+  unitPrice: number;
+  /** Inclusive of GST - the default display. */
+  unitPriceInclGst: number;
+  gstRatePercent: number;
+  /** The total the tier was entered as ("5 packs for 2750"), or null when entered per unit. */
+  tierTotal: number | null;
+  /** Per-unit price (excl. GST) vs MRP, 2dp - computed server-side. Null without an MRP. */
+  discountPercent: number | null;
+}
+
+/** What a listing card needs. */
+export interface StorefrontProductCard {
+  id: string;
+  slug: string | null;
+  name: string;
+  sku: string;
+  category: CategoryRef | null;
+  unit: string;
+  images: string[];
+  price: StorefrontPrice | null;
+  inStock: boolean;
+  allowBackorder: boolean;
+  brand: string | null;
+  packLabel: string | null;
+  mrp: number | null;
+  badge: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+}
+
+export interface StorefrontVariant {
+  id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  mrp: number | null;
+  images: string[];
+  price: StorefrontPrice | null;
+  /** This pack size's own quantity-break ladder for the requested channel. */
+  priceTiers: StorefrontPriceTier[];
+}
+
+/** GET /storefront/catalogue/products/:idOrSlug - every product-page section. */
+export interface StorefrontProductDetail extends StorefrontProductCard {
+  /** Detail only: the parent rides along so the breadcrumb can link a subcategory back to its main category. */
+  category: CategoryRefWithParent | null;
+  description: string | null;
+  availableQuantity: number;
+  highlights: string[];
+  hsnCode: string | null;
+  manufacturer: string | null;
+  countryOfOrigin: string | null;
+  shelfLife: string | null;
+  disclaimer: string | null;
+  returnPolicy: string | null;
+  warranty: string | null;
+  orderLimits: {
+    minOrderQuantity: number;
+    maxOrderQuantity: number | null;
+    moqB2B: number;
+    maxOrderQuantityB2B: number | null;
+    packBoxSize: number | null;
+    bulkAvailable: boolean;
+    allowBackorder: boolean;
+  };
+  businessInfo: {
+    gstInvoiceAvailable: boolean;
+    businessSupportContact: string | null;
+    deliveryTerms: string | null;
+  };
+  specifications: Array<{ label: string; value: string }>;
+  faqs: Array<{ question: string; answer: string }>;
+  offers: Array<{ title: string; description: string }>;
+  variants: StorefrontVariant[];
+  priceTiers: StorefrontPriceTier[];
 }
 
 export type StockStatus = 'OK' | 'LOW' | 'CRITICAL';

@@ -5,8 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useStorefrontBanners } from '@shared/hooks/useBanners';
 import { api as storefrontApi } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import { popularProducts } from '../mock/homeMockData';
+import { formatInr } from '../utils/money';
 
 interface CategoryPageBanner {
   id: string;
@@ -40,6 +41,10 @@ export function CategoriesPage() {
   const { role } = useCustomerAuth();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | 'for-you'>('for-you');
   const categories = useCategoryTree();
+  // Real products for the "Often Seen" / "High Velocity" strips. The old code
+  // doubled a two-item mock list to fill the grid; the strips now show what
+  // actually exists, however few.
+  const popularProducts = useCatalogueProducts({ topPick: true, limit: 8 }).products;
 
   const { data: publishedBanners } = useStorefrontBanners(
     'CATEGORIES_PAGE',
@@ -308,10 +313,10 @@ export function CategoriesPage() {
                     Often Seen
                   </Typography.Title>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px 8px' }}>
-                    {popularProducts.concat(popularProducts).map((product, i) => (
+                    {popularProducts.map((product, i) => (
                       <Link
                         key={`${product.id}-${i}`}
-                        to={`/product-detail/${product.id}`}
+                        to={`/product-detail/${product.slug}`}
                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}
                       >
                         <div
@@ -641,10 +646,10 @@ export function CategoriesPage() {
                       </Link>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-                      {popularProducts.concat(popularProducts).slice(0, 8).map((product, i) => (
+                      {popularProducts.map((product, i) => (
                         <Link
                           key={`${product.id}-${i}`}
-                          to={`/product-detail/${product.id}`}
+                          to={`/product-detail/${product.slug}`}
                           style={{
                             textDecoration: 'none',
                             background: '#f8fafc',
@@ -663,7 +668,7 @@ export function CategoriesPage() {
                             {product.name}
                           </Typography.Text>
                           <Typography.Text strong style={{ fontSize: 14, color: '#ea580c' }}>
-                            ₹{product.price}
+                            {product.price !== null ? formatInr(product.price) : 'N/A'}
                           </Typography.Text>
                         </Link>
                       ))}

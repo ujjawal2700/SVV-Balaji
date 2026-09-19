@@ -352,9 +352,15 @@ export function App() {
 
           <Route path="/profile" element={SCREENS['/profile']} />
           <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
-          <Route path="/add-product" element={<AddEditProductPage />} />
-          <Route path="/products/edit/:id" element={<AddEditProductPage />} />
-          <Route path="/edit-product/:id" element={<AddEditProductPage />} />
+          {/* Creating and editing are separate grants (products.create / products.edit); the
+              server enforces both, this just stops the screen opening for someone who cannot save. */}
+          <Route element={<RequirePermission permission={PERMISSIONS.PRODUCT_CREATE} />}>
+            <Route path="/add-product" element={<AddEditProductPage />} />
+          </Route>
+          <Route element={<RequirePermission permission={PERMISSIONS.PRODUCT_MANAGE} />}>
+            <Route path="/products/edit/:id" element={<AddEditProductPage />} />
+            <Route path="/edit-product/:id" element={<AddEditProductPage />} />
+          </Route>
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

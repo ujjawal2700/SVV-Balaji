@@ -8,11 +8,9 @@ import {
 import { Button, Typography, message } from 'antd';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../cart/useCart';
+import { useCart } from '../cart/useCart';
+import { formatInr } from '../utils/money';
 
-function formatInr(value: number): string {
-  return `₹${value.toLocaleString('en-IN')}`;
-}
 
 interface WishlistItem {
   id: string;
