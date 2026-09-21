@@ -53,3 +53,14 @@ export class CreateQualityInspectionDto {
   @IsString()
   remarks?: string;
 }
+
+export class ReleaseBatchDto {
+  @ApiPropertyOptional({
+    description:
+      'Warehouse that receives the packs. Defaults to the warehouse the production run used, ' +
+      'else the branch central depot.',
+  })
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+}

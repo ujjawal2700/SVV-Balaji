@@ -119,6 +119,17 @@ export const NAV_SECTIONS: NavSection[] = [
         endpoints: ['GET /trace/:fgBatchNumber'],
         workstream: 'WS2.6',
       },
+      {
+        key: 'recall',
+        path: '/recall',
+        label: 'Recall & Batch Audit',
+        permission: 'RECALL_VIEW',
+        description:
+          'Forward trace (which customers received a batch or raw lot), backward trace (machine, ' +
+          'milling loss, raw lots, weighing slips, payouts, FIFO) and freeze / recall of a batch.',
+        endpoints: ['GET /recall/forward', 'GET /recall/backward/:fgBatchNumber', 'POST /recall/hold'],
+        workstream: 'WS2.6',
+      },
     ],
   },
   {
@@ -754,6 +765,36 @@ export const NAV_SECTIONS: NavSection[] = [
           'Coin amounts, trigger and on/off switch for the refer-a-friend program. Applies live ' +
           'to referrals already in flight, not only ones created after a change.',
         endpoints: ['GET /referral-settings', 'PATCH /referral-settings'],
+        workstream: 'WS2.5',
+      },
+      {
+        key: 'checkoutSettings',
+        path: '/settings/checkout',
+        label: 'Checkout & Delivery',
+        permission: 'CHECKOUT_SETTINGS_VIEW',
+        description: 'Local delivery radius, fees, ETAs, COD limit and stock-hold time. Outlets are set on Warehouses.',
+        endpoints: ['GET /checkout-settings', 'PATCH /checkout-settings'],
+        workstream: 'WS2.5',
+      },
+      {
+        key: 'coupons',
+        path: '/coupons',
+        label: 'Coupons',
+        permission: 'COUPONS_VIEW',
+        description: 'Coupon codes validated by the server at checkout.',
+        endpoints: ['GET /coupons', 'POST /coupons', 'PATCH /coupons/:id'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'loyaltySettings',
+        path: '/settings/loyalty',
+        label: 'Loyalty Rewards',
+        permission: 'LOYALTY_VIEW',
+        description:
+          'Percentage-based rewards: earn percentage per channel, point value, eligibility, ' +
+          'minimums, per-order cap and expiry. Points are credited when an order is delivered.',
+        endpoints: ['GET /loyalty/settings', 'PATCH /loyalty/settings'],
         workstream: 'WS2.5',
       },
       {

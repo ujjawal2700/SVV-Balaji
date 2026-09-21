@@ -5,6 +5,7 @@ import {
   EnvironmentOutlined,
   FileProtectOutlined,
   GiftOutlined,
+  HeartFilled,
   HeartOutlined,
   InfoCircleOutlined,
   MinusOutlined,
@@ -29,10 +30,12 @@ import { Badge, Button, Carousel, Collapse, Divider, Input, InputNumber, Spin, S
 import type { StorefrontPriceTier, StorefrontVariant } from '@shared/api/types';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useToggleWishlist, useWishlist } from '../hooks/useWishlist';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
 import { useCatalogueProduct, useCatalogueProducts } from '../hooks/useCatalogue';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { useLoyaltyEstimate } from '../loyalty/useLoyaltyEstimate';
+
 import { formatInr } from '../utils/money';
 
 
@@ -64,14 +67,28 @@ export function ProductDetailPage() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const cart = useCart();
-  const { role, switchRole } = useCustomerAuth();
-  const loyalty = useLoyalty();
+  const { role, isLoggedIn } = useCustomerAuth();
+  const wishlist = useWishlist();
+  const toggleWishlist = useToggleWishlist();
   const isRetailer = role === 'RETAILER';
-
   // Every section below renders from this one response. The channel is part of
   // the query, so flipping the role switcher refetches with the other price list.
   const catalogue = useCatalogueProduct(productId);
   const detail = catalogue.data;
+  const wishlisted = detail ? wishlist.has(detail.id) : false;
+  const handleWishlistToggle = () => {
+    if (!detail) return;
+    if (!isLoggedIn) {
+      message.info('Sign in to save items to your wishlist');
+      navigate('/login', { state: { from: window.location.pathname } });
+      return;
+    }
+    toggleWishlist.mutate(
+      { productId: detail.id, saved: wishlisted },
+      { onSuccess: () => message.success(wishlisted ? 'Removed from wishlist' : 'Saved to wishlist') },
+    );
+  };
+
 
   // Pincode mock state
   const [pincode, setPincode] = useState('');
@@ -89,6 +106,20 @@ export function ProductDetailPage() {
 
   const [wholesaleQty, setWholesaleQty] = useState<number>(1);
   const [selectedUnits, setSelectedUnits] = useState<number>(1);
+
+  // What this quantity would earn, per the server's live loyalty rules (product-level
+  // price, same as order placement). Says so plainly when the item is not eligible.
+  const loyaltyEstimate = useLoyaltyEstimate(
+    detail ? [{ productId: detail.id, quantity: isRetailer ? wholesaleQty : selectedUnits }] : [],
+  );
+  const loyaltyQuote = loyaltyEstimate.data;
+  const loyaltyText = !loyaltyQuote?.enabled
+    ? null
+    : loyaltyQuote.points > 0
+      ? `Earn ${loyaltyQuote.points} loyalty pts once delivered`
+      : loyaltyQuote.lines[0] && !loyaltyQuote.lines[0].eligible
+        ? 'This item does not earn loyalty points'
+        : null;
 
   // Related products: same category (parent included), never the product itself.
   const relatedQuery = useCatalogueProducts({
@@ -450,24 +481,6 @@ export function ProductDetailPage() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Button
-            size="small"
-            type={!isRetailer ? 'primary' : 'default'}
-            style={{ borderRadius: 6, fontSize: 11, background: !isRetailer ? '#f97316' : undefined, borderColor: !isRetailer ? '#f97316' : undefined }}
-            onClick={() => switchRole('CUSTOMER')}
-          >
-            👤 Customer
-          </Button>
-          <Button
-            size="small"
-            type={isRetailer ? 'primary' : 'default'}
-            style={{ borderRadius: 6, fontSize: 11, background: isRetailer ? '#059669' : undefined, borderColor: isRetailer ? '#059669' : undefined }}
-            onClick={() => switchRole('RETAILER')}
-          >
-            🏪 Retailer
-          </Button>
-        </div>
       </div>
 
       {/* Breadcrumbs (Desktop Enhanced) */}
@@ -546,9 +559,9 @@ export function ProductDetailPage() {
             boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
             cursor: 'pointer',
           }}
-          onClick={() => message.success('Saved to Wishlist')}
+          onClick={handleWishlistToggle}
         >
-          <HeartOutlined style={{ fontSize: 18, color: '#ef4444' }} />
+          {wishlisted ? <HeartFilled style={{ fontSize: 18, color: '#ef4444' }} /> : <HeartOutlined style={{ fontSize: 18, color: '#ef4444' }} />}
         </button>
 
         <button
@@ -829,9 +842,11 @@ export function ProductDetailPage() {
                   <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
                     Applied: <strong>{activeTier.label}</strong>{mrp !== null ? ` (${activeTier.discount}% off)` : ''} • Total: <strong>{formatInr(totalWholesaleOrderAmount)}</strong>
                   </Typography.Text>
-                  <Typography.Text style={{ fontSize: 11, color: '#b45309', display: 'block', marginTop: 4 }}>
-                    <GiftOutlined /> Earn {loyalty.estimateLinePoints(activeWholesalePriceInclGst, wholesaleQty)} loyalty pts on this order
-                  </Typography.Text>
+                  {loyaltyText ? (
+                    <Typography.Text style={{ fontSize: 11, color: '#b45309', display: 'block', marginTop: 4 }}>
+                      <GiftOutlined /> {loyaltyText}
+                    </Typography.Text>
+                  ) : null}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1005,9 +1020,11 @@ export function ProductDetailPage() {
             <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
               Inclusive of all taxes
             </Typography.Text>
-            <Typography.Text style={{ fontSize: 12, color: '#b45309', display: 'block', marginTop: 4, fontWeight: 500 }}>
-              <GiftOutlined /> Earn {loyalty.estimateLinePoints(consumerPrice ?? 0, selectedUnits)} loyalty pts on this order
-            </Typography.Text>
+            {loyaltyText ? (
+              <Typography.Text style={{ fontSize: 12, color: '#b45309', display: 'block', marginTop: 4, fontWeight: 500 }}>
+                <GiftOutlined /> {loyaltyText}
+              </Typography.Text>
+            ) : null}
 
             {/* Consumer Quantity Stepper */}
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0' }}>

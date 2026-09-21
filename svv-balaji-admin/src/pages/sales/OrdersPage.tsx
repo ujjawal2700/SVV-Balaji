@@ -1,3 +1,4 @@
+import { paymentLabel } from './OrderDetailParts';
 import {
   AppstoreOutlined,
   CalendarOutlined,
@@ -76,296 +77,6 @@ export interface ExtendedOrder extends Order {
   orderSource?: string;
 }
 
-export const MOCK_ORDERS: ExtendedOrder[] = [
-  {
-    id: 'ord-pos-1',
-    orderNumber: 'POS-PAT-90101',
-    channel: 'B2C',
-    customerId: 'cust-pos-01',
-    customer: { id: 'cust-pos-01', customerCode: 'POS-WALKIN', name: 'Walk-In Counter Customer', channel: 'B2C' },
-    status: 'DELIVERED',
-    orderDate: '2026-09-17T14:20:00.000Z',
-    requiredByDate: '2026-09-17T14:20:00.000Z',
-    dispatchedAt: '2026-09-17T14:20:00.000Z',
-    deliveredAt: '2026-09-17T14:20:00.000Z',
-    warehouseId: 'outlet-pat-01',
-    warehouse: { id: 'outlet-pat-01', name: 'Patna City Flagship Store' },
-    branchId: 'br-1',
-    subtotal: '2100.00',
-    taxTotal: '150.00',
-    total: '2250.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Over-the-Counter Cashier Bill #04',
-    notes: 'POS Counter Cashier: Pankaj Kumar. Receipt printed & handed to customer.',
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T14:20:00.000Z',
-    updatedAt: '2026-09-17T14:20:00.000Z',
-    customerMobile: '+91 98350 00000',
-    deliveryCity: 'Patna Outlet',
-    primaryProductName: 'A2 Pure Desi Cow Ghee (1L Jar) + Sharbati Atta (10kg)',
-    totalItemCount: 2,
-    itemsSummary: '2 items (11 kg)',
-    assignedNodeName: 'Patna City Flagship Store',
-    logisticsPartner: 'Over-the-Counter Instant Carry',
-    awbNumber: 'POS-BILL-90101',
-    paymentMethod: 'PhonePe QR / UPI Scan',
-    orderSource: 'POS_COUNTER',
-  },
-  {
-    id: 'ord-pos-2',
-    orderNumber: 'POS-IND-80412',
-    channel: 'B2C',
-    customerId: 'cust-pos-02',
-    customer: { id: 'cust-pos-02', customerCode: 'POS-WALKIN', name: 'SURESH VERMA (Walk-In)', channel: 'B2C' },
-    status: 'DELIVERED',
-    orderDate: '2026-09-17T11:45:00.000Z',
-    requiredByDate: '2026-09-17T11:45:00.000Z',
-    dispatchedAt: '2026-09-17T11:45:00.000Z',
-    deliveredAt: '2026-09-17T11:45:00.000Z',
-    warehouseId: 'outlet-ind-02',
-    warehouse: { id: 'outlet-ind-02', name: 'Indore Depot Outlet' },
-    branchId: 'br-2',
-    subtotal: '1500.00',
-    taxTotal: '100.00',
-    total: '1600.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Over-the-Counter Cashier Bill #02',
-    notes: 'POS Cash Drawer payment collected.',
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T11:45:00.000Z',
-    updatedAt: '2026-09-17T11:45:00.000Z',
-    customerMobile: '+91 99260 00000',
-    deliveryCity: 'Indore Outlet',
-    primaryProductName: 'Cold-Pressed Kachi Ghani Mustard Oil (5 L Tin)',
-    totalItemCount: 1,
-    itemsSummary: '1 item (5 L)',
-    assignedNodeName: 'Indore Depot Outlet',
-    logisticsPartner: 'Over-the-Counter Instant Carry',
-    awbNumber: 'POS-BILL-80412',
-    paymentMethod: 'Cash (Cashier Drawer)',
-    orderSource: 'POS_COUNTER',
-  },
-  {
-    id: 'ord-mock-1',
-    orderNumber: 'DT-ORD-94021',
-    channel: 'B2C',
-    customerId: 'cust-101',
-    customer: { id: 'cust-101', customerCode: 'CUST-B2C-000001', name: 'Rohit Sharma', channel: 'B2C' },
-    status: 'DELIVERED',
-    orderDate: '2026-09-16T11:30:00.000Z',
-    requiredByDate: '2026-09-17T18:00:00.000Z',
-    dispatchedAt: '2026-09-16T17:30:00.000Z',
-    deliveredAt: '2026-09-17T13:10:00.000Z',
-    warehouseId: 'wh-1',
-    warehouse: { id: 'wh-1', name: 'Patna Central Processing Hub' },
-    branchId: 'br-1',
-    subtotal: '1250.00',
-    taxTotal: '150.00',
-    total: '1450.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Flat 402, Royal Residency, Boring Road, Patna, Bihar - 800001',
-    notes: 'Please leave at security desk if recipient unavailable.',
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-16T11:30:00.000Z',
-    updatedAt: '2026-09-17T13:10:00.000Z',
-    customerMobile: '+91 98765 43210',
-    deliveryCity: 'Patna',
-    primaryProductName: 'Organic Sharbati Wheat Atta (10 KG)',
-    totalItemCount: 3,
-    itemsSummary: '3 items (7 kg)',
-    assignedNodeName: 'Patna City Dark Store (Outlet)',
-    logisticsPartner: 'In-House Delivery Fleet (Vikram Singh)',
-    awbNumber: 'AWB-889210',
-    paymentMethod: 'Razorpay / UPI (pay_Px982103912)',
-    orderSource: 'Android App',
-  },
-  {
-    id: 'ord-mock-2',
-    orderNumber: 'DT-ORD-94022',
-    channel: 'B2C',
-    customerId: 'cust-102',
-    customer: { id: 'cust-102', customerCode: 'CUST-B2C-000002', name: 'Ananya Roy', channel: 'B2C' },
-    status: 'DISPATCHED',
-    orderDate: '2026-09-17T09:15:00.000Z',
-    requiredByDate: '2026-09-18T18:00:00.000Z',
-    dispatchedAt: '2026-09-17T12:00:00.000Z',
-    deliveredAt: null,
-    warehouseId: 'wh-2',
-    warehouse: { id: 'wh-2', name: 'Ranchi Express Outlet' },
-    branchId: 'br-2',
-    subtotal: '790.00',
-    taxTotal: '100.00',
-    total: '890.00',
-    paymentStatus: 'PENDING',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'House 44/B, Kanke Road, Ranchi, Jharkhand - 834008',
-    notes: 'Call customer before delivery',
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T09:15:00.000Z',
-    updatedAt: '2026-09-17T12:00:00.000Z',
-    customerMobile: '+91 91119 66732',
-    deliveryCity: 'Ranchi',
-    primaryProductName: 'Royal 1121 Premium Basmati Rice (5 KG)',
-    totalItemCount: 2,
-    itemsSummary: '2 items (5 kg)',
-    assignedNodeName: 'Ranchi Express Dark Store',
-    logisticsPartner: 'Delhivery 3PL Courier',
-    awbNumber: 'AWB-889211',
-    paymentMethod: 'Cash on Delivery (COD)',
-    orderSource: 'iOS App',
-  },
-  {
-    id: 'ord-mock-3',
-    orderNumber: 'DT-ORD-94023',
-    channel: 'B2C',
-    customerId: 'cust-103',
-    customer: { id: 'cust-103', customerCode: 'CUST-B2C-000003', name: 'Suresh Kumar', channel: 'B2C' },
-    status: 'PACKED',
-    orderDate: '2026-09-17T08:00:00.000Z',
-    requiredByDate: '2026-09-19T18:00:00.000Z',
-    dispatchedAt: null,
-    deliveredAt: null,
-    warehouseId: 'wh-3',
-    warehouse: { id: 'wh-3', name: 'Gaya Regional Warehouse' },
-    branchId: 'br-3',
-    subtotal: '1650.00',
-    taxTotal: '200.00',
-    total: '1850.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'House 12, Main Market Road, Gaya, Bihar - 823001',
-    notes: 'Fragile handling for glass ghee jar',
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T08:00:00.000Z',
-    updatedAt: '2026-09-17T10:30:00.000Z',
-    customerMobile: '+91 94310 88200',
-    deliveryCity: 'Gaya',
-    primaryProductName: 'A2 Pure Desi Cow Ghee (1L Glass Jar)',
-    totalItemCount: 1,
-    itemsSummary: '1 item (1 kg)',
-    assignedNodeName: 'Gaya Dark Store Outlet',
-    logisticsPartner: 'In-House Express Fleet',
-    awbNumber: 'AWB-889214',
-    paymentMethod: 'UPI / PhonePe',
-    orderSource: 'Web Storefront',
-  },
-  {
-    id: 'ord-mock-4',
-    orderNumber: 'DT-ORD-94024',
-    channel: 'B2C',
-    customerId: 'cust-104',
-    customer: { id: 'cust-104', customerCode: 'CUST-B2C-000004', name: 'Priya Verma', channel: 'B2C' },
-    status: 'CONFIRMED',
-    orderDate: '2026-09-17T11:45:00.000Z',
-    requiredByDate: '2026-09-18T18:00:00.000Z',
-    dispatchedAt: null,
-    deliveredAt: null,
-    warehouseId: 'wh-1',
-    warehouse: { id: 'wh-1', name: 'Muzaffarpur Processing Center' },
-    branchId: 'br-1',
-    subtotal: '1850.00',
-    taxTotal: '250.00',
-    total: '2100.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Sector 3, Club Road, Muzaffarpur, Bihar - 842001',
-    notes: null,
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T11:45:00.000Z',
-    updatedAt: '2026-09-17T11:50:00.000Z',
-    customerMobile: '+91 98350 44219',
-    deliveryCity: 'Muzaffarpur',
-    primaryProductName: 'Organic Phool Makhana Jumbo (250g)',
-    totalItemCount: 4,
-    itemsSummary: '4 items (10 kg)',
-    assignedNodeName: 'Muzaffarpur Outlet',
-    logisticsPartner: 'In-House Express Rider',
-    awbNumber: 'AWB-889212',
-    paymentMethod: 'Paytm UPI',
-    orderSource: 'Android App',
-  },
-  {
-    id: 'ord-mock-5',
-    orderNumber: 'DT-ORD-94025',
-    channel: 'B2C',
-    customerId: 'cust-105',
-    customer: { id: 'cust-105', customerCode: 'CUST-B2C-000005', name: 'Amitabh Sen', channel: 'B2C' },
-    status: 'PLACED',
-    orderDate: '2026-09-17T13:20:00.000Z',
-    requiredByDate: '2026-09-19T18:00:00.000Z',
-    dispatchedAt: null,
-    deliveredAt: null,
-    warehouseId: 'wh-1',
-    warehouse: { id: 'wh-1', name: 'Central Processing Warehouse' },
-    branchId: 'br-1',
-    subtotal: '400.00',
-    taxTotal: '50.00',
-    total: '450.00',
-    paymentStatus: 'PAID',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Housing Colony, Dhanbad, Jharkhand - 826001',
-    notes: null,
-    cancelledReason: null,
-    cancelledAt: null,
-    createdAt: '2026-09-17T13:20:00.000Z',
-    updatedAt: '2026-09-17T13:20:00.000Z',
-    customerMobile: '+91 97714 55012',
-    deliveryCity: 'Dhanbad',
-    primaryProductName: 'Kashmiri Red Chilli Powder (250g)',
-    totalItemCount: 1,
-    itemsSummary: '1 item (2 kg)',
-    assignedNodeName: 'Central Fulfillment Warehouse',
-    logisticsPartner: 'BlueDart Express',
-    awbNumber: 'AWB-889213',
-    paymentMethod: 'Razorpay Credit Card',
-    orderSource: 'iOS App',
-  },
-  {
-    id: 'ord-mock-6',
-    orderNumber: 'DT-ORD-94026',
-    channel: 'B2C',
-    customerId: 'cust-106',
-    customer: { id: 'cust-106', customerCode: 'CUST-B2C-000006', name: 'Sunil Gupta', channel: 'B2C' },
-    status: 'CANCELLED',
-    orderDate: '2026-09-15T10:00:00.000Z',
-    requiredByDate: '2026-09-16T18:00:00.000Z',
-    dispatchedAt: null,
-    deliveredAt: null,
-    warehouseId: 'wh-1',
-    warehouse: { id: 'wh-1', name: 'Patna Central Warehouse' },
-    branchId: 'br-1',
-    subtotal: '650.00',
-    taxTotal: '70.00',
-    total: '720.00',
-    paymentStatus: 'REFUNDED',
-    paymentTerms: 'PREPAID',
-    deliveryAddress: 'Exhibition Road, Patna, Bihar - 800001',
-    notes: 'Cancelled by shopper prior to dispatch.',
-    cancelledReason: 'Customer requested cancellation before batch allocation.',
-    cancelledAt: '2026-09-15T11:30:00.000Z',
-    createdAt: '2026-09-15T10:00:00.000Z',
-    updatedAt: '2026-09-15T11:30:00.000Z',
-    customerMobile: '+91 99341 00192',
-    deliveryCity: 'Patna',
-    primaryProductName: 'Unpolished Desi Chana Dal (1 KG)',
-    totalItemCount: 2,
-    itemsSummary: '2 items (4 kg)',
-    assignedNodeName: 'Patna Central Warehouse',
-    logisticsPartner: 'N/A (Order Cancelled)',
-    awbNumber: 'N/A',
-    paymentMethod: 'Refunded (Razorpay Txn 99218)',
-    orderSource: 'Android App',
-  },
-];
 
 /**
  * Super Admin Order Management Center (B2C & B2B)
@@ -386,24 +97,29 @@ export function OrdersPage() {
   const ordersQuery = useOrders(query);
 
   const rawOrders = useMemo(() => ordersQuery.data?.data ?? [], [ordersQuery.data]);
-  const combined = useMemo(() => [...rawOrders, ...MOCK_ORDERS], [rawOrders]);
-
+  // Rows are the API's orders, enriched ONLY from what each order carries - no invented
+  // phone numbers, cities, items or payment methods.
   const enrichedOrders: ExtendedOrder[] = useMemo(() => {
-    return combined.map((o) => {
-      const ext = o as ExtendedOrder;
+    return rawOrders.map((o) => {
+      const ext = o as ExtendedOrder & Record<string, any>;
+      const items: any[] = ext.items ?? [];
+      const first = items[0];
+      const snap = ext.addressSnapshot as { city?: string } | null | undefined;
       return {
         ...ext,
-        customerMobile: ext.customerMobile || '+91 98765 43210',
-        deliveryCity: ext.deliveryCity || 'Patna',
-        itemsSummary: ext.itemsSummary || '3 items (7 kg)',
-        assignedNodeName: ext.assignedNodeName || ext.warehouse?.name || 'Patna Outlet Store',
-        logisticsPartner: ext.logisticsPartner || 'In-House Fleet',
-        awbNumber: ext.awbNumber || 'AWB-889210',
-        paymentMethod: ext.paymentMethod || 'Razorpay / UPI',
-        orderSource: ext.orderSource || 'Android App',
+        customerMobile: ext.customer?.phone ?? undefined,
+        deliveryCity: snap?.city ?? undefined,
+        primaryProductName: first?.nameSnapshot ?? first?.product?.name ?? undefined,
+        totalItemCount: items.length,
+        itemsSummary: items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined,
+        assignedNodeName: ext.warehouse?.name,
+        logisticsPartner: ext.shipment?.courier ?? ext.riderName ?? undefined,
+        awbNumber: ext.shipment?.awb ?? undefined,
+        paymentMethod: paymentLabel(ext),
+        orderSource: ext.source === 'STOREFRONT' ? 'Customer app' : 'Staff',
       };
     });
-  }, [combined]);
+  }, [rawOrders]);
 
   // Filtered rows
   const filteredOrders = useMemo(() => {
@@ -430,8 +146,9 @@ export function OrdersPage() {
       if (paymentStatusFilter && o.paymentStatus !== paymentStatusFilter) return false;
 
       // Payment Mode filter
-      if (paymentModeFilter === 'ONLINE' && o.paymentStatus !== 'PAID') return false;
-      if (paymentModeFilter === 'COD' && o.paymentStatus === 'PAID') return false;
+      const mode = (o as any).paymentMode as string | null | undefined;
+      if (paymentModeFilter === 'ONLINE' && (mode ? mode !== 'ONLINE' : o.paymentStatus !== 'PAID')) return false;
+      if (paymentModeFilter === 'COD' && (mode ? mode !== 'COD' : o.paymentStatus === 'PAID')) return false;
 
       // Warehouse Node filter
       if (selectedWarehouseNode && o.warehouseId !== selectedWarehouseNode) return false;
@@ -475,18 +192,20 @@ export function OrdersPage() {
       key: 'customerName',
       width: 150,
       render: (_, record) => (
-        <Text strong style={{ fontSize: 13 }} ellipsis={{ tooltip: true }}>
-          {record.customer?.name ?? 'Guest Shopper'}
-        </Text>
+        <div style={{ maxWidth: 140 }}>
+          <Text strong style={{ fontSize: 13, display: 'block' }} ellipsis={{ tooltip: record.customer?.name ?? 'Guest Shopper' }}>
+            {record.customer?.name ?? 'Guest Shopper'}
+          </Text>
+        </div>
       ),
     },
     {
       title: 'Mobile Number',
       key: 'customerMobile',
-      width: 140,
+      width: 130,
       render: (_, record) => (
         <Text style={{ fontSize: 12, whiteSpace: 'nowrap', color: '#595959' }}>
-          {record.customerMobile || '+91 98765 43210'}
+          {record.customerMobile ?? '—'}
         </Text>
       ),
     },
@@ -495,22 +214,22 @@ export function OrdersPage() {
       key: 'deliveryCity',
       width: 110,
       render: (_, record) => (
-        <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>
-          {record.deliveryCity || 'Patna'}
+        <Tag color="blue" style={{ fontSize: 11, margin: 0, whiteSpace: 'nowrap' }}>
+          {record.deliveryCity ?? '—'}
         </Tag>
       ),
     },
     {
       title: 'Order Items',
       key: 'orderedItems',
-      width: 210,
+      width: 220,
       render: (_, record) => {
-        const firstItem = record.primaryProductName || 'Organic Sharbati Wheat Atta (10 KG)';
-        const count = record.totalItemCount || 3;
+        const firstItem = record.primaryProductName ?? '—';
+        const count = record.totalItemCount ?? 0;
         const extraCount = count - 1;
         return (
-          <Space direction="vertical" size={0}>
-            <Text strong style={{ fontSize: 12, color: '#262626' }} ellipsis={{ tooltip: firstItem }}>
+          <div style={{ maxWidth: 210 }}>
+            <Text strong style={{ fontSize: 12, color: '#262626', display: 'block' }} ellipsis={{ tooltip: firstItem }}>
               {firstItem}
             </Text>
             {extraCount > 0 ? (
@@ -518,11 +237,11 @@ export function OrdersPage() {
                 +{extraCount} more {extraCount === 1 ? 'item' : 'items'}
               </Tag>
             ) : (
-              <Text type="secondary" style={{ fontSize: 10 }}>
+              <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>
                 1 item single pack
               </Text>
             )}
-          </Space>
+          </div>
         );
       },
     },
@@ -533,7 +252,7 @@ export function OrdersPage() {
       align: 'right',
       width: 120,
       render: (val: string) => (
-        <Text strong style={{ color: '#1677ff', fontSize: 13 }}>
+        <Text strong style={{ color: '#1677ff', fontSize: 13, whiteSpace: 'nowrap' }}>
           {formatCurrency(val)}
         </Text>
       ),
@@ -542,14 +261,14 @@ export function OrdersPage() {
     {
       title: 'Payment Status',
       key: 'paymentStatus',
-      width: 140,
+      width: 130,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <Tag color={PAYMENT_STATUS_COLOUR[record.paymentStatus]} style={{ fontSize: 10, margin: 0 }}>
+          <Tag color={PAYMENT_STATUS_COLOUR[record.paymentStatus]} style={{ fontSize: 10, margin: 0, whiteSpace: 'nowrap' }}>
             {PAYMENT_STATUS_LABEL[record.paymentStatus]}
           </Tag>
-          <Text type="secondary" style={{ fontSize: 10 }}>
-            {record.paymentMethod || (record.paymentStatus === 'PAID' ? 'Razorpay / UPI' : 'COD')}
+          <Text type="secondary" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>
+            {record.paymentMethod ?? '—'}
           </Text>
         </Space>
       ),
@@ -560,7 +279,7 @@ export function OrdersPage() {
       key: 'status',
       width: 130,
       render: (status: OrderStatus) => (
-        <Tag color={ORDER_STATUS_COLOUR[status]} style={{ fontSize: 10, margin: 0 }}>
+        <Tag color={ORDER_STATUS_COLOUR[status]} style={{ fontSize: 10, margin: 0, whiteSpace: 'nowrap' }}>
           {ORDER_STATUS_LABEL[status]}
         </Tag>
       ),
@@ -568,30 +287,46 @@ export function OrdersPage() {
     {
       title: 'Assigned Node',
       key: 'assignedNode',
-      width: 160,
+      width: 175,
       render: (_, record) => (
-        <Space size={4}>
-          <HomeOutlined style={{ color: '#1677ff', fontSize: 12 }} />
-          <Text style={{ fontSize: 11 }} ellipsis={{ tooltip: true }}>
-            {record.assignedNodeName || record.warehouse?.name || 'Patna City Dark Store'}
-          </Text>
-        </Space>
+        <div style={{ maxWidth: 170 }}>
+          <Space size={4} style={{ maxWidth: '100%' }}>
+            <HomeOutlined style={{ color: '#1677ff', fontSize: 12, flexShrink: 0 }} />
+            <Text style={{ fontSize: 11, maxWidth: 140, display: 'block' }} ellipsis={{ tooltip: record.assignedNodeName || record.warehouse?.name || '—' }}>
+              {record.assignedNodeName || record.warehouse?.name || '—'}
+            </Text>
+          </Space>
+          {record.fulfillmentMethod ? (
+            <div style={{ marginTop: 2 }}>
+              <Tag
+                color={record.fulfillmentMethod === 'LOCAL' ? 'green' : 'blue'}
+                style={{ fontSize: 10, margin: 0, padding: '0 6px', borderRadius: 4, lineHeight: '18px', whiteSpace: 'nowrap' }}
+              >
+                {record.fulfillmentMethod === 'LOCAL' ? '⚡ Local Delivery' : '📦 Shiprocket'}
+              </Tag>
+            </div>
+          ) : null}
+        </div>
       ),
     },
     {
       title: 'Logistics Partner',
       key: 'logistics',
-      width: 160,
+      width: 175,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Space size={4}>
-            <TruckOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-            <Text style={{ fontSize: 11 }}>{record.logisticsPartner || 'In-House Fleet'}</Text>
+        <div style={{ maxWidth: 170 }}>
+          <Space size={4} style={{ maxWidth: '100%' }}>
+            <TruckOutlined style={{ color: '#52c41a', fontSize: 12, flexShrink: 0 }} />
+            <Text style={{ fontSize: 11, fontWeight: 500, maxWidth: 145, display: 'block' }} ellipsis={{ tooltip: true }}>
+              {record.shipment?.courier ?? record.riderName ?? record.logisticsPartner ?? (record.source === 'STOREFRONT' ? 'Not assigned yet' : '—')}
+            </Text>
           </Space>
-          <Text type="secondary" style={{ fontSize: 10 }}>
-            {record.awbNumber || 'AWB-889210'}
-          </Text>
-        </Space>
+          {record.shipment?.awb || record.awbNumber ? (
+            <Text type="secondary" style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', marginTop: 2, whiteSpace: 'nowrap' }}>
+              AWB: {record.shipment?.awb ?? record.awbNumber}
+            </Text>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -738,7 +473,7 @@ export function OrdersPage() {
                   onChange={(val) => setPaymentModeFilter(val)}
                   options={[
                     { value: 'all', label: 'All Payment Modes' },
-                    { value: 'ONLINE', label: 'Prepaid (Razorpay / UPI)' },
+                    { value: 'ONLINE', label: 'Prepaid (online)' },
                     { value: 'COD', label: 'Cash on Delivery (COD)' },
                   ]}
                   style={{ width: 145 }}

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { refreshOnce } from '../api/client';
-import { storefrontAuthApi } from '../api/storefrontAuth';
+import { storefrontAuthApi, type AuthAudience } from '../api/storefrontAuth';
 import { tokenStore } from '../api/tokenStore';
 import type {
   RegisterRetailerPayload,
@@ -49,7 +49,7 @@ export interface RetailerUserProfile {
 
 /** Outcome of a real OTP verification — the caller (LoginPage) branches on this. */
 export type VerifyOtpOutcome =
-  | { status: 'signedIn'; channel: 'B2C' | 'B2B' }
+  | { status: 'signedIn'; channel: 'B2C' | 'B2B'; isNewAccount: boolean }
   | { status: 'pending'; message: string };
 
 export interface CustomerAuthContextType {
@@ -59,43 +59,16 @@ export interface CustomerAuthContextType {
   initialising: boolean;
   customerProfile: CustomerUserProfile | null;
   retailerProfile: RetailerUserProfile | null;
-  requestOtp: (phone: string) => Promise<RequestOtpResponse>;
-  verifyOtp: (phone: string, code: string, fullName?: string, referralCode?: string) => Promise<VerifyOtpOutcome>;
+  requestOtp: (phone: string, audience?: AuthAudience) => Promise<RequestOtpResponse>;
+  verifyOtp: (phone: string, code: string, audience: AuthAudience, fullName?: string, referralCode?: string) => Promise<VerifyOtpOutcome>;
   registerRetailer: (payload: RegisterRetailerPayload) => Promise<RegisterRetailerResponse>;
   logout: () => void;
-  /** Front-end-only preview toggle for the demo "view as Customer/Retailer" affordances — not a real account switch. */
-  switchRole: (newRole: UserRole) => void;
 }
 
-const defaultCustomer: CustomerUserProfile = {
-  name: 'Rahul Sharma',
-  phone: '+91 98765 43210',
-  email: 'rahul.sharma@example.com',
-  memberSince: 'Aug 2024',
-  savedAddressesCount: 2,
-  totalOrders: 4,
-  walletBalance: 250,
-  couponsCount: 3,
-};
-
-const defaultRetailer: RetailerUserProfile = {
-  storeName: 'Sri Balaji Provision Store',
-  ownerName: 'Ramesh Kumar',
-  phone: '+91 98765 43210',
-  email: 'ramesh.balaji@example.com',
-  gstin: '36AABCU9603R1ZM',
-  panNumber: 'AABCU9603R',
-  category: 'Kirana & General Store',
-  address: 'Shop #14, Main Market, Hanamkonda, Warangal, TS - 506001',
-  pincode: '506001',
-  memberSince: 'Aug 2024',
-  kycStatus: 'VERIFIED',
-  totalOrders: 12,
-  totalSavings: 4320,
-  walletBalance: 895,
-  creditLimit: 50000,
-  creditUsed: 14500,
-};
+function formatMemberSince(iso?: string): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
 
 function formatPhone(phone: string): string {
   return phone.startsWith('+91') ? phone : `+91 ${phone}`;
@@ -115,7 +88,7 @@ function toCustomerProfile(account: StorefrontAccountSummary): CustomerUserProfi
     name: account.fullName,
     phone: formatPhone(account.phone),
     email: account.email ?? undefined,
-    memberSince: 'Just joined',
+    memberSince: formatMemberSince(account.memberSince),
     savedAddressesCount: 0,
     totalOrders: 0,
     walletBalance: 0,
@@ -126,21 +99,21 @@ function toCustomerProfile(account: StorefrontAccountSummary): CustomerUserProfi
 
 function toRetailerProfile(account: StorefrontAccountSummary): RetailerUserProfile {
   return {
-    storeName: account.businessName || 'My Store',
+    storeName: account.businessName || '',
     ownerName: account.fullName,
     phone: formatPhone(account.phone),
     email: account.email ?? '',
     gstin: account.gstin ?? '',
-    category: 'Kirana & General Store',
-    address: '',
-    pincode: '',
-    memberSince: 'Just joined',
+    category: '',
+    address: [account.addressLine, account.city, account.state].filter(Boolean).join(', '),
+    pincode: account.pincode ?? '',
+    memberSince: formatMemberSince(account.memberSince),
     kycStatus: account.status === 'ACTIVE' ? 'VERIFIED' : account.status === 'REJECTED' ? 'REJECTED' : 'PENDING',
     totalOrders: 0,
     totalSavings: 0,
     walletBalance: 0,
-    creditLimit: 0,
-    creditUsed: 0,
+    creditLimit: account.creditLimit ?? 0,
+    creditUsed: account.creditUsed ?? 0,
     referralCode: account.referralCode ?? undefined,
   };
 }
@@ -211,11 +184,14 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     });
   }, [clearSession]);
 
-  const requestOtp = useCallback((phone: string) => storefrontAuthApi.requestOtp(phone), []);
+  const requestOtp = useCallback(
+    (phone: string, audience?: AuthAudience) => storefrontAuthApi.requestOtp(phone, audience),
+    [],
+  );
 
   const verifyOtp = useCallback(
-    async (phone: string, code: string, fullName?: string, referralCode?: string): Promise<VerifyOtpOutcome> => {
-      const response = await storefrontAuthApi.verifyOtp(phone, code, fullName, referralCode);
+    async (phone: string, code: string, audience: AuthAudience, fullName?: string, referralCode?: string): Promise<VerifyOtpOutcome> => {
+      const response = await storefrontAuthApi.verifyOtp(phone, code, audience, fullName, referralCode);
 
       if (!isStorefrontSession(response)) {
         return { status: 'pending', message: response.message };
@@ -223,7 +199,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
       tokenStore.set({ accessToken: response.accessToken, refreshToken: response.refreshToken });
       applyAccount(response.account);
-      return { status: 'signedIn', channel: response.account.channel };
+      return { status: 'signedIn', channel: response.account.channel, isNewAccount: Boolean(response.isNewAccount) };
     },
     [applyAccount],
   );
@@ -234,31 +210,15 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    void storefrontAuthApi.logout().catch(() => {
+    // Capture the tokens BEFORE clearing: the request is sent asynchronously and would otherwise go
+    // out unauthenticated, leaving the server-side session alive.
+    const tokens = { accessToken: tokenStore.getAccessToken(), refreshToken: tokenStore.getRefreshToken() };
+    void storefrontAuthApi.logout(tokens).catch(() => {
       // A failed logout call must not strand the user in a signed-in shell.
     });
     tokenStore.clear();
     clearSession();
   }, [clearSession]);
-
-  /**
-   * Front-end-only preview toggle used by a few demo screens (ProfilePage,
-   * ProductDetailPage) to show what the storefront looks like for the other
-   * role. It does not touch the server or the real session — a genuinely
-   * signed-in account's role is decided by the backend, not this switch.
-   */
-  const switchRole = useCallback(
-    (newRole: UserRole) => {
-      if (newRole === 'RETAILER' && !retailerProfile) {
-        setRetailerProfile(defaultRetailer);
-      }
-      if (newRole === 'CUSTOMER' && !customerProfile) {
-        setCustomerProfile(defaultCustomer);
-      }
-      setRole(newRole);
-    },
-    [customerProfile, retailerProfile],
-  );
 
   const value = useMemo<CustomerAuthContextType>(
     () => ({
@@ -271,9 +231,8 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       verifyOtp,
       registerRetailer,
       logout,
-      switchRole,
     }),
-    [role, initialising, customerProfile, retailerProfile, requestOtp, verifyOtp, registerRetailer, logout, switchRole],
+    [role, initialising, customerProfile, retailerProfile, requestOtp, verifyOtp, registerRetailer, logout],
   );
 
   return <CustomerAuthContext.Provider value={value}>{children}</CustomerAuthContext.Provider>;

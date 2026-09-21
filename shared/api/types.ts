@@ -1,3 +1,4 @@
+import type { LoyaltyEligibility } from './loyalty';
 import type { UserRole } from '../auth/types';
 
 /**
@@ -630,6 +631,15 @@ export interface Warehouse {
   location: string;
   capacity: string | null;
   isActive: boolean;
+  /** CENTRAL ships by courier; OUTLET is a franchise store delivering locally. */
+  kind?: 'CENTRAL' | 'OUTLET';
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  serviceRadiusKm?: string | null;
+  contactPhone?: string | null;
   branchId: string;
   branch?: BranchRef;
   createdAt: string;
@@ -890,7 +900,7 @@ export interface RawMaterialBatch {
   updatedAt: string;
 }
 
-export const MOVEMENT_TYPES = ['STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT'] as const;
+export const MOVEMENT_TYPES = ['PRODUCTION_INWARD', 'STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT'] as const;
 export type StockMovementType = (typeof MOVEMENT_TYPES)[number];
 
 export interface StockMovement {
@@ -962,6 +972,14 @@ export interface CreateWarehouseInput {
   location: string;
   branchId: string;
   capacity?: number;
+  kind?: 'CENTRAL' | 'OUTLET';
+  city?: string;
+  state?: string;
+  pincode?: string;
+  latitude?: number;
+  longitude?: number;
+  serviceRadiusKm?: number;
+  contactPhone?: string;
 }
 
 export interface StockInInput {
@@ -1069,6 +1087,8 @@ export interface Category {
   displayOrder: number;
   isActive: boolean;
   parentId: string | null;
+  /** Loyalty default for products filed here; INHERIT follows the parent, then the program default. */
+  loyaltyEligibility?: LoyaltyEligibility;
   /** Present on list/detail. */
   parent?: { id: string; name: string } | null;
   /** Present on GET /categories/:id only. */
@@ -1086,6 +1106,7 @@ export interface CreateCategoryInput {
   description?: string;
   imageUrl?: string;
   parentId?: string;
+  loyaltyEligibility?: LoyaltyEligibility;
   displayOrder?: number;
 }
 
@@ -1319,6 +1340,8 @@ export interface Product {
   deliveryTerms: string | null;
   isTopPick: boolean;
   isDailyStaple: boolean;
+  /** Per-product loyalty override; INHERIT follows the category, then the program default. */
+  loyaltyEligibility: LoyaltyEligibility;
   /** true = the B2B tier table is entered as totals for each quantity. */
   b2bTiersAreTotals: boolean;
 
@@ -1394,6 +1417,7 @@ export interface CreateProductInput {
   deliveryTerms?: string;
   isTopPick?: boolean;
   isDailyStaple?: boolean;
+  loyaltyEligibility?: LoyaltyEligibility;
   b2bTiersAreTotals?: boolean;
 
   /** Each list is authoritative when present, and left untouched when omitted. Array order is display order. */
@@ -1965,6 +1989,7 @@ export interface FinishedGoodsTrace {
     packagingType: string;
     netWeight: string;
     qaReleased: boolean;
+    holdStatus: BatchHoldStatus;
   };
   production: {
     productionBatchNumber: string;
@@ -2225,7 +2250,7 @@ export interface Order {
   orderNumber: string;
   channel: SalesChannel;
   customerId: string;
-  customer?: { id: string; customerCode: string; name: string; channel: SalesChannel };
+  customer?: { id: string; customerCode: string; name: string; channel: SalesChannel; phone?: string | null; gstin?: string | null };
   status: OrderStatus;
   orderDate: string;
   requiredByDate: string | null;
@@ -2239,6 +2264,19 @@ export interface Order {
   paymentTerms: PaymentTerms;
   /** FRD 24.2 — snapshotted at order time, not read from the customer now. */
   deliveryAddress: string | null;
+  /** Storefront checkout fields (absent/null on staff-placed orders). */
+  source?: 'STAFF' | 'STOREFRONT';
+  fulfillmentMethod?: 'LOCAL' | 'SHIPROCKET' | null;
+  paymentMode?: 'ONLINE' | 'COD' | 'CREDIT' | null;
+  riderName?: string | null;
+  riderPhone?: string | null;
+  discountTotal?: string;
+  deliveryFee?: string;
+  couponCode?: string | null;
+  etaMin?: string | null;
+  etaMax?: string | null;
+  distanceKm?: string | null;
+  shipment?: { awb?: string | null; courier?: string | null; trackingUrl?: string | null } | null;
   notes: string | null;
   cancelledReason: string | null;
   cancelledAt: string | null;
@@ -2301,6 +2339,14 @@ export interface AllocationShortfall {
   requested: number;
   allocated: number;
   short: number;
+}
+
+export interface ReallocationResult {
+  orderNumber: string;
+  released: Array<{ fgBatchNumber: string; quantity: number; reason: string }>;
+  allocations: Array<{ orderItemId: string; fgBatchNumber: string; quantity: number }>;
+  shortfalls: Array<{ orderItemId: string; productId: string; short: number }>;
+  complete: boolean;
 }
 
 export interface AllocationResult {
@@ -2469,11 +2515,17 @@ export interface ReferralQuery {
 export type CoinTransactionReason =
   | 'REFERRAL_REFERRER_REWARD'
   | 'REFERRAL_REFEREE_REWARD'
+  | 'LOYALTY_EARN'
+  | 'LOYALTY_REVERSAL'
+  | 'LOYALTY_EXPIRY'
   | 'MANUAL_ADJUSTMENT';
 
 export const COIN_TRANSACTION_REASON_LABELS: Record<CoinTransactionReason, string> = {
   REFERRAL_REFERRER_REWARD: 'Referral reward (as referrer)',
   REFERRAL_REFEREE_REWARD: 'Referral reward (as referred user)',
+  LOYALTY_EARN: 'Loyalty points earned',
+  LOYALTY_REVERSAL: 'Loyalty points reversed (return)',
+  LOYALTY_EXPIRY: 'Loyalty points expired',
   MANUAL_ADJUSTMENT: 'Manual adjustment',
 };
 
@@ -2556,3 +2608,101 @@ export interface CreateCouponInput {
   isActive?: boolean;
 }
 
+
+
+// --- Recall & batch audit -----------------------------------------------------
+
+export type BatchHoldStatus = 'ACTIVE' | 'ON_HOLD' | 'RECALLED';
+
+export interface RecallShipment {
+  orderId: string;
+  orderNumber: string;
+  orderStatus: string;
+  channel: 'B2B' | 'B2C';
+  orderDate: string;
+  dispatchedAt: string | null;
+  shipped: boolean;
+  quantity: number;
+  warehouse: string;
+  customer: { customerCode: string; name: string; phone: string };
+}
+
+export interface RecallBatch {
+  fgBatchNumber: string;
+  product: { name: string; sku: string };
+  holdStatus: BatchHoldStatus;
+  holdReason: string | null;
+  qaReleased: boolean;
+  manufacturingDate: string;
+  expiryDate: string | null;
+  packCount: number;
+  stock: Array<{ warehouse: string; quantity: number; reserved: number }>;
+  shipments: RecallShipment[];
+}
+
+export interface ForwardTrace {
+  query: string;
+  kind: 'FG' | 'RAW';
+  batches: RecallBatch[];
+  totals: {
+    batches: number;
+    orders: number;
+    customers: number;
+    packsShipped: number;
+    packsAllocatedNotShipped: number;
+    packsInStock: number;
+  };
+}
+
+export interface BackwardTrace {
+  fgBatchNumber: string;
+  product: { name: string; sku: string };
+  holdStatus: BatchHoldStatus;
+  holdReason: string | null;
+  packing: { packedOn: string; packedBy: string; packagingType: string };
+  production: {
+    productionBatchNumber: string;
+    productionDate: string;
+    branch: string;
+    machine: string | null;
+    productionLine: string | null;
+    operator: string | null;
+    supervisor: string;
+    plannedQuantity: number;
+    actualQuantity: number | null;
+    lossQuantity: number | null;
+    lossPercent: number | null;
+  };
+  rawLots: Array<{
+    batchNumber: string;
+    crop: string;
+    quantityUsed: number;
+    source: { type: 'FARMER' | 'SUPPLIER'; code: string; name: string; place: string } | null;
+    weighingSlip: { receiptNumber: string; date: string; grossWeight: number; netWeight: number } | null;
+    payout: { receiptNumber: string | null; totalAmount: number | null; paymentStatus: string } | null;
+  }>;
+  fifo: {
+    checked: boolean;
+    compliant: boolean | null;
+    violations: Array<{ warehouse: string; olderBatch: string; expiryDate: string | null; quantityRemaining: number }>;
+  };
+  holdHistory: Array<{
+    fromStatus: BatchHoldStatus;
+    toStatus: BatchHoldStatus;
+    reason: string;
+    createdAt: string;
+    performedBy: { fullName: string };
+  }>;
+}
+
+export interface SetBatchHoldInput {
+  fgBatchNumbers: string[];
+  status: BatchHoldStatus;
+  reason: string;
+}
+
+export interface SetBatchHoldResult {
+  status: BatchHoldStatus;
+  changed: string[];
+  unchanged: string[];
+}

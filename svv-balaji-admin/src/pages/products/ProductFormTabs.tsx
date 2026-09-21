@@ -1,5 +1,7 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { useCategories } from '@shared/hooks/useCategories';
+import { LOYALTY_ELIGIBILITY_LABELS, type EligibilitySource, type LoyaltyEligibility } from '@shared/api/loyalty';
+import { useLoyaltyEligibility } from '@shared/hooks/useLoyalty';
 import {
   Alert,
   AutoComplete,
@@ -224,6 +226,8 @@ export function BasicTab({ isEdit }: { isEdit: boolean }) {
         </Form.Item>
       </Section>
 
+      <LoyaltySection />
+
       <Section title="Publishing & shelves">
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Space align="center">
@@ -247,6 +251,57 @@ export function BasicTab({ isEdit }: { isEdit: boolean }) {
         </Space>
       </Section>
     </>
+  );
+}
+
+const ELIGIBILITY_SOURCE_LABELS: Record<EligibilitySource, string> = {
+  PRODUCT: 'this product\'s own setting',
+  CATEGORY: 'its category',
+  PARENT_CATEGORY: 'its parent category',
+  DEFAULT: 'the program default',
+};
+
+/**
+ * Loyalty eligibility for this product. The dropdown is the override; the line
+ * underneath is the SERVER's answer to "so will it actually earn?" for the
+ * current choice and category - the cascade is never re-implemented here.
+ */
+function LoyaltySection() {
+  const form = Form.useFormInstance<ProductFormValues>();
+  const setting = (Form.useWatch('loyaltyEligibility', form) ?? 'INHERIT') as LoyaltyEligibility;
+  const categoryId = Form.useWatch('categoryId', form);
+  const preview = useLoyaltyEligibility(setting, categoryId);
+
+  return (
+    <Section title="Loyalty rewards" hint="Configured centrally by Super Admin under Loyalty Rewards">
+      <Form.Item
+        name="loyaltyEligibility"
+        label="Earns loyalty points"
+        extra="Inherit follows the category's rule, then the program default. Choose an option here to override both for this product."
+        style={{ marginBottom: 12 }}
+      >
+        <Select
+          style={{ maxWidth: 320 }}
+          options={(Object.keys(LOYALTY_ELIGIBILITY_LABELS) as LoyaltyEligibility[]).map((value) => ({
+            value,
+            label: LOYALTY_ELIGIBILITY_LABELS[value],
+          }))}
+        />
+      </Form.Item>
+      {preview.data ? (
+        <Alert
+          type={preview.data.eligible ? 'success' : 'warning'}
+          showIcon
+          message={
+            <>
+              {preview.data.eligible ? 'Eligible' : 'Not eligible'} — from{' '}
+              {ELIGIBILITY_SOURCE_LABELS[preview.data.source]}
+              {!preview.data.programActive ? ' (the loyalty program is currently paused)' : ''}
+            </>
+          }
+        />
+      ) : null}
+    </Section>
   );
 }
 

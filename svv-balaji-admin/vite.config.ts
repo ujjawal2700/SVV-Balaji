@@ -76,6 +76,12 @@ export default defineConfig(({ mode }) => {
       // here because it keeps the browser origin identical to the app's, which
       // is what production looks like behind Nginx - fewer surprises later.
       proxy: {
+        // The live-orders socket (Socket.io) lives beside /api on the same server.
+        '/socket.io': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3000',
+          changeOrigin: true,
+          ws: true,
+        },
         '/api': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3000',
           changeOrigin: true,

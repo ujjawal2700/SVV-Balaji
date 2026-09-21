@@ -180,7 +180,7 @@ export function HomePage() {
               {isRetailer ? (
                 <>
                   <Typography.Title level={4} style={{ margin: 0, color: '#065f46', lineHeight: 1.25, fontSize: 17, fontWeight: 700 }}>
-                    Good Morning, {retailerProfile?.storeName || 'Sri Balaji Store'}
+                    Good Morning, {retailerProfile?.storeName || 'My Store'}
                   </Typography.Title>
                   <div className="brand-title-font" style={{ fontSize: 11, color: '#b45309', fontWeight: 700, letterSpacing: '1px', marginTop: 4 }}>
                     GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'} • Mandi Wholesale
@@ -413,7 +413,7 @@ export function HomePage() {
                 <form onSubmit={handleTraceSubmit}>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <Input
-                      placeholder="e.g. BATCH-2026-0814"
+                      placeholder="e.g. FG-20260807-001"
                       value={traceInput}
                       onChange={(e) => setTraceInput(e.target.value)}
                       prefix={<BarcodeOutlined style={{ color: '#9ca3af' }} />}
@@ -452,7 +452,7 @@ export function HomePage() {
                           Retailer Account Position
                         </span>
                         <Typography.Text strong style={{ color: '#ffffff', display: 'block', fontSize: 15 }}>
-                          {retailerProfile?.storeName || 'Sri Balaji Provision Store'}
+                          {retailerProfile?.storeName || 'My Store'}
                         </Typography.Text>
                       </div>
                       <CreditCardOutlined style={{ color: '#38bdf8', fontSize: 20 }} />
@@ -1281,7 +1281,7 @@ export function HomePage() {
                   Verified Retailer Account
                 </span>
                 <Typography.Title level={4} style={{ margin: '2px 0 0', color: '#065f46', fontSize: 18 }}>
-                  {retailerProfile?.storeName || 'Sri Balaji Provision Store'}
+                  {retailerProfile?.storeName || 'My Store'}
                 </Typography.Title>
                 <Typography.Text style={{ fontSize: 12, color: '#15803d' }}>
                   GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'} | Dedicated B2B Wholesale Supply

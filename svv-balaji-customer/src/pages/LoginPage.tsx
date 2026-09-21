@@ -44,7 +44,7 @@ export function LoginPage() {
 
     setSendingOtp(true);
     try {
-      const response = await requestOtp(cleanNum);
+      const response = await requestOtp(cleanNum, loginRole);
 
       if (loginRole === 'RETAILER' && response.purpose === 'REGISTRATION') {
         // Verifying an unknown number here would self-provision it as a B2C
@@ -83,6 +83,7 @@ export function LoginPage() {
       const outcome = await verifyOtp(
         cleanPhone(),
         code,
+        loginRole,
         isNewAccount && loginRole === 'CUSTOMER' && fullName.trim() ? fullName.trim() : undefined,
         isNewAccount && loginRole === 'CUSTOMER' && referralCode.trim() ? referralCode.trim() : undefined,
       );
@@ -93,7 +94,11 @@ export function LoginPage() {
       }
 
       message.success(
-        `Welcome! Signed in as ${outcome.channel === 'B2B' ? 'Store Partner' : 'Customer'}`,
+        outcome.channel === 'B2B'
+          ? 'Welcome back! Signed in as Store Partner'
+          : outcome.isNewAccount
+            ? 'Welcome! Your account is ready.'
+            : 'Welcome back!',
       );
       const fallback = outcome.channel === 'B2B' ? '/profile' : '/';
       navigate(destination || fallback, { replace: true });

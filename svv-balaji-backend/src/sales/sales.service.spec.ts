@@ -1,3 +1,5 @@
+import { OrderEventsService } from '../realtime/order-events.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +24,9 @@ describe('SalesService', () => {
   let allocations: any[];
   let orders: any[];
   let orderItems: any[];
+  let orderReturns: any[];
+  let loyalty: { creditForDeliveredOrder: jest.Mock; reverseForReturn: jest.Mock; refundRedemptionForOrder: jest.Mock };
+  let events: { publish: jest.Mock };
   let referrals: any[];
   let referralSettings: any;
   let coinTransactions: any[];
@@ -40,6 +45,7 @@ describe('SalesService', () => {
       fgBatchNumber: `FG-20260801-00${n}`,
       productId: 'prod-atta',
       qaReleased: true,
+      holdStatus: 'ACTIVE',
       expiryDate: FUTURE,
       ...(over.fgBatch ?? {}),
     };
@@ -61,6 +67,13 @@ describe('SalesService', () => {
     allocations = [];
     orders = [];
     orderItems = [];
+    orderReturns = [];
+    loyalty = {
+      creditForDeliveredOrder: jest.fn(async () => ({ credited: true, points: 0 })),
+      reverseForReturn: jest.fn(async () => ({ pointsReversed: 0 })),
+      refundRedemptionForOrder: jest.fn(async () => 0),
+    };
+    events = { publish: jest.fn() };
     referrals = [];
     referralSettings = null;
     coinTransactions = [];
@@ -190,8 +203,15 @@ describe('SalesService', () => {
           if (!row) return null;
           return {
             ...row,
-            items: orderItems.filter((i) => i.orderId === row.id),
-            allocations: allocations.filter((a) => a.orderId === row.id),
+            items: orderItems
+              .filter((i) => i.orderId === row.id)
+              .map((i) => ({ ...i, returns: orderReturns.filter((r) => r.orderItemId === i.id) })),
+            allocations: allocations
+              .filter((a) => a.orderId === row.id && a.releasedAt == null)
+              .map((a) => ({
+                ...a,
+                fgBatch: stock.find((r) => r.fgBatchId === a.fgBatchId)?.fgBatch,
+              })),
           };
         }),
         findMany: jest.fn(async () => []),
@@ -216,6 +236,9 @@ describe('SalesService', () => {
           allocations.push(row);
           return row;
         }),
+        update: jest.fn(async ({ where, data }: any) =>
+          Object.assign(allocations.find((a) => a.id === where.id), data),
+        ),
         deleteMany: jest.fn(async ({ where }) => {
           allocations = allocations.filter((a) => a.orderId !== where.orderId);
           return { count: 0 };
@@ -233,13 +256,37 @@ describe('SalesService', () => {
           return { count };
         }),
       },
+      orderItem: {
+        findMany: jest.fn(async ({ where }: any) => orderItems.filter((i) => where.id.in.includes(i.id))),
+      },
+      orderEvent: { create: jest.fn(async () => ({})) },
+      stockReservation: {
+        aggregate: jest.fn(async () => ({ _sum: { quantity: 0 } })),
+        updateMany: jest.fn(async () => ({ count: 0 })),
+      },
+      couponRedemption: { findUnique: jest.fn(async () => null) },
+      orderReturn: {
+        create: jest.fn(async ({ data }: any) => {
+          const row = { id: `ret-${orderReturns.length + 1}`, ...data };
+          orderReturns.push(row);
+          return row;
+        }),
+      },
+      finishedGoodsBatch: {
+        findMany: jest.fn(async ({ where }) =>
+          stock
+            .map((s) => s.fgBatch)
+            .filter((b) => where.id.in.includes(b.id) && b.holdStatus !== where.holdStatus.not),
+        ),
+      },
       finishedGoodsStock: {
         findMany: jest.fn(async ({ where }) =>
           stock.filter(
             (s) =>
               s.warehouseId === where.warehouseId &&
               s.fgBatch.productId === where.fgBatch.productId &&
-              s.fgBatch.qaReleased === where.fgBatch.qaReleased,
+              s.fgBatch.qaReleased === where.fgBatch.qaReleased &&
+              s.fgBatch.holdStatus === where.fgBatch.holdStatus,
           ),
         ),
         findUnique: jest.fn(async ({ where }) => {
@@ -295,6 +342,8 @@ describe('SalesService', () => {
       new SequenceService(),
       pricing as unknown as PricingService,
       new ReferralService(),
+      loyalty as unknown as LoyaltyService,
+      events as unknown as OrderEventsService,
     );
   });
 
@@ -428,6 +477,14 @@ describe('SalesService', () => {
       await expect(service.allocate(order.id, 'user-1')).rejects.toThrow(/QA-released/);
     });
 
+    it('will not allocate a frozen or recalled batch', async () => {
+      fgStock({ quantity: 100, fgBatch: { id: 'fg-frozen', holdStatus: 'ON_HOLD' } });
+      fgStock({ quantity: 100, fgBatch: { id: 'fg-recalled', holdStatus: 'RECALLED' } });
+
+      const order = await confirmed(10);
+      await expect(service.allocate(order.id, 'user-1')).rejects.toThrow(/QA-released/);
+    });
+
     it('will not ship expired stock', async () => {
       fgStock({ quantity: 100, fgBatch: { id: 'fg-old', expiryDate: D('2020-01-01') } });
 
@@ -485,7 +542,138 @@ describe('SalesService', () => {
     });
   });
 
+  describe('re-allocation after a freeze or recall', () => {
+    const allocatedOrder = async (qty: number) => {
+      const order: any = await placeOrder('cust-b2b', qty);
+      await service.confirm(order.id);
+      await service.allocate(order.id, 'user-1');
+      return order;
+    };
+
+    it('moves the reservation from a frozen batch to healthy stock', async () => {
+      const early = fgStock({ quantity: 50, fgBatch: { id: 'fg-early', fgBatchNumber: 'FG-B', expiryDate: D('2027-01-31') } });
+      const late = fgStock({ quantity: 50, fgBatch: { id: 'fg-late', fgBatchNumber: 'FG-A', expiryDate: D('2027-12-31') } });
+      const order = await allocatedOrder(30);
+      expect(early.reservedQuantity).toBe(30);
+
+      early.fgBatch.holdStatus = 'RECALLED';
+      const result: any = await service.reallocate(order.id, 'user-1');
+
+      expect(result.complete).toBe(true);
+      expect(result.released[0]).toMatchObject({ fgBatchNumber: 'FG-B', quantity: 30 });
+      expect(result.allocations).toEqual([expect.objectContaining({ fgBatchNumber: 'FG-A', quantity: 30 })]);
+      expect(early.reservedQuantity).toBe(0);
+      expect(late.reservedQuantity).toBe(30);
+    });
+
+    it('reports a shortfall instead of pretending, keeping what it could re-pick', async () => {
+      const bad = fgStock({ quantity: 50, fgBatch: { id: 'fg-bad', fgBatchNumber: 'FG-B', expiryDate: D('2027-01-31') } });
+      fgStock({ quantity: 10, fgBatch: { id: 'fg-ok', fgBatchNumber: 'FG-A', expiryDate: D('2027-12-31') } });
+      const order = await allocatedOrder(30);
+
+      bad.fgBatch.holdStatus = 'ON_HOLD';
+      const result: any = await service.reallocate(order.id, 'user-1');
+
+      expect(result.complete).toBe(false);
+      expect(result.shortfalls[0].short).toBe(20);
+      expect(result.allocations[0].quantity).toBe(10);
+    });
+
+    it('refuses when nothing is held, and once the order has shipped', async () => {
+      fgStock({ quantity: 50 });
+      const order = await allocatedOrder(10);
+      await expect(service.reallocate(order.id, 'user-1')).rejects.toThrow(/nothing to re-allocate/);
+
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+      await service.advance(order.id, 'DISPATCHED' as any, 'user-1');
+      await expect(service.reallocate(order.id, 'user-1')).rejects.toThrow(/allocated or packed/);
+    });
+  });
+
+  describe('returns and loyalty', () => {
+    const deliveredOrder = async (quantity = 10) => {
+      fgStock({ quantity: 100 });
+      const order: any = await placeOrder('cust-b2b', quantity);
+      await service.confirm(order.id);
+      await service.allocate(order.id, 'user-1');
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+      await service.advance(order.id, 'DISPATCHED' as any, 'user-1');
+      await service.advance(order.id, 'DELIVERED' as any, 'user-1');
+      return order;
+    };
+    const itemOf = (order: any) => orderItems.find((i) => i.orderId === order.id);
+
+    it('asks loyalty to credit the order when it is delivered', async () => {
+      const order = await deliveredOrder();
+      expect(loyalty.creditForDeliveredOrder).toHaveBeenCalledWith(order.id);
+    });
+
+    it('never lets a loyalty failure block a delivery', async () => {
+      loyalty.creditForDeliveredOrder.mockRejectedValueOnce(new Error('rewards are down'));
+      const order = await deliveredOrder();
+      expect(orders.find((o) => o.id === order.id).status).toBe('DELIVERED');
+    });
+
+    it('records a return and reverses loyalty points in the same transaction', async () => {
+      const order = await deliveredOrder();
+      loyalty.reverseForReturn.mockResolvedValueOnce({ pointsReversed: 10 });
+
+      const result: any = await service.recordReturn(
+        order.id,
+        { items: [{ orderItemId: itemOf(order).id, quantity: 2 }], reason: 'Damaged' },
+        'user-1',
+      );
+
+      expect(result.loyaltyPointsReversed).toBe(10);
+      expect(orderReturns).toHaveLength(1);
+      expect(orderReturns[0]).toMatchObject({ orderId: order.id, quantity: 2, reason: 'Damaged', recordedById: 'user-1' });
+      // Handed the transaction client, so the return and its reversal commit together.
+      expect(loyalty.reverseForReturn).toHaveBeenCalledWith(expect.anything(), order.id, [itemOf(order).id]);
+    });
+
+    it('refuses a return on an order that has not been delivered', async () => {
+      fgStock({ quantity: 100 });
+      const order: any = await placeOrder('cust-b2b', 5);
+      await expect(
+        service.recordReturn(order.id, { items: [{ orderItemId: itemOf(order).id, quantity: 1 }], reason: 'Changed mind' }, 'user-1'),
+      ).rejects.toThrow(/delivered order/);
+      expect(orderReturns).toHaveLength(0);
+      expect(loyalty.reverseForReturn).not.toHaveBeenCalled();
+    });
+
+    it('refuses to return more than was ordered, counting earlier returns', async () => {
+      const order = await deliveredOrder(10);
+      await service.recordReturn(order.id, { items: [{ orderItemId: itemOf(order).id, quantity: 7 }], reason: 'First' }, 'u');
+      await expect(
+        service.recordReturn(order.id, { items: [{ orderItemId: itemOf(order).id, quantity: 4 }], reason: 'Second' }, 'u'),
+      ).rejects.toThrow(/7 of 10 already returned/);
+      expect(orderReturns).toHaveLength(1);
+    });
+
+    it('refuses an item that is not on the order', async () => {
+      const order = await deliveredOrder();
+      await expect(
+        service.recordReturn(order.id, { items: [{ orderItemId: 'not-an-item', quantity: 1 }], reason: 'Wrong' }, 'u'),
+      ).rejects.toThrow(/not on order/);
+    });
+  });
+
   describe('fulfilment', () => {
+    it('refuses to dispatch a batch frozen after it was allocated', async () => {
+      const row = fgStock({ quantity: 40 });
+      const order: any = await placeOrder('cust-b2b', 15);
+      await service.confirm(order.id);
+      await service.allocate(order.id, 'user-1');
+      await service.advance(order.id, 'PACKED' as any, 'user-1');
+
+      row.fgBatch.holdStatus = 'RECALLED';
+
+      await expect(service.advance(order.id, 'DISPATCHED' as any, 'user-1')).rejects.toThrow(
+        /is RECALLED/,
+      );
+      expect(row.quantity).toBe(40); // nothing left the building
+    });
+
     it('takes stock down only when the order is actually dispatched', async () => {
       const row = fgStock({ quantity: 40 });
       const order: any = await placeOrder('cust-b2b', 15);

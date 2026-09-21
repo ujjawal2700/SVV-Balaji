@@ -1,4 +1,4 @@
-import { App as AntApp, Form, Input, InputNumber, Modal } from 'antd';
+import { App as AntApp, Alert, Form, Input, InputNumber, Modal, Radio } from 'antd';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
 import type { CreateWarehouseInput, Warehouse } from '../../api/types';
@@ -31,7 +31,17 @@ export function WarehouseFormModal({ open, warehouse, onClose }: WarehouseFormMo
         branchId: warehouse.branchId,
         // Capacity is a Prisma Decimal and arrives as a string.
         capacity: warehouse.capacity === null ? undefined : Number(warehouse.capacity),
+        kind: warehouse.kind ?? 'CENTRAL',
+        city: warehouse.city ?? undefined,
+        state: warehouse.state ?? undefined,
+        pincode: warehouse.pincode ?? undefined,
+        latitude: warehouse.latitude ? Number(warehouse.latitude) : undefined,
+        longitude: warehouse.longitude ? Number(warehouse.longitude) : undefined,
+        serviceRadiusKm: warehouse.serviceRadiusKm ? Number(warehouse.serviceRadiusKm) : undefined,
+        contactPhone: warehouse.contactPhone ?? undefined,
       });
+    } else {
+      form.setFieldsValue({ kind: 'CENTRAL' });
     }
   }, [open, warehouse, form]);
 
@@ -85,6 +95,30 @@ export function WarehouseFormModal({ open, warehouse, onClose }: WarehouseFormMo
         >
           <InputNumber style={{ width: '100%' }} min={0} step={1000} placeholder="Optional" />
         </Form.Item>
+
+        <Form.Item name="kind" label="Fulfilment role" extra="Central ships nationally by courier. An outlet is a franchise store that delivers locally with its own riders.">
+          <Radio.Group optionType="button" buttonStyle="solid" options={[{ value: 'CENTRAL', label: 'Central warehouse' }, { value: 'OUTLET', label: 'Franchise outlet' }]} />
+        </Form.Item>
+        <Form.Item noStyle shouldUpdate={(a, b) => a.kind !== b.kind}>
+          {({ getFieldValue }) =>
+            getFieldValue('kind') === 'OUTLET' ? (
+              <>
+                <Alert type="info" showIcon style={{ marginBottom: 12 }} message="An outlet needs its exact location: customers within its delivery radius are routed here automatically." />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <Form.Item name="latitude" label="Latitude" rules={[required('Latitude')]}><InputNumber style={{ width: '100%' }} min={-90} max={90} step={0.0001} placeholder="23.2599" /></Form.Item>
+                  <Form.Item name="longitude" label="Longitude" rules={[required('Longitude')]}><InputNumber style={{ width: '100%' }} min={-180} max={180} step={0.0001} placeholder="77.4126" /></Form.Item>
+                </div>
+                <Form.Item name="serviceRadiusKm" label="Delivery radius (km)" extra="Empty = the program default from Checkout & Delivery settings."><InputNumber style={{ width: '100%' }} min={0.5} max={100} step={0.5} /></Form.Item>
+                <Form.Item name="contactPhone" label="Store phone"><Input /></Form.Item>
+              </>
+            ) : null
+          }
+        </Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Form.Item name="city" label="City"><Input /></Form.Item>
+          <Form.Item name="state" label="State"><Input /></Form.Item>
+          <Form.Item name="pincode" label="Pincode"><Input maxLength={6} /></Form.Item>
+        </div>
       </Form>
     </Modal>
   );

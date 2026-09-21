@@ -19,10 +19,12 @@ import {
   SalesChannel,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
 import { ReferralService } from '../common/referral.service';
 import {
+  AuthAudience,
   RegisterRetailerDto,
   RejectAccountDto,
   UpdateStorefrontProfileDto,
@@ -45,6 +47,33 @@ import {
   customerRefreshSecret,
 } from './customer-token.config';
 import type { CustomerJwtPayload } from './strategies/customer-jwt.strategy';
+
+/** Where a sign-in came from - stored on the session so a person can see and end their devices. */
+export interface SessionMeta {
+  userAgent?: string;
+  ipAddress?: string;
+}
+
+/**
+ * Refresh tokens are stored as SHA-256, not bcrypt: bcrypt only reads the first 72 bytes, and a JWT's
+ * first 72 bytes are the constant header plus the start of the payload - identical for every token of
+ * the same session - so a bcrypt hash could not tell a rotated token from the current one.
+ */
+const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+const tokenMatches = (token: string, hash: string) => {
+  const a = Buffer.from(hashToken(token));
+  const b = Buffer.from(hash);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Mirrors CUSTOMER_REFRESH_EXPIRES_IN ('30d' by default) so the DB row and the token expire together. */
+function refreshLifetimeMs(): number {
+  const m = /^(\d+)([smhd])$/.exec(CUSTOMER_REFRESH_EXPIRES_IN);
+  if (!m) return 30 * DAY_MS;
+  const unit = { s: 1000, m: 60_000, h: 3_600_000, d: DAY_MS }[m[2] as 's' | 'm' | 'h' | 'd'];
+  return Number(m[1]) * unit;
+}
 
 const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -109,7 +138,7 @@ export class StorefrontAuthService {
    * exists yet - not existing is exactly the state a first-time consumer is
    * in, and the account is created on successful verification, not before.
    */
-  async requestOtp(rawPhone: string) {
+  async requestOtp(rawPhone: string, audience?: AuthAudience) {
     const phone = normalisePhone(rawPhone);
 
     const windowStart = new Date(Date.now() - OTP_REQUEST_WINDOW_SECONDS * 1000);
@@ -124,6 +153,7 @@ export class StorefrontAuthService {
     }
 
     const account = await this.prisma.customerAccount.findUnique({ where: { phone } });
+    if (audience && account) this.assertAudience(account, audience);
     const purpose: CustomerOtpPurpose = account
       ? CustomerOtpPurpose.LOGIN
       : CustomerOtpPurpose.REGISTRATION;
@@ -159,29 +189,52 @@ export class StorefrontAuthService {
    * the account, never chosen by the caller, which is the "role decided by the
    * server, not a toggle" requirement this replaces.
    */
-  async verifyOtp(dto: VerifyOtpDto) {
+  async verifyOtp(dto: VerifyOtpDto, meta: SessionMeta = {}) {
     const phone = normalisePhone(dto.phone);
-    const challenge = await this.consumeChallenge(phone, dto.code);
+    const existingBefore = await this.prisma.customerAccount.findUnique({ where: { phone } });
 
-    let account = await this.prisma.customerAccount.findUnique({ where: { phone } });
+    // Audience is checked BEFORE the code is consumed: a wrong-door attempt must not burn the OTP,
+    // and a retailer login must never fall through to creating a consumer.
+    if (existingBefore) this.assertAudience(existingBefore, dto.audience);
+    else if (dto.audience === 'RETAILER') {
+      throw new ForbiddenException('No retailer account exists for this number. Register your business first.');
+    }
+
+    await this.consumeChallenge(phone, dto.code);
+
+    let account = existingBefore;
+    let isNewAccount = false;
 
     if (!account) {
+      // First successful verification of an unknown number - the only moment a customer is created,
+      // and therefore the only moment a referral code is looked at.
       account = await this.provisionConsumer(phone, dto.fullName, dto.referralCode);
+      isNewAccount = true;
     } else if (account.status === CustomerAccountStatus.PENDING_VERIFICATION) {
       account = await this.prisma.customerAccount.update({
         where: { id: account.id },
-        data: { phoneVerifiedAt: new Date() },
+        data: { phoneVerifiedAt: new Date(), status: CustomerAccountStatus.ACTIVE },
       });
-      // A B2C account left unverified is completed here too - registration and
-      // first login are the same event for a consumer.
+      // A consumer left half-created (no Customer row yet) is completed here - that IS its creation.
       if (account.channel === SalesChannel.B2C && !account.customerId) {
         account = await this.attachConsumerCustomerRecord(account, dto.referralCode);
+        isNewAccount = true;
       }
     }
+    // Any other existing account: strictly a login. dto.referralCode is neither validated nor stored.
 
-    void challenge;
+    const session = await this.sessionFor(account, meta, { touchLogin: true });
+    return 'pending' in session ? session : { ...session, isNewAccount };
+  }
 
-    return this.sessionFor(account, { touchLogin: true });
+  /** A retailer number cannot sign in on the customer screen, and a customer number cannot on the retailer one. */
+  private assertAudience(account: CustomerAccount, audience: AuthAudience) {
+    if (audience === 'CUSTOMER' && account.channel === SalesChannel.B2B) {
+      throw new ForbiddenException('This number is registered as a retailer. Use the retailer sign-in.');
+    }
+    if (audience === 'RETAILER' && account.channel !== SalesChannel.B2B) {
+      throw new ForbiddenException('This number is registered as a customer, not a retailer.');
+    }
   }
 
   /**
@@ -283,10 +336,14 @@ export class StorefrontAuthService {
       throw new UnauthorizedException('Incorrect code.');
     }
 
-    await this.prisma.customerOtpChallenge.update({
-      where: { id: challenge.id },
+    // Single use, even under a double-submit: only the request that flips consumedAt from null wins.
+    const claimed = await this.prisma.customerOtpChallenge.updateMany({
+      where: { id: challenge.id, consumedAt: null },
       data: { consumedAt: new Date() },
     });
+    if (claimed.count === 0) {
+      throw new UnauthorizedException('This code was already used. Request a new one.');
+    }
 
     return challenge;
   }
@@ -380,10 +437,14 @@ export class StorefrontAuthService {
 
   // --- Session ------------------------------------------------------------
 
-  private async sessionFor(account: CustomerAccount, opts: { touchLogin?: boolean } = {}) {
+  private async sessionFor(
+    account: CustomerAccount,
+    meta: SessionMeta,
+    opts: { touchLogin?: boolean; reuseSessionId?: string } = {},
+  ) {
     if (account.status === CustomerAccountStatus.PENDING_APPROVAL) {
       return {
-        pending: true,
+        pending: true as const,
         status: account.status,
         message: 'Your registration is awaiting approval. You will be able to sign in once it is reviewed.',
       };
@@ -395,9 +456,26 @@ export class StorefrontAuthService {
           : 'Registration was not approved.',
       );
     }
-    if (account.status === CustomerAccountStatus.SUSPENDED) {
+    if (account.status !== CustomerAccountStatus.ACTIVE) {
       throw new ForbiddenException('This account has been suspended.');
     }
+
+    const expiresAt = new Date(Date.now() + refreshLifetimeMs());
+    // The row is created (or, on refresh, reused) first so its id can ride in both tokens.
+    const sessionId =
+      opts.reuseSessionId ??
+      (
+        await this.prisma.customerSession.create({
+          data: {
+            accountId: account.id,
+            refreshTokenHash: 'pending',
+            userAgent: meta.userAgent?.slice(0, 300),
+            ipAddress: meta.ipAddress?.slice(0, 64),
+            expiresAt,
+          },
+          select: { id: true },
+        })
+      ).id;
 
     const payload: CustomerJwtPayload = {
       sub: account.id,
@@ -405,31 +483,35 @@ export class StorefrontAuthService {
       channel: account.channel,
       typ: 'customer',
       customerId: account.customerId,
+      sid: sessionId,
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: customerAccessSecret(),
       expiresIn: CUSTOMER_ACCESS_EXPIRES_IN,
+      jwtid: randomUUID(),
     });
+    // A unique jti makes every rotated token distinct even within the same second (same iat), which
+    // is what lets a replayed old refresh token be told apart from the current one.
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: customerRefreshSecret(),
       expiresIn: CUSTOMER_REFRESH_EXPIRES_IN,
+      jwtid: randomUUID(),
     });
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
-    await this.prisma.customerAccount.update({
-      where: { id: account.id },
+    await this.prisma.customerSession.update({
+      where: { id: sessionId },
       data: {
-        refreshTokenHash,
-        ...(opts.touchLogin ? { lastLoginAt: new Date() } : {}),
+        refreshTokenHash: hashToken(refreshToken),
+        lastUsedAt: new Date(),
       },
     });
+    if (opts.touchLogin) {
+      await this.prisma.customerAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });
+    }
 
-    // Fetched separately rather than carried on `account` (which callers pass
-    // in without this relation loaded) so the very first response after
-    // signing in already carries the customer's own referral code - the
-    // whole point of generating one is that the person can see and share it
-    // immediately, not only after a follow-up /me call.
+    // Fetched separately rather than carried on `account` so the very first response already carries
+    // the customer's own referral code.
     const customer = account.customerId
       ? await this.prisma.customer.findUnique({
           where: { id: account.customerId },
@@ -453,30 +535,70 @@ export class StorefrontAuthService {
     } catch {
       throw new UnauthorizedException('Session is no longer valid - sign in again');
     }
-
-    const account = await this.prisma.customerAccount.findUnique({ where: { id: payload.sub } });
-    if (!account || !account.refreshTokenHash) {
+    if (payload.typ !== 'customer' || !payload.sid) {
       throw new UnauthorizedException('Session is no longer valid - sign in again');
     }
 
-    const matches = await bcrypt.compare(refreshToken, account.refreshTokenHash);
+    const session = await this.prisma.customerSession.findUnique({
+      where: { id: payload.sid },
+      include: { account: true },
+    });
+    if (!session || session.revokedAt || session.expiresAt <= new Date() || session.accountId !== payload.sub) {
+      throw new UnauthorizedException('Session is no longer valid - sign in again');
+    }
+
+    const matches = tokenMatches(refreshToken, session.refreshTokenHash);
     if (!matches) {
-      await this.prisma.customerAccount.update({
-        where: { id: account.id },
-        data: { refreshTokenHash: null },
-      });
+      // An already-rotated refresh token being replayed: assume it leaked and end the session.
+      await this.revokeSession(session.id, 'refresh token reuse');
       throw new UnauthorizedException('Session is no longer valid - sign in again');
     }
 
-    return this.sessionFor(account);
+    return this.sessionFor(session.account, {}, { reuseSessionId: session.id });
   }
 
-  async logout(accountId: string) {
-    await this.prisma.customerAccount.updateMany({
-      where: { id: accountId },
-      data: { refreshTokenHash: null },
+  private revokeSession(sessionId: string, reason: string) {
+    return this.prisma.customerSession.updateMany({
+      where: { id: sessionId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: reason },
     });
+  }
+
+  /** Ends THIS device's session. The access token stops working on the very next request. */
+  async logout(sessionId: string) {
+    await this.revokeSession(sessionId, 'logout');
     return { success: true };
+  }
+
+  /**
+   * Logout that still works when the access token has already expired: any token of the session,
+   * even an expired one, is enough to name the session - signature is verified, expiry is not.
+   * Idempotent, and never reveals whether the token was good.
+   */
+  async logoutWithTokens(tokens: { refreshToken?: string; accessToken?: string }) {
+    const attempts: Array<[string | undefined, string]> = [
+      [tokens.refreshToken, customerRefreshSecret()],
+      [tokens.accessToken, customerAccessSecret()],
+    ];
+    for (const [token, secret] of attempts) {
+      if (!token) continue;
+      try {
+        const p = await this.jwtService.verifyAsync<CustomerJwtPayload>(token, { secret, ignoreExpiration: true });
+        if (p.typ === 'customer' && p.sid) await this.revokeSession(p.sid, 'logout');
+      } catch {
+        // not a token of ours - nothing to revoke
+      }
+    }
+    return { success: true };
+  }
+
+  /** Ends every session of the account (all devices). */
+  async logoutAll(accountId: string) {
+    const r = await this.prisma.customerSession.updateMany({
+      where: { accountId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: 'logout-all' },
+    });
+    return { success: true, sessionsEnded: r.count };
   }
 
   async me(accountId: string) {
@@ -485,7 +607,39 @@ export class StorefrontAuthService {
       include: { customer: { select: { id: true, customerCode: true, status: true, referralCode: true } } },
     });
     if (!account) throw new UnauthorizedException('Session is no longer valid - sign in again');
-    return this.toPublicAccount(account, account.customer);
+    return { ...this.toPublicAccount(account, account.customer), ...(await this.profileExtras(account)) };
+  }
+
+  /** Real profile facts only: when they joined, their saved address, and (retailers) their credit position. */
+  private async profileExtras(account: CustomerAccount) {
+    const base = {
+      memberSince: account.createdAt,
+      addressLine: account.addressLine,
+      city: account.city,
+      state: account.state,
+      pincode: account.pincode,
+      creditLimit: null as number | null,
+      creditUsed: null as number | null,
+    };
+    if (!account.customerId || account.channel !== SalesChannel.B2B) return base;
+
+    const [customer, open] = await Promise.all([
+      this.prisma.customer.findUnique({ where: { id: account.customerId }, select: { creditLimit: true } }),
+      this.prisma.order.aggregate({
+        where: {
+          customerId: account.customerId,
+          paymentMode: 'CREDIT',
+          paymentStatus: { not: 'PAID' },
+          status: { not: 'CANCELLED' },
+        },
+        _sum: { total: true },
+      }),
+    ]);
+    return {
+      ...base,
+      creditLimit: customer?.creditLimit ? Number(customer.creditLimit) : 0,
+      creditUsed: Number(open._sum.total ?? 0),
+    };
   }
 
   async updateProfile(accountId: string, dto: UpdateStorefrontProfileDto) {

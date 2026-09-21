@@ -116,6 +116,12 @@ export const queryKeys = {
     trace: (batchNumber: string) => [...queryKeys.batches.all, 'trace', batchNumber] as const,
   },
 
+  recall: {
+    all: ['recall'] as const,
+    forward: (code: string) => [...queryKeys.recall.all, 'forward', code] as const,
+    backward: (fg: string) => [...queryKeys.recall.all, 'backward', fg] as const,
+  },
+
   trace: {
     all: ['trace'] as const,
     finishedGoods: (fgBatchNumber: string) =>
@@ -255,6 +261,15 @@ export const queryKeys = {
 
   referralSettings: {
     all: ['referral-settings'] as const,
+  },
+
+  loyalty: {
+    all: ['loyalty'] as const,
+    settings: ['loyalty', 'settings'] as const,
+    eligibilityAll: ['loyalty', 'eligibility'] as const,
+    eligibility: (productEligibility: string, categoryId: string) =>
+      ['loyalty', 'eligibility', productEligibility, categoryId] as const,
+    order: (orderNumber: string) => ['loyalty', 'order', orderNumber] as const,
   },
 
   referrals: {

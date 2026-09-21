@@ -1,338 +1,235 @@
-import {
-  ArrowLeftOutlined,
-  CheckCircleFilled,
-  CloseCircleOutlined,
-  CustomerServiceOutlined,
-  DownloadOutlined,
-  ExclamationCircleOutlined,
-  MessageOutlined,
-  PhoneOutlined,
-  QuestionCircleOutlined,
-  RightOutlined,
-  StarFilled,
-} from '@ant-design/icons';
-import { Button, Divider, Drawer, Rate, Typography, message } from 'antd';
-import { useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { ArrowLeftOutlined, CarOutlined, CheckCircleFilled, EnvironmentOutlined, PhoneOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Divider, Skeleton, Steps, Tag, Typography } from 'antd';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { checkoutApi, checkoutError } from '../api/checkout';
 import { formatInr } from '../utils/money';
+import { progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
 
+const at = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
-const allMockOrders = [
-  {
-    id: 'ORD-89237492',
-    date: 'Today, 2:30 PM',
-    status: 'IN_TRANSIT',
-    statusText: 'Arriving Today by 7:30 PM',
-    deliveredDate: null,
-    total: 1450,
-    itemCount: 3,
-    items: [
-      { id: 'premium-atta', name: 'Aashirvaad Shudh Chakki Atta (10kg)', image: '/images/cat_atta_flour.jpg', price: 450, mrp: 480, quantity: 1, variant: '10kg Bag' },
-      { id: 'aloo-bhujia-500g', name: 'Aloo Bhujia (500g)', image: '/images/aloo_bhujia.jpg', price: 180, mrp: 200, quantity: 2, variant: '500g Box' },
-      { id: 'classic-namkeen-100x20', name: 'Classic Namkeen (100g x 20)', image: '/images/classic_namkeen.jpg', price: 620, mrp: 680, quantity: 1, variant: '100g x 20' },
-    ],
-    deliveryDetails: {
-      name: 'Rahul Sharma',
-      phone: '+91 98765 43210',
-      address: '123 Main St, Apartment 4B, Mumbai, Maharashtra 400001',
-    },
-    priceDetails: { mrpTotal: 1560, discount: 110, deliveryFee: 0, grandTotal: 1450 },
-  },
-  {
-    id: 'ORD-76342891',
-    date: '28 Aug, 2026',
-    status: 'DELIVERED',
-    statusText: 'Delivered on 30 Aug, 2026',
-    deliveredDate: '30 Aug, 2026 at 2:15 PM',
-    total: 580,
-    itemCount: 1,
-    items: [
-      { id: 'premium-atta', name: 'Aashirvaad Shudh Chakki Atta (10kg)', image: '/images/cat_atta_flour.jpg', price: 450, mrp: 480, quantity: 1, variant: '10kg Bag' },
-    ],
-    deliveryDetails: {
-      name: 'Rahul Sharma',
-      phone: '+91 98765 43210',
-      address: '123 Main St, Apartment 4B, Mumbai, Maharashtra 400001',
-    },
-    priceDetails: { mrpTotal: 480, discount: 30, deliveryFee: 0, grandTotal: 450 },
-  },
-  {
-    id: 'ORD-54328912',
-    date: '15 Aug, 2026',
-    status: 'CANCELLED',
-    statusText: 'Cancelled on 15 Aug, 2026',
-    deliveredDate: null,
-    total: 300,
-    itemCount: 2,
-    items: [
-      { id: 'aloo-bhujia-500g', name: 'Aloo Bhujia (500g)', image: '/images/aloo_bhujia.jpg', price: 180, mrp: 200, quantity: 1, variant: '500g Box' },
-      { id: 'classic-namkeen-100x20', name: 'Classic Namkeen (100g x 20)', image: '/images/classic_namkeen.jpg', price: 180, mrp: 200, quantity: 1, variant: '100g x 20' },
-    ],
-    deliveryDetails: {
-      name: 'Rahul Sharma',
-      phone: '+91 98765 43210',
-      address: '123 Main St, Apartment 4B, Mumbai, Maharashtra 400001',
-    },
-    priceDetails: { mrpTotal: 400, discount: 40, deliveryFee: 49, grandTotal: 409 },
-  },
-];
-
-const mockRecommendations = [
-  { id: 'aloo-bhujia-500g', name: 'Aloo Bhujia (500g)', image: '/images/aloo_bhujia.jpg', price: 180, mrp: 200 },
-  { id: 'classic-namkeen-100x20', name: 'Classic Namkeen (1kg)', image: '/images/classic_namkeen.jpg', price: 250, mrp: 300 },
-  { id: 'santa-cruz', name: 'Santa Cruz Fruit Spread', image: '/images/santa_cruz.jpg', price: 750, mrp: 850 },
-];
-
+/**
+ * One order, live. Status, ETA, the rider or courier, and - for local delivery -
+ * the OTP to read out at the door, all straight from the server, refreshed every
+ * 15 seconds until the order is closed.
+ */
 export function OrderTrackingPage() {
-  const { orderId } = useParams<{ orderId: string }>();
+  const { orderId: orderNumber } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const [helpVisible, setHelpVisible] = useState(false);
+  const justPlaced = Boolean((useLocation().state as { justPlaced?: boolean } | null)?.justPlaced);
 
-  // Look up the order by ID, fallback to first order
-  const order = allMockOrders.find(o => o.id === orderId) || allMockOrders[0];
-  const { deliveryDetails, priceDetails } = order;
+  const order = useQuery({
+    queryKey: ['storefront', 'orders', orderNumber],
+    queryFn: () => checkoutApi.order(orderNumber as string),
+    enabled: Boolean(orderNumber),
+    retry: false,
+    refetchInterval: (q) => (q.state.data && ['DELIVERED', 'CANCELLED'].includes(q.state.data.status) ? false : 15_000),
+  });
+  const o = order.data;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 40 }}>
-      {/* Header */}
-      <header
-        style={{
-          background: '#fff',
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }}>
-            <ArrowLeftOutlined style={{ fontSize: 20 }} />
-          </button>
-          <Typography.Text strong style={{ fontSize: 16 }}>Order Details</Typography.Text>
-        </div>
-        <Typography.Text 
-          style={{ color: '#f97316', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
-          onClick={() => setHelpVisible(true)}
-        >
-          Help
-        </Typography.Text>
+    <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
+      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+        <button onClick={() => navigate('/orders')} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
+        <Typography.Text strong style={{ fontSize: 16 }}>{orderNumber}</Typography.Text>
       </header>
 
-      <div style={{ padding: '8px 12px' }}>
-        
-        {/* Order Info Banner */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: 12, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-           <Typography.Text style={{ fontSize: 13, color: '#878787', display: 'block', marginBottom: 4 }}>Order ID: {order.id}</Typography.Text>
-           <Typography.Text style={{ fontSize: 13, color: '#878787', display: 'block' }}>Placed on: {order.date}</Typography.Text>
-           <Divider style={{ margin: '12px 0' }} />
-           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-             {order.status === 'DELIVERED' && <CheckCircleFilled style={{ color: '#16a34a', fontSize: 24, marginTop: 4 }} />}
-             {order.status === 'IN_TRANSIT' && <CheckCircleFilled style={{ color: '#f97316', fontSize: 24, marginTop: 4 }} />}
-             {order.status === 'CANCELLED' && <CheckCircleFilled style={{ color: '#dc2626', fontSize: 24, marginTop: 4 }} />}
-             <div>
-               <Typography.Text strong style={{ fontSize: 16, color: order.status === 'DELIVERED' ? '#16a34a' : order.status === 'CANCELLED' ? '#dc2626' : '#f97316', display: 'block' }}>
-                 {order.statusText}
-               </Typography.Text>
-               {order.deliveredDate && (
-                 <Typography.Text style={{ fontSize: 13, color: '#424242' }}>On {order.deliveredDate}</Typography.Text>
-               )}
-             </div>
-           </div>
-        </div>
+      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
+        {order.isLoading ? (
+          <Skeleton active paragraph={{ rows: 8 }} />
+        ) : order.error ? (
+          <Alert type="error" showIcon message={checkoutError(order.error).message} />
+        ) : o ? (
+          <>
+            {justPlaced ? <Alert type="success" showIcon message="Thank you! Your order has been placed." style={{ marginBottom: 12 }} /> : null}
 
-        {/* Product Details */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: 12, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          {order.items.map((item, idx) => (
-            <div key={item.id}>
-              <Link to={`/product-detail/${item.id}`} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit' }}>
-                 <div style={{ width: 80, height: 80, borderRadius: 8, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                   <img src={item.image} alt={item.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                 </div>
-                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                   <Typography.Text strong style={{ fontSize: 14, color: '#212121', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                     {item.name}
-                   </Typography.Text>
-                   <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
-                     {item.variant} • Qty: {item.quantity}
-                   </Typography.Text>
-                   <div style={{ marginTop: 8 }}>
-                     <Typography.Text strong style={{ fontSize: 15, color: '#212121' }}>{formatInr(item.price * item.quantity)}</Typography.Text>
-                     {item.mrp && item.mrp > item.price && (
-                       <Typography.Text delete style={{ fontSize: 12, color: '#878787', marginLeft: 6 }}>{formatInr(item.mrp * item.quantity)}</Typography.Text>
-                     )}
-                   </div>
-                 </div>
-              </Link>
-              {idx < order.items.length - 1 && <Divider style={{ margin: '14px 0' }} />}
-            </div>
-          ))}
-          
-          <Divider style={{ margin: '16px 0' }} />
-          
-          {/* Rating Section — only for delivered orders */}
-          {order.status === 'DELIVERED' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0' }}>
-              <Typography.Text strong style={{ fontSize: 15, marginBottom: 12 }}>Rate your experience</Typography.Text>
-              <Rate 
-                 character={<StarFilled style={{ fontSize: 32 }} />} 
-                 onChange={(val) => message.success(`Thanks for your ${val}-star rating!`)} 
-              />
-            </div>
-          )}
-        </div>
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Tag color={statusColor(o.status)} style={{ fontSize: 13, padding: '2px 10px' }}>{statusLabel(o.status, o.fulfillment.method)}</Tag>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>Placed {at(o.placedAt)}</Typography.Text>
+              </div>
+              {o.status === 'CANCELLED' ? (
+                <Alert type="error" showIcon message="This order was cancelled" />
+              ) : (
+                <Steps size="small" current={progressIndex(o.status)} items={progressSteps(o.fulfillment.method).map((s) => ({ title: s.label }))} />
+              )}
+              {o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.fulfillment.etaLabel ? (
+                <Typography.Text style={{ display: 'block', marginTop: 12 }}>
+                  Expected delivery in about <strong>{o.fulfillment.etaLabel}</strong> of placing
+                </Typography.Text>
+              ) : null}
+              {o.status === 'DELIVERED' && o.deliveredAt ? (
+                <Typography.Text style={{ display: 'block', marginTop: 12, color: '#16a34a' }}><CheckCircleFilled /> Delivered {at(o.deliveredAt)}</Typography.Text>
+              ) : null}
+            </Card>
 
-        {/* Delivery Details */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: 12, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <Typography.Text strong style={{ display: 'block', fontSize: 15, marginBottom: 12 }}>Delivery Details</Typography.Text>
-          <Typography.Text strong style={{ display: 'block', fontSize: 14, color: '#212121', marginBottom: 4 }}>{deliveryDetails.name}</Typography.Text>
-          <Typography.Text style={{ display: 'block', fontSize: 13, color: '#424242', marginBottom: 4 }}>{deliveryDetails.address}</Typography.Text>
-          <Typography.Text style={{ display: 'block', fontSize: 13, color: '#424242' }}>Phone: {deliveryDetails.phone}</Typography.Text>
-        </div>
+            {o.deliveryOtp ? (
+              <Card>
+                <div style={{ textAlign: 'center' }}>
+                  <Typography.Text type="secondary"><SafetyCertificateOutlined /> Delivery OTP</Typography.Text>
+                  <div style={{ fontSize: 34, letterSpacing: 10, fontWeight: 800, color: '#c2410c', margin: '4px 0' }}>{o.deliveryOtp}</div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>Tell this code to the delivery partner at your door. Don't share it before your order arrives.</Typography.Text>
+                </div>
+              </Card>
+            ) : null}
 
-        {/* Price Details */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: 12, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <Typography.Text strong style={{ display: 'block', fontSize: 15, marginBottom: 16 }}>Price Details</Typography.Text>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Total MRP</Typography.Text>
-            <Typography.Text style={{ color: '#212121', fontSize: 13 }}>{formatInr(priceDetails.mrpTotal)}</Typography.Text>
-          </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Discount</Typography.Text>
-            <Typography.Text style={{ color: '#16a34a', fontSize: 13 }}>-{formatInr(priceDetails.discount)}</Typography.Text>
-          </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Delivery Fee</Typography.Text>
-            <Typography.Text style={{ color: priceDetails.deliveryFee === 0 ? '#16a34a' : '#212121', fontSize: 13 }}>
-              {priceDetails.deliveryFee === 0 ? 'FREE' : formatInr(priceDetails.deliveryFee)}
-            </Typography.Text>
-          </div>
-          
-          <Divider style={{ margin: '12px 0' }} />
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography.Text strong style={{ color: '#212121', fontSize: 15 }}>Grand Total</Typography.Text>
-            <Typography.Text strong style={{ color: '#212121', fontSize: 15 }}>{formatInr(priceDetails.grandTotal)}</Typography.Text>
-          </div>
-          
-          <Button type="dashed" block icon={<DownloadOutlined />} style={{ marginTop: 16, color: '#f97316', borderColor: '#f97316' }}>
-            Download Invoice
-          </Button>
-        </div>
+            {o.rider?.name ? (
+              <Card title="Your delivery partner">
+                <Typography.Text strong>{o.rider.name}</Typography.Text>
+                {o.rider.phone ? <div><Button type="link" icon={<PhoneOutlined />} href={`tel:${o.rider.phone}`} style={{ paddingLeft: 0 }}>{o.rider.phone}</Button></div> : null}
+              </Card>
+            ) : null}
 
-        {/* Recommended Products */}
-        <div style={{ marginTop: 24, marginBottom: 16 }}>
-          <Typography.Text strong style={{ display: 'block', fontSize: 16, marginBottom: 12, paddingLeft: 4 }}>
-            Products For You
-          </Typography.Text>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8, margin: '0 -12px', paddingLeft: 12, paddingRight: 12 }} className="hide-scrollbar">
-             {mockRecommendations.map(rec => (
-               <div key={rec.id} style={{ width: 140, flexShrink: 0, background: '#fff', borderRadius: 8, padding: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
-                 <Link to={`/product-detail/${rec.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                   <div style={{ width: '100%', height: 100, background: '#f5f5f5', borderRadius: 8, marginBottom: 12, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <img src={rec.image} alt={rec.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                   </div>
-                   <Typography.Text strong style={{ display: 'block', fontSize: 13, color: '#212121', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                     {rec.name}
-                   </Typography.Text>
-                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
-                     <Typography.Text strong style={{ fontSize: 14 }}>{formatInr(rec.price)}</Typography.Text>
-                     <Typography.Text delete style={{ fontSize: 11, color: '#878787' }}>{formatInr(rec.mrp)}</Typography.Text>
-                   </div>
-                 </Link>
-                 <Button size="small" block style={{ color: '#f97316', borderColor: '#f97316', fontWeight: 600, marginTop: 'auto' }}>
-                   ADD
-                 </Button>
-               </div>
-             ))}
-          </div>
-        </div>
+            {o.shipment ? (
+              <Card title="Shipment">
+                <Typography.Text style={{ display: 'block' }}><CarOutlined /> {o.shipment.courier} · AWB <strong>{o.shipment.awb}</strong></Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>Status: {o.shipment.status.replace(/_/g, ' ').toLowerCase()}</Typography.Text>
+                {o.shipment.trackingUrl ? <div style={{ marginTop: 8 }}><Button type="primary" href={o.shipment.trackingUrl} target="_blank" rel="noreferrer">Track shipment</Button></div> : null}
+              </Card>
+            ) : null}
 
+            <Card title="Delivery">
+              <Typography.Text style={{ display: 'block' }}>
+                <Tag color={o.fulfillment.method === 'LOCAL' ? 'green' : 'blue'}>{o.fulfillment.method === 'LOCAL' ? 'Local delivery' : 'Courier'}</Tag> from {o.fulfillment.nodeName}
+              </Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                <EnvironmentOutlined /> {o.address.fullName} · {o.address.phone}<br />
+                {[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, {o.address.city}, {o.address.state} {o.address.pincode}
+              </Typography.Text>
+            </Card>
+
+            <Card title="Items">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {o.items.map((i, idx) => {
+                  const fallbackImg = getFallbackImage(i.name);
+                  const imgSrc = i.imageUrl || fallbackImg;
+                  return (
+                    <div
+                      key={i.sku ?? `${i.name}-${idx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        paddingBottom: 8,
+                        borderBottom: idx === o.items.length - 1 ? 'none' : '1px solid #f8fafc',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            background: '#f8f7f5',
+                            border: '1px solid #e2e8f0',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <img
+                            src={imgSrc}
+                            alt={i.name ?? 'Product'}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = fallbackImg;
+                            }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Typography.Text
+                            strong
+                            style={{
+                              fontSize: 13,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              lineHeight: 1.35,
+                              color: '#1e293b',
+                            }}
+                          >
+                            {i.name}
+                          </Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 2, display: 'block' }}>
+                            Qty: <strong>{i.quantity}</strong> {i.quantity > 1 ? `· ${formatInr(i.unitPrice)} each` : ''}
+                          </Typography.Text>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: 8 }}>
+                        <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                          {formatInr(i.total)}
+                        </Typography.Text>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <Divider style={{ margin: '12px 0 10px' }} />
+              <Line label="Subtotal" value={formatInr(o.totals.subtotal)} />
+              {o.totals.discount > 0 ? <Line label={o.totals.couponCode ? `Discount (${o.totals.couponCode}${o.totals.loyaltyRedeemedPoints ? ` + ${o.totals.loyaltyRedeemedPoints} pts` : ''})` : 'Loyalty points'} value={`− ${formatInr(o.totals.discount)}`} green /> : null}
+              <Line label="GST" value={formatInr(o.totals.tax)} />
+              <Line label="Delivery" value={o.totals.deliveryFee === 0 ? 'FREE' : formatInr(o.totals.deliveryFee)} />
+              <Divider style={{ margin: '10px 0' }} />
+              <Line label="Total" value={formatInr(o.totals.total)} bold />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Payment: {o.payment.mode === 'COD' ? 'Cash on delivery' : o.payment.mode === 'CREDIT' ? 'On account' : 'Paid online'} · {o.payment.status.toLowerCase()}
+              </Typography.Text>
+            </Card>
+
+            <Card title="Order history">
+              {o.timeline.map((t, i) => (
+                <div key={`${t.type}-${i}`} style={{ fontSize: 13, marginBottom: 6 }}>
+                  <strong>{statusLabel(t.type, o.fulfillment.method) === t.type ? t.type.replace(/_/g, ' ').toLowerCase() : statusLabel(t.type, o.fulfillment.method)}</strong>
+                  <span style={{ color: '#64748b' }}> · {at(t.at)}{t.note ? ` · ${t.note}` : ''}</span>
+                </div>
+              ))}
+            </Card>
+          </>
+        ) : null}
       </div>
-      {/* Help Drawer */}
-      <Drawer
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CustomerServiceOutlined style={{ color: '#f97316', fontSize: 18 }} />
-            <Typography.Text strong style={{ fontSize: 16 }}>Help & Support</Typography.Text>
-          </div>
-        }
-        placement="bottom"
-        open={helpVisible}
-        onClose={() => setHelpVisible(false)}
-        height="auto"
-        styles={{ body: { padding: 0 }, header: { borderBottom: '1px solid #f0f0f0', padding: '16px 20px' } }}
-      >
-        <div style={{ padding: '8px 0 24px' }}>
-          {/* Order ID context */}
-          <div style={{ padding: '10px 20px', background: '#f8fafc', borderBottom: '1px solid #f0f0f0', marginBottom: 8 }}>
-            <Typography.Text style={{ fontSize: 12, color: '#878787' }}>Getting help for Order ID: <Typography.Text strong style={{ color: '#424242' }}>{order.id}</Typography.Text></Typography.Text>
-          </div>
-
-          {[
-            {
-              icon: <ExclamationCircleOutlined style={{ color: '#f97316', fontSize: 20 }} />,
-              title: 'Raise a Complaint',
-              subtitle: 'Wrong item, damaged, or missing?',
-              action: () => { setHelpVisible(false); message.info('Complaint form coming soon!'); }
-            },
-            {
-              icon: <PhoneOutlined style={{ color: '#3b82f6', fontSize: 20 }} />,
-              title: 'Call Support',
-              subtitle: 'Speak to us at +91 98765 00000',
-              action: () => { window.location.href = 'tel:+919876500000'; }
-            },
-            {
-              icon: <MessageOutlined style={{ color: '#10b981', fontSize: 20 }} />,
-              title: 'Live Chat',
-              subtitle: 'Chat with us — typically replies in 2 mins',
-              action: () => { setHelpVisible(false); message.info('Live chat coming soon!'); }
-            },
-            {
-              icon: <QuestionCircleOutlined style={{ color: '#8b5cf6', fontSize: 20 }} />,
-              title: 'FAQs',
-              subtitle: 'Delivery, returns, refunds and more',
-              action: () => { setHelpVisible(false); message.info('FAQs coming soon!'); }
-            },
-            ...(order.status !== 'DELIVERED' && order.status !== 'CANCELLED'
-              ? [{
-                  icon: <CloseCircleOutlined style={{ color: '#dc2626', fontSize: 20 }} />,
-                  title: 'Cancel Order',
-                  subtitle: 'Request cancellation for this order',
-                  action: () => { setHelpVisible(false); message.warning('Cancellation request submitted!'); }
-                }]
-              : []
-            ),
-          ].map((item, idx, arr) => (
-            <div key={idx}>
-              <button
-                onClick={item.action}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 16,
-                  padding: '14px 20px', background: 'none', border: 'none',
-                  cursor: 'pointer', textAlign: 'left'
-                }}
-              >
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {item.icon}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Typography.Text strong style={{ display: 'block', fontSize: 14, color: '#212121' }}>{item.title}</Typography.Text>
-                  <Typography.Text style={{ fontSize: 12, color: '#878787' }}>{item.subtitle}</Typography.Text>
-                </div>
-                <RightOutlined style={{ color: '#d1d5db', fontSize: 12 }} />
-              </button>
-              {idx < arr.length - 1 && <Divider style={{ margin: '0 20px', width: 'auto', minWidth: 'auto' }} />}
-            </div>
-          ))}
-        </div>
-      </Drawer>
     </div>
   );
+}
+
+function Card({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      {title ? <Typography.Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>{title}</Typography.Text> : null}
+      {children}
+    </div>
+  );
+}
+
+function Line({ label, value, bold, green }: { label: string; value: string; bold?: boolean; green?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: bold ? 16 : 13, fontWeight: bold ? 700 : 400, color: green ? '#16a34a' : undefined, marginBottom: 4 }}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function getFallbackImage(name?: string | null): string {
+  if (!name) return '/images/cat_namkeen.jpg';
+  const lower = name.toLowerCase();
+  if (lower.includes('atta') || lower.includes('flour') || lower.includes('chakki') || lower.includes('maida') || lower.includes('suji') || lower.includes('rava')) {
+    return '/images/cat_atta_flour.jpg';
+  }
+  if (lower.includes('spice') || lower.includes('masala') || lower.includes('cardamom') || lower.includes('pepper') || lower.includes('clove') || lower.includes('dalchini') || lower.includes('haldi') || lower.includes('chilli') || lower.includes('turmeric') || lower.includes('coriander') || lower.includes('cumin') || lower.includes('jeera')) {
+    return '/images/cat_spices.jpg';
+  }
+  if (lower.includes('wafer') || lower.includes('chip') || lower.includes('crisp')) {
+    return '/images/cat_wafers.jpg';
+  }
+  if (lower.includes('bhujia') || lower.includes('aloo')) {
+    return '/images/aloo_bhujia.jpg';
+  }
+  if (lower.includes('namkeen') || lower.includes('mixture') || lower.includes('sev') || lower.includes('snack')) {
+    return '/images/cat_namkeen.jpg';
+  }
+  return '/images/cat_namkeen.jpg';
 }

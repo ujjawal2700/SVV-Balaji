@@ -27,3 +27,4 @@ prisma/migrations/dev.db
 
 # Testing
 coverage/
+backups/

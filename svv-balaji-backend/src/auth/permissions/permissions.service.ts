@@ -46,6 +46,7 @@ export class PermissionsService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     assertRegistryIsWellFormed();
     await this.seedUnconfiguredRoles();
+    await this.backfillNewPermissions();
   }
 
   // --- Reads ----------------------------------------------------------------
@@ -218,6 +219,58 @@ export class PermissionsService implements OnModuleInit {
     this.cache.clear();
     this.logger.log(`Seeded default permissions for: ${missing.join(', ')}`);
     return [...missing];
+  }
+
+  /**
+   * Grant NEW permission keys to roles that are already configured (A-14).
+   *
+   * `seedUnconfiguredRoles` only helps a role the first time it is seen, so a
+   * key added to the registry later never reached roles an administrator had
+   * already set up - it needed a by-hand database grant, repeatedly.
+   *
+   * A key is "new" when it is not in `permission_key_state`. For each new key,
+   * every configured role whose registry defaults include it gets it once, and
+   * the key is recorded. A key already recorded is never touched again, which
+   * is what stops this undoing a deliberate revocation. Idempotent, and safe
+   * to run from several API instances at once (`skipDuplicates`).
+   *
+   * Removing a role from a key's `defaultRoles` later does NOT revoke anything:
+   * defaults are for first grants, never a way to take access away.
+   */
+  async backfillNewPermissions(): Promise<string[]> {
+    const seen = new Set(
+      (await this.prisma.permissionKeyState.findMany({ select: { permission: true } })).map(
+        (row) => row.permission,
+      ),
+    );
+    const fresh = ALL_PERMISSIONS.filter((p) => !seen.has(p.key));
+    if (fresh.length === 0) return [];
+
+    const configured = new Set(
+      (await this.prisma.rolePermissionState.findMany({ select: { role: true } })).map(
+        (row) => row.role,
+      ),
+    );
+
+    const grants = fresh.flatMap((p) =>
+      p.defaultRoles
+        .filter((role) => configured.has(role))
+        .map((role) => ({ role, permission: p.key })),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.rolePermission.createMany({ data: grants, skipDuplicates: true }),
+      this.prisma.permissionKeyState.createMany({
+        data: fresh.map((p) => ({ permission: p.key })),
+        skipDuplicates: true,
+      }),
+    ]);
+
+    this.cache.clear();
+    this.logger.log(
+      `New permissions reconciled: ${fresh.map((p) => p.key).join(', ')} (${grants.length} grant(s) to configured roles)`,
+    );
+    return fresh.map((p) => p.key);
   }
 
   // --- Internals ------------------------------------------------------------

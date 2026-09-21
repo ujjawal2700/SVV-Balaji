@@ -9,6 +9,7 @@ import { useWarehouses, useStockMovements } from '../../hooks/useWarehouses';
 import { EM_DASH, formatDateTime, formatQuantity } from '../../utils/format';
 
 const MOVEMENT_COLOURS: Record<StockMovementType, string> = {
+  PRODUCTION_INWARD: 'cyan',
   STOCK_IN: 'green',
   STOCK_OUT: 'red',
   TRANSFER: 'blue',

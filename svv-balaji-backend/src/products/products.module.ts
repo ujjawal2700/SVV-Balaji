@@ -27,6 +27,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -34,7 +35,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Prisma, SalesChannel } from '@prisma/client';
+import { LoyaltyEligibility, Prisma, SalesChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingModule } from '../pricing/pricing.module';
 import { PricingService } from '../pricing/pricing.service';
@@ -413,6 +414,14 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   b2bTiersAreTotals?: boolean;
+
+  @ApiPropertyOptional({
+    enum: LoyaltyEligibility,
+    description: 'Loyalty override for this product. INHERIT = follow the category, then the program default.',
+  })
+  @IsOptional()
+  @IsEnum(LoyaltyEligibility)
+  loyaltyEligibility?: LoyaltyEligibility;
 
   @ApiPropertyOptional({ description: 'Pin to the "Popular Products" shelf and category Top Picks.' })
   @IsOptional()
@@ -925,6 +934,7 @@ export class ProductsService {
         where: {
           fgBatch: {
             qaReleased: true,
+            holdStatus: 'ACTIVE',
             OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }],
           },
         },

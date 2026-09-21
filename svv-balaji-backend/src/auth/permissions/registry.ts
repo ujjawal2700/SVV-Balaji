@@ -112,6 +112,86 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    key: 'recall',
+    label: 'Recall & Batch Audit',
+    path: '/recall',
+    viewKey: 'recall.view',
+    permissions: [
+      {
+        key: 'recall.view',
+        label: 'Forward and backward batch tracing',
+        description:
+          'Forward: which orders and customers received a batch or raw lot. Backward: the ' +
+          'machine, milling loss, raw lots, weighing slips, farmer payouts and FIFO check behind ' +
+          'a pack.',
+        defaultRoles: [BM, QA],
+      },
+      {
+        key: 'recall.manage',
+        label: 'Freeze, recall or release a batch',
+        description:
+          'A frozen or recalled batch is refused by allocation and dispatch, dropped from ' +
+          'storefront stock and shown as withdrawn on the public trace page. Recall is final.',
+        defaultRoles: [BM, QA],
+      },
+    ],
+  },
+  {
+    key: 'loyalty',
+    label: 'Loyalty Rewards',
+    path: '/settings/loyalty',
+    viewKey: 'loyalty.view',
+    permissions: [
+      {
+        key: 'loyalty.view',
+        label: 'View the loyalty program',
+        description:
+          'The configured percentage, point value and rules, and what any order earned or ' +
+          'why it earned nothing.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'loyalty.manage',
+        label: 'Configure the loyalty program',
+        description:
+          'Percentage per channel, point-to-rupee value, calculation base, eligibility default, ' +
+          'discounted-product rule, minimums, per-order cap and expiry. Applies to orders ' +
+          'delivered from then on. Super Admin only by default.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    key: 'checkoutSettings',
+    label: 'Checkout & Delivery Settings',
+    path: '/settings/checkout',
+    viewKey: 'checkoutSettings.view',
+    permissions: [
+      {
+        key: 'checkoutSettings.view',
+        label: 'View checkout and delivery rules',
+        description: 'Local delivery radius, fees, ETAs, COD limit and stock-hold time.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'checkoutSettings.manage',
+        label: 'Change checkout and delivery rules',
+        description: 'Applies to every new checkout. Super Admin only by default.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    key: 'coupons',
+    label: 'Coupons',
+    path: '/coupons',
+    viewKey: 'coupons.view',
+    permissions: [
+      { key: 'coupons.view', label: 'View coupons', description: 'Codes, limits and usage.', defaultRoles: [BM, ST] },
+      { key: 'coupons.manage', label: 'Create and edit coupons', description: 'Validated server-side at checkout against the server subtotal.', defaultRoles: [BM] },
+    ],
+  },
+  {
     key: 'fieldPanel',
     label: 'My Field Work (mobile panel)',
     path: '/field',
@@ -1027,6 +1107,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'orders.cancel',
         label: 'Cancel an order',
         description: 'Returns any reservations to available stock.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'orders.return',
+        label: 'Record a return / refund',
+        description:
+          'Marks delivered items as returned and reverses the loyalty points they earned, in the ' +
+          'same step.',
         defaultRoles: [BM, ST],
       },
       {

@@ -1,0 +1,36 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaymentMode } from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
+} from 'class-validator';
+
+export class CheckoutItemDto {
+  @ApiProperty() @IsString() productId!: string;
+  @ApiProperty({ example: 2 }) @IsInt() @Min(1) @Max(100000) quantity!: number;
+}
+
+/**
+ * Deliberately has NO price, tax, fee, discount amount or delivery-method
+ * field: the server works all of those out. `expectedTotal` is the one number
+ * the client may send, and it is only compared - never used.
+ */
+export class CheckoutDto {
+  @ApiProperty() @IsString() addressId!: string;
+
+  @ApiProperty({ type: [CheckoutItemDto] })
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50)
+  @ValidateNested({ each: true }) @Type(() => CheckoutItemDto)
+  items!: CheckoutItemDto[];
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) couponCode?: string;
+  @ApiPropertyOptional({ description: 'Loyalty points to spend' }) @IsOptional() @IsInt() @Min(0) redeemPoints?: number;
+  @ApiPropertyOptional({ enum: PaymentMode }) @IsOptional() @IsEnum(PaymentMode) paymentMode?: PaymentMode;
+  @ApiPropertyOptional({ description: 'The total the customer was shown; used only to detect a price change' })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) expectedTotal?: number;
+}
+
+export class ConfirmCheckoutDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) gatewayPaymentId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) signature?: string;
+}

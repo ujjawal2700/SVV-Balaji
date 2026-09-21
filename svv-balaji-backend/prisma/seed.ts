@@ -203,78 +203,101 @@ async function seedDefaultBanners() {
  * Idempotent on count, same pattern as seedDefaultBranch/seedDefaultBanners.
  */
 async function seedDefaultCategories() {
-  const categoryCount = await prisma.category.count();
-  if (categoryCount > 0) {
-    console.log(`Categories already present (${categoryCount}) - leaving them alone`);
-    return;
-  }
-
   const tree: {
     slug: string;
     name: string;
     imageUrl: string;
-    children: { slug: string; name: string; imageUrl: string }[];
+    description: string;
+    children: { slug: string; name: string; imageUrl: string; description: string }[];
   }[] = [
     {
       slug: 'atta-flour',
       name: 'Atta & Flour',
       imageUrl: '/images/cat_atta_flour.jpg',
+      description: 'Fresh chakki atta, premium maida, pure besan and grain flours.',
       children: [
-        { slug: 'chakki-atta', name: 'Chakki Atta', imageUrl: '/images/premium_atta.jpg' },
-        { slug: 'maida', name: 'Maida', imageUrl: '/images/cat_atta_flour.jpg' },
-        { slug: 'besan', name: 'Besan', imageUrl: '/images/cat_spices.jpg' },
+        { slug: 'chakki-atta', name: 'Chakki Atta', imageUrl: '/images/premium_atta.jpg', description: 'Fresh stone-ground chakki wheat atta.' },
+        { slug: 'maida', name: 'Maida', imageUrl: '/images/cat_atta_flour.jpg', description: 'Refined wheat flour for baking and cooking.' },
+        { slug: 'besan', name: 'Besan', imageUrl: '/images/cat_spices.jpg', description: 'Pure unadulterated gram flour.' },
       ],
     },
     {
       slug: 'namkeen',
       name: 'Namkeen',
       imageUrl: '/images/cat_namkeen.jpg',
+      description: 'Crispy, savory traditional namkeens, bhujia, and sev.',
       children: [
-        { slug: 'bhujia', name: 'Bhujia', imageUrl: '/images/aloo_bhujia.jpg' },
-        { slug: 'mixtures', name: 'Mixtures', imageUrl: '/images/classic_namkeen.jpg' },
-        { slug: 'sev', name: 'Sev & Gathiya', imageUrl: '/images/cat_namkeen.jpg' },
+        { slug: 'bhujia', name: 'Bhujia', imageUrl: '/images/aloo_bhujia.jpg', description: 'Spicy crispy Bikaneri and aloo bhujia.' },
+        { slug: 'mixtures', name: 'Mixtures', imageUrl: '/images/classic_namkeen.jpg', description: 'Crunchy traditional mixed farsan.' },
+        { slug: 'sev', name: 'Sev & Gathiya', imageUrl: '/images/cat_namkeen.jpg', description: 'Traditional Gujarati and Rajasthani sev & gathiya.' },
       ],
     },
     {
       slug: 'wafers',
       name: 'Wafers',
       imageUrl: '/images/cat_wafers.jpg',
+      description: 'Light, crunchy potato, banana and tortilla chips.',
       children: [
-        { slug: 'potato-chips', name: 'Potato Chips', imageUrl: '/images/cat_wafers.jpg' },
-        { slug: 'banana-chips', name: 'Banana Chips', imageUrl: '/images/cat_wafers.jpg' },
-        { slug: 'tortilla', name: 'Tortilla Chips', imageUrl: '/images/tonys_chips.jpg' },
+        { slug: 'potato-chips', name: 'Potato Chips', imageUrl: '/images/cat_wafers.jpg', description: 'Crispy salted and masala potato chips.' },
+        { slug: 'banana-chips', name: 'Banana Chips', imageUrl: '/images/cat_wafers.jpg', description: 'Kerala style crispy banana wafers in pure oil.' },
+        { slug: 'tortilla', name: 'Tortilla Chips', imageUrl: '/images/tonys_chips.jpg', description: 'Corn tortilla chips for nachos and dips.' },
       ],
     },
     {
       slug: 'spices',
       name: 'Spices',
       imageUrl: '/images/cat_spices.jpg',
+      description: 'Pure, aromatic whole spices, ground powders, and blended masalas.',
       children: [
-        { slug: 'whole-spices', name: 'Whole Spices', imageUrl: '/images/cat_spices.jpg' },
-        { slug: 'powdered-spices', name: 'Powdered Spices', imageUrl: '/images/cat_spices.jpg' },
-        { slug: 'blended-spices', name: 'Blended Masalas', imageUrl: '/images/cat_spices.jpg' },
+        { slug: 'whole-spices', name: 'Whole Spices', imageUrl: '/images/cat_spices.jpg', description: 'Khada masala: black pepper, cardamom, cloves, cinnamon.' },
+        { slug: 'powdered-spices', name: 'Powdered Spices', imageUrl: '/images/cat_spices.jpg', description: 'Turmeric, red chilli powder, coriander powder, cumin powder.' },
+        { slug: 'blended-spices', name: 'Blended Masalas', imageUrl: '/images/cat_spices.jpg', description: 'Garam masala, kitchen king, chaat masala and special blends.' },
       ],
     },
   ];
 
   for (const [index, parent] of tree.entries()) {
-    const created = await prisma.category.create({
-      data: {
+    const parentCat = await prisma.category.upsert({
+      where: { slug: parent.slug },
+      update: {
+        name: parent.name,
+        imageUrl: parent.imageUrl,
+        description: parent.description,
+        displayOrder: index + 1,
+        isActive: true,
+      },
+      create: {
         name: parent.name,
         slug: parent.slug,
         imageUrl: parent.imageUrl,
+        description: parent.description,
         displayOrder: index + 1,
+        isActive: true,
       },
     });
-    await prisma.category.createMany({
-      data: parent.children.map((child, childIndex) => ({
-        name: child.name,
-        slug: child.slug,
-        imageUrl: child.imageUrl,
-        parentId: created.id,
-        displayOrder: childIndex + 1,
-      })),
-    });
+
+    for (const [childIndex, child] of parent.children.entries()) {
+      await prisma.category.upsert({
+        where: { slug: child.slug },
+        update: {
+          name: child.name,
+          imageUrl: child.imageUrl,
+          description: child.description,
+          parentId: parentCat.id,
+          displayOrder: childIndex + 1,
+          isActive: true,
+        },
+        create: {
+          name: child.name,
+          slug: child.slug,
+          imageUrl: child.imageUrl,
+          description: child.description,
+          parentId: parentCat.id,
+          displayOrder: childIndex + 1,
+          isActive: true,
+        },
+      });
+    }
   }
 
   console.log('Seeded 4 default categories with 12 subcategories');

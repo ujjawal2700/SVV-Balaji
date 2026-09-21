@@ -91,6 +91,19 @@ export function useAllocateOrder() {
   });
 }
 
+/** Re-pick an order's stock off frozen/recalled batches. Also refreshes the recall views. */
+export function useReallocateOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => salesApi.reallocate(id),
+    onSuccess: () => {
+      invalidateOrderWorld(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.recall.all });
+    },
+  });
+}
+
 export function usePackOrder() {
   const queryClient = useQueryClient();
 

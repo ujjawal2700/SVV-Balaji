@@ -38,11 +38,13 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
 import { useLoyalty } from '../loyalty/useLoyalty';
+import { useAccountStats } from '../hooks/useAccountStats';
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { role, customerProfile, retailerProfile, logout, switchRole } = useCustomerAuth();
+  const { role, customerProfile, retailerProfile, logout } = useCustomerAuth();
   const loyalty = useLoyalty();
+  const stats = useAccountStats();
   const [whatsappAlerts, setWhatsappAlerts] = useState(true);
 
   const handleLogout = () => {
@@ -102,7 +104,7 @@ export function ProfilePage() {
           iconColor: '#2563eb',
           label: 'My Orders',
           subtitle: 'Track live delivery & past receipts',
-          badge: customerProfile?.totalOrders || 0,
+          badge: stats.orderCount,
           route: '/orders',
         },
         {
@@ -115,21 +117,12 @@ export function ProfilePage() {
           route: '/orders',
         },
         {
-          key: 'wallet',
-          icon: <WalletOutlined />,
-          iconBg: '#f0fdf4',
-          iconColor: '#16a34a',
-          label: 'Desi Wallet',
-          subtitle: `₹${customerProfile?.walletBalance || 0} Balance available`,
-          route: '/wallet',
-        },
-        {
           key: 'loyalty',
           icon: <TrophyOutlined />,
           iconBg: '#fffbeb',
           iconColor: '#d97706',
           label: 'Desi Rewards',
-          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • ${loyalty.tier.label}`,
+          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • worth ₹${loyalty.pointsValueInr.toLocaleString('en-IN')}`,
           route: '/loyalty',
         },
         {
@@ -161,7 +154,7 @@ export function ProfilePage() {
           iconBg: '#fefce8',
           iconColor: '#ca8a04',
           label: 'Delivery Addresses',
-          subtitle: `${customerProfile?.savedAddressesCount || 1} Saved address`,
+          subtitle: `${stats.addressCount} Saved address`,
           route: '/addresses',
         },
         {
@@ -203,7 +196,7 @@ export function ProfilePage() {
           iconColor: '#2563eb',
           label: 'Wholesale Orders',
           subtitle: 'Track active bulk consignments',
-          badge: retailerProfile?.totalOrders || 1,
+          badge: stats.orderCount,
           route: '/orders',
         },
         {
@@ -212,7 +205,7 @@ export function ProfilePage() {
           iconBg: '#f0fdf4',
           iconColor: '#16a34a',
           label: 'B2B Wallet Balance',
-          subtitle: `₹${retailerProfile?.walletBalance || 895} Balance available`,
+          subtitle: `₹${0} Balance available`,
           route: '/wallet',
         },
         {
@@ -221,8 +214,8 @@ export function ProfilePage() {
           iconBg: '#fff7ed',
           iconColor: '#ea580c',
           label: 'Wholesale Schemes & Margins',
-          subtitle: '2 Active Mandi Deals',
-          action: () => message.info('2 active wholesale schemes on your account'),
+          subtitle: 'Current offers on the storefront',
+          route: '/',
         },
         {
           key: 'loyalty',
@@ -230,7 +223,7 @@ export function ProfilePage() {
           iconBg: '#fffbeb',
           iconColor: '#d97706',
           label: 'Wholesaler Rewards',
-          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • ${loyalty.tier.label}`,
+          subtitle: `${loyalty.points.toLocaleString('en-IN')} pts • worth ₹${loyalty.pointsValueInr.toLocaleString('en-IN')}`,
           route: '/loyalty',
         },
         {
@@ -262,7 +255,7 @@ export function ProfilePage() {
           iconBg: '#fefce8',
           iconColor: '#ca8a04',
           label: 'Store Dispatch Points',
-          subtitle: retailerProfile?.address || 'Primary Shop Delivery Point',
+          subtitle: retailerProfile?.address || '—',
           route: '/addresses',
         },
         {
@@ -271,7 +264,7 @@ export function ProfilePage() {
           iconBg: '#f0fdfa',
           iconColor: '#0d9488',
           label: 'Business GSTIN & KYC',
-          subtitle: `${retailerProfile?.gstin || '36AABCU9603R1ZM'} · Verified`,
+          subtitle: `${retailerProfile?.gstin || '—'} · Verified`,
           action: () => message.success('KYC & GSTIN are verified'),
         },
       ],
@@ -391,22 +384,22 @@ export function ProfilePage() {
               {isRetailer ? (
                 <>
                   <Typography.Text strong style={{ color: '#ffffff', fontSize: 18, display: 'block', lineHeight: 1.25 }}>
-                    {retailerProfile?.storeName || 'Sri Balaji Provision Store'}
+                    {retailerProfile?.storeName || 'My Store'}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, display: 'block', marginTop: 2 }}>
-                    Prop: {retailerProfile?.ownerName || 'Ramesh Kumar'} • {retailerProfile?.phone || '+91 98765 43210'}
+                    Prop: {retailerProfile?.ownerName || '—'} • {retailerProfile?.phone || '—'}
                   </Typography.Text>
                   <Tag color="gold" style={{ marginTop: 6, fontWeight: 700, borderRadius: 10, fontSize: 11 }}>
-                    GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'}
+                    GST: {retailerProfile?.gstin || '—'}
                   </Tag>
                 </>
               ) : (
                 <>
                   <Typography.Text strong style={{ color: '#ffffff', fontSize: 19, display: 'block', lineHeight: 1.25 }}>
-                    {customerProfile?.name || 'Rahul Sharma'}
+                    {customerProfile?.name || 'Customer'}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.95)', fontSize: 13, display: 'block', marginTop: 2 }}>
-                    {customerProfile?.phone || '+91 98765 43210'}
+                    {customerProfile?.phone || '—'}
                   </Typography.Text>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <span
@@ -445,28 +438,28 @@ export function ProfilePage() {
               <>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{retailerProfile?.walletBalance || 895}
+                    {loyalty.points.toLocaleString('en-IN')}
                   </Typography.Text>
-                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>B2B Wallet</Typography.Text>
+                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Reward Pts</Typography.Text>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {retailerProfile?.totalOrders || 12}
+                    {stats.orderCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Orders</Typography.Text>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{(retailerProfile?.totalSavings || 4320).toLocaleString('en-IN')}
+                    ₹{(retailerProfile?.creditUsed || 0).toLocaleString('en-IN')}
                   </Typography.Text>
-                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Mandi Saved</Typography.Text>
+                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Outstanding</Typography.Text>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{((retailerProfile?.creditLimit || 50000) - (retailerProfile?.creditUsed || 14500)).toLocaleString('en-IN')}
+                    ₹{((retailerProfile?.creditLimit || 0) - (retailerProfile?.creditUsed || 0)).toLocaleString('en-IN')}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Credit Line</Typography.Text>
                 </div>
@@ -475,16 +468,16 @@ export function ProfilePage() {
               <>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{customerProfile?.walletBalance || 250}
+                    {loyalty.points.toLocaleString('en-IN')}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
-                    Desi Wallet
+                    Reward Points
                   </Typography.Text>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {customerProfile?.totalOrders || 4}
+                    {stats.orderCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
                     My Orders
@@ -493,7 +486,7 @@ export function ProfilePage() {
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {customerProfile?.couponsCount || 3}
+                    {stats.couponCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
                     Active Offers
@@ -616,31 +609,6 @@ export function ProfilePage() {
             </div>
           ))}
 
-          {/* Quick Demo Role Switcher for easy testing */}
-          <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 12, marginBottom: 12, textAlign: 'center' }}>
-            <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 6 }}>
-              DEMO ROLE SWITCHER
-            </Typography.Text>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button
-                size="small"
-                type={!isRetailer ? 'primary' : 'default'}
-                style={{ flex: 1, borderRadius: 6, fontSize: 12, background: !isRetailer ? '#f97316' : undefined, borderColor: !isRetailer ? '#f97316' : undefined }}
-                onClick={() => switchRole('CUSTOMER')}
-              >
-                👤 Customer View
-              </Button>
-              <Button
-                size="small"
-                type={isRetailer ? 'primary' : 'default'}
-                style={{ flex: 1, borderRadius: 6, fontSize: 12, background: isRetailer ? '#ea580c' : undefined, borderColor: isRetailer ? '#ea580c' : undefined }}
-                onClick={() => switchRole('RETAILER')}
-              >
-                🏪 Retailer View
-              </Button>
-            </div>
-          </div>
-
           {/* Logout */}
           <button
             onClick={handleLogout}
@@ -723,26 +691,6 @@ export function ProfilePage() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* Demo Mode Toggle */}
-              <div style={{ background: '#f1f5f9', borderRadius: 8, padding: 3, display: 'flex', gap: 4 }}>
-                <Button
-                  size="small"
-                  type={!isRetailer ? 'primary' : 'text'}
-                  style={{ borderRadius: 6, fontSize: 11, height: 26, padding: '0 8px', background: !isRetailer ? '#f97316' : undefined }}
-                  onClick={() => switchRole('CUSTOMER')}
-                >
-                  👤 Customer
-                </Button>
-                <Button
-                  size="small"
-                  type={isRetailer ? 'primary' : 'text'}
-                  style={{ borderRadius: 6, fontSize: 11, height: 26, padding: '0 8px', background: isRetailer ? '#ea580c' : undefined }}
-                  onClick={() => switchRole('RETAILER')}
-                >
-                  🏪 Retailer
-                </Button>
-              </div>
-
               {!isRetailer && (
                 <Button
                   type="primary"
@@ -816,25 +764,25 @@ export function ProfilePage() {
 
                 <Typography.Title level={4} style={{ margin: '0 0 4px 0', color: '#0f172a', fontWeight: 700 }}>
                   {isRetailer
-                    ? retailerProfile?.storeName || 'Sri Balaji Provision Store'
-                    : customerProfile?.name || 'Rahul Sharma'}
+                    ? retailerProfile?.storeName || 'My Store'
+                    : customerProfile?.name || 'Customer'}
                 </Typography.Title>
                 <Typography.Text style={{ color: '#64748b', fontSize: 13, display: 'block' }}>
                   {isRetailer
-                    ? `Prop: ${retailerProfile?.ownerName || 'Ramesh Kumar'}`
+                    ? `Prop: ${retailerProfile?.ownerName || '—'}`
                     : '👤 Personal Customer Account'}
                 </Typography.Text>
 
                 {isRetailer ? (
                   <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8 }}>
                     <Tag color="orange" style={{ borderRadius: 12, fontWeight: 700, padding: '2px 10px' }}>
-                      GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'}
+                      GST: {retailerProfile?.gstin || '—'}
                     </Tag>
                   </div>
                 ) : (
                   <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 6 }}>
                     <Tag color="orange" style={{ borderRadius: 12, fontWeight: 600, padding: '2px 10px' }}>
-                      Desi Member since {customerProfile?.memberSince || 'Aug 2024'}
+                      Desi Member since {customerProfile?.memberSince || '—'}
                     </Tag>
                   </div>
                 )}
@@ -845,20 +793,20 @@ export function ProfilePage() {
                   <div>
                     <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>PHONE NUMBER</Typography.Text>
                     <Typography.Text strong style={{ color: '#1e293b' }}>
-                      {isRetailer ? retailerProfile?.phone : customerProfile?.phone || '+91 98765 43210'}
+                      {isRetailer ? retailerProfile?.phone : customerProfile?.phone || '—'}
                     </Typography.Text>
                   </div>
                   <div>
                     <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>EMAIL ADDRESS</Typography.Text>
                     <Typography.Text strong style={{ color: '#1e293b' }}>
-                      {isRetailer ? retailerProfile?.email : customerProfile?.email || 'rahul.sharma@example.com'}
+                      {isRetailer ? retailerProfile?.email : customerProfile?.email || '—'}
                     </Typography.Text>
                   </div>
                   {isRetailer && (
                     <div>
                       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>DEFAULT DELIVERY HUB</Typography.Text>
                       <Typography.Text strong style={{ color: '#1e293b' }}>
-                        {retailerProfile?.address || 'Shop #14, Main Market, Hanamkonda'}
+                        {retailerProfile?.address || '—'}
                       </Typography.Text>
                     </div>
                   )}
@@ -911,13 +859,13 @@ export function ProfilePage() {
               <div style={{ display: 'grid', gridTemplateColumns: isRetailer ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
                 <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
                   <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
-                    DESI WALLET
+                    {isRetailer ? 'REWARD POINTS' : 'DESI REWARDS'}
                   </Typography.Text>
                   <Typography.Text strong style={{ fontSize: 18, color: '#ea580c', display: 'block', marginTop: 2 }}>
-                    ₹{isRetailer ? retailerProfile?.walletBalance || 895 : customerProfile?.walletBalance || 250}
+                    {loyalty.points.toLocaleString('en-IN')} pts
                   </Typography.Text>
-                  <Link to="/wallet" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
-                    Recharge Balance &rarr;
+                  <Link to="/loyalty" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
+                    View rewards &rarr;
                   </Link>
                 </div>
 
@@ -926,7 +874,7 @@ export function ProfilePage() {
                     MY ORDERS
                   </Typography.Text>
                   <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
-                    {isRetailer ? retailerProfile?.totalOrders || 12 : customerProfile?.totalOrders || 4}
+                    {isRetailer ? stats.orderCount : stats.orderCount}
                   </Typography.Text>
                   <Link to="/orders" style={{ fontSize: 11.5, color: '#f97316', fontWeight: 600 }}>
                     View Order History &rarr;
@@ -940,7 +888,7 @@ export function ProfilePage() {
                         TOTAL SAVINGS
                       </Typography.Text>
                       <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
-                        ₹{(retailerProfile?.totalSavings || 4320).toLocaleString('en-IN')}
+                        ₹{(retailerProfile?.totalSavings || 0).toLocaleString('en-IN')}
                       </Typography.Text>
                       <Typography.Text style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                         Wholesale Margins
@@ -952,7 +900,7 @@ export function ProfilePage() {
                         CREDIT LINE
                       </Typography.Text>
                       <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
-                        ₹{((retailerProfile?.creditLimit || 50000) - (retailerProfile?.creditUsed || 14500)).toLocaleString('en-IN')}
+                        ₹{((retailerProfile?.creditLimit || 0) - (retailerProfile?.creditUsed || 0)).toLocaleString('en-IN')}
                       </Typography.Text>
                       <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
                         Limit: ₹50,000
@@ -965,7 +913,7 @@ export function ProfilePage() {
                       ACTIVE COUPONS
                     </Typography.Text>
                     <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
-                      {customerProfile?.couponsCount || 3} Offers
+                      {stats.couponCount} Offers
                     </Typography.Text>
                     <Typography.Text style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                       Apply at Checkout
@@ -1127,10 +1075,10 @@ export function ProfilePage() {
                                         VERIFIED GSTIN
                                       </Tag>
                                       <Typography.Text strong style={{ fontSize: 16, display: 'block' }}>
-                                        {retailerProfile?.gstin || '36AABCU9603R1ZM'}
+                                        {retailerProfile?.gstin || '—'}
                                       </Typography.Text>
                                       <Typography.Text style={{ fontSize: 12, color: '#64748b' }}>
-                                        Registered Name: {retailerProfile?.storeName || 'Sri Balaji Provision Store'} · State: Telangana (36)
+                                        Registered Name: {retailerProfile?.storeName || 'My Store'}
                                       </Typography.Text>
                                     </div>
                                     <Button style={{ borderRadius: 8 }}>View Certificate</Button>

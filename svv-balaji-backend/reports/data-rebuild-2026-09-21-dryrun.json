@@ -1,0 +1,70 @@
+{
+  "removed": {
+    "coin_transactions": 0,
+    "customer_wishlist_items": 0,
+    "customer_addresses": 0,
+    "coupon_redemptions": 0,
+    "customer_otp_challenges": 0,
+    "customer_sessions": 2,
+    "customer_accounts": 2,
+    "orders": 0,
+    "referrals": 0,
+    "checkout_sessions": 0,
+    "customers": 2
+  },
+  "kept": {
+    "products": [
+      "BJ-ALO-500G Aloo Bhujia (500g)",
+      "SC-SPR-95OZ Santa Cruz Organic Fruit Spread",
+      "TB-CHP-125OZ Tony B's Steak Chips Gochu Bang!",
+      "BJ-NAM-100G Classic Namkeen",
+      "DT-ATTA-10KG Premium Chakki Atta",
+      "CF-COF-48FLOZ Califia Farms Pure Black Medium Roast",
+      "DES-PREM Premium Whole Spices Combo – Dalchini, B"
+    ],
+    "categories": [
+      "Banana Chips",
+      "Tortilla Chips",
+      "Spices",
+      "Whole Spices",
+      "Powdered Spices",
+      "Blended Masalas",
+      "Atta & Flour",
+      "Chakki Atta",
+      "Maida",
+      "Besan",
+      "Namkeen",
+      "Bhujia",
+      "Mixtures",
+      "Sev & Gathiya",
+      "Wafers",
+      "Potato Chips"
+    ],
+    "customers": [
+      "Raunak 9111966732"
+    ],
+    "farmers": [
+      "Harsh Pandey SVV-2026-000026"
+    ],
+    "users": [
+      "admin@svvbalaji.com"
+    ],
+    "warehouses": [
+      "Main Store 1789969802",
+      "Secondary Store 1789969802"
+    ],
+    "genuineOrders": [
+      "SO-20260921-151"
+    ]
+  },
+  "rebuilt": [
+    "BJ-ALO-500G / FG-20260921-STOCK-001 / PB-2026-001: FG stock 500 on hand, ledger restated",
+    "SC-SPR-95OZ / FG-20260921-STOCK-002 / PB-2026-002: FG stock 500 on hand, ledger restated",
+    "TB-CHP-125OZ / FG-20260921-STOCK-003 / PB-2026-003: FG stock 500 on hand, ledger restated",
+    "BJ-NAM-100G / FG-20260921-STOCK-004 / PB-2026-004: FG stock 500 on hand, ledger restated",
+    "DT-ATTA-10KG / FG-20260921-STOCK-005 / PB-2026-005: FG stock 500 on hand, ledger restated",
+    "CF-COF-48FLOZ / FG-20260921-STOCK-006 / PB-2026-006: FG stock 500 on hand, ledger restated",
+    "DES-PREM / FG-20260921-STOCK-007 / PB-2026-007: FG stock 500 on hand, ledger restated"
+  ],
+  "notes": []
+}

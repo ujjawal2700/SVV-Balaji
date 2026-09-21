@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { OrderStatus, SalesChannel } from '@prisma/client';
+import { StripOrderSecretsInterceptor } from '../common/strip-order-secrets.interceptor';
+import { RecordReturnDto } from '../loyalty/dto/loyalty.dto';
 import { SalesService } from './sales.service';
 import {
   CancelOrderDto,
@@ -16,6 +18,7 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 @ApiTags('sales')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseInterceptors(StripOrderSecretsInterceptor)
 @Controller('orders')
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
@@ -111,6 +114,19 @@ export class SalesController {
     return this.salesService.allocate(id, user.sub);
   }
 
+  @Post(':id/reallocate')
+  @RequirePermission('orders.allocate')
+  @ApiOperation({
+    summary: 'Re-allocate an order away from frozen or recalled batches',
+    description:
+      'Releases reservations on held/recalled batches and re-picks the same quantities from ' +
+      'ACTIVE stock (first-expiry-first-out). Only for allocated or packed orders; dispatched ' +
+      'orders are handled through the recall forward trace. Returns any shortfall.',
+  })
+  reallocate(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.salesService.reallocate(id, user.sub);
+  }
+
   @Patch(':id/pack')
   @RequirePermission('orders.pack')
   pack(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
@@ -133,6 +149,18 @@ export class SalesController {
   @RequirePermission('orders.deliver')
   deliver(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.salesService.advance(id, OrderStatus.DELIVERED, user.sub);
+  }
+
+  @Post(':id/returns')
+  @RequirePermission('orders.return')
+  @ApiOperation({
+    summary: 'Record returned/refunded items on a delivered order',
+    description:
+      'Reverses, in the same transaction, the loyalty points those items earned - proportionally ' +
+      'to the quantity returned. Points that already expired are not debited twice.',
+  })
+  recordReturn(@Param('id') id: string, @Body() dto: RecordReturnDto, @CurrentUser() user: JwtPayload) {
+    return this.salesService.recordReturn(id, dto, user.sub);
   }
 
   @Patch(':id/cancel')

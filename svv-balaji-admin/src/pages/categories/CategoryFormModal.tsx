@@ -6,6 +6,7 @@ import { FileUploadField } from '../../components/FileUploadField';
 import { useCategories, useCreateCategory, useUpdateCategory } from '@shared/hooks/useCategories';
 import { maxLength, required } from '../../validation/rules';
 import { MOCK_CATEGORIES } from './MainCategoriesPage';
+import { LOYALTY_ELIGIBILITY_LABELS, type LoyaltyEligibility } from '@shared/api/loyalty';
 
 const { Text } = Typography;
 
@@ -48,6 +49,7 @@ export function CategoryFormModal({
         description: category.description || '',
         imageUrl: category.imageUrl || '',
         parentId: category.parentId || undefined,
+        loyaltyEligibility: category.loyaltyEligibility ?? 'INHERIT',
         displayOrder: category.displayOrder ?? 0,
       });
     } else {
@@ -123,7 +125,7 @@ export function CategoryFormModal({
         form={form}
         layout="vertical"
         requiredMark
-        initialValues={{ displayOrder: 0 }}
+        initialValues={{ displayOrder: 0, loyaltyEligibility: 'INHERIT' }}
       >
         {!isEdit && (
           <Form.Item label="Category Classification">
@@ -183,6 +185,19 @@ export function CategoryFormModal({
 
         <Form.Item name="imageUrl" label="Category Image Icon">
           <FileUploadField folder="categories" hint="Recommended ratio 1:1 square image." />
+        </Form.Item>
+
+        <Form.Item
+          name="loyaltyEligibility"
+          label="Loyalty rewards"
+          extra="Default for every product in this category. Inherit follows the parent category, then the program default. A product can override it."
+        >
+          <Select
+            options={(Object.keys(LOYALTY_ELIGIBILITY_LABELS) as LoyaltyEligibility[]).map((value) => ({
+              value,
+              label: LOYALTY_ELIGIBILITY_LABELS[value],
+            }))}
+          />
         </Form.Item>
 
         <Form.Item

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Ip, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SalesChannel } from '@prisma/client';
 import { StorefrontAuthService } from './storefront-auth.service';
@@ -7,6 +7,7 @@ import {
   RegisterRetailerDto,
   RejectAccountDto,
   RequestOtpDto,
+  StorefrontLogoutDto,
   StorefrontRefreshDto,
   UpdateStorefrontProfileDto,
   VerifyOtpDto,
@@ -45,19 +46,21 @@ export class StorefrontAuthController {
       'provider configured yet) the response includes devCode.',
   })
   requestOtp(@Body() dto: RequestOtpDto) {
-    return this.service.requestOtp(dto.phone);
+    return this.service.requestOtp(dto.phone, dto.audience);
   }
 
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Verify the code and sign in',
+    summary: 'Verify the code and sign in (audience CUSTOMER or RETAILER)',
     description:
-      'An unknown number self-provisions as a B2C consumer. A known number signs in as ' +
-      'whatever channel it already is - the caller does not choose.',
+      'CUSTOMER: an unknown number is created as a customer on this first verification (the only ' +
+      'time a referralCode is honoured); a known number is a plain login and any referralCode is ' +
+      'ignored. RETAILER: login only - an unknown number is refused, never turned into a consumer. ' +
+      'Each audience refuses the other one\'s numbers. Creates a server-side session (sid).',
   })
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.service.verifyOtp(dto);
+  verifyOtp(@Body() dto: VerifyOtpDto, @Ip() ip: string, @Headers('user-agent') userAgent?: string) {
+    return this.service.verifyOtp(dto, { ipAddress: ip, userAgent });
   }
 
   @Post('register-retailer')
@@ -80,10 +83,24 @@ export class StorefrontAuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'End this session - its tokens stop working immediately',
+    description:
+      'Send the refresh token in the body and/or the access token as Bearer. Works even when the ' +
+      'access token has expired, and is idempotent.',
+  })
+  logout(@Body() dto: StorefrontLogoutDto, @Headers('authorization') authorization?: string) {
+    const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+    return this.service.logoutWithTokens({ refreshToken: dto?.refreshToken, accessToken });
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseGuards(CustomerJwtAuthGuard)
-  logout(@CurrentCustomer() customer: CustomerJwtPayload) {
-    return this.service.logout(customer.sub);
+  @ApiOperation({ summary: 'End every session of this account (all devices)' })
+  logoutAll(@CurrentCustomer() customer: CustomerJwtPayload) {
+    return this.service.logoutAll(customer.sub);
   }
 
   @Get('me')

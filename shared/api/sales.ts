@@ -1,6 +1,7 @@
 import { api } from './client';
 import { pruneEmpty, unwrap, unwrapList, type Paginated } from './envelope';
 import type {
+  ReallocationResult,
   AllocationResult,
   CreateOrderInput,
   Order,
@@ -51,6 +52,12 @@ export const salesApi = {
    * warehouse, reserves it, and returns exactly what goes on the picking slip.
    * The panel does not choose batches — it could not do so correctly.
    */
+  /** Swap allocations off frozen/recalled batches onto healthy stock (pre-dispatch orders only). */
+  async reallocate(id: string): Promise<ReallocationResult> {
+    const response = await api.post<ReallocationResult>(`/orders/${id}/reallocate`);
+    return unwrap<ReallocationResult>(response.data);
+  },
+
   async allocate(id: string): Promise<AllocationResult> {
     const response = await api.post<AllocationResult>(`/orders/${id}/allocate`);
     return unwrap<AllocationResult>(response.data);

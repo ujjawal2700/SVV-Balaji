@@ -15,7 +15,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiQuery, ApiTags, PartialType } from '@nestjs/swagger';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { LoyaltyEligibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertDeletable } from '../common/dependants';
 import { SetActiveDto } from '../common/dto/set-active.dto';
@@ -44,6 +45,14 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({
+    enum: LoyaltyEligibility,
+    description: 'Loyalty default for products in this category. INHERIT = follow the parent, then the program default.',
+  })
+  @IsOptional()
+  @IsEnum(LoyaltyEligibility)
+  loyaltyEligibility?: LoyaltyEligibility;
 
   @ApiPropertyOptional({ description: 'Parent category, for a two-level hierarchy.' })
   @IsOptional()
@@ -95,6 +104,7 @@ export class CategoriesService {
         description: dto.description,
         imageUrl: dto.imageUrl,
         parentId: dto.parentId,
+        loyaltyEligibility: dto.loyaltyEligibility,
         displayOrder: dto.displayOrder ?? 0,
       },
     });
@@ -151,6 +161,7 @@ export class CategoriesService {
         description: dto.description,
         imageUrl: dto.imageUrl,
         parentId: dto.parentId,
+        loyaltyEligibility: dto.loyaltyEligibility,
         displayOrder: dto.displayOrder,
       },
     });

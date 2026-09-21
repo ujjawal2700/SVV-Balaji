@@ -1,245 +1,784 @@
 import {
   ArrowLeftOutlined,
-  CheckCircleFilled,
-  EnvironmentOutlined,
-  EditOutlined,
-  CreditCardOutlined,
-  WalletOutlined,
   BankOutlined,
+  CarOutlined,
+  CheckCircleFilled,
+  CreditCardOutlined,
+  EnvironmentOutlined,
+  GiftOutlined,
+  LockOutlined,
+  PlusOutlined,
+  SafetyCertificateOutlined,
+  ShoppingOutlined,
+  ThunderboltOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
-import { GiftOutlined } from '@ant-design/icons';
-import { Button, Divider, Radio, Typography, message } from 'antd';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Divider,
+  Input,
+  InputNumber,
+  Modal,
+  Radio,
+  Row as AntRow,
+  Skeleton,
+  Space,
+  Switch,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  checkoutApi,
+  checkoutError,
+  type CheckoutRequest,
+  type CheckoutSession,
+  type PaymentMode,
+  type PlacedOrder,
+} from '../api/checkout';
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { AddressFormModal } from '../components/AddressFormModal';
+import { LOYALTY_QUERY_KEY } from '../loyalty/LoyaltyProvider';
 import { formatInr } from '../utils/money';
+import { ADDRESSES_KEY } from './AddressesPage';
 
+const COUPON_KEY = 'applied_coupon_code';
 
-const defaultAddress = {
-  id: 'addr-1',
-  type: 'Home',
-  name: 'Rahul Sharma',
-  phone: '9876543210',
-  addressLine1: '123 Main St, Apartment 4B',
-  addressLine2: 'Andheri West',
-  city: 'Mumbai',
-  state: 'Maharashtra',
-  pincode: '400001',
+const MODE_LABEL: Record<PaymentMode, { title: string; hint: string; icon: React.ReactNode }> = {
+  ONLINE: { title: 'Pay Online (UPI / Cards / Netbanking)', hint: 'Instant confirmation via Razorpay/Gateway', icon: <CreditCardOutlined style={{ fontSize: 18, color: '#f97316' }} /> },
+  COD: { title: 'Cash on Delivery', hint: 'Pay via cash or UPI when order arrives', icon: <WalletOutlined style={{ fontSize: 18, color: '#16a34a' }} /> },
+  CREDIT: { title: 'On Account (Credit Terms)', hint: 'Billed against your verified B2B credit limit', icon: <BankOutlined style={{ fontSize: 18, color: '#2563eb' }} /> },
 };
 
-const DELIVERY_CHARGE = 49;
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+
+function loadRazorpay(): Promise<void> {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load the payment window'));
+    document.body.appendChild(s);
+  });
+}
 
 /**
- * Checkout — second half of FRD 29.2.
- *
- * Where the browser-side cart becomes a real order: delivery address, server-
- * side re-pricing of every line, a stock check, then order creation and payment.
- *
- * The gap here is not cosmetic. The whole sales module was built for B2B — an
- * order belongs to a `Customer` with a credit limit, a payment term and a price
- * list, and is placed by a staff member on that customer's behalf. A member of
- * the public has none of those. Whether a B2C order reuses `Order` with a
- * different customer type, or is its own thing, is the first design decision of
- * WS3.5 and it is a client conversation, not a coding one.
+ * Responsive Checkout Page
+ * Supports seamless desktop 2-column layout and mobile-optimized single-column flow.
  */
 export function CheckoutPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const cart = useCart();
-  const loyalty = useLoyalty();
-  const [selectedAddress, setSelectedAddress] = useState<any>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>('cod');
+  const { role } = useCustomerAuth();
+
+  const [addressId, setAddressId] = useState<string | null>(null);
+  const [addressModal, setAddressModal] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponCode, setCouponCode] = useState<string>(() => sessionStorage.getItem(COUPON_KEY) ?? '');
+  const [redeem, setRedeem] = useState(0);
+  const [mode, setMode] = useState<PaymentMode | undefined>();
+  const [placing, setPlacing] = useState(false);
+  const [mockSession, setMockSession] = useState<CheckoutSession | null>(null);
+
+  const addresses = useQuery({ queryKey: ADDRESSES_KEY, queryFn: checkoutApi.addresses, enabled: role !== 'GUEST' });
+  const offers = useQuery({ queryKey: ['storefront', 'coupons'], queryFn: checkoutApi.coupons, enabled: role !== 'GUEST' });
 
   useEffect(() => {
-    // Read selected address from localStorage (synced with AddressesPage)
-    const storedAddrsStr = localStorage.getItem('mockAddresses');
-    const storedSelectedId = localStorage.getItem('selectedAddressId') || 'addr-1';
-    if (storedAddrsStr) {
-      const addrs = JSON.parse(storedAddrsStr);
-      const found = addrs.find((a: any) => a.id === storedSelectedId) || addrs[0];
-      setSelectedAddress(found || defaultAddress);
-    } else {
-      setSelectedAddress(defaultAddress);
+    if (!addresses.data?.length) return;
+    if (!addressId || !addresses.data.some((a) => a.id === addressId)) {
+      setAddressId((addresses.data.find((a) => a.isDefault) ?? addresses.data[0]).id);
     }
-  }, []);
+  }, [addresses.data, addressId]);
 
-  // Price calculations
-  const mrpTotal = cart.lines.reduce((sum, l) => sum + (l.mrp || l.displayUnitPrice) * l.quantity, 0);
-  const sellingTotal = cart.lines.reduce((sum, l) => sum + l.displayUnitPrice * l.quantity, 0);
-  const discount = mrpTotal - sellingTotal;
-  const deliveryFee = sellingTotal >= 500 ? 0 : DELIVERY_CHARGE;
-  const grandTotal = sellingTotal + deliveryFee;
+  const request: CheckoutRequest | null = useMemo(
+    () =>
+      addressId && cart.lines.length > 0
+        ? {
+            addressId,
+            items: cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+            couponCode: couponCode || undefined,
+            redeemPoints: redeem || undefined,
+            paymentMode: mode,
+          }
+        : null,
+    [addressId, cart.lines, couponCode, redeem, mode],
+  );
 
-  const loyaltyLines = cart.lines.map((l) => ({ productName: l.productName, price: l.displayUnitPrice ?? 0, quantity: l.quantity }));
-  const estimatedPoints = loyalty.estimateOrderPoints(loyaltyLines);
+  const quoteQuery = useQuery({
+    queryKey: ['storefront', 'checkout', 'quote', request],
+    queryFn: () => checkoutApi.quote(request as CheckoutRequest),
+    enabled: request !== null,
+    retry: false,
+    staleTime: 0,
+  });
+  const quote = quoteQuery.data;
+  const quoteError = quoteQuery.error ? checkoutError(quoteQuery.error).message : null;
+  const address = addresses.data?.find((a) => a.id === addressId);
 
-  const handlePlaceOrder = () => {
-    const orderId = `ORD-${Math.floor(10000000 + Math.random() * 89999999)}`;
-    const earnedPoints = loyalty.earnForOrder(orderId, loyaltyLines);
-    message.success(
-      earnedPoints > 0
-        ? `Order placed successfully! 🎉 You earned ${earnedPoints} loyalty points.`
-        : 'Order placed successfully! 🎉',
-    );
-    cart.clear();
-    setTimeout(() => navigate('/orders'), 800);
+  const applyCoupon = (code: string) => {
+    const c = code.trim().toUpperCase();
+    setCouponCode(c);
+    if (c) sessionStorage.setItem(COUPON_KEY, c);
+    else sessionStorage.removeItem(COUPON_KEY);
+    setCouponInput('');
   };
 
+  const finish = (order: PlacedOrder) => {
+    cart.clear();
+    sessionStorage.removeItem(COUPON_KEY);
+    void qc.invalidateQueries({ queryKey: LOYALTY_QUERY_KEY });
+    message.success('Order placed successfully! 🎉');
+    navigate(`/orders/${order.orderNumber}`, { replace: true, state: { justPlaced: true } });
+  };
+
+  const handleError = (error: unknown) => {
+    const e = checkoutError(error);
+    if (e.code === 'PRICE_CHANGED') message.warning(e.message, 6);
+    else if (e.code === 'OUT_OF_STOCK') message.error('Some items just sold out. Please review your cart.', 6);
+    else if (e.code === 'PAYMENT_FAILED' || e.code === 'REFUND_REQUIRED') message.error(e.message, 8);
+    else message.error(e.message, 6);
+    void qc.invalidateQueries({ queryKey: ['storefront', 'checkout', 'quote'] });
+  };
+
+  const confirmMock = async (session: CheckoutSession, ok: boolean) => {
+    setMockSession(null);
+    setPlacing(true);
+    try {
+      const order = await checkoutApi.confirm(session.sessionId, {
+        gatewayPaymentId: `${ok ? 'mockpay' : 'mockfail'}_${Date.now()}`,
+        signature: ok ? 'mock_signature' : 'declined',
+      });
+      finish(order);
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const payWithRazorpay = async (session: CheckoutSession) => {
+    const g = session.payment.gateway!;
+    await loadRazorpay();
+    const rz = new window.Razorpay!({
+      key: g.keyId,
+      order_id: g.gatewayOrderId,
+      amount: g.amount,
+      currency: g.currency,
+      name: 'SVV Balaji',
+      prefill: { name: address?.fullName, contact: address?.phone },
+      handler: async (resp: { razorpay_payment_id: string; razorpay_signature: string }) => {
+        try {
+          finish(await checkoutApi.confirm(session.sessionId, { gatewayPaymentId: resp.razorpay_payment_id, signature: resp.razorpay_signature }));
+        } catch (error) {
+          handleError(error);
+        } finally {
+          setPlacing(false);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          void checkoutApi.abort(session.sessionId).catch(() => undefined);
+          setPlacing(false);
+        },
+      },
+    });
+    rz.open();
+  };
+
+  const placeOrder = async () => {
+    if (!request || !quote) return;
+    setPlacing(true);
+    try {
+      const session = await checkoutApi.start({ ...request, paymentMode: request.paymentMode ?? quote.payment.mode, expectedTotal: quote.totals.totalPayable });
+      if (!session.payment.requiresPayment) {
+        finish(await checkoutApi.confirm(session.sessionId, {}));
+        setPlacing(false);
+      } else if (session.payment.gateway?.provider === 'razorpay') {
+        await payWithRazorpay(session);
+      } else {
+        setMockSession(session);
+        setPlacing(false);
+      }
+    } catch (error) {
+      handleError(error);
+      setPlacing(false);
+    }
+  };
+
+  const cancelMock = async () => {
+    const s = mockSession;
+    setMockSession(null);
+    if (s) await checkoutApi.abort(s.sessionId).catch(() => undefined);
+    message.info('Payment cancelled - reserved stock has been released');
+  };
+
+  if (role === 'GUEST') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '40px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: '32px 24px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <LockOutlined style={{ fontSize: 24, color: '#f97316' }} />
+          </div>
+          <Typography.Title level={4} style={{ margin: '0 0 8px', color: '#1e293b' }}>Sign in to Checkout</Typography.Title>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 24, fontSize: 14 }}>
+            Please sign in with your phone number to access saved addresses and place orders.
+          </Typography.Paragraph>
+          <Button type="primary" size="large" block onClick={() => navigate('/login')} style={{ background: '#f97316', borderColor: '#f97316', height: 46, borderRadius: 10, fontWeight: 600 }}>
+            Sign In with OTP
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (cart.lines.length === 0) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '40px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: '36px 24px', maxWidth: 440, width: '100%', textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <ShoppingOutlined style={{ fontSize: 28, color: '#f97316' }} />
+          </div>
+          <Typography.Title level={4} style={{ margin: '0 0 8px', color: '#1e293b' }}>Your Cart is Empty</Typography.Title>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 24, fontSize: 14 }}>
+            You don't have any items in your cart to checkout.
+          </Typography.Paragraph>
+          <Button type="primary" size="large" block onClick={() => navigate('/')} style={{ background: '#f97316', borderColor: '#f97316', height: 46, borderRadius: 10, fontWeight: 600 }}>
+            Continue Shopping
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const f = quote?.fulfillment;
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 100 }}>
-      {/* Header */}
+    <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 110 }}>
+      {/* Sticky Header */}
       <header
         style={{
           background: '#fff',
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+          padding: '14px 20px',
+          borderBottom: '1px solid #e2e8f0',
           position: 'sticky',
           top: 0,
           zIndex: 100,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
         }}
       >
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }}>
-          <ArrowLeftOutlined style={{ fontSize: 20 }} />
-        </button>
-        <Typography.Text strong style={{ fontSize: 16 }}>Checkout</Typography.Text>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                background: '#f1f5f9',
+                border: 'none',
+                borderRadius: '50%',
+                width: 36,
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              title="Go Back"
+            >
+              <ArrowLeftOutlined style={{ fontSize: 16, color: '#334155' }} />
+            </button>
+            <div>
+              <Typography.Title level={4} style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>
+                Secure Checkout
+              </Typography.Title>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {cart.count} {cart.count === 1 ? 'item' : 'items'} in your cart
+              </Typography.Text>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#16a34a', fontSize: 13, fontWeight: 600 }}>
+            <SafetyCertificateOutlined style={{ fontSize: 16 }} />
+            <span style={{ display: 'none' }} className="desktop-inline">100% Secure &amp; Verified</span>
+          </div>
+        </div>
       </header>
 
-      <div style={{ padding: '12px' }}>
-
-        {/* Delivery Address */}
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <EnvironmentOutlined style={{ color: '#f97316', fontSize: 16 }} />
-            <Typography.Text strong style={{ fontSize: 15 }}>Delivery Address</Typography.Text>
-          </div>
-
-          {selectedAddress && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <Typography.Text strong style={{ fontSize: 14 }}>{selectedAddress.name}</Typography.Text>
-                  <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: '#475569', fontWeight: 600 }}>
-                    {selectedAddress.type}
-                  </span>
-                </div>
-                <Typography.Text style={{ fontSize: 13, color: '#424242', display: 'block', lineHeight: 1.6 }}>
-                  {selectedAddress.addressLine1}, {selectedAddress.addressLine2}<br />
-                  {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode}
-                </Typography.Text>
-                <Typography.Text style={{ fontSize: 13, color: '#424242', display: 'block', marginTop: 4 }}>
-                  Phone: <Typography.Text strong>{selectedAddress.phone}</Typography.Text>
-                </Typography.Text>
-              </div>
-              <button
-                onClick={() => navigate('/addresses')}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#f97316', fontSize: 13, fontWeight: 600, flexShrink: 0 }}
+      {/* Main Content Area */}
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
+        <AntRow gutter={[24, 24]}>
+          {/* Left Column: Form Details (Address, Fulfillment, Coupons, Payment) */}
+          <Col xs={24} lg={15} xl={16}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* 1. Delivery Address Card */}
+              <Card
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
+                    <EnvironmentOutlined style={{ color: '#f97316' }} /> Delivery Address
+                  </div>
+                }
+                extra={
+                  (addresses.data ?? []).length > 0 ? (
+                    <Button type="link" icon={<PlusOutlined />} onClick={() => setAddressModal(true)} style={{ color: '#f97316', padding: 0, fontWeight: 600 }}>
+                      + Add New
+                    </Button>
+                  ) : null
+                }
+                style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
               >
-                <EditOutlined /> Change
-              </button>
-            </div>
-          )}
-        </div>
+                {addresses.isLoading ? (
+                  <Skeleton active paragraph={{ rows: 2 }} />
+                ) : (addresses.data ?? []).length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+                      No saved addresses found. Please add a delivery address to proceed.
+                    </Typography.Paragraph>
+                    <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddressModal(true)} style={{ background: '#f97316', borderColor: '#f97316' }}>
+                      Add Delivery Address
+                    </Button>
+                  </div>
+                ) : (
+                  <Radio.Group value={addressId} onChange={(e) => setAddressId(e.target.value)} style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                      {addresses.data!.map((a) => {
+                        const isSelected = a.id === addressId;
+                        return (
+                          <div
+                            key={a.id}
+                            onClick={() => setAddressId(a.id)}
+                            style={{
+                              padding: '14px 16px',
+                              borderRadius: 12,
+                              border: isSelected ? '2px solid #f97316' : '1px solid #e2e8f0',
+                              background: isSelected ? '#fffaf5' : '#fff',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 12,
+                            }}
+                          >
+                            <Radio value={a.id} style={{ marginTop: 2 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                                <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                                  {a.fullName}
+                                </Typography.Text>
+                                <Tag color={a.label.toUpperCase() === 'HOME' ? 'blue' : a.label.toUpperCase() === 'WORK' ? 'purple' : 'default'} style={{ borderRadius: 4, margin: 0, fontSize: 11, fontWeight: 600 }}>
+                                  {a.label}
+                                </Tag>
+                                {a.latitude ? <Tag color="green" style={{ borderRadius: 4, margin: 0, fontSize: 11 }}>📍 Pinned Location</Tag> : null}
+                              </div>
+                              <Typography.Text style={{ fontSize: 13, color: '#475569', display: 'block', lineHeight: 1.5 }}>
+                                {[a.line1, a.line2].filter(Boolean).join(', ')}, {a.city}, {a.state} - <strong>{a.pincode}</strong>
+                              </Typography.Text>
+                              <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                                Phone: {a.phone}
+                              </Typography.Text>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </Space>
+                  </Radio.Group>
+                )}
+              </Card>
 
-        {/* Order Items */}
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <Typography.Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>
-            Order Items ({cart.count})
-          </Typography.Text>
-          {cart.lines.map((line, idx) => (
-            <div key={line.productId}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 56, height: 56, borderRadius: 8, background: '#f5f5f5', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {line.imageUrl
-                    ? <img src={line.imageUrl} alt={line.productName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                    : <Typography.Text style={{ fontSize: 10, color: '#aaa', textAlign: 'center', padding: 4 }}>{line.productName}</Typography.Text>
+              {/* 2. Delivery & Fulfillment Method */}
+              <Card
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
+                    {f?.method === 'LOCAL' ? <ThunderboltOutlined style={{ color: '#16a34a' }} /> : <CarOutlined style={{ color: '#2563eb' }} />}
+                    Delivery &amp; Fulfillment
+                  </div>
+                }
+                style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+              >
+                {quoteQuery.isLoading ? (
+                  <Skeleton active paragraph={{ rows: 2 }} />
+                ) : quoteError ? (
+                  <Alert type="error" showIcon message="Delivery Quote Error" description={quoteError} />
+                ) : f ? (
+                  <div style={{ background: f.method === 'LOCAL' ? '#f0fdf4' : '#eff6ff', borderRadius: 12, padding: 16, border: f.method === 'LOCAL' ? '1px solid #bbf7d0' : '1px solid #bfdbfe' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Tag color={f.method === 'LOCAL' ? 'green' : 'blue'} style={{ fontSize: 12, padding: '2px 8px', fontWeight: 700 }}>
+                          {f.method === 'LOCAL' ? '⚡ EXPRESS LOCAL DELIVERY' : '📦 COURIER SHIPMENT'}
+                        </Tag>
+                        <Typography.Text strong style={{ fontSize: 14, color: '#1e293b' }}>
+                          From: {f.nodeName}
+                        </Typography.Text>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: f.method === 'LOCAL' ? '#166534' : '#1e40af' }}>
+                        ETA: {f.etaLabel}
+                      </div>
+                    </div>
+                    <Typography.Text style={{ fontSize: 13, color: '#475569', display: 'block' }}>
+                      {f.reason}
+                    </Typography.Text>
+                    {f.method === 'SHIPROCKET' && address && !address.latitude ? (
+                      <Alert
+                        style={{ marginTop: 12, borderRadius: 8 }}
+                        type="info"
+                        showIcon
+                        message="Want faster doorstep delivery?"
+                        description="Click 'Add New' or edit your address to Pin your exact GPS location for local outlet fulfillment."
+                      />
+                    ) : null}
+                  </div>
+                ) : (
+                  <Typography.Text type="secondary">Select a delivery address to calculate shipping &amp; delivery window.</Typography.Text>
+                )}
+              </Card>
+
+              {/* 3. Offers, Coupons & Loyalty Rewards */}
+              <Card
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
+                    <GiftOutlined style={{ color: '#f97316' }} /> Offers &amp; Loyalty Rewards
+                  </div>
+                }
+                style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+              >
+                {couponCode ? (
+                  <div
+                    style={{
+                      background: '#fff7ed',
+                      border: '1px dashed #f97316',
+                      borderRadius: 10,
+                      padding: '12px 16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Tag color="orange" style={{ fontWeight: 700, fontSize: 13, padding: '2px 8px' }}>
+                        {couponCode}
+                      </Tag>
+                      <Typography.Text strong style={{ color: '#c2410c', fontSize: 13 }}>
+                        APPLIED SUCCESSFULLY
+                      </Typography.Text>
+                    </div>
+                    <Button type="link" danger onClick={() => applyCoupon('')} style={{ fontWeight: 600, padding: 0 }}>
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input
+                        placeholder="Enter Promo or Coupon Code"
+                        size="large"
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value)}
+                        onPressEnter={() => applyCoupon(couponInput)}
+                        style={{ borderRadius: '8px 0 0 8px' }}
+                      />
+                      <Button
+                        type="primary"
+                        size="large"
+                        onClick={() => applyCoupon(couponInput)}
+                        style={{ background: '#f97316', borderColor: '#f97316', borderRadius: '0 8px 8px 0', fontWeight: 600 }}
+                      >
+                        Apply
+                      </Button>
+                    </Space.Compact>
+
+                    {!couponCode && (offers.data ?? []).length > 0 ? (
+                      <div style={{ marginTop: 12 }}>
+                        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                          Available offers for you:
+                        </Typography.Text>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {offers.data!.slice(0, 4).map((o) => (
+                            <Tag
+                              key={o.code}
+                              color="gold"
+                              style={{ cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: 12 }}
+                              onClick={() => applyCoupon(o.code)}
+                            >
+                              <strong>{o.code}</strong> · {o.title}
+                            </Tag>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {quote?.loyalty.enabled && quote.loyalty.balance > 0 ? (
+                  <>
+                    <Divider style={{ margin: '16px 0' }} />
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        padding: '14px 16px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                            Redeem Loyalty Coins
+                          </Typography.Text>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            Available: <strong>{quote.loyalty.balance} pts</strong> (Worth ₹{(quote.loyalty.balance * quote.loyalty.pointValueInr).toFixed(2)})
+                          </div>
+                        </div>
+                        <Switch
+                          checked={redeem > 0}
+                          disabled={quote.loyalty.maxPoints === 0}
+                          onChange={(on) => setRedeem(on ? quote.loyalty.maxPoints : 0)}
+                        />
+                      </div>
+                      {redeem > 0 ? (
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <InputNumber
+                            size="middle"
+                            min={quote.loyalty.minPoints || 1}
+                            max={quote.loyalty.maxPoints}
+                            precision={0}
+                            value={redeem}
+                            onChange={(v) => setRedeem(v ?? 0)}
+                            addonAfter="pts"
+                            style={{ width: 160 }}
+                          />
+                          <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>
+                            − {formatInr(redeem * quote.loyalty.pointValueInr)} saved on this order
+                          </Typography.Text>
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </Card>
+
+              {/* 4. Payment Options */}
+              {quote ? (
+                <Card
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
+                      <CreditCardOutlined style={{ color: '#f97316' }} /> Payment Options
+                    </div>
                   }
+                  style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+                >
+                  <Radio.Group value={quote.payment.mode} onChange={(e) => setMode(e.target.value)} style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                      {quote.payment.allowedModes.map((m) => {
+                        const isSelected = quote.payment.mode === m;
+                        return (
+                          <div
+                            key={m}
+                            onClick={() => setMode(m)}
+                            style={{
+                              padding: '14px 16px',
+                              borderRadius: 12,
+                              border: isSelected ? '2px solid #f97316' : '1px solid #e2e8f0',
+                              background: isSelected ? '#fffaf5' : '#fff',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <Radio value={m} />
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {MODE_LABEL[m].icon}
+                                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                                    {MODE_LABEL[m].title}
+                                  </Typography.Text>
+                                </div>
+                                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+                                  {MODE_LABEL[m].hint}
+                                </Typography.Text>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </Space>
+                  </Radio.Group>
+
+                  {quote.payment.codUnavailableReason && quote.channel === 'B2C' ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8, color: '#94a3b8' }}>
+                      ℹ️ {quote.payment.codUnavailableReason}
+                    </Typography.Text>
+                  ) : null}
+                  {quote.payment.creditUnavailableReason && quote.channel === 'B2B' ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8, color: '#94a3b8' }}>
+                      ℹ️ {quote.payment.creditUnavailableReason}
+                    </Typography.Text>
+                  ) : null}
+                </Card>
+              ) : null}
+            </div>
+          </Col>
+
+          {/* Right Column: Sticky Order Summary & Price Breakdown */}
+          <Col xs={24} lg={9} xl={8}>
+            <div style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Items in Order */}
+              {quote ? (
+                <Card
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>Order Items ({quote.lines.length})</span>
+                      <Link to="/cart" style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>Edit Cart</Link>
+                    </div>
+                  }
+                  style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+                >
+                  <div style={{ maxHeight: 240, overflowY: 'auto', paddingRight: 4 }}>
+                    {quote.lines.map((l) => (
+                      <div
+                        key={l.productId}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 0',
+                          borderBottom: '1px solid #f1f5f9',
+                          fontSize: 13,
+                        }}
+                      >
+                        <div style={{ flex: 1, paddingRight: 8 }}>
+                          <Typography.Text strong style={{ fontSize: 13, color: '#334155', display: 'block' }}>
+                            {l.name}
+                          </Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            Qty: {l.quantity}
+                          </Typography.Text>
+                        </div>
+                        <Typography.Text strong style={{ fontSize: 13, color: '#0f172a' }}>
+                          {formatInr(l.gross)}
+                        </Typography.Text>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Divider style={{ margin: '14px 0' }} />
+
+                  {/* Price Breakdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <PriceRow label="Items Subtotal" value={formatInr(quote.totals.subtotal)} />
+                    {quote.totals.couponDiscount > 0 ? (
+                      <PriceRow
+                        label={`Coupon Discount (${quote.coupon?.code})`}
+                        value={`− ${formatInr(quote.totals.couponDiscount)}`}
+                        green
+                      />
+                    ) : null}
+                    {quote.totals.loyaltyDiscount > 0 ? (
+                      <PriceRow
+                        label="Loyalty Coins Used"
+                        value={`− ${formatInr(quote.totals.loyaltyDiscount)}`}
+                        green
+                      />
+                    ) : null}
+                    <PriceRow label="Estimated GST / Taxes" value={formatInr(quote.totals.tax)} />
+                    <PriceRow
+                      label="Delivery Charges"
+                      value={quote.totals.deliveryFee === 0 ? 'FREE' : formatInr(quote.totals.deliveryFee)}
+                      green={quote.totals.deliveryFee === 0}
+                    />
+
+                    <Divider style={{ margin: '10px 0' }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
+                      <div>
+                        <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', display: 'block' }}>
+                          Total Payable
+                        </Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                          Inclusive of all taxes
+                        </Typography.Text>
+                      </div>
+                      <Typography.Text strong style={{ fontSize: 22, color: '#0f172a' }}>
+                        {formatInr(quote.totals.totalPayable)}
+                      </Typography.Text>
+                    </div>
+                  </div>
+
+                  {/* Desktop Action Button */}
+                  <div style={{ marginTop: 20 }}>
+                    <Button
+                      type="primary"
+                      size="large"
+                      block
+                      loading={placing}
+                      disabled={!quote || placing}
+                      onClick={() => void placeOrder()}
+                      style={{
+                        background: '#f97316',
+                        borderColor: '#f97316',
+                        height: 50,
+                        borderRadius: 12,
+                        fontSize: 16,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
+                      }}
+                    >
+                      <LockOutlined />
+                      {quote.payment.mode === 'ONLINE' && quote.totals.totalPayable > 0
+                        ? `Pay ${formatInr(quote.totals.totalPayable)}`
+                        : `Place Order · ${formatInr(quote.totals.totalPayable)}`}
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
+
+              {/* Trust Badges */}
+              <div
+                style={{
+                  background: '#fff',
+                  borderRadius: 12,
+                  padding: '16px',
+                  border: '1px solid #e2e8f0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#475569' }}>
+                  <CheckCircleFilled style={{ color: '#16a34a', fontSize: 16 }} />
+                  <span>100% Direct from Verified Mandi Farmers</span>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <Typography.Text strong style={{ fontSize: 13, display: 'block', color: '#212121' }}>{line.productName}</Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>{line.unit} × {line.quantity}</Typography.Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#475569' }}>
+                  <SafetyCertificateOutlined style={{ color: '#2563eb', fontSize: 16 }} />
+                  <span>Unhindered Batch Traceability &amp; Lab Tested</span>
                 </div>
-                <Typography.Text strong style={{ fontSize: 14 }}>{formatInr(line.displayUnitPrice * line.quantity)}</Typography.Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#475569' }}>
+                  <ThunderboltOutlined style={{ color: '#f59e0b', fontSize: 16 }} />
+                  <span>Fast Local Delivery with Doorstep OTP</span>
+                </div>
               </div>
-              {idx < cart.lines.length - 1 && <Divider style={{ margin: '12px 0' }} />}
             </div>
-          ))}
-        </div>
+          </Col>
+        </AntRow>
+      </main>
 
-        {/* Payment Method */}
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <Typography.Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>Payment Method</Typography.Text>
-          <Radio.Group value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Radio value="cod" style={{ padding: '10px 12px', border: paymentMethod === 'cod' ? '1px solid #f97316' : '1px solid #e0e0e0', borderRadius: 8, background: paymentMethod === 'cod' ? '#fff3ed' : '#fff' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <WalletOutlined style={{ color: '#f97316' }} />
-                <Typography.Text strong>Cash on Delivery</Typography.Text>
-              </div>
-            </Radio>
-            <Radio value="upi" style={{ padding: '10px 12px', border: paymentMethod === 'upi' ? '1px solid #f97316' : '1px solid #e0e0e0', borderRadius: 8, background: paymentMethod === 'upi' ? '#fff3ed' : '#fff' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <BankOutlined style={{ color: '#f97316' }} />
-                <Typography.Text strong>UPI / Net Banking</Typography.Text>
-              </div>
-            </Radio>
-            <Radio value="card" style={{ padding: '10px 12px', border: paymentMethod === 'card' ? '1px solid #f97316' : '1px solid #e0e0e0', borderRadius: 8, background: paymentMethod === 'card' ? '#fff3ed' : '#fff' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <CreditCardOutlined style={{ color: '#f97316' }} />
-                <Typography.Text strong>Credit / Debit Card</Typography.Text>
-              </div>
-            </Radio>
-          </Radio.Group>
-        </div>
-
-        {/* Price Breakdown */}
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <Typography.Text strong style={{ fontSize: 15, display: 'block', marginBottom: 16 }}>Price Details</Typography.Text>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Total MRP ({cart.count} items)</Typography.Text>
-            <Typography.Text style={{ fontSize: 13 }}>{formatInr(mrpTotal)}</Typography.Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Discount on MRP</Typography.Text>
-            <Typography.Text style={{ color: '#16a34a', fontSize: 13 }}>-{formatInr(discount)}</Typography.Text>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Typography.Text style={{ color: '#424242', fontSize: 13 }}>Delivery Fee</Typography.Text>
-            <Typography.Text style={{ color: deliveryFee === 0 ? '#16a34a' : '#212121', fontSize: 13 }}>
-              {deliveryFee === 0 ? 'FREE' : formatInr(deliveryFee)}
-            </Typography.Text>
-          </div>
-
-          <Divider style={{ margin: '12px 0' }} />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Typography.Text strong style={{ fontSize: 15 }}>Total Amount</Typography.Text>
-            <Typography.Text strong style={{ fontSize: 16, color: '#212121' }}>{formatInr(grandTotal)}</Typography.Text>
-          </div>
-
-          {discount > 0 && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: estimatedPoints > 0 ? 10 : 0 }}>
-              <CheckCircleFilled style={{ color: '#16a34a' }} />
-              <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
-                You're saving {formatInr(discount)} on this order!
-              </Typography.Text>
-            </div>
-          )}
-
-          {estimatedPoints > 0 && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <GiftOutlined style={{ color: '#d97706' }} />
-              <Typography.Text style={{ color: '#92400e', fontSize: 13, fontWeight: 500 }}>
-                You'll earn {estimatedPoints} loyalty points on this order
-              </Typography.Text>
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* Sticky Place Order Button */}
+      {/* Mobile Sticky Bottom Bar */}
       <div
         style={{
           position: 'fixed',
@@ -248,26 +787,102 @@ export function CheckoutPage() {
           right: 0,
           background: '#fff',
           padding: '12px 16px',
-          boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
+          zIndex: 99,
+          borderTop: '1px solid #e2e8f0',
         }}
+        className="mobile-only"
       >
-        <div>
-          <Typography.Text strong style={{ fontSize: 18, color: '#212121' }}>{formatInr(grandTotal)}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{cart.count} items</Typography.Text>
+        <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          {quote ? (
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                TOTAL PAYABLE
+              </Typography.Text>
+              <Typography.Text strong style={{ fontSize: 18, color: '#0f172a' }}>
+                {formatInr(quote.totals.totalPayable)}
+              </Typography.Text>
+            </div>
+          ) : (
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>Calculating total...</Typography.Text>
+            </div>
+          )}
+
+          <Button
+            type="primary"
+            size="large"
+            loading={placing}
+            disabled={!quote || placing}
+            onClick={() => void placeOrder()}
+            style={{
+              background: '#f97316',
+              borderColor: '#f97316',
+              height: 46,
+              padding: '0 24px',
+              borderRadius: 10,
+              fontSize: 15,
+              fontWeight: 700,
+              flex: 1,
+              maxWidth: 240,
+            }}
+          >
+            {quote ? (quote.payment.mode === 'ONLINE' && quote.totals.totalPayable > 0 ? 'Pay Now' : 'Place Order') : 'Place Order'}
+          </Button>
         </div>
-        <Button
-          type="primary"
-          size="large"
-          style={{ background: '#f97316', borderColor: '#f97316', flex: 1, height: 48, fontWeight: 600, fontSize: 15 }}
-          onClick={handlePlaceOrder}
-        >
-          Place Order
-        </Button>
       </div>
+
+      {/* Add Address Modal */}
+      <AddressFormModal
+        open={addressModal}
+        onClose={() => setAddressModal(false)}
+        onSaved={(a) => {
+          void qc.invalidateQueries({ queryKey: ADDRESSES_KEY });
+          setAddressId(a.id);
+        }}
+      />
+
+      {/* Mock Development Payment Gateway Modal */}
+      <Modal
+        open={mockSession !== null}
+        title="Test Payment (Development Gateway)"
+        onCancel={() => void cancelMock()}
+        footer={null}
+        maskClosable={false}
+      >
+        <Typography.Paragraph>
+          This is the mock payment gateway simulated in development environment. Order Amount:{' '}
+          <strong>{mockSession ? formatInr(mockSession.payment.amount) : ''}</strong>. Stock reservations are held for 15 minutes.
+        </Typography.Paragraph>
+        <Space wrap style={{ marginTop: 12 }}>
+          <Button type="primary" onClick={() => mockSession && void confirmMock(mockSession, true)} style={{ background: '#16a34a', borderColor: '#16a34a' }}>
+            Simulate Successful Payment
+          </Button>
+          <Button danger onClick={() => mockSession && void confirmMock(mockSession, false)}>
+            Simulate Payment Failure
+          </Button>
+          <Button onClick={() => void cancelMock()}>
+            Cancel &amp; Release Stock
+          </Button>
+        </Space>
+      </Modal>
+    </div>
+  );
+}
+
+function PriceRow({ label, value, bold, green }: { label: string; value: string; bold?: boolean; green?: boolean }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: bold ? 15 : 13,
+        fontWeight: bold ? 700 : 400,
+        color: green ? '#16a34a' : '#475569',
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ fontWeight: green || bold ? 700 : 500 }}>{value}</span>
     </div>
   );
 }

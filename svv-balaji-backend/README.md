@@ -193,6 +193,11 @@ Swagger docs: `http://localhost:3000/api/docs`
 npm run lint     # ESLint
 npm test         # Jest unit tests
 ./smoke-test.sh  # 42-check end-to-end API walkthrough (needs the server running)
+python e2e-recall-flow.py  # trace / freeze / recall / re-allocation flow (needs the server running; set SEED_SUPER_ADMIN_PASSWORD)
+python e2e-loyalty-flow.py  # loyalty earn / eligibility / returns / rules flow (same prerequisites)
+python e2e-checkout-flow.py  # storefront checkout, routing, stock holds, fulfilment, realtime (needs PAYMENT_GATEWAY=mock, SHIPPING_PROVIDER=mock, SHIPROCKET_WEBHOOK_TOKEN)
+node e2e-reconcile.mjs  # 27 cross-module invariants from the DB: production yield, stock vs ledger vs reservations, order/payment/coupon money, loyalty ledger, traceability (read-only)
+./e2e-all.sh  # all scenarios, then the reconciliation
 ```
 
 Unit tests cover the two riskiest pieces: the `farmerCode` generation logic (format,

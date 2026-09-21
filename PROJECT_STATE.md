@@ -16,7 +16,30 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**19 Sep (latest) — Add Product made fully dynamic; storefront catalogue is now real.** The
+**21 Sep (latest) — Storefront checkout & fulfilment lifecycle is real end to end.** Address -> server-side
+LOCAL (franchise outlet + rider + doorstep OTP) vs SHIPROCKET (central depot + AWB + webhook) routing -> server-computed
+totals -> row-locked stock holds (15-min TTL, ON_HOLD/RECALLED excluded) -> atomic order -> live Socket.io feed + web push +
+reconciliation -> FIFO packing with barcode scan -> DELIVERED -> loyalty. B2B on credit terms too. Verified live incl. a
+concurrency test (8 buyers, 5 units, zero overselling). **Razorpay and Shiprocket adapters are unverified against the live
+APIs (no credentials) and refunds are not automated.** See `DEV_LOG.md` (2026-09-21, "Storefront checkout").
+
+**21 Sep — Loyalty rewards made real and Super Admin-configurable.** Percentage of the eligible
+order value (per channel), configurable point-to-rupee value, product/category/default eligibility,
+min/max/expiry/discounted-product rules, credited on delivery, reversed on returns, full audit ledger.
+Replaces the customer app's mock points/tiers/redemption. Verified end to end on the live API and in a real
+browser. **Storefront checkout is still mock (no storefront order API) and there is no redemption yet.**
+See `DEV_LOG.md` (2026-09-21, "Loyalty rewards").
+
+**21 Sep — Trace Batch Provenance is real end to end; recall/audit built.** Public
+`/storefront/trace/:fg` (region-level projection, closes audit M1) powers the storefront trace page and
+homepage widget. New `BatchHoldStatus` on finished-goods batches with freeze/recall/release, forward
+and backward trace and a FIFO check in a new Super Admin `/recall` screen; held/recalled batches are
+refused by allocation, dispatch, stock-in and QA release and vanish from storefront stock. Order
+re-allocation off held batches added. **A-14 fixed properly** (new permission keys now reach configured
+roles on boot). Verified end to end against the live API (`svv-balaji-backend/e2e-recall-flow.py`) and with
+real browser screenshots. Needs `prisma migrate deploy` + `generate` + API restart. See `DEV_LOG.md` (2026-09-21).
+
+**19 Sep — Add Product made fully dynamic; storefront catalogue is now real.** The
 storefront's product pages/listings/homepage shelves ran on hardcoded mock arrays, and Add Product
 kept prices/variants in local state. Now: 7-tab admin form (category→subcategory, B2C price, B2B tier
 ladder, specs, offers, FAQs, pack sizes, thresholds, preview) saves in one transaction; the six mock
@@ -508,7 +531,7 @@ must not be read as "nearly ready".
 | **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
 | **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
 | A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Ujjawal / Raunak | 15 Aug | Open — shapes WS2.5 screens |
-| A-14 | Fix permission seeding so a new key added to an already-configured role's defaults actually grants, instead of needing a by-hand DB write | Ujjawal / Raunak | — | **Open — hit a third time on 17 Sep** (`customerAccounts.*` and `categories.*` on 16 Sep, `referralSettings.*` on 17 Sep), each worked around manually and logged in `DEV_LOG.md`. `PermissionsService.seedUnconfiguredRoles()` only backfills a role the first time it has never been configured. Worth fixing properly now rather than a fourth by-hand grant |
+| A-14 | Fix permission seeding so a new key added to an already-configured role's defaults actually grants | Raunak | — | ✅ **Closed 21 Sep** — `permission_key_state` + `PermissionsService.backfillNewPermissions()`; new keys reach configured roles on boot, revocations stick. See `DEV_LOG.md` (2026-09-21) |
 
 ---
 

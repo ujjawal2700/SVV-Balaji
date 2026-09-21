@@ -81,6 +81,9 @@ const TransportsPage = lazy(() =>
 const PurchaseOrdersPage = lazy(() =>
   import('./pages/suppliers/PurchaseOrdersPage').then((m) => ({ default: m.PurchaseOrdersPage })),
 );
+const RecallPage = lazy(() =>
+  import('./pages/recall/RecallPage').then((m) => ({ default: m.RecallPage })),
+);
 const TracePage = lazy(() =>
   import('./pages/trace/TracePage').then((m) => ({ default: m.TracePage })),
 );
@@ -221,6 +224,15 @@ const RolesPermissionsPage = lazy(() =>
     default: m.RolesPermissionsPage,
   })),
 );
+const CheckoutSettingsPage = lazy(() =>
+  import('./pages/checkout/CheckoutSettingsPage').then((m) => ({ default: m.CheckoutSettingsPage })),
+);
+const CouponsPage = lazy(() =>
+  import('./pages/checkout/CouponsPage').then((m) => ({ default: m.CouponsPage })),
+);
+const LoyaltySettingsPage = lazy(() =>
+  import('./pages/loyalty/LoyaltySettingsPage').then((m) => ({ default: m.LoyaltySettingsPage })),
+);
 const ReferralSettingsPage = lazy(() =>
   import('./pages/referral-settings/ReferralSettingsPage').then((m) => ({
     default: m.ReferralSettingsPage,
@@ -303,9 +315,13 @@ const SCREENS: Record<string, ReactElement> = {
   '/finance': <EarningsFinancePage />,
   // Farm-to-fork trace (FRD Section 30)
   '/trace': <TracePage />,
+  '/recall': <RecallPage />,
   // Administration
   '/settings/roles': <RolesPermissionsPage />,
   '/settings/referrals': <ReferralSettingsPage />,
+  '/settings/loyalty': <LoyaltySettingsPage />,
+  '/settings/checkout': <CheckoutSettingsPage />,
+  '/coupons': <CouponsPage />,
   '/referrals': <ReferralsPage />,
   '/profile': <ProfilePage />,
 };

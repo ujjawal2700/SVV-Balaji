@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Length,
@@ -12,11 +13,24 @@ import {
 import { SalesChannel } from '@prisma/client';
 import { OTP_LENGTH } from '../otp.config';
 
+export const AUTH_AUDIENCES = ['CUSTOMER', 'RETAILER'] as const;
+export type AuthAudience = (typeof AUTH_AUDIENCES)[number];
+
 export class RequestOtpDto {
   @ApiProperty({ example: '9111966732', description: 'Indian mobile number, any common format' })
   @IsString()
   @MaxLength(20)
   phone!: string;
+
+  @ApiPropertyOptional({
+    enum: AUTH_AUDIENCES,
+    description:
+      'Which sign-in screen this is. A number that belongs to the other audience is refused up ' +
+      'front (a retailer number cannot sign in as a customer and vice versa).',
+  })
+  @IsOptional()
+  @IsIn(AUTH_AUDIENCES)
+  audience?: AuthAudience;
 }
 
 export class VerifyOtpDto {
@@ -24,6 +38,16 @@ export class VerifyOtpDto {
   @IsString()
   @MaxLength(20)
   phone!: string;
+
+  @ApiProperty({
+    enum: AUTH_AUDIENCES,
+    description:
+      'CUSTOMER: sign-in only - an unknown number is created as a customer on this first ' +
+      'verification, a known one just signs in. RETAILER: login only - never creates an account ' +
+      '(retailers register first).',
+  })
+  @IsIn(AUTH_AUDIENCES)
+  audience!: AuthAudience;
 
   @ApiProperty({ example: '123456' })
   @IsString()
@@ -173,4 +197,11 @@ export class RejectAccountDto {
   @MinLength(4)
   @MaxLength(500)
   reason!: string;
+}
+
+export class StorefrontLogoutDto {
+  @ApiPropertyOptional({ description: "The session's refresh token. Optional if the access token is sent as Bearer." })
+  @IsOptional()
+  @IsString()
+  refreshToken?: string;
 }

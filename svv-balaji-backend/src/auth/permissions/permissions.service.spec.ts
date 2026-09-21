@@ -21,6 +21,7 @@ import {
 function makePrisma() {
   let grants: { role: UserRole; permission: string }[] = [];
   const state: { role: UserRole }[] = [];
+  const keyState: { permission: string }[] = [];
   let users: { role: UserRole }[] = [];
 
   return {
@@ -45,6 +46,16 @@ function makePrisma() {
         return Promise.resolve({ count: data.length });
       }),
     },
+    permissionKeyState: {
+      findMany: jest.fn(() => Promise.resolve(keyState)),
+      createMany: jest.fn(({ data }: any) => {
+        for (const row of data) {
+          if (!keyState.some((k) => k.permission === row.permission)) keyState.push(row);
+        }
+        return Promise.resolve({ count: data.length });
+      }),
+    },
+    _keyState: () => keyState,
     rolePermissionState: {
       findMany: jest.fn(() => Promise.resolve(state)),
       create: jest.fn(({ data }: any) => {
@@ -162,6 +173,36 @@ describe('PermissionsService', () => {
     const seeded = await service.seedUnconfiguredRoles();
     expect(seeded).toEqual([]);
     expect(await service.listFor(UserRole.SALES_TEAM)).toEqual([]);
+  });
+
+  describe('A-14: keys added after a role was configured', () => {
+    it('records every key on a fresh install without double-granting', async () => {
+      // beforeEach already booted: all keys recorded, defaults granted once.
+      expect(prisma._keyState()).toHaveLength(ALL_PERMISSIONS.length);
+      expect(await service.backfillNewPermissions()).toEqual([]);
+    });
+
+    it('grants a brand-new key to a configured role whose defaults include it', async () => {
+      // Simulate the key having been added to the registry after deploy: it is
+      // absent from key state, and the role was configured before it existed.
+      const key = 'recall.view';
+      prisma._keyState().splice(0, prisma._keyState().length, ...prisma._keyState().filter((k: any) => k.permission !== key));
+      await service.setForRole(UserRole.QA_MANAGER, (await service.listFor(UserRole.QA_MANAGER)).filter((k) => k !== key), 'actor-1');
+      expect(await service.can(UserRole.QA_MANAGER, key)).toBe(false);
+
+      expect(await service.backfillNewPermissions()).toEqual([key]);
+
+      expect(await service.can(UserRole.QA_MANAGER, key)).toBe(true);
+      // A role whose defaults do not include it is left alone.
+      expect(await service.can(UserRole.LOGISTICS_TEAM, key)).toBe(false);
+    });
+
+    it('never re-grants a key an administrator revoked, across restarts', async () => {
+      await service.setForRole(UserRole.QA_MANAGER, [], 'actor-1');
+      await service.onModuleInit();
+      await service.onModuleInit();
+      expect(await service.listFor(UserRole.QA_MANAGER)).toEqual([]);
+    });
   });
 
   it('lets Super Admin do everything without reading the database', async () => {

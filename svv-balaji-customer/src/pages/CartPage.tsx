@@ -11,39 +11,73 @@ import {
   ShoppingOutlined,
   TagsOutlined,
 } from '@ant-design/icons';
-import { Button, Divider, Empty, Input, Modal, Space, Tag, Typography, message } from 'antd';
-import { useEffect, useState } from 'react';
+import { Button, Divider, Empty, Input, Modal, Radio, Space, Tag, Typography, message } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCart } from '../cart/useCart';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { useLoyaltyEstimate } from '../loyalty/useLoyaltyEstimate';
 import { couponsApi } from '@shared/api/coupons';
-import type { Coupon } from '@shared/api/types';
+import type { Coupon } from '@shared/api/types';
+import { checkoutApi, type OfferCoupon, type Address } from '../api/checkout';
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useToggleWishlist } from '../hooks/useWishlist';
+import { AddressFormModal } from '../components/AddressFormModal';
+import { ADDRESSES_KEY } from './AddressesPage';
 import { formatInr } from '../utils/money';
 
+
+/** The server's offer, in the shape this page already renders. */
+function toCoupon(o: OfferCoupon): Coupon {
+  return {
+    id: o.code,
+    code: o.code,
+    title: o.title,
+    description: o.description,
+    discountType: o.type === 'PERCENT' ? 'PERCENTAGE' : 'FIXED',
+    discountValue: o.value,
+    minOrderValue: o.minOrderValue,
+    maxDiscount: o.maxDiscount ?? undefined,
+    targetAudience: 'ALL',
+    expiryDate: o.expiresAt ?? undefined,
+    usedCount: 0,
+    isActive: true,
+    createdAt: '',
+    updatedAt: '',
+  };
+}
 
 export function CartPage() {
   const navigate = useNavigate();
   const cart = useCart();
-  const loyalty = useLoyalty();
+  const { role, isLoggedIn } = useCustomerAuth();
+  const toggleWishlist = useToggleWishlist();
 
-  // Coupons state
+  // Coupons state. The offers are the SERVER's (active, in date, for this channel);
+  // the amounts shown in the cart are only an estimate - checkout prices the coupon for real.
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponInput, setCouponInput] = useState('');
   const [couponModalOpen, setCouponModalOpen] = useState(false);
 
   useEffect(() => {
-    const list = couponsApi.list(false);
-    setCoupons(list);
-    // Try to auto-apply first valid coupon if subtotal qualifies
-    const savedCode = sessionStorage.getItem('applied_coupon_code');
-    if (savedCode) {
-      const c = couponsApi.getByCode(savedCode);
-      if (c && c.isActive) setAppliedCoupon(c);
-    } else if (list.length > 0) {
-      setAppliedCoupon(list[0]);
-    }
-  }, []);
+    if (role === 'GUEST') return;
+    let live = true;
+    void checkoutApi
+      .coupons()
+      .then((offers) => {
+        if (!live) return;
+        const list = offers.map(toCoupon);
+        setCoupons(list);
+        const savedCode = sessionStorage.getItem('applied_coupon_code');
+        const saved = savedCode ? list.find((c) => c.code === savedCode) : undefined;
+        if (saved) setAppliedCoupon(saved);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [role]);
 
   if (cart.lines.length === 0) {
     return (
@@ -95,8 +129,8 @@ export function CartPage() {
       message.error('Please enter a coupon code');
       return;
     }
-    const found = couponsApi.getByCode(code);
-    if (!found || !found.isActive) {
+    const found = coupons.find((c) => c.code === code);
+    if (!found) {
       message.error(`Coupon code "${code}" is invalid or expired.`);
       return;
     }
@@ -118,35 +152,33 @@ export function CartPage() {
     message.info('Coupon removed');
   };
 
-  const estimatedPoints = loyalty.estimateOrderPoints(
-    cart.lines.map((l) => ({ productName: l.productName, price: l.displayUnitPrice ?? 0, quantity: l.quantity })),
-  );
+  // Worked out by the server (same engine that credits the delivered order).
+  const loyaltyEstimate = useLoyaltyEstimate(cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })));
+  const estimatedPoints = loyaltyEstimate.data?.enabled ? loyaltyEstimate.data.points : 0;
 
   const today = new Date();
   const tmrw = new Date(today);
   tmrw.setDate(tmrw.getDate() + 1);
   const dayStr = tmrw.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-  const [selectedAddress, setSelectedAddress] = useState<any>(null);
+  const qc = useQueryClient();
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [addressSelectModalOpen, setAddressSelectModalOpen] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => localStorage.getItem('selectedAddressId'));
 
-  useEffect(() => {
-    const storedAddrsStr = localStorage.getItem('mockAddresses');
-    const storedSelectedId = localStorage.getItem('selectedAddressId') || 'addr-1';
-    if (storedAddrsStr) {
-      const addrs = JSON.parse(storedAddrsStr);
-      const selected = addrs.find((a: any) => a.id === storedSelectedId) || addrs[0];
-      setSelectedAddress(selected);
-    } else {
-      setSelectedAddress({
-        type: 'Store Hub',
-        addressLine1: 'Plot 12, Main Mandi Road',
-        addressLine2: 'Sector 18',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400001',
-      });
-    }
-  }, []);
+  const addressesQuery = useQuery({ queryKey: ADDRESSES_KEY, queryFn: checkoutApi.addresses, enabled: role !== 'GUEST' });
+  const addressesList = addressesQuery.data ?? [];
+
+  const selectedAddress: Address | null = useMemo(() => {
+    if (!addressesList.length) return null;
+    return addressesList.find((a) => a.id === selectedAddressId) ?? addressesList.find((a) => a.isDefault) ?? addressesList[0];
+  }, [addressesList, selectedAddressId]);
+
+  const handleSelectAddress = (id: string) => {
+    setSelectedAddressId(id);
+    localStorage.setItem('selectedAddressId', id);
+    setAddressSelectModalOpen(false);
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', paddingBottom: 100 }}>
@@ -189,32 +221,52 @@ export function CartPage() {
           {/* Left Column: Delivery Address & Cart Lines */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Delivery Address Card */}
-            {selectedAddress && (
-              <div
-                style={{
-                  background: '#fff',
-                  borderRadius: 14,
-                  padding: '16px 20px',
-                  border: '1px solid #e7e5e4',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                }}
-              >
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: 14,
+                padding: '16px 20px',
+                border: '1px solid #e7e5e4',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+              }}
+            >
+              {selectedAddress ? (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Typography.Text strong style={{ fontSize: 14 }}>Delivering to:</Typography.Text>
-                    <Tag color="green" style={{ margin: 0, borderRadius: 6, fontWeight: 600 }}>{selectedAddress.type}</Tag>
+                    <Tag color="green" style={{ margin: 0, borderRadius: 6, fontWeight: 600 }}>{selectedAddress.label}</Tag>
+                    {selectedAddress.latitude ? <Tag color="blue" style={{ margin: 0, borderRadius: 6, fontSize: 11 }}>📍 Pinned</Tag> : null}
                   </div>
-                  <Typography.Text type="secondary" style={{ fontSize: 13, display: 'block', lineHeight: 1.4 }}>
-                    {selectedAddress.addressLine1}, {selectedAddress.addressLine2}, {selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode}
+                  <Typography.Text style={{ fontSize: 13, color: '#44403c', display: 'block', lineHeight: 1.4 }}>
+                    {[selectedAddress.line1, selectedAddress.line2].filter(Boolean).join(', ')}, {selectedAddress.city}, {selectedAddress.state} - <strong>{selectedAddress.pincode}</strong>
+                  </Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 3 }}>
+                    {selectedAddress.fullName} · {selectedAddress.phone}
                   </Typography.Text>
                 </div>
-                <Button size="small" style={{ color: '#059669', borderColor: '#059669', borderRadius: 6 }} onClick={() => navigate('/addresses')}>
-                  Change
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#1c1917', display: 'block' }}>No Delivery Address Selected</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>Add an address for doorstep delivery</Typography.Text>
+                </div>
+              )}
+              <Button
+                size="small"
+                style={{ color: '#059669', borderColor: '#059669', borderRadius: 6, fontWeight: 600 }}
+                onClick={() => {
+                  if (addressesList.length > 0) {
+                    setAddressSelectModalOpen(true);
+                  } else {
+                    setAddressModalOpen(true);
+                  }
+                }}
+              >
+                {selectedAddress ? 'Change' : '+ Add'}
+              </Button>
+            </div>
 
             {/* Cart Item Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -323,8 +375,20 @@ export function CartPage() {
                         type="text"
                         icon={<HeartOutlined />}
                         onClick={() => {
-                          cart.remove(line.productId);
-                          message.success('Moved item to wishlist');
+                          if (!isLoggedIn) {
+                            message.info('Sign in to save items for later');
+                            navigate('/login', { state: { from: '/cart' } });
+                            return;
+                          }
+                          toggleWishlist.mutate(
+                            { productId: line.productId, saved: false },
+                            {
+                              onSuccess: () => {
+                                cart.remove(line.productId);
+                                message.success('Moved item to wishlist');
+                              },
+                            },
+                          );
                         }}
                         style={{ color: '#4b5563', padding: 0, height: 'auto', fontSize: 13 }}
                       >
@@ -509,14 +573,14 @@ export function CartPage() {
                   <div style={{ marginTop: 8, padding: '10px 14px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <GiftOutlined style={{ color: '#d97706' }} />
                     <Typography.Text strong style={{ color: '#92400e', fontSize: 13 }}>
-                      Earn {estimatedPoints} loyalty points on this order
+                      Earn {estimatedPoints} loyalty points once this order is delivered
                     </Typography.Text>
                   </div>
                 )}
               </div>
 
-              {/* Desktop Checkout CTA */}
-              <div className="desktop-only" style={{ marginTop: 24 }}>
+              {/* Checkout CTA Button (Visible on all devices) */}
+              <div style={{ marginTop: 20 }}>
                 <Button
                   type="primary"
                   size="large"
@@ -525,9 +589,14 @@ export function CartPage() {
                     background: '#f97316',
                     borderColor: '#f97316',
                     fontWeight: 700,
-                    height: 48,
-                    borderRadius: 10,
+                    height: 50,
+                    borderRadius: 12,
                     fontSize: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
                   }}
                   onClick={() => navigate('/checkout')}
                 >
@@ -535,7 +604,7 @@ export function CartPage() {
                 </Button>
               </div>
 
-              <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', color: '#78716c', fontSize: 12 }}>
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', color: '#78716c', fontSize: 12 }}>
                 <SafetyCertificateOutlined style={{ color: '#059669' }} />
                 <span>100% Secure &amp; Verified B2B Billing</span>
               </div>
@@ -544,34 +613,43 @@ export function CartPage() {
         </div>
       </div>
 
-      {/* Mobile Fixed Bottom Checkout Bar */}
+      {/* Mobile Fixed Bottom Checkout Bar (Above BottomNav) */}
       <div
         className="mobile-only"
         style={{
           position: 'fixed',
-          bottom: 0,
+          bottom: 56,
           left: 0,
           right: 0,
           background: '#fff',
-          padding: '12px 18px',
+          padding: '10px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           boxShadow: '0 -4px 14px rgba(0,0,0,0.08)',
-          zIndex: 100,
+          zIndex: 99,
+          borderTop: '1px solid #e7e5e4',
         }}
       >
         <div>
           <span style={{ display: 'block', fontSize: 11, color: '#78716c' }}>Total Amount</span>
-          <strong style={{ fontSize: 18, color: '#065f46', lineHeight: 1 }}>{formatInr(grandTotal)}</strong>
+          <strong style={{ fontSize: 17, color: '#065f46', lineHeight: 1 }}>{formatInr(grandTotal)}</strong>
         </div>
         <Button
           type="primary"
           size="large"
-          style={{ background: '#f97316', borderColor: '#f97316', fontWeight: 700, width: 180, borderRadius: 10 }}
+          style={{
+            background: '#f97316',
+            borderColor: '#f97316',
+            fontWeight: 700,
+            padding: '0 20px',
+            height: 42,
+            borderRadius: 10,
+            fontSize: 14,
+          }}
           onClick={() => navigate('/checkout')}
         >
-          Place Order
+          Checkout &rarr;
         </Button>
       </div>
 
@@ -647,6 +725,79 @@ export function CartPage() {
           })}
         </div>
       </Modal>
+
+      {/* Address Switcher Modal */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 24 }}>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>Select Delivery Address</span>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                setAddressSelectModalOpen(false);
+                setAddressModalOpen(true);
+              }}
+              style={{ color: '#f97316', fontWeight: 600, padding: 0 }}
+            >
+              + Add New Address
+            </Button>
+          </div>
+        }
+        open={addressSelectModalOpen}
+        onCancel={() => setAddressSelectModalOpen(false)}
+        footer={null}
+        width={520}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+          {addressesList.map((a) => {
+            const isSelected = selectedAddress?.id === a.id;
+            return (
+              <div
+                key={a.id}
+                onClick={() => handleSelectAddress(a.id)}
+                style={{
+                  border: isSelected ? '2px solid #059669' : '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  background: isSelected ? '#f0fdf4' : '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <Radio checked={isSelected} style={{ marginTop: 2 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>{a.fullName}</Typography.Text>
+                    <Tag color="green" style={{ fontSize: 11, margin: 0, fontWeight: 600 }}>{a.label}</Tag>
+                    {a.latitude ? <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>📍 Pinned</Tag> : null}
+                  </div>
+                  <Typography.Text style={{ fontSize: 13, color: '#475569', display: 'block', lineHeight: 1.4 }}>
+                    {[a.line1, a.line2].filter(Boolean).join(', ')}, {a.city}, {a.state} - <strong>{a.pincode}</strong>
+                  </Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+                    Phone: {a.phone}
+                  </Typography.Text>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Modal>
+
+      {/* Add New Address Modal */}
+      <AddressFormModal
+        open={addressModalOpen}
+        onClose={() => setAddressModalOpen(false)}
+        onSaved={(saved) => {
+          void qc.invalidateQueries({ queryKey: ADDRESSES_KEY });
+          handleSelectAddress(saved.id);
+          setAddressModalOpen(false);
+        }}
+      />
     </div>
   );
 }

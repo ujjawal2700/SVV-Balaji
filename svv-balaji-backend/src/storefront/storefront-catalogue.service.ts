@@ -366,6 +366,7 @@ export class StorefrontCatalogueService {
         fgBatch: {
           productId,
           qaReleased: true,
+          holdStatus: 'ACTIVE',
           OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }],
         },
       },

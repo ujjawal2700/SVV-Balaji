@@ -65,7 +65,7 @@ export function RegisterPage() {
     }
     setSendingOtp(true);
     try {
-      const response = await requestOtp(cleanNum);
+      const response = await requestOtp(cleanNum, 'RETAILER');
       setOtpSent(true);
       setDevCode(response.devCode ?? null);
       message.success(

@@ -16,6 +16,198 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-21 — Raunak — Storefront checkout & fulfilment lifecycle (end to end)
+
+**Did:** The customer app's checkout/orders were mock and there was no storefront order API. Built the whole
+lifecycle for B2C and B2B, on the SAME `Order` so admin, inventory, quality, traceability and loyalty stay one system.
+- **Statuses:** reuse Super Admin's existing ones - PLACED (= ORDER_PLACED) -> CONFIRMED -> ALLOCATED -> PACKED ->
+  DISPATCHED (= OUT_FOR_DELIVERY / shipped) -> DELIVERED / CANCELLED. No new enum; the customer app words them
+  (`pages/orderStatus.ts`). `advance()` now refuses to skip the storefront controls (scan, rider, AWB, OTP).
+- **Routing (server decides, customer never picks):** `Warehouse.kind` CENTRAL|OUTLET + lat/lng + radius. B2B -> central.
+  B2C: nearest active outlet within its radius (haversine) that has stock for EVERY item -> LOCAL (rider); else central
+  -> SHIPROCKET. No coordinates = never "local". ETA (prep + km x min/km, or day window) and fee come from
+  `CheckoutSettings` (Super Admin: `/settings/checkout`).
+- **Server-side money:** `/storefront/checkout/quote` has no price/tax/fee/method fields (forbidNonWhitelisted rejects
+  them). Price lists, GST, coupon (`Coupon`, validated vs the SERVER subtotal), loyalty redemption (new; caps + FIFO lot
+  drawdown so points never "expire twice") and fee are all recomputed; `expectedTotal` is compared only (409 PRICE_CHANGED).
+  Order-level discount is spread pro-rata and GST is charged AFTER it; loyalty earning is now on the net amount.
+- **Stock (no overselling):** `StockReservation` (HELD with 15-min TTL -> COMMITTED on order -> RELEASED when packing
+  turns it into batch allocations). Availability = QA-released, unexpired, holdStatus ACTIVE batches only - **ON_HOLD /
+  RECALLED excluded** - minus allocations minus active holds, checked under `SELECT ... FOR UPDATE` on the stock rows
+  (id-ordered, deadlock-free). Expired holds stop counting by themselves (sweeper is tidy-up only). `allocate()` now
+  subtracts other orders' holds, so packing can't steal paid stock. Loser of a local race is re-routed (next node/central).
+- **Atomic order:** one transaction = order + items (SKU/name snapshots) + address snapshot (JSONB) + pricing snapshot +
+  delivery OTP + reservation commit + coupon redemption + loyalty debit + payment ledger + event. Idempotent on the
+  session (unique `checkoutSessionId`). Payment failure/abandon/TTL release everything. Paid-but-unfulfillable is
+  flagged `REFUND REQUIRED` on the payment row (no automated refund yet).
+- **Payments:** `PaymentGateway` seam. `mock` (dev; refuses NODE_ENV=production) and `razorpay` (plain HTTPS; HMAC
+  signature + webhook verification). B2B: CREDIT with the existing credit-limit check, GSTIN + MOQ enforced; COD for B2C only.
+- **Fulfilment pipeline** (`FulfillmentService`): start-packing (confirm + FIFO allocate) -> scan a batch label/QR (only an
+  allocated batch accepted; last scan = PACKED) -> LOCAL: assign rider (= out for delivery) -> doorstep OTP (5 tries then
+  423 lock) -> DELIVERED; SHIPROCKET: create shipment (AWB/courier/label/tracking, idempotent) -> Shiprocket webhook
+  (token-authenticated) -> DELIVERED. Loyalty credits on DELIVERED via the existing hook. **Staff never receive
+  `deliveryOtp`** (interceptor strips it from every staff order response); only the owning customer sees it.
+- **Realtime:** Socket.io `/admin` (JWT + `orders.view`, Super Admin = all orders, others = own branch room):
+  `orders:new` / `orders:updated` with order id, customer, channel, amount, method, node, timestamps. Web Push (VAPID)
+  when a user has no live socket. `GET /orders-sync?since=` reconciles after a drop/close (unique by order id; serverTime
+  taken before the query). Admin: `useLiveOrders` (in `AppLayout`) toasts + refreshes every orders view; header shows
+  Live/Offline; "Enable order alerts" registers the service worker (`public/sw.js`).
+- **Customer app:** real Addresses (with "use my location" pin), Checkout (server quote, coupon, points, payment,
+  mock/Razorpay gateway), Orders, live Tracking (timeline, OTP, rider, AWB link). Cart offers are real server coupons.
+- **Admin:** Orders table shows node + method + rider/courier (real data); drawer tab "Pack & Deliver"; Checkout &
+  Delivery settings; Coupons (real, replaces the localStorage mock); Warehouse form gained role/coordinates/radius.
+**Contract changes:** many - see Swagger. New: `/storefront/{addresses,checkout/*,coupons,orders}`, `/checkout-settings`,
+`/coupons`, `/orders/:id/{start-packing,pick-plan,scan,assign-rider,ship,verify-otp}`, `/webhooks/{shiprocket,razorpay}`,
+`/orders-sync`, `/notifications/push/*`, socket namespace `/admin`; Warehouse DTO fields; loyalty settings
+`redemptionEnabled/maxRedemptionPercent/minRedeemPoints`. Migration `20260921130000_storefront_checkout`
+(additive). New perms `checkoutSettings.*`, `coupons.*`. `main.ts` now `rawBody: true`.
+**Deploy:** `npx prisma migrate deploy && npx prisma generate`, restart. Env: `PAYMENT_GATEWAY`, `SHIPPING_PROVIDER`,
+`SHIPROCKET_WEBHOOK_TOKEN`, `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT` (+ Razorpay/Shiprocket credentials). nginx must
+forward `/socket.io` with websocket upgrade (dev proxy already does).
+**Verified live** (API + Postgres): `svv-balaji-backend/e2e-checkout-flow.py` (102 checks, re-runnable, cleans up):
+LOCAL vs SHIPROCKET routing, server maths (coupon + points + GST-after-discount), tamper rejection, forged payment
+signature, idempotent confirm, atomic order snapshot, socket auth + live `orders:new`, FIFO allocation + wrong-batch
+scan refused, rider/OTP (wrong OTP, lockout, plain-deliver blocked), Shiprocket AWB + webhook, payment failure /
+abandon / TTL expiry releasing stock, **8 concurrent buyers on 5 units -> exactly 5 succeed and 5 allocations**,
+frozen/recalled batches excluded (re-route to depot), cancel returns points+coupon, B2B MOQ/tier price/credit limit,
+reconciliation after socket loss, permissions. Also recall + loyalty e2e re-run green, 498 unit tests, `tsc` and
+production builds clean, and real Chrome screenshots of customer checkout/tracking and admin orders/drawer.
+**NOT verified / NOT built (be honest with the client):** Razorpay and Shiprocket adapters follow the documented APIs but
+have never been called (no credentials) - first sandbox run is onboarding. Web push delivery to a real browser was not
+exercised (subscription/key endpoints were; sending needs a real subscription). Automated refunds (cancel of a PAID
+online order, or REFUND_REQUIRED) are not implemented - the fact is recorded, money movement is manual. No geocoder:
+coordinates come from the browser's "use my location"; an unpinned address ships by courier. Customer self-cancel and
+rider mobile app are not built (staff console only). Full 2x2 concurrency across multiple API instances relies on
+Postgres row locks (sound) but was tested against one instance.
+**Reconciliation:** `e2e-reconcile.mjs` (read-only, from the DB) asserts 27 invariants across modules - production loss/yield, raw kg consumed <= received, stock >= 0 and reserved == live allocations, stock on hand == ledger (stock-ins - dispatches), reservations == order lines, order = lines = payment ledger, coupon usage == redemptions, every customer balance == ledger sum, earned points == line points == ledger, points only on delivered orders, scans/OTP/AWB present, dispatched allocations trace to a farmer. All hold; a deliberate 1-rupee corruption is caught three ways. `./e2e-all.sh` runs everything + this.
+**Next:** Razorpay + Shiprocket sandbox onboarding (A-11), refund automation, customer cancel, geocoding provider.
+
+## 2026-09-21 — Raunak — Loyalty rewards: percentage-based, configurable, real end to end
+
+**Did:** Replaced the customer app's mock loyalty (client-side price-band points, tiers, wallet
+redemption in localStorage) with a real server-side, Super Admin–configurable program. Crossed into
+backend/schema/sales deliberately.
+- **Design decisions (worth knowing):** loyalty *points are the existing coin ledger*
+  (`CoinTransaction` / `Customer.coinBalance`) - one balance, shared with referral coins, told apart by
+  ledger reason (`LOYALTY_EARN` / `LOYALTY_REVERSAL` / `LOYALTY_EXPIRY`). **1 point = Rs `pointValueInr`**
+  (configurable; default 1). Points = floor(eligible base x percent / pointValue), integer-paise maths.
+  Credit happens when an order is **DELIVERED**; nothing is earned at placement.
+- **Settings (`LoyaltySettings`, single row, Super Admin only):** earn % per channel (B2C / B2B), point
+  value, calculation base (excl./incl. GST; delivery charges are never part of it - they are not order
+  lines), default eligibility, "discounted products earn" switch (a line is discounted when its price incl.
+  GST is below product MRP), min item value, min order value, max reward per order (Rs), expiry months,
+  program on/off. What was applied is frozen on each order's `LoyaltyOrderEarn` (+ per-line
+  `LoyaltyOrderEarnLine`), so changing a rule never restates a past order.
+- **Eligibility cascade:** product override (`Product.loyaltyEligibility`) -> category -> parent category
+  -> program default. `INHERIT | ELIGIBLE | NOT_ELIGIBLE`. Resolved server-side; the admin product form
+  shows the server's answer (`GET /loyalty/eligibility`), the frontend re-implements nothing.
+- **Idempotent + retryable:** `LoyaltyOrderEarn` is unique on `orderId` (no double credit); the delivery
+  hook is best-effort and an hourly sweep credits any delivered order whose hook failed - but only orders
+  delivered after `earningStartsAt` (deploy), so history is never retro-paid. A paused program records a
+  zero-point earn (`PROGRAM_OFF`) so it isn't retro-paid on re-enable. Every order records *why* it earned
+  nothing (`skipReason` / per-line `ineligibleReason`).
+- **Returns/reversal:** new `OrderReturn` + `POST /orders/:id/returns` (`orders.return`). Delivered orders
+  only; cumulative qty can't exceed ordered. In the same transaction, points are reversed in proportion to
+  quantity (a full return reverses exactly what remains - no stranded rounding point). Points that already
+  expired aren't debited twice. Cancelled/undelivered orders never earned anything.
+- **Expiry:** earned rows carry `expiresAt`/`remainingAmount`; hourly `expireDue()` (also on customer read)
+  lapses live points once, never below a zero balance.
+- **Customer app:** `LoyaltyProvider` now reads `GET /storefront/loyalty` (balance, rupee value, expiring
+  soon, history, program rules in words); product page / cart / checkout hints come from
+  `POST /storefront/loyalty/estimate` (same engine, priced via the pricing service) and say plainly when
+  an item doesn't earn. **Removed:** tiers, price-band table, mock transactions, wallet redemption.
+- **Admin:** `/settings/loyalty` (all controls + worked example), "Loyalty rewards" section on the product
+  form, category modal field, order drawer tab "Rewards & Returns" (frozen earn breakdown, returns, ledger,
+  Record return), new ledger labels in the coin drawer.
+**Contract changes:** `GET/PATCH /loyalty/settings`, `GET /loyalty/eligibility`, `GET /loyalty/orders/:n`,
+`POST /loyalty/housekeeping`, `GET /storefront/loyalty` (customer JWT), `POST /storefront/loyalty/estimate`
+(public), `POST /orders/:id/returns`; `loyaltyEligibility` on product & category DTOs; new tables
+`loyalty_settings`, `loyalty_order_earns`, `loyalty_order_earn_lines`, `order_returns`; enums
+`LoyaltyEligibility`, `LoyaltyCalculationBase`; 3 new `CoinTransactionReason` values; `coin_transactions`
+gained `expiresAt`/`remainingAmount`. Permissions `loyalty.view` (Branch Manager), `loyalty.manage`
+(Super Admin only), `orders.return` (BM, ST) - granted to configured roles automatically by the A-14 fix.
+**Deploy:** `npx prisma migrate deploy && npx prisma generate`, restart the API (migration
+`20260921120000_loyalty_rewards`).
+**Verified (live API + Postgres):** `svv-balaji-backend/e2e-loyalty-flow.py` (re-runnable, restores the
+settings it changes, unpublishes its test products): configure -> eligibility (product/category/default) ->
+estimate -> order -> dispatched = 0 points -> DELIVERED = credited -> customer balance/history -> partial,
+ineligible, over-limit and full returns -> point value / percent / calc base / cap / minimums / discounted
+rule / expiry / program-off -> permissions. Plus 471 backend unit tests (new: calculator, service ledger
+invariants, returns in sales), `tsc` clean on all three apps, production builds, and real Chrome
+screenshots of the customer loyalty page + product-page hints and the admin settings, product form and
+order drawer, on real data.
+**NOT done - and not a loyalty gap:** the customer app's *checkout/orders are still mock* (there is no
+`POST /storefront/orders`; that needs address, payment (A-11/Razorpay) and warehouse decisions). So today
+a customer order that earns points is one staff place and deliver in the admin panel; the moment a real
+storefront order path exists, it earns points with no loyalty change. **Also:** points can be earned and
+reversed but there is no redemption yet (needs a wallet/checkout discount).
+**Next:** storefront order placement; then redemption.
+
+## 2026-09-21 — Raunak — Trace Batch Provenance, end to end (public trace + recall/audit)
+
+**Did:** Made the homepage "Trace Batch Provenance" widget fully real, and built the Super Admin / QA
+half of the spec. Crossed into backend/schema deliberately (owner asked for a complete flow, not a
+hand-off).
+- **Public trace (closes audit M1):** new unguarded `GET /storefront/trace/:fgBatchNumber`
+  (`src/storefront/storefront-trace.*`). Explicit-`select` projection: region-level origin, grower
+  *count*, averaged lab moisture/purity/foreign matter, QC ticks, milling dates. Never farmer
+  name/code/GPS/phone/bank/rates (spec asserts it). Unknown or not-QA-released -> 404. Customer
+  `TracePage` rewritten; also accepts `?batch=`. Placeholder page deleted.
+- **Schema (migration `20260921100000_batch_hold_recall`):** `FinishedGoodsBatch.holdStatus`
+  (`ACTIVE|ON_HOLD|RECALLED`) + `holdReason`/`holdChangedAt`; new append-only `batch_hold_events`.
+  Kept separate from `qaReleased` (passed inspection != allowed to sell).
+- **Recall module (`src/recall`):** `GET /recall/forward?code=FG-…|RM-…` (every order/customer,
+  stock, shipped vs allocated), `GET /recall/backward/:fg` (machine/line/operator, milling loss %,
+  raw lots, weighing slip, farmer/supplier payout, FIFO check, hold history),
+  `POST /recall/hold` (freeze/recall/release, all-or-nothing, reason mandatory, RECALLED is final).
+- **Enforcement (touches WS1.5 sales/packaging/quality/products — all additive filters):** allocation
+  only draws `holdStatus=ACTIVE`; dispatch refuses if any allocated batch was frozen/recalled since;
+  stock-in and QA release refuse held/recalled batches; storefront availability and inventory stock
+  summary exclude non-ACTIVE. Public trace shows ON_HOLD as "under review" and RECALLED as a
+  do-not-consume notice only.
+- **A-14 FIXED PROPERLY (not worked around):** new table `permission_key_state` records every
+  permission key already reconciled against role grants. On boot `PermissionsService.backfillNewPermissions()`
+  grants each *new* key to configured roles whose registry defaults include it, then records it.
+  A recorded key is never re-granted, so a deliberate revocation survives restarts; removing a role
+  from a key's `defaultRoles` never revokes anything. Migration `20260921110000_permission_key_state`
+  pre-records all 135 existing keys so the first boot doesn't undo anyone's revocations. Adding a
+  permission is now: add it to `registry.ts` + `@RequirePermission`, deploy. Nothing by hand.
+  (`20260921101000_recall_permissions` was the hand-grant workaround; superseded, left in place
+  because it is already applied.) Proven live: deleted a key's state + grants, restarted, it was
+  re-granted to BM+QA while a revoked sibling key stayed revoked.
+- **Re-allocation:** `POST /orders/:id/reallocate` (`orders.allocate`) releases reservations on
+  frozen/recalled batches for ALLOCATED/PACKED orders and re-picks the same quantities from ACTIVE
+  stock FEFO; shortfall is returned, not hidden; released rows are kept (A-13 audit). Forward-trace
+  shipments now carry `orderId`; the admin Recall screen has a per-order Re-allocate button.
+- **Bug found by looking at real data, fixed:** the public trace read the RAW_MATERIAL / IN_PROCESS QC
+  ticks off the finished batch's own inspections, so they were always ticked off. Now: every raw lot
+  needs a PASS, and the production run needs an IN_PROCESS PASS.
+- **Admin:** `/recall` screen (forward/backward tabs, freeze/recall/release modal, re-allocate), shared
+  `api/recall.ts` + `hooks/useRecall.ts`; staff `/trace` shows sale status; staff trace response gained
+  `finishedBatch.holdStatus`.
+**Contract changes:** new `GET /storefront/trace/:n`, `GET /recall/forward`, `GET /recall/backward/:n`,
+`POST /recall/hold`, `POST /orders/:id/reallocate`; new enum `BatchHoldStatus`; new tables
+`batch_hold_events`, `permission_key_state`; `holdStatus` on `GET /trace/:n` `finishedBatch`.
+**Deploy:** `npx prisma migrate deploy && npx prisma generate`, restart the API. On Windows `generate`
+fails with EPERM if a node process still holds `query_engine-windows.dll.node` (stop the API first).
+**Verified (live, against the running API + Postgres):** `svv-balaji-backend/e2e-recall-flow.py`
+(stdlib Python, re-runnable, 54 checks): farmer approval -> RM batch -> production (machine/line) ->
+IN_PROCESS + FG QA -> two FG batches -> release -> stock in -> FEFO order dispatched + one packed
+order -> forward/backward/FIFO -> freeze (dispatch refused, new allocations skip it, QR = "under
+review") -> re-allocate -> dispatch from healthy stock -> release -> recall (QR = do-not-consume, no
+data or internal reason leaked; recall can't be released, QA-released or stocked in) -> audit history
+-> storefront `inStock` follows the hold -> LOGISTICS user gets 403 on recall, public QR stays open.
+Also: 433 backend unit tests, `tsc` clean on all three apps, and real Chrome screenshots of the
+customer trace page (verified / under review / recalled / not found) and the authenticated admin
+Recall screen (forward + backward) on real data.
+**Known limits:** FIFO check compares to shelf stock *now*, not a replay of the dispatch day (stated
+in the UI). Gluten/protein and a "pesticide residue free" seal aren't in the schema, so the public
+page shows only what is measured. Freezing does not auto-release existing reservations (dispatch is
+blocked and Re-allocate fixes them). A recalled batch's remaining shelf stock is shown but not
+written off - use the existing warehouse adjust flow. `smoke-test.sh` predates the farmer
+registration-completeness gate and the new Add Product DTO and fails from step 4 on; it is unrelated
+to this work, and `e2e-recall-flow.py` supersedes it for the sales half.
+
 ## 2026-09-19 — Raunak — Dynamic Add/Edit Product, real catalogue on the storefront
 
 **Did:** The storefront's product pages, listings and homepage shelves read hardcoded arrays in
@@ -2321,3 +2513,33 @@ Packaging is printed once and cannot be reissued, so pointing at a URL means lin
 (farm details, process video) can change later without a reprint. Do not change this.
 
 **Next:** Phase 3 processing and packaging.
+
+## 2026-09-21 — Raunak (agent session) — Orders pages show real data only
+- **Admin**: `OrdersPage`, `OrderDetailDrawer` and `B2BOrdersPage` no longer use `MOCK_ORDERS` / `MOCK_B2B_ORDERS`. Each row/drawer renders the order's own customer, phone, address snapshot, items, payment mode, node, batches → raw lots → farmers, event timeline, rider/AWB and invoice preview. New `pages/sales/OrderDetailParts.tsx` holds the shared blocks. Values the system does not record (gross/tare weight, cartons) show "Not recorded" / "—".
+- **B2B page**: now loads `GET /orders?channel=B2B`; fake local status dropdown replaced by a read-only tag (transitions run through the drawer's real actions); city filter built from real cities; PO number column replaced by GSTIN (Order has no PO field).
+- **Backend** (`sales.service.ts`): `findAll` also returns customer phone, item name snapshots, shipment; `findOne` returns allocation→batch→production→raw lot→farmer/supplier chain, FG QA sign-off and order `events`. No route/DTO change.
+- **Still placeholder**: invoice preview header company GSTIN/FSSAI text (real company details pending, see A-11).
+
+## 2026-09-21 — Raunak (agent session) — Auto-inward stock on QA release
+- **Behaviour**: `PATCH /quality-inspections/release/:fgBatchId` now, in ONE transaction, sets `qaReleased`, upserts `FinishedGoodsStock` (+`packCount`) at the target node and writes a `StockMovement` `PRODUCTION_INWARD`, `reference = QA_RELEASE_AUTO`. Target node = optional body `warehouseId` → the production run's warehouse → the branch's only central depot; otherwise the release is refused (never guesses). Idempotent: a re-release (e.g. after a withdrawn release) never inwards twice (ledger row is the key). The existing route was kept (no `/batches/:id/qa-status` alias) because the admin app and e2e scripts call it.
+- **Schema**: migration `20260921140000_auto_inward_on_qa_release` — enum `StockMovementType.PRODUCTION_INWARD`, `stock_movements.reference`.
+- **Manual stock-in** (`POST /finished-goods/:id/stock`) stays for corrections but is refused if it would push stocked total above `packCount`.
+- **New**: `POST /finished-goods/:id/transfer` (depot → outlet; only unreserved packs; `TRANSFER` ledger row). Needed because auto-inward puts all packs at one node.
+- **Scripts**: e2e-checkout/loyalty/recall updated (no manual stock-in; transfer to outlet); `e2e-reconcile.mjs` counts `PRODUCTION_INWARD`/`TRANSFER` in the ledger. Admin/shared: `PRODUCTION_INWARD` movement type + colour.
+- **Note for whoever owns `prisma/seed-storefront-stock.ts`**: the 9 `FG-20260921-STOCK-00x` batches it created have no production/raw/farmer chain and no ledger rows, so 3 reconcile invariants report them. Not touched.
+
+## 2026-09-21 — Raunak (agent session) — Storefront login/logout, sessions, one-time referral
+- **Customer** = sign-in only (mock OTP `123456`): first successful verify of an unknown number creates the customer (and is the ONLY time `referralCode` is looked at); an existing number is a plain login — a supplied code is ignored and not even validated. Response now carries `isNewAccount`. DB backstop: `referrals.refereeId` is unique.
+- **Retailer** = existing signup (`register-retailer`, referral honoured at approval) + login. `POST /storefront/auth/otp/verify` now REQUIRES `audience: CUSTOMER | RETAILER` (breaking for callers — customer app and e2e scripts updated). RETAILER login never creates an account; each audience refuses the other's numbers (checked before the OTP is consumed). `otp/request` accepts an optional `audience` for the same up-front refusal.
+- **Sessions**: new table `customer_sessions` (migration `20260921150000_customer_sessions`). Access + refresh tokens carry `sid`; `CustomerJwtStrategy` re-reads the session on every request, so logout, expiry, refresh-token reuse or a suspended account end access immediately (previously a logged-out access token lived up to 30 min). One row per device; refresh rotates within the session.
+- `POST /storefront/auth/logout` (refresh token in body and/or Bearer; works with an expired access token; idempotent), new `POST /storefront/auth/logout-all`.
+- **Two latent bugs fixed on the way**: refresh tokens were bcrypt-hashed (bcrypt only reads 72 bytes — a JWT's first 72 bytes are identical for every token of a session, so a rotated/replayed token could not be told apart) → now SHA-256 + `jti`; OTP consume is now atomic (double-submit can't use one code twice). Customer app logout now captures the tokens before clearing them (the server call used to go out unauthenticated).
+- Tests: `storefront-auth.service.spec.ts` (+7), `e2e-auth-flow.py` (new; added to `e2e-all.sh`) — covers new vs existing customer, referral once, retailer signup/login, audience refusal, logout/logout-all/rotation/replay/expiry.
+
+## 2026-09-21 — Raunak (agent session) — Customer profile area: real per-customer data
+- **Removed** the demo Customer/Retailer view switchers (Profile, Product detail) and `switchRole`; role comes only from the signed-in account.
+- **Wishlist is real**: table `customer_wishlist_items` (migration `20260921160000_customer_wishlist`), `GET /storefront/wishlist`, `PUT|DELETE /storefront/wishlist/:productId` (customer JWT; idempotent). Wishlist page = saved ids joined to the live catalogue (current price/stock); product-page heart and cart "Save for later" write to it (guests are sent to sign in).
+- **Profile numbers** (orders, addresses, coupons, reward points) now come from the account's own APIs (`useAccountStats`, loyalty). `GET /storefront/auth/me` also returns `memberSince`, saved business address, and for retailers `creditLimit` / `creditUsed` (open CREDIT orders).
+- **Wallet**: there is no rupee wallet in the system, so the fake "Desi Wallet ₹" is gone: customers see Desi Rewards points; `/wallet` redirects customers to `/loyalty`, and for retailers it is now the real credit position (limit / outstanding / available) + their own recent orders.
+- Removed remaining demo strings (Rahul Sharma, Sri Balaji Provision Store, 98765…, fake field rep, fake ₹ amounts, "2 Active Mandi Deals").
+- Not changed: HomePage still imports `mock/homeMockData.ts` for non-account content; retailer "Mandi Saved" savings figure was dropped (no data source).

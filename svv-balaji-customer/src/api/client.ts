@@ -20,6 +20,7 @@ const AUTH_ROUTES = [
   '/storefront/auth/otp',
   '/storefront/auth/register-retailer',
   '/storefront/auth/refresh',
+  '/storefront/auth/logout',
 ];
 
 interface RetriableConfig extends InternalAxiosRequestConfig {

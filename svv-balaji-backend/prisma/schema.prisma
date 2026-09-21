@@ -109,6 +109,8 @@ enum PaymentStatus {
 
 /// FRD 17.3 - every inventory change is one of these.
 enum StockMovementType {
+  /// Packed finished goods entering a warehouse automatically when QA releases the batch.
+  PRODUCTION_INWARD
   STOCK_IN
   STOCK_OUT
   TRANSFER
@@ -238,6 +240,11 @@ model User {
   productionBatchesCreated ProductionBatch[]       @relation("ProductionBatchesCreated")
   qualityInspections       QualityInspection[]     @relation("QualityInspections")
   finishedGoodsPacked      FinishedGoodsBatch[]    @relation("FinishedGoodsPacked")
+  batchHoldEvents          BatchHoldEvent[]        @relation("BatchHoldEvents")
+  orderReturnsRecorded     OrderReturn[]           @relation("OrderReturnsRecorded")
+  pushSubscriptions        PushSubscription[]
+  orderEventsActed         OrderEvent[]            @relation("OrderEventsActed")
+  loyaltySettingsUpdated   LoyaltySettings[]       @relation("LoyaltySettingsUpdated")
 
   // Phase 4 back-relations
   customersAssigned Customer[]        @relation("CustomerAssignedTo")
@@ -252,9 +259,9 @@ model User {
   purchaseOrdersCreated     PurchaseOrder[]           @relation("PurchaseOrdersCreated")
 
   // Storefront back-relations
-  customerAccountsReviewed CustomerAccount[] @relation("CustomerAccountsReviewed")
-  referralSettingsUpdated  ReferralSettings[]
-  coinTransactionsPerformed CoinTransaction[] @relation("CoinTransactionsPerformed")
+  customerAccountsReviewed  CustomerAccount[]  @relation("CustomerAccountsReviewed")
+  referralSettingsUpdated   ReferralSettings[]
+  coinTransactionsPerformed CoinTransaction[]  @relation("CoinTransactionsPerformed")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -899,6 +906,8 @@ model StockMovement {
   quantity     Decimal           @db.Decimal(12, 2)
   unit         String            @default("KG")
   reason       String?
+  /// Machine-readable origin, e.g. QA_RELEASE_AUTO.
+  reference    String?
 
   performedById String
   performedBy   User   @relation("StockMovements", fields: [performedById], references: [id])
@@ -1229,6 +1238,17 @@ model FinishedGoodsBatch {
   /// FRD 21.5 - only QA-released batches may be stocked or dispatched.
   qaReleased Boolean @default(false)
 
+  /// Recall control, separate from QA release on purpose: `qaReleased` says the
+  /// batch PASSED inspection, `holdStatus` says whether it may still be sold.
+  /// A complaint can freeze a batch that passed. Only ACTIVE batches are
+  /// allocated, dispatched, counted as storefront stock or vouched for on the
+  /// public trace page. Every change is written to `BatchHoldEvent`.
+  holdStatus    BatchHoldStatus @default(ACTIVE)
+  holdReason    String?
+  holdChangedAt DateTime?
+
+  holdEvents BatchHoldEvent[]
+
   packedById String
   packedBy   User   @relation("FinishedGoodsPacked", fields: [packedById], references: [id])
 
@@ -1246,10 +1266,37 @@ model FinishedGoodsBatch {
 
   @@index([productionBatchId])
   @@index([qaReleased])
+  @@index([holdStatus])
   @@map("finished_goods_batches")
 }
 
 /// FRD Section 23 - packaged stock awaiting dispatch.
+enum BatchHoldStatus {
+  ACTIVE
+  ON_HOLD
+  RECALLED
+}
+
+/// Append-only audit of every freeze, recall and release of a finished goods batch.
+model BatchHoldEvent {
+  id String @id @default(uuid())
+
+  fgBatchId String
+  fgBatch   FinishedGoodsBatch @relation(fields: [fgBatchId], references: [id])
+
+  fromStatus BatchHoldStatus
+  toStatus   BatchHoldStatus
+  reason     String
+
+  performedById String
+  performedBy   User   @relation("BatchHoldEvents", fields: [performedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([fgBatchId])
+  @@map("batch_hold_events")
+}
+
 model FinishedGoodsStock {
   id String @id @default(uuid())
 
@@ -1333,17 +1380,17 @@ model Product {
   // PriceList rules so historical invoices reproduce (see PriceList).
 
   /// Marketing brand, distinct from the manufacturer entity below.
-  brand String?
+  brand     String?
   /// The pack descriptor a shopper reads under the name - "10kg Bag",
   /// "100g x 20". Not `unit`, which is the operational measure (KG/PACK).
   packLabel String?
   /// Struck-through reference price. The sell price is a PriceList rule;
   /// this is the "was" figure a discount is calculated against, and it is a
   /// property of the pack, not of a channel.
-  mrp Decimal? @db.Decimal(12, 2)
+  mrp       Decimal? @db.Decimal(12, 2)
   /// Small overlay on the product card - "Buy 10 Get 1", "100% Sharbati".
-  badge   String?
-  hsnCode String?
+  badge     String?
+  hsnCode   String?
 
   /// Display-only until a real review subsystem exists. Staff-entered, so a
   /// seeded catalogue does not show "0 ratings" on every card.
@@ -1390,6 +1437,9 @@ model Product {
   isTopPick     Boolean @default(false)
   isDailyStaple Boolean @default(false)
 
+  /// Per-product loyalty override. INHERIT = use the category rule.
+  loyaltyEligibility LoyaltyEligibility @default(INHERIT)
+
   recipes              Recipe[]
   productionBatches    ProductionBatch[]
   finishedGoodsBatches FinishedGoodsBatch[]
@@ -1407,6 +1457,8 @@ model Product {
   updatedAt DateTime @updatedAt
 
   @@index([categoryId])
+  wishlistedBy CustomerWishlistItem[]
+
   @@map("products")
 }
 
@@ -1429,6 +1481,10 @@ model Category {
   parentId String?
   parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children Category[] @relation("CategoryHierarchy")
+
+  /// Loyalty default for everything filed here. INHERIT = ask the parent
+  /// category, then the program default. A product can override it.
+  loyaltyEligibility LoyaltyEligibility @default(INHERIT)
 
   products Product[]
 
@@ -1459,10 +1515,10 @@ model ProductVariant {
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  name String
+  name   String
   /// Unique across the catalogue, same rule as Product.sku - a variant is a
   /// distinct sellable unit and a picking slip has to resolve it.
-  sku String @unique
+  sku    String   @unique
   /// Falls back to the parent product's unit when null.
   unit   String?
   mrp    Decimal? @db.Decimal(12, 2)
@@ -1536,6 +1592,22 @@ model Warehouse {
   location String
   capacity Decimal? @db.Decimal(12, 2)
   isActive Boolean  @default(true)
+
+  /// CENTRAL = the depot that ships nationally through the 3PL. OUTLET = a
+  /// franchise store that delivers locally with its own riders. Both hold
+  /// finished goods stock in the same table, so there is one inventory truth.
+  kind    WarehouseKind @default(CENTRAL)
+  city    String?
+  state   String?
+  pincode String?
+  /// Where the node physically is, for the distance test at checkout.
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  /// How far this outlet delivers. Null = the program default (CheckoutSettings).
+  serviceRadiusKm Decimal? @db.Decimal(6, 2)
+  contactPhone    String?
+
+  stockReservations StockReservation[]
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -1681,12 +1753,18 @@ model Customer {
   coinBalance      Int               @default(0)
   coinTransactions CoinTransaction[]
 
+  addresses        CustomerAddress[]
+  checkoutSessions CheckoutSession[]
+  couponRedemptions CouponRedemption[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([channel])
   @@index([status])
   @@index([branchId])
+  wishlistItems CustomerWishlistItem[]
+
   @@map("customers")
 }
 
@@ -1739,6 +1817,17 @@ enum ReferralRewardTrigger {
 enum CoinTransactionReason {
   REFERRAL_REFERRER_REWARD
   REFERRAL_REFEREE_REWARD
+  /// Loyalty points earned on a DELIVERED order. `expiresAt`/`remainingAmount`
+  /// are set on these rows only.
+  LOYALTY_EARN
+  /// Negative. Points taken back because eligible items were returned/refunded.
+  LOYALTY_REVERSAL
+  /// Negative. Unspent points that passed their `expiresAt`.
+  LOYALTY_EXPIRY
+  /// Negative. Points spent to pay part of an order at checkout.
+  LOYALTY_REDEMPTION
+  /// Positive. Redeemed points given back because the order was cancelled.
+  LOYALTY_REDEMPTION_REFUND
   /// A Super Admin correction - refund, reversal, or any other manual fix.
   /// `amount` carries the sign (negative claws back); `note` is required at
   /// the API layer for this reason, because unlike the two above there is no
@@ -1754,8 +1843,8 @@ enum CoinTransactionReason {
 model ReferralSettings {
   id String @id @default(uuid())
 
-  referrerRewardCoins Int @default(100)
-  refereeRewardCoins  Int @default(50)
+  referrerRewardCoins Int                   @default(100)
+  refereeRewardCoins  Int                   @default(50)
   rewardTrigger       ReferralRewardTrigger @default(REGISTRATION)
 
   /// The program-wide kill switch. While false: no new referral code may be
@@ -1764,7 +1853,7 @@ model ReferralSettings {
   isActive Boolean @default(true)
 
   updatedById String?
-  updatedBy   User?   @relation(fields: [updatedById], references: [id])
+  updatedBy   User?    @relation(fields: [updatedById], references: [id])
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 
@@ -1807,6 +1896,12 @@ model CoinTransaction {
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id])
 
+  /// LOYALTY_EARN only: when these points lapse (null = never), and how many of
+  /// them are still live. Reversals and expiry both draw `remainingAmount` down,
+  /// which is what stops a return reversing points that already expired.
+  expiresAt       DateTime?
+  remainingAmount Int?
+
   /// Staff who made a MANUAL_ADJUSTMENT. Null for every system-generated row
   /// (both referral reward reasons) - there is no "performer" for those,
   /// only a trigger event.
@@ -1816,6 +1911,7 @@ model CoinTransaction {
   createdAt DateTime @default(now())
 
   @@index([customerId])
+  @@index([reason, expiresAt])
   @@map("coin_transactions")
 }
 
@@ -1960,8 +2056,51 @@ model Order {
   /// trigger paid out because of this specific order - see CoinTransaction.
   coinTransactions CoinTransaction[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  loyaltyEarn LoyaltyOrderEarn?
+  returns     OrderReturn[]
+
+  // ---- Storefront checkout (all null/default for staff-placed orders) ----
+  source OrderSource @default(STAFF)
+  /// LOCAL (franchise outlet, in-house rider) or SHIPROCKET (central depot, 3PL).
+  /// Decided by the server from the delivery address; the customer never picks it.
+  fulfillmentMethod FulfillmentMethod?
+  /// Immutable copy of the delivery address as it was when the order was placed.
+  addressSnapshot   Json?
+  /// The full server-side quote (lines, tax, discounts, fee, ETA) frozen at placement.
+  pricingSnapshot   Json?
+  distanceKm        Decimal?           @db.Decimal(8, 2)
+  etaMin            DateTime?
+  etaMax            DateTime?
+
+  /// Doorstep proof-of-delivery code. Shown only to the customer who owns the
+  /// order; staff enter what the customer reads out.
+  deliveryOtp           String?
+  deliveryOtpAttempts   Int       @default(0)
+  deliveryOtpVerifiedAt DateTime?
+
+  paymentMode     PaymentMode?
+  gatewayOrderId  String?
+  gatewayPaymentId String?
+
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  deliveryFee   Decimal @default(0) @db.Decimal(14, 2)
+  couponCode    String?
+  loyaltyRedeemedPoints Int     @default(0)
+  loyaltyRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
+
+  riderName  String?
+  riderPhone String?
+
+  checkoutSessionId String?  @unique
+  checkoutSession   CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
+
+  shipment          OrderShipment?
+  events            OrderEvent[]
+  paymentTransactions PaymentTransaction[]
+  stockReservations StockReservation[]
+  couponRedemption  CouponRedemption?
 
   @@index([channel])
   @@index([status])
@@ -1997,10 +2136,20 @@ model OrderItem {
   gstRatePercent Decimal @db.Decimal(5, 2)
 
   lineSubtotal Decimal @db.Decimal(14, 2)
+  /// This line's pro-rata share of the order-level discount (coupon + points
+  /// redeemed). GST is charged on subtotal minus this.
+  lineDiscount Decimal @default(0) @db.Decimal(14, 2)
   lineTax      Decimal @db.Decimal(14, 2)
   lineTotal    Decimal @db.Decimal(14, 2)
 
+  /// Frozen at placement so a later rename or re-SKU never rewrites history.
+  skuSnapshot  String?
+  nameSnapshot String?
+
   allocations OrderAllocation[]
+
+  loyaltyLine LoyaltyOrderEarnLine?
+  returns     OrderReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2050,6 +2199,11 @@ model OrderAllocation {
   releasedAt     DateTime?
   releasedReason String?
 
+  /// Set when packing staff scan this batch's label against the order, proving
+  /// the pack physically in the box is the batch the system allocated (FIFO).
+  scannedAt   DateTime?
+  scannedById String?
+
   createdAt DateTime @default(now())
 
   @@index([orderId])
@@ -2095,6 +2249,19 @@ model RolePermission {
 /// set up" are the same empty result, and the seeder could not tell whether an
 /// empty grant set was deliberate. A Super Admin who deliberately strips a role
 /// bare must not have the defaults handed back to it on the next restart.
+/// Every permission key the system has already reconciled against role grants.
+///
+/// This is what lets boot tell a NEW key from one an administrator deliberately
+/// revoked (A-14). A key absent here is new: configured roles whose registry
+/// defaults include it are granted it once, then it is recorded. A key present
+/// here is never re-granted, so revocations stick across restarts.
+model PermissionKeyState {
+  permission String   @id
+  seenAt     DateTime @default(now())
+
+  @@map("permission_key_state")
+}
+
 model RolePermissionState {
   role UserRole @id
 
@@ -2464,6 +2631,8 @@ model CustomerAccount {
 
   @@index([status])
   @@index([channel])
+  sessions CustomerSession[]
+
   @@map("customer_accounts")
 }
 
@@ -2548,24 +2717,551 @@ model Banner {
 model Scheme {
   id String @id @default(uuid())
 
-  tag              String
-  title            String
-  subtitle         String
-  ctaText          String
-  ctaLink          String         @default("/products/atta-flour")
-  backgroundColor  String         @default("#fce3cd")
-  textColor        String         @default("#452b0d")
-  badgeColor       String         @default("#965a0b")
-  badgeTextColor   String         @default("#ffffff")
-  buttonColor      String         @default("#8a4b08")
-  buttonTextColor  String         @default("#ffffff")
-  targetAudience   BannerAudience @default(ALL)
-  displayOrder     Int            @default(0)
-  isActive         Boolean        @default(true)
+  tag             String
+  title           String
+  subtitle        String
+  ctaText         String
+  ctaLink         String         @default("/products/atta-flour")
+  backgroundColor String         @default("#fce3cd")
+  textColor       String         @default("#452b0d")
+  badgeColor      String         @default("#965a0b")
+  badgeTextColor  String         @default("#ffffff")
+  buttonColor     String         @default("#8a4b08")
+  buttonTextColor String         @default("#ffffff")
+  targetAudience  BannerAudience @default(ALL)
+  displayOrder    Int            @default(0)
+  isActive        Boolean        @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([isActive, displayOrder])
   @@map("schemes")
+}
+
+// ---------------------------------------------------------------------------
+// Loyalty rewards (percentage-based, configured by Super Admin)
+//
+// Points ARE the coin ledger (`CoinTransaction`, `Customer.coinBalance`) - one
+// currency shared with referral rewards, so a customer has one balance.
+// ---------------------------------------------------------------------------
+
+enum LoyaltyEligibility {
+  INHERIT
+  ELIGIBLE
+  NOT_ELIGIBLE
+}
+
+/// What the percentage is applied to. Delivery/shipping charges are NEVER part
+/// of either (they are not on order lines at all); GST is the only switch.
+enum LoyaltyCalculationBase {
+  /// Line value after the price is applied, before GST. The default: GST is
+  /// not the company's revenue, so it should not fund rewards.
+  EXCLUDING_TAX
+  INCLUDING_TAX
+}
+
+/// Single row, lazily created (same pattern as ReferralSettings). Read live
+/// when an order is delivered; what was applied is frozen on LoyaltyOrderEarn.
+model LoyaltySettings {
+  id String @id @default(uuid())
+
+  /// Master switch. Off: delivered orders are recorded as "program off" and
+  /// earn nothing - and are NOT retro-credited if it is switched on later.
+  isActive Boolean @default(true)
+
+  /// Percent of the eligible amount returned as rewards, per channel.
+  /// 0 switches earning off for that channel.
+  earnPercentB2C Decimal @default(2) @db.Decimal(5, 2)
+  earnPercentB2B Decimal @default(1) @db.Decimal(5, 2)
+
+  /// Rupees one point is worth. 1 = one point is Rs 1. 0.25 = four points per rupee.
+  pointValueInr Decimal @default(1) @db.Decimal(10, 4)
+
+  calculationBase LoyaltyCalculationBase @default(EXCLUDING_TAX)
+
+  /// Whether a product with no explicit or category rule earns.
+  defaultEligible Boolean @default(true)
+
+  /// A line counts as discounted when its selling price (incl. GST) is below
+  /// the product's MRP. Off = such lines earn nothing.
+  appliesToDiscountedProducts Boolean @default(true)
+
+  /// Optional guards. Null = no limit.
+  minEligibleItemAmount  Decimal? @db.Decimal(12, 2)
+  minEligibleOrderAmount Decimal? @db.Decimal(12, 2)
+  /// Cap on the rupee value of rewards one order can earn.
+  maxRewardPerOrderInr   Decimal? @db.Decimal(12, 2)
+
+  /// Months until earned points lapse. Null/0 = never.
+  pointsExpiryMonths Int?
+
+  /// Whether customers may spend points at checkout.
+  redemptionEnabled Boolean @default(false)
+  /// Most of an order's value points can pay for.
+  maxRedemptionPercent Int @default(50)
+  /// Fewest points a redemption may use.
+  minRedeemPoints Int @default(0)
+
+  /// Only orders delivered on/after this are ever credited by the catch-up
+  /// sweep, so switching the feature on never retro-pays history.
+  earningStartsAt DateTime @default(now())
+
+  updatedById String?
+  updatedBy   User?    @relation("LoyaltySettingsUpdated", fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("loyalty_settings")
+}
+
+/// One per DELIVERED order, unique on orderId - which is the idempotency
+/// guarantee: an order can never be credited twice. Written even when nothing
+/// is earned, so "why did I get no points?" always has a stored answer.
+model LoyaltyOrderEarn {
+  id String @id @default(uuid())
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  customerId String
+
+  /// Sum of the eligible lines' base amounts.
+  eligibleAmount    Decimal                @db.Decimal(14, 2)
+  /// The rules that produced this result, frozen at credit time.
+  percentApplied    Decimal                @db.Decimal(5, 2)
+  pointValueApplied Decimal                @db.Decimal(10, 4)
+  calculationBase   LoyaltyCalculationBase
+  /// Rupee value of the points credited (points x point value).
+  rewardInr         Decimal                @db.Decimal(14, 2)
+  points            Int
+  cappedByMax       Boolean                @default(false)
+  /// Why an order earned nothing: PROGRAM_OFF, NO_RATE, BELOW_MIN_ORDER, NO_ELIGIBLE_ITEMS.
+  skipReason        String?
+
+  coinTransactionId String? @unique
+
+  lines LoyaltyOrderEarnLine[]
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("loyalty_order_earns")
+}
+
+model LoyaltyOrderEarnLine {
+  id String @id @default(uuid())
+
+  earnId String
+  earn   LoyaltyOrderEarn @relation(fields: [earnId], references: [id], onDelete: Cascade)
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  productId  String
+  quantity   Int
+  baseAmount Decimal @db.Decimal(14, 2)
+
+  eligible          Boolean
+  /// PRODUCT_NOT_ELIGIBLE, DISCOUNTED, BELOW_MIN_ITEM when not eligible.
+  ineligibleReason  String?
+  /// Where the eligibility decision came from: PRODUCT, CATEGORY, PARENT_CATEGORY, DEFAULT.
+  eligibilitySource String
+
+  points         Int
+  /// How many of `points` have been taken back by returns. Never exceeds `points`.
+  reversedPoints Int @default(0)
+
+  @@index([earnId])
+  @@map("loyalty_order_earn_lines")
+}
+
+/// A delivered item coming back / being refunded. The trigger for reversing
+/// the loyalty points that item earned.
+model OrderReturn {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  quantity     Int
+  reason       String
+  /// Money refunded for this return, when known. Informational.
+  refundAmount Decimal? @db.Decimal(14, 2)
+
+  recordedById String
+  recordedBy   User   @relation("OrderReturnsRecorded", fields: [recordedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([orderItemId])
+  @@map("order_returns")
+}
+
+
+// ---------------------------------------------------------------------------
+// Storefront checkout & fulfilment
+// ---------------------------------------------------------------------------
+
+enum WarehouseKind {
+  CENTRAL
+  OUTLET
+}
+
+enum OrderSource {
+  STAFF
+  STOREFRONT
+}
+
+enum FulfillmentMethod {
+  LOCAL
+  SHIPROCKET
+}
+
+enum PaymentMode {
+  ONLINE
+  COD
+  /// B2B on account terms; the credit limit is enforced at placement.
+  CREDIT
+}
+
+enum CheckoutSessionStatus {
+  OPEN
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
+enum ReservationStatus {
+  /// Short-lived (TTL) hold while the customer pays.
+  HELD
+  /// Firm: an order exists. Stays until packing turns it into batch allocations.
+  COMMITTED
+  /// Given back (payment failed / abandoned / order cancelled) or converted to allocations.
+  RELEASED
+  EXPIRED
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PAID
+  FAILED
+  COD
+  CREDIT
+  REFUNDED
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+/// A customer's saved delivery address. Coordinates decide LOCAL vs SHIPROCKET.
+model CustomerAddress {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  label     String  @default("Home")
+  fullName  String
+  phone     String
+  line1     String
+  line2     String?
+  landmark  String?
+  city      String
+  state     String
+  pincode   String
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  isDefault Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+/// Single row of checkout / fulfilment rules, Super Admin editable.
+model CheckoutSettings {
+  id String @id @default(uuid())
+
+  /// A franchise outlet whose own radius is unset delivers this far.
+  localRadiusKm Decimal @default(5) @db.Decimal(6, 2)
+  /// The depot that fulfils everything outside local range and all B2B. Null = first active CENTRAL warehouse.
+  centralWarehouseId String?
+
+  localBaseFee     Decimal  @default(30) @db.Decimal(10, 2)
+  localFreeAbove   Decimal? @default(499) @db.Decimal(12, 2)
+  shipBaseFee      Decimal  @default(60) @db.Decimal(10, 2)
+  shipFreeAbove    Decimal? @default(999) @db.Decimal(12, 2)
+  /// B2B bulk orders ship free above this (null = never free).
+  b2bFreeAbove     Decimal? @default(5000) @db.Decimal(12, 2)
+  b2bBaseFee       Decimal  @default(150) @db.Decimal(10, 2)
+
+  /// ETA model. LOCAL: prepMinutes + distance x minutesPerKm. SHIPROCKET: whole days.
+  prepMinutes   Int @default(30)
+  minutesPerKm  Int @default(4)
+  shipMinDays   Int @default(3)
+  shipMaxDays   Int @default(6)
+
+  codEnabled Boolean  @default(true)
+  codMaxAmount Decimal? @default(5000) @db.Decimal(12, 2)
+
+  /// How long stock is held while a customer pays.
+  reservationTtlMinutes Int @default(15)
+  deliveryOtpDigits     Int @default(4)
+
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("checkout_settings")
+}
+
+/// One attempt to buy: the server's frozen quote, the stock hold, and the payment.
+model CheckoutSession {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  status CheckoutSessionStatus @default(OPEN)
+
+  /// Everything the server decided at the time: lines, prices, node, method, totals.
+  quote       Json
+  paymentMode PaymentMode
+
+  gatewayProvider String?
+  gatewayOrderId  String?
+
+  expiresAt DateTime
+  /// Set once the order exists. The unique constraint on Order.checkoutSessionId
+  /// is what makes confirming twice return the SAME order.
+  orderId   String?
+
+  reservations StockReservation[]
+  payments     PaymentTransaction[]
+  order        Order?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status, expiresAt])
+  @@map("checkout_sessions")
+}
+
+/// Product-level stock earmarked for a checkout or a placed order, before
+/// packing picks the exact FIFO batch. `available = stock - active reservations`.
+model StockReservation {
+  id String @id @default(uuid())
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  productId   String
+
+  quantity Int
+  status   ReservationStatus @default(HELD)
+  /// Only meaningful while HELD; COMMITTED holds have none.
+  expiresAt DateTime?
+
+  sessionId String?
+  session   CheckoutSession? @relation(fields: [sessionId], references: [id])
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([warehouseId, productId, status])
+  @@index([sessionId])
+  @@index([orderId])
+  @@map("stock_reservations")
+}
+
+/// The payment ledger. One row per attempt; a session can have several.
+model PaymentTransaction {
+  id String @id @default(uuid())
+
+  sessionId String?
+  session   CheckoutSession? @relation(fields: [sessionId], references: [id])
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id])
+
+  provider         String
+  mode             PaymentMode
+  gatewayOrderId   String?
+  gatewayPaymentId String?
+  amount           Decimal                  @db.Decimal(14, 2)
+  status           PaymentTransactionStatus @default(PENDING)
+  failureReason    String?
+  raw              Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([orderId])
+  @@index([gatewayOrderId])
+  @@map("payment_transactions")
+}
+
+model OrderShipment {
+  id String @id @default(uuid())
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  provider    String
+  awb         String?
+  courier     String?
+  trackingUrl String?
+  labelUrl    String?
+  status      String  @default("CREATED")
+  events      Json    @default("[]")
+  lastEventAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([awb])
+  @@map("order_shipments")
+}
+
+/// Append-only timeline of an order (what the customer's tracking screen shows).
+model OrderEvent {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// PLACED, CONFIRMED, ALLOCATED, PACKED, DISPATCHED, DELIVERED, CANCELLED,
+  /// RIDER_ASSIGNED, SHIPMENT_CREATED, SHIPMENT_UPDATE, ...
+  type String
+  note String?
+
+  actorId String?
+  actor   User?   @relation("OrderEventsActed", fields: [actorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
+}
+
+model Coupon {
+  id String @id @default(uuid())
+
+  code        String  @unique
+  title       String
+  description String  @default("")
+  type        CouponType
+  value       Decimal @db.Decimal(12, 2)
+  minOrderValue Decimal @default(0) @db.Decimal(12, 2)
+  /// Cap for PERCENT coupons.
+  maxDiscount   Decimal? @db.Decimal(12, 2)
+
+  /// ALL | B2C | B2B
+  audience String @default("ALL")
+  validFrom DateTime?
+  expiresAt DateTime?
+  /// Total uses across everyone / per customer. Null = unlimited.
+  usageLimit       Int?
+  perCustomerLimit Int?
+  usedCount        Int @default(0)
+  isActive Boolean @default(true)
+
+  redemptions CouponRedemption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id String @id @default(uuid())
+
+  couponId String
+  coupon   Coupon @relation(fields: [couponId], references: [id])
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  amount Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([couponId, customerId])
+  @@map("coupon_redemptions")
+}
+
+/// A staff browser that asked to be told about new orders while the dashboard is closed.
+model PushSubscription {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// One row per signed-in device. The access/refresh tokens both carry this id (`sid`) and every
+/// protected request re-reads the row, so logging out (revokedAt) or expiry ends the session
+/// immediately - not when a stateless JWT eventually times out.
+model CustomerSession {
+  id String @id @default(uuid())
+
+  accountId String
+  account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  /// bcrypt of the current refresh token; rotated on every refresh. A refresh that does not match
+  /// means an old token was replayed, and the whole session is revoked.
+  refreshTokenHash String
+
+  userAgent String?
+  ipAddress String?
+
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  revokedReason String?
+
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("customer_sessions")
+}
+
+/// A product a storefront customer saved for later. One row per customer+product.
+model CustomerWishlistItem {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerId, productId])
+  @@index([customerId])
+  @@map("customer_wishlist_items")
 }

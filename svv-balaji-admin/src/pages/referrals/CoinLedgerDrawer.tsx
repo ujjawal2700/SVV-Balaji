@@ -12,6 +12,9 @@ import { EM_DASH, formatDateTime } from '@shared/utils/format';
 const REASON_COLOUR: Record<CoinTransactionReason, string> = {
   REFERRAL_REFERRER_REWARD: 'green',
   REFERRAL_REFEREE_REWARD: 'blue',
+  LOYALTY_EARN: 'green',
+  LOYALTY_REVERSAL: 'red',
+  LOYALTY_EXPIRY: 'default',
   MANUAL_ADJUSTMENT: 'orange',
 };
 

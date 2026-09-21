@@ -26,7 +26,15 @@ export class WarehouseService {
 
   // --- Warehouse master ----------------------------------------------------
 
+  /** A franchise outlet is only routable if we know where it is. */
+  private assertOutletLocated(kind: string | undefined, lat: unknown, lng: unknown) {
+    if (kind === 'OUTLET' && (lat === undefined || lat === null || lng === undefined || lng === null)) {
+      throw new BadRequestException('A franchise outlet needs its latitude and longitude so deliveries can be routed to it');
+    }
+  }
+
   create(dto: CreateWarehouseDto) {
+    this.assertOutletLocated(dto.kind, dto.latitude, dto.longitude);
     return this.prisma.warehouse.create({ data: dto });
   }
 
@@ -53,6 +61,8 @@ export class WarehouseService {
 
   async update(id: string, dto: import('./dto/warehouse.dto').UpdateWarehouseDto) {
     await this.assertWarehouse(id);
+    const existing = await this.prisma.warehouse.findUnique({ where: { id } });
+    this.assertOutletLocated(dto.kind ?? existing?.kind, dto.latitude ?? existing?.latitude, dto.longitude ?? existing?.longitude);
     return this.prisma.warehouse.update({
       where: { id },
       data: dto,

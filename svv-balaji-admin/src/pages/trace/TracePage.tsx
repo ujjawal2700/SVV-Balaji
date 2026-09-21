@@ -20,6 +20,7 @@ import { apiErrorMessage } from '../../api/client';
 import type { FinishedGoodsTrace, TraceFarmer } from '../../api/types';
 import { PageHeader } from '../../components/PageHeader';
 import { useFinishedGoodsTrace } from '../../hooks/useTrace';
+import { HoldTag } from '../recall/HoldTag';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
 
 /**
@@ -247,6 +248,9 @@ function TraceResult({ data }: { data: FinishedGoodsTrace }) {
               </Descriptions.Item>
               <Descriptions.Item label="Expires">
                 {formatDate(data.finishedBatch.expiryDate)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Sale status">
+                <HoldTag status={data.finishedBatch.holdStatus} />
               </Descriptions.Item>
               <Descriptions.Item label="QA released">
                 {data.finishedBatch.qaReleased ? (

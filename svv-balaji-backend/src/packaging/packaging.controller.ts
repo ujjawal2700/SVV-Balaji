@@ -10,7 +10,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PackagingService } from './packaging.service';
-import { CreateFinishedGoodsBatchDto, StockFinishedGoodsDto } from './dto/packaging.dto';
+import {
+  CreateFinishedGoodsBatchDto,
+  StockFinishedGoodsDto,
+  TransferFinishedGoodsDto,
+} from './dto/packaging.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
@@ -71,6 +75,17 @@ export class PackagingController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.packagingService.stockIn(id, dto, user.sub);
+  }
+
+  @Post('finished-goods/:id/transfer')
+  @RequirePermission('finishedGoods.stockIn')
+  @ApiOperation({ summary: 'Move packs of a released batch between warehouses / outlets' })
+  transfer(
+    @Param('id') id: string,
+    @Body() dto: TransferFinishedGoodsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.packagingService.transfer(id, dto, user.sub);
   }
 
   @Get('finished-goods-stock')

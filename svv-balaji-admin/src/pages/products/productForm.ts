@@ -1,3 +1,4 @@
+import type { LoyaltyEligibility } from '@shared/api/loyalty';
 import type {
   CreateProductInput,
   LivePriceRule,
@@ -80,6 +81,7 @@ export interface ProductFormValues {
   showOnStorefront: boolean;
   isTopPick: boolean;
   isDailyStaple: boolean;
+  loyaltyEligibility: LoyaltyEligibility;
 
   // Pricing (prices are EXCLUSIVE of GST - the order engine adds tax on top)
   mrp?: number | null;
@@ -136,6 +138,7 @@ export const EMPTY_FORM: ProductFormValues = {
   showOnStorefront: false,
   isTopPick: false,
   isDailyStaple: false,
+  loyaltyEligibility: 'INHERIT',
   gstRatePercent: DEFAULT_GST,
   b2bTiers: [],
   b2bTiersAreTotals: false,
@@ -232,6 +235,7 @@ export function productToFormValues(product: Product): ProductFormValues {
     showOnStorefront: product.showOnStorefront,
     isTopPick: product.isTopPick,
     isDailyStaple: product.isDailyStaple,
+    loyaltyEligibility: product.loyaltyEligibility ?? 'INHERIT',
 
     mrp: num(product.mrp),
     gstRatePercent: gst,
@@ -373,6 +377,7 @@ export function formValuesToPayload(values: ProductFormValues): CreateProductInp
     deliveryTerms: clean(values.deliveryTerms),
     isTopPick: values.isTopPick,
     isDailyStaple: values.isDailyStaple,
+    loyaltyEligibility: values.loyaltyEligibility,
     b2bTiersAreTotals: values.b2bTiersAreTotals,
 
     specifications: (values.specifications ?? [])
@@ -400,7 +405,7 @@ export function formValuesToPayload(values: ProductFormValues): CreateProductInp
 export const FIELD_TAB: Record<string, string> = {
   name: 'basic', brand: 'basic', sku: 'basic', unit: 'basic', packLabel: 'basic', badge: 'basic',
   description: 'basic', mainCategoryId: 'basic', categoryId: 'basic', highlights: 'basic',
-  showOnStorefront: 'basic', isTopPick: 'basic', isDailyStaple: 'basic',
+  showOnStorefront: 'basic', isTopPick: 'basic', isDailyStaple: 'basic', loyaltyEligibility: 'basic',
 
   mrp: 'pricing', gstRatePercent: 'pricing', hsnCode: 'pricing', b2cPrice: 'pricing',
   b2bTiers: 'pricing', b2bTiersAreTotals: 'pricing', minOrderQuantity: 'pricing', maxOrderQuantity: 'pricing', moqB2B: 'pricing',

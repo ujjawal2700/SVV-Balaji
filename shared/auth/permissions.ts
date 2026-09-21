@@ -172,6 +172,13 @@ export const PERMISSIONS = {
   // --- Storefront -------------------------------------------------------------
   CUSTOMER_ACCOUNT_VIEW: 'customerAccounts.view',
   CUSTOMER_ACCOUNT_REVIEW: 'customerAccounts.review',
+  CHECKOUT_SETTINGS_VIEW: 'checkoutSettings.view',
+  CHECKOUT_SETTINGS_MANAGE: 'checkoutSettings.manage',
+  COUPONS_VIEW: 'coupons.view',
+  COUPONS_MANAGE: 'coupons.manage',
+  LOYALTY_VIEW: 'loyalty.view',
+  LOYALTY_MANAGE: 'loyalty.manage',
+  ORDER_RETURN: 'orders.return',
   REFERRAL_SETTINGS_VIEW: 'referralSettings.view',
   REFERRAL_SETTINGS_MANAGE: 'referralSettings.manage',
   REFERRALS_VIEW: 'referrals.view',
@@ -188,6 +195,8 @@ export const PERMISSIONS = {
   // --- Screens with no endpoint of their own --------------------------------
   DASHBOARD_VIEW: 'dashboard.view',
   TRACE_VIEW: 'trace.view',
+  RECALL_VIEW: 'recall.view',
+  RECALL_MANAGE: 'recall.manage',
   FIELD_PANEL: 'field.panel',
   ONBOARDING_PANEL: 'onboarding.panel',
   UPLOAD: 'uploads.create',

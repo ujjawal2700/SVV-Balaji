@@ -36,12 +36,23 @@ export interface StorefrontAccountSummary {
   gstin?: string | null;
   /** This account's own shareable refer-a-friend code. Null until it has a Customer row. */
   referralCode?: string | null;
+  /** From GET /me only: real profile facts. */
+  memberSince?: string;
+  addressLine?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  /** Retailers only. */
+  creditLimit?: number | null;
+  creditUsed?: number | null;
 }
 
 export interface StorefrontSession {
   accessToken: string;
   refreshToken: string;
   account: StorefrontAccountSummary;
+  /** True only when this verification created the customer (their first ever sign-in). */
+  isNewAccount?: boolean;
 }
 
 /** Returned instead of a session when a retailer's registration is still under review. */

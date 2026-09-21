@@ -13,6 +13,11 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { refundCouponForOrder } from '../checkout/coupons.service';
+import { heldByOthers } from '../checkout/stock-holds';
+import { OrderEventsService } from '../realtime/order-events.service';
+import type { RecordReturnDto } from '../loyalty/dto/loyalty.dto';
 import {
   CancelOrderDto,
   CreateOrderDto,
@@ -57,6 +62,8 @@ export class SalesService {
     private readonly sequence: SequenceService,
     private readonly pricing: PricingService,
     private readonly referrals: ReferralService,
+    private readonly loyalty: LoyaltyService,
+    private readonly events: OrderEventsService,
   ) {}
 
   async create(dto: CreateOrderDto, placedById: string | null) {
@@ -192,7 +199,7 @@ export class SalesService {
    *   sees the same snapshot as the write it is guarding. Falls back to the
    *   base client for the one caller (`place`) that is not yet transactional.
    */
-  private async assertWithinCreditLimit(
+  async assertWithinCreditLimit(
     customerId: string,
     orderTotal: number,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
@@ -260,8 +267,15 @@ export class SalesService {
       where,
       orderBy: { orderDate: 'desc' },
       include: {
-        customer: { select: { customerCode: true, name: true, channel: true } },
-        items: { select: { productId: true, quantity: true, lineTotal: true } },
+        customer: { select: { customerCode: true, name: true, channel: true, phone: true } },
+        items: {
+          select: {
+            productId: true, quantity: true, lineTotal: true, nameSnapshot: true, skuSnapshot: true,
+            product: { select: { name: true, sku: true } },
+          },
+        },
+        warehouse: { select: { name: true, kind: true } },
+        shipment: { select: { awb: true, courier: true, trackingUrl: true } },
       },
     });
   }
@@ -272,6 +286,7 @@ export class SalesService {
       include: {
         customer: true,
         warehouse: { select: { id: true, name: true, location: true } },
+        shipment: true,
         placedBy: { select: { id: true, fullName: true } },
         items: {
           include: {
@@ -289,9 +304,49 @@ export class SalesService {
           orderBy: { createdAt: 'asc' },
           include: {
             fgBatch: {
-              select: { id: true, fgBatchNumber: true, expiryDate: true, qaReleased: true },
+              select: {
+                id: true,
+                fgBatchNumber: true,
+                expiryDate: true,
+                manufacturingDate: true,
+                packagingDate: true,
+                netWeight: true,
+                weightUnit: true,
+                qaReleased: true,
+                holdStatus: true,
+                // The upstream chain: which raw lots, from which farmers/suppliers.
+                productionBatch: {
+                  select: {
+                    productionBatchNumber: true,
+                    consumptions: {
+                      select: {
+                        rawMaterialBatch: {
+                          select: {
+                            batchNumber: true,
+                            cropName: true,
+                            farmer: { select: { farmerCode: true, fullName: true, village: true, district: true, state: true } },
+                            supplier: { select: { supplierCode: true, fullName: true, city: true, district: true, state: true } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                // Who signed the finished batch off, and when.
+                qualityInspections: {
+                  where: { stage: 'FINISHED_GOODS' },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { result: true, createdAt: true, inspectedBy: { select: { fullName: true } } },
+                },
+              },
             },
           },
+        },
+        // The order's own timeline (placed, confirmed, packed, rider/AWB, delivered ...).
+        events: {
+          orderBy: { createdAt: 'asc' },
+          include: { actor: { select: { fullName: true } } },
         },
       },
     });
@@ -430,7 +485,23 @@ export class SalesService {
     };
   }
 
+  /** Timeline entry + live update for anyone watching the orders screen. Never fails the caller. */
+  async record(orderId: string, type: string, actorId?: string, note?: string): Promise<void> {
+    try {
+      await this.prisma.orderEvent.create({ data: { orderId, type, note, actorId: actorId && actorId !== 'system' ? actorId : undefined } });
+    } catch (err) {
+      this.logger.warn(`Could not log ${type} for order ${orderId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    this.events.publish('updated', orderId);
+  }
+
   async confirm(id: string) {
+    const updated = await this.confirmCore(id);
+    await this.record(id, 'CONFIRMED');
+    return updated;
+  }
+
+  private async confirmCore(id: string) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, OrderStatus.CONFIRMED);
@@ -464,6 +535,12 @@ export class SalesService {
    * stock moves before it becomes a write-off.
    */
   async allocate(id: string, allocatedById: string) {
+    const result = await this.allocateCore(id, allocatedById);
+    await this.record(id, 'ALLOCATED', allocatedById);
+    return result;
+  }
+
+  private async allocateCore(id: string, allocatedById: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       // Live only: a released allocation is history, not a current holding,
@@ -509,7 +586,7 @@ export class SalesService {
         const stock = await tx.finishedGoodsStock.findMany({
           where: {
             warehouseId: order.warehouseId,
-            fgBatch: { productId: item.productId, qaReleased: true },
+            fgBatch: { productId: item.productId, qaReleased: true, holdStatus: 'ACTIVE' },
           },
           include: {
             fgBatch: {
@@ -523,9 +600,12 @@ export class SalesService {
           .filter((s) => !s.fgBatch.expiryDate || s.fgBatch.expiryDate >= today)
           .sort(byFirstExpiryFirstOut);
 
-        const availableTotal = eligible.reduce(
-          (sum, s) => sum + (s.quantity - s.reservedQuantity),
+        // Stock another paid order (or a customer mid-payment) has already been
+        // promised is not ours to pick - see checkout/stock-holds.ts.
+        const promisedToOthers = await heldByOthers(tx, order.warehouseId, item.productId, order.id);
+        const availableTotal = Math.max(
           0,
+          eligible.reduce((sum, s) => sum + (s.quantity - s.reservedQuantity), 0) - promisedToOthers,
         );
 
         /**
@@ -609,6 +689,12 @@ export class SalesService {
         );
       }
 
+      // The order's product-level reservation has now become real batch allocations.
+      await tx.stockReservation.updateMany({
+        where: { orderId: order.id, status: 'COMMITTED' },
+        data: { status: 'RELEASED' },
+      });
+
       const updated = await tx.order.update({
         where: { id },
         data: { status: OrderStatus.ALLOCATED },
@@ -632,6 +718,37 @@ export class SalesService {
    * count and the system agree the moment the vehicle goes.
    */
   async advance(id: string, to: OrderStatus, performedById: string) {
+    await this.assertLifecycleGuards(id, to);
+    const result = await this.advanceCore(id, to, performedById);
+    await this.record(id, to, performedById);
+    return result;
+  }
+
+  /**
+   * Storefront orders cannot skip the steps that make them trustworthy. A
+   * shortcut through the plain status endpoints would defeat the very controls
+   * (scan, rider, AWB, doorstep OTP) the fulfilment pipeline exists to enforce.
+   */
+  private async assertLifecycleGuards(id: string, to: OrderStatus) {
+    const o = await this.prisma.order.findUnique({
+      where: { id },
+      include: { allocations: { where: { releasedAt: null } }, shipment: true },
+    });
+    if (!o || o.source !== 'STOREFRONT') return;
+
+    if (to === OrderStatus.PACKED && o.allocations.some((a) => !a.scannedAt)) {
+      throw new BadRequestException('Scan every allocated batch before marking this order packed');
+    }
+    if (to === OrderStatus.DISPATCHED) {
+      if (o.fulfillmentMethod === 'LOCAL' && !o.riderName) throw new BadRequestException('Assign a rider before sending this order out for delivery');
+      if (o.fulfillmentMethod === 'SHIPROCKET' && !o.shipment) throw new BadRequestException('Create the shipment (AWB) before dispatching this order');
+    }
+    if (to === OrderStatus.DELIVERED && o.fulfillmentMethod === 'LOCAL' && !o.deliveryOtpVerifiedAt) {
+      throw new BadRequestException("Enter the customer's delivery OTP to complete this delivery");
+    }
+  }
+
+  private async advanceCore(id: string, to: OrderStatus, performedById: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       // Live allocations only. A released one has already had its reservation
@@ -652,9 +769,33 @@ export class SalesService {
         await this.referrals.onOrderDelivered(this.prisma, order.customerId, order.id).catch((err) => {
           this.logger.warn(`Referral reward check failed for delivered order ${order.orderNumber}: ${err instanceof Error ? err.message : String(err)}`);
         });
+
+        // Loyalty points are credited on delivery. Best-effort for the same
+        // reason as above - a rewards bug must never block a delivery - but
+        // NOT fire-and-forget-and-forget: the credit is idempotent and the
+        // hourly sweep (LoyaltyService.sweepDelivered) retries any order whose
+        // credit failed here.
+        await this.loyalty.creditForDeliveredOrder(order.id).catch((err) => {
+          this.logger.warn(`Loyalty credit failed for delivered order ${order.orderNumber}, sweep will retry: ${err instanceof Error ? err.message : String(err)}`);
+        });
       }
 
       return updated;
+    }
+
+    // A batch frozen or recalled AFTER allocation must not leave the building.
+    const held = await this.prisma.finishedGoodsBatch.findMany({
+      where: {
+        id: { in: order.allocations.map((a) => a.fgBatchId) },
+        holdStatus: { not: 'ACTIVE' },
+      },
+      select: { fgBatchNumber: true, holdStatus: true },
+    });
+    if (held.length > 0) {
+      throw new BadRequestException(
+        `Cannot dispatch: ${held.map((b) => `${b.fgBatchNumber} is ${b.holdStatus}`).join(', ')}. ` +
+          'Release the hold, or re-allocate this order from another batch.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -729,8 +870,173 @@ export class SalesService {
     return {};
   }
 
+  /**
+   * Swap out allocations that point at a frozen or recalled batch.
+   *
+   * The recall flow's answer to "this order was promised FG-X and FG-X is now
+   * withheld". For a not-yet-dispatched order it gives back the reservation on
+   * every held batch (rows are released, never deleted - the audit still shows
+   * what was promised and why it changed) and re-picks the same quantity from
+   * ACTIVE, QA-released, unexpired stock, first-expiry-first-out, exactly as
+   * `allocate` does. A dispatched order cannot be fixed here - those packs are
+   * with the customer, which is what the recall's forward trace is for.
+   *
+   * Partial is reported, not hidden: if healthy stock cannot cover it the
+   * shortfall comes back and the order keeps whatever could be re-picked.
+   */
+  async reallocate(id: string, allocatedById: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        allocations: {
+          where: { releasedAt: null },
+          include: { fgBatch: { select: { fgBatchNumber: true, holdStatus: true } } },
+        },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status !== OrderStatus.ALLOCATED && order.status !== OrderStatus.PACKED) {
+      throw new BadRequestException(
+        `Only an allocated or packed order can be re-allocated (this one is ${order.status})`,
+      );
+    }
+
+    const stale = order.allocations.filter((a) => a.fgBatch.holdStatus !== 'ACTIVE');
+    if (stale.length === 0) {
+      throw new BadRequestException('None of this order\'s batches is frozen or recalled - nothing to re-allocate');
+    }
+
+    const today = startOfDay(new Date());
+
+    return this.prisma.$transaction(async (tx) => {
+      const released: Array<{ fgBatchNumber: string; quantity: number; reason: string }> = [];
+      const perLine = new Map<string, number>();
+
+      for (const a of stale) {
+        const row = await tx.finishedGoodsStock.findUnique({
+          where: { warehouseId_fgBatchId: { warehouseId: a.warehouseId, fgBatchId: a.fgBatchId } },
+        });
+        if (row) {
+          await tx.finishedGoodsStock.update({
+            where: { id: row.id },
+            data: { reservedQuantity: { decrement: Math.min(a.quantity, row.reservedQuantity) } },
+          });
+        }
+        const reason = `Batch ${a.fgBatch.fgBatchNumber} is ${a.fgBatch.holdStatus} - re-allocated`;
+        await tx.orderAllocation.update({ where: { id: a.id }, data: { releasedAt: new Date(), releasedReason: reason } });
+        released.push({ fgBatchNumber: a.fgBatch.fgBatchNumber, quantity: a.quantity, reason });
+        perLine.set(a.orderItemId, (perLine.get(a.orderItemId) ?? 0) + a.quantity);
+      }
+
+      const items = await tx.orderItem.findMany({ where: { id: { in: [...perLine.keys()] } } });
+      const created: Array<{ orderItemId: string; fgBatchNumber: string; quantity: number }> = [];
+      const shortfalls: Array<{ orderItemId: string; productId: string; short: number }> = [];
+
+      for (const item of items) {
+        const needed = perLine.get(item.id) ?? 0;
+        const stock = await tx.finishedGoodsStock.findMany({
+          where: {
+            warehouseId: order.warehouseId,
+            fgBatch: { productId: item.productId, qaReleased: true, holdStatus: 'ACTIVE' },
+          },
+          include: { fgBatch: { select: { id: true, fgBatchNumber: true, expiryDate: true } } },
+        });
+        const eligible = stock
+          .filter((r) => r.quantity - r.reservedQuantity > 0)
+          .filter((r) => !r.fgBatch.expiryDate || r.fgBatch.expiryDate >= today)
+          .sort(byFirstExpiryFirstOut);
+
+        let outstanding = needed;
+        for (const row of eligible) {
+          if (outstanding === 0) break;
+          const take = Math.min(outstanding, row.quantity - row.reservedQuantity);
+          if (take <= 0) continue;
+          await tx.orderAllocation.create({
+            data: {
+              orderId: order.id,
+              orderItemId: item.id,
+              fgBatchId: row.fgBatchId,
+              warehouseId: row.warehouseId,
+              quantity: take,
+              allocatedById,
+            },
+          });
+          await tx.finishedGoodsStock.update({ where: { id: row.id }, data: { reservedQuantity: { increment: take } } });
+          created.push({ orderItemId: item.id, fgBatchNumber: row.fgBatch.fgBatchNumber, quantity: take });
+          outstanding -= take;
+        }
+        if (outstanding > 0) shortfalls.push({ orderItemId: item.id, productId: item.productId, short: outstanding });
+      }
+
+      return { orderNumber: order.orderNumber, released, allocations: created, shortfalls, complete: shortfalls.length === 0 };
+    });
+  }
+
+  /**
+   * A delivered item coming back / being refunded. Records the return and, in
+   * the SAME transaction, takes back the loyalty points those items earned - so
+   * a return and its reversal are all-or-nothing, and neither can be missed.
+   *
+   * Only DELIVERED orders can have returns (nothing has reached the customer
+   * before that), and cumulative returned quantity can never exceed what was
+   * ordered.
+   */
+  async recordReturn(id: string, dto: RecordReturnDto, recordedById: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { items: { include: { returns: { select: { quantity: true } } } } },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status !== OrderStatus.DELIVERED) {
+      throw new BadRequestException(
+        `Only a delivered order can have returns (this one is ${order.status}). Cancel it instead.`,
+      );
+    }
+
+    const wanted = new Map<string, number>();
+    for (const line of dto.items) wanted.set(line.orderItemId, (wanted.get(line.orderItemId) ?? 0) + line.quantity);
+
+    for (const [orderItemId, quantity] of wanted) {
+      const item = order.items.find((i) => i.id === orderItemId);
+      if (!item) throw new BadRequestException(`Item ${orderItemId} is not on order ${order.orderNumber}`);
+      const alreadyReturned = item.returns.reduce((n, r) => n + r.quantity, 0);
+      if (alreadyReturned + quantity > item.quantity) {
+        throw new BadRequestException(
+          `Cannot return ${quantity} more: ${alreadyReturned} of ${item.quantity} already returned`,
+        );
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const rows: Prisma.OrderReturnGetPayload<object>[] = [];
+      for (const [orderItemId, quantity] of wanted) {
+        rows.push(
+          await tx.orderReturn.create({
+            data: {
+              orderId: order.id,
+              orderItemId,
+              quantity,
+              reason: dto.reason,
+              // A refund amount is for the whole return; recorded once, on the first line.
+              refundAmount: rows.length === 0 ? dto.refundAmount : undefined,
+              recordedById,
+            },
+          }),
+        );
+      }
+      const { pointsReversed } = await this.loyalty.reverseForReturn(tx, order.id, [...wanted.keys()]);
+      return { orderNumber: order.orderNumber, returns: rows, loyaltyPointsReversed: pointsReversed };
+    });
+  }
+
   /** Cancelling releases every reservation the order was holding. */
   async cancel(id: string, dto: CancelOrderDto) {
+    const result = await this.cancelCore(id, dto);
+    await this.record(id, 'CANCELLED', undefined, dto.reason);
+    return result;
+  }
+
+  private async cancelCore(id: string, dto: CancelOrderDto) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       // Live allocations only - a previously released one has already had its
@@ -772,6 +1078,12 @@ export class SalesService {
         where: { orderId: id, releasedAt: null },
         data: { releasedAt: new Date(), releasedReason: dto.reason ?? 'Order cancelled' },
       });
+
+      // Storefront orders: give back everything the customer put up. All in this
+      // transaction, so a half-cancelled order cannot exist.
+      await tx.stockReservation.updateMany({ where: { orderId: id, status: 'COMMITTED' }, data: { status: 'RELEASED' } });
+      await this.loyalty.refundRedemptionForOrder(tx, id);
+      await refundCouponForOrder(tx, id);
 
       return tx.order.update({
         where: { id },

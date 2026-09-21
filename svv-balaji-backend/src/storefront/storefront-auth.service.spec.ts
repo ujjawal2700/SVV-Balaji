@@ -19,6 +19,7 @@ describe('StorefrontAuthService', () => {
   let referrals: any[];
   let referralSettings: any;
   let coinTransactions: any[];
+  let sessions: any[];
   let counters: Record<string, number>;
   let prisma: any;
   let service: StorefrontAuthService;
@@ -39,6 +40,7 @@ describe('StorefrontAuthService', () => {
     referrals = [];
     referralSettings = null;
     coinTransactions = [];
+    sessions = [];
     counters = {};
 
     prisma = {
@@ -91,6 +93,11 @@ describe('StorefrontAuthService', () => {
             .filter((c) => c.phone === where.phone && c.consumedAt === null)
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null,
         ),
+        updateMany: jest.fn(async ({ where, data }) => {
+          const rows = challenges.filter((c) => c.id === where.id && (where.consumedAt !== null || c.consumedAt === null));
+          rows.forEach((r) => Object.assign(r, data));
+          return { count: rows.length };
+        }),
         update: jest.fn(async ({ where, data }) => {
           const row = challenges.find((c) => c.id === where.id);
           if (data.attempts?.increment !== undefined) {
@@ -177,6 +184,23 @@ describe('StorefrontAuthService', () => {
         update: jest.fn(async ({ where, data }) => {
           counters[where.key] = (counters[where.key] ?? 0) + data.lastNumber.increment;
           return { key: where.key, lastNumber: counters[where.key] };
+        }),
+      },
+      customerSession: {
+        create: jest.fn(async ({ data }) => {
+          const row = { id: `sess-${sessions.length + 1}`, revokedAt: null, ...data };
+          sessions.push(row);
+          return row;
+        }),
+        update: jest.fn(async ({ where, data }) => Object.assign(sessions.find((x) => x.id === where.id), data)),
+        findUnique: jest.fn(async ({ where }) => {
+          const row = sessions.find((x) => x.id === where.id);
+          return row ? { ...row, account: accounts.find((a) => a.id === row.accountId) } : null;
+        }),
+        updateMany: jest.fn(async ({ where, data }) => {
+          const rows = sessions.filter((x) => (!where.id || x.id === where.id) && (!where.accountId || x.accountId === where.accountId) && x.revokedAt === null);
+          rows.forEach((r) => Object.assign(r, data));
+          return { count: rows.length };
         }),
       },
       $transaction: jest.fn(async (fn: any) => fn(prisma)),
@@ -647,6 +671,89 @@ describe('StorefrontAuthService', () => {
       const stored = challenges[challenges.length - 1];
       expect(stored.codeHash).not.toBe('123456');
       expect(await bcrypt.compare('123456', stored.codeHash)).toBe(true);
+    });
+  });
+  describe('audience separation, sessions and one-time referral', () => {
+    const login = async (phone: string, extra: Record<string, unknown> = {}, audience = 'CUSTOMER') => {
+      const code = await requestAndGetCode(phone);
+      return service.verifyOtp({ phone, code, audience, ...extra } as any) as Promise<any>;
+    };
+
+    it('customer sign-in creates the account on first verify and flags it new', async () => {
+      const first = await login('9333333331');
+      expect(first.isNewAccount).toBe(true);
+      const again = await login('9333333331');
+      expect(again.isNewAccount).toBe(false);
+      expect(customers).toHaveLength(1);
+    });
+
+    it('a referral code is honoured on first verify only - never again on later logins', async () => {
+      await login('9333333331', { fullName: 'Referrer' });
+      const referrerCode = customers[0].referralCode;
+
+      await login('9333333332', { referralCode: referrerCode });
+      expect(referrals).toHaveLength(1);
+
+      // Existing customer logging in again WITH a code (even a valid one, even the same one): ignored.
+      const again = await login('9333333332', { referralCode: referrerCode });
+      expect(again.isNewAccount).toBe(false);
+      expect(referrals).toHaveLength(1);
+
+      // Even a garbage code on an existing account is not validated, so it cannot fail the login.
+      await expect(login('9333333332', { referralCode: 'DOESNOTEXIST' })).resolves.toBeDefined();
+      expect(referrals).toHaveLength(1);
+    });
+
+    it('retailer login never creates an account for an unknown number', async () => {
+      const code = await requestAndGetCode('9333333340');
+      await expect(
+        service.verifyOtp({ phone: '9333333340', code, audience: 'RETAILER' } as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(accounts).toHaveLength(0);
+    });
+
+    it('a customer number cannot sign in as a retailer and a retailer number cannot sign in as a customer', async () => {
+      await login('9333333331');
+      await expect(service.requestOtp('9333333331', 'RETAILER')).rejects.toThrow(ForbiddenException);
+
+      accounts.push({ id: 'acct-r', phone: '9333333350', channel: 'B2B', status: 'ACTIVE', fullName: 'R', customerId: null });
+      await expect(service.requestOtp('9333333350', 'CUSTOMER')).rejects.toThrow(ForbiddenException);
+      const code = await requestAndGetCode('9333333350');
+      await expect(
+        service.verifyOtp({ phone: '9333333350', code, audience: 'CUSTOMER' } as any),
+      ).rejects.toThrow(ForbiddenException);
+      // ...and the wrong-door attempt did not burn the code.
+      await expect(
+        service.verifyOtp({ phone: '9333333350', code, audience: 'RETAILER' } as any),
+      ).resolves.toBeDefined();
+    });
+
+    it('login creates a server-side session that the tokens point at; logout revokes it', async () => {
+      const s = await login('9333333331');
+      expect(sessions).toHaveLength(1);
+      expect(JSON.parse(s.accessToken.slice('signed.'.length)).sid).toBe(sessions[0].id);
+      await service.logout(sessions[0].id);
+      expect(sessions[0].revokedAt).toBeInstanceOf(Date);
+      await expect(service.refresh(s.refreshToken)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('refresh rotates within the same session; replaying an old refresh token kills the session', async () => {
+      const s = await login('9333333331');
+      // The mocked signer is deterministic, so make the second token differ.
+      (service as any).jwtService.signAsync.mockImplementation(async (p: any, o: any) => `signed.${JSON.stringify({ ...p, n: Math.random() })}`);
+      const rotated: any = await service.refresh(s.refreshToken);
+      expect(sessions).toHaveLength(1);
+      expect(rotated.refreshToken).not.toBe(s.refreshToken);
+      await expect(service.refresh(s.refreshToken)).rejects.toThrow(UnauthorizedException);
+      expect(sessions[0].revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('logout-all ends every device session', async () => {
+      await login('9333333331');
+      await login('9333333331');
+      expect(sessions).toHaveLength(2);
+      const r = await service.logoutAll(accounts[0].id);
+      expect(r.sessionsEnded).toBe(2);
     });
   });
 });

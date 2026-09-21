@@ -9,16 +9,19 @@ import type {
   VerifyOtpResponse,
 } from './types';
 
+/** Which sign-in screen the request comes from. The server refuses the other audience's numbers. */
+export type AuthAudience = 'CUSTOMER' | 'RETAILER';
+
 export const storefrontAuthApi = {
-  requestOtp(phone: string) {
+  requestOtp(phone: string, audience?: AuthAudience) {
     return api
-      .post<RequestOtpResponse>('/storefront/auth/otp/request', { phone })
+      .post<RequestOtpResponse>('/storefront/auth/otp/request', { phone, audience })
       .then((r) => r.data);
   },
 
-  verifyOtp(phone: string, code: string, fullName?: string, referralCode?: string) {
+  verifyOtp(phone: string, code: string, audience: AuthAudience, fullName?: string, referralCode?: string) {
     return api
-      .post<VerifyOtpResponse>('/storefront/auth/otp/verify', { phone, code, fullName, referralCode })
+      .post<VerifyOtpResponse>('/storefront/auth/otp/verify', { phone, code, audience, fullName, referralCode })
       .then((r) => r.data);
   },
 
@@ -51,7 +54,14 @@ export const storefrontAuthApi = {
       .then((r) => r.data);
   },
 
-  logout() {
-    return api.post('/storefront/auth/logout').then((r) => r.data);
+  /** Tokens are passed explicitly: the caller clears the local store right after, before the request interceptor would read it. */
+  logout(tokens: { accessToken?: string | null; refreshToken?: string | null }) {
+    return api
+      .post(
+        '/storefront/auth/logout',
+        { refreshToken: tokens.refreshToken ?? undefined },
+        tokens.accessToken ? { headers: { Authorization: `Bearer ${tokens.accessToken}` } } : undefined,
+      )
+      .then((r) => r.data);
   },
 };

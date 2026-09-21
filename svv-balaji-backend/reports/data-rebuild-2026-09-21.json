@@ -1,0 +1,122 @@
+{
+  "removed": {
+    "product_specifications": 0,
+    "product_faqs": 0,
+    "product_offers": 0,
+    "coin_transactions": 27,
+    "customer_addresses": 20,
+    "coupon_redemptions": 1,
+    "farmer_verification_logs": 2,
+    "seed_distributions": 0,
+    "training_attendances": 0,
+    "field_visits": 0,
+    "referral_settings": 0,
+    "batch_hold_events": 3,
+    "push_subscriptions": 0,
+    "stock_movements": 43,
+    "cleaning_grading_records": 0,
+    "quality_inspections": 9,
+    "loyalty_settings": 0,
+    "order_returns": 3,
+    "order_events": 104,
+    "order_allocations": 23,
+    "supplier_verification_logs": 0,
+    "warehouse_stock": 7,
+    "finished_goods_stock": 11,
+    "stock_reservations": 18,
+    "payment_transactions": 18,
+    "order_shipments": 1,
+    "recipe_ingredients": 7,
+    "production_consumptions": 7,
+    "loyalty_order_earn_lines": 18,
+    "customer_otp_challenges": 22,
+    "customer_sessions": 47,
+    "harvest_inspection_documents": 0,
+    "coupons": 2,
+    "finished_goods_batches": 9,
+    "order_items": 26,
+    "customer_accounts": 30,
+    "referrals": 4,
+    "raw_material_batches": 7,
+    "training_sessions": 0,
+    "loyalty_order_earns": 15,
+    "orders": 23,
+    "production_batches": 7,
+    "price_lists": 9,
+    "raw_material_collections": 7,
+    "supplier_transports": 0,
+    "warehouses": 3,
+    "recipes": 7,
+    "product_variants": 0,
+    "checkout_sessions": 18,
+    "harvest_inspections": 7,
+    "purchase_orders": 0,
+    "products": 7,
+    "customers": 30,
+    "agreements": 0,
+    "farm_plots": 0,
+    "procurement_plans": 0,
+    "suppliers": 0,
+    "categories": 2,
+    "farmers": 2,
+    "users": 4,
+    "branches": 0
+  },
+  "kept": {
+    "products": [
+      "BJ-ALO-500G Aloo Bhujia (500g)",
+      "SC-SPR-95OZ Santa Cruz Organic Fruit Spread",
+      "TB-CHP-125OZ Tony B's Steak Chips Gochu Bang!",
+      "BJ-NAM-100G Classic Namkeen",
+      "DT-ATTA-10KG Premium Chakki Atta",
+      "CF-COF-48FLOZ Califia Farms Pure Black Medium Roast",
+      "DES-PREM Premium Whole Spices Combo – Dalchini, B"
+    ],
+    "categories": [
+      "Banana Chips",
+      "Tortilla Chips",
+      "Spices",
+      "Whole Spices",
+      "Powdered Spices",
+      "Blended Masalas",
+      "Atta & Flour",
+      "Chakki Atta",
+      "Maida",
+      "Besan",
+      "Namkeen",
+      "Bhujia",
+      "Mixtures",
+      "Sev & Gathiya",
+      "Wafers",
+      "Potato Chips"
+    ],
+    "customers": [
+      "Raunak 9111966732"
+    ],
+    "farmers": [
+      "Harsh Pandey SVV-2026-000026"
+    ],
+    "users": [
+      "admin@svvbalaji.com"
+    ],
+    "warehouses": [
+      "Main Store 1789969802",
+      "Secondary Store 1789969802"
+    ],
+    "genuineOrders": [
+      "SO-20260921-151"
+    ]
+  },
+  "rebuilt": [
+    "BJ-ALO-500G / FG-20260921-STOCK-001 / PB-2026-001: FG stock 500 on hand, ledger restated",
+    "SC-SPR-95OZ / FG-20260921-STOCK-002 / PB-2026-002: FG stock 500 on hand, ledger restated",
+    "TB-CHP-125OZ / FG-20260921-STOCK-003 / PB-2026-003: FG stock 500 on hand, ledger restated",
+    "BJ-NAM-100G / FG-20260921-STOCK-004 / PB-2026-004: FG stock 500 on hand, ledger restated",
+    "DT-ATTA-10KG / FG-20260921-STOCK-005 / PB-2026-005: FG stock 500 on hand, ledger restated",
+    "CF-COF-48FLOZ / FG-20260921-STOCK-006 / PB-2026-006: FG stock 500 on hand, ledger restated",
+    "DES-PREM / FG-20260921-STOCK-007 / PB-2026-007: FG stock 500 on hand, ledger restated"
+  ],
+  "notes": [
+    "cycle broken by nulling: users.branchId, branches.managerId"
+  ]
+}

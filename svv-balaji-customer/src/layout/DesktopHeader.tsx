@@ -24,7 +24,8 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import { useLoyalty } from '../loyalty/useLoyalty';
+import { useLoyalty } from '../loyalty/useLoyalty';
+
 import { formatInr } from '../utils/money';
 
 
@@ -54,7 +55,7 @@ export function DesktopHeader() {
         <div style={{ padding: '6px 4px', minWidth: 220 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
             <Typography.Text strong style={{ fontSize: 14 }}>
-              {retailerProfile?.storeName || 'Sri Balaji Provision Store'}
+              {retailerProfile?.storeName || 'My Store'}
             </Typography.Text>
             <Tag color="green" style={{ margin: 0, fontSize: 10, fontWeight: 700 }}>KYC VERIFIED</Tag>
           </div>
@@ -80,7 +81,7 @@ export function DesktopHeader() {
             </div>
           </div>
           <Tag color="gold" style={{ margin: '8px 0 0', fontSize: 11 }}>
-            {loyalty.points.toLocaleString('en-IN')} loyalty pts • {loyalty.tier.label}
+            {loyalty.points.toLocaleString('en-IN')} loyalty pts
           </Tag>
         </div>
       ),
@@ -121,15 +122,12 @@ export function DesktopHeader() {
       label: (
         <div style={{ padding: '6px 4px', minWidth: 200 }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 14 }}>
-            {customerProfile?.name || 'Rahul Sharma'}
+            {customerProfile?.name ?? ''}
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {customerProfile?.phone || '+91 98765 43210'}
+            {customerProfile?.phone ?? ''}
           </Typography.Text>
           <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-            <Tag color="orange" style={{ margin: 0, fontSize: 11 }}>
-              Wallet: ₹{customerProfile?.walletBalance || 250}
-            </Tag>
             <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
               {loyalty.points.toLocaleString('en-IN')} pts
             </Tag>

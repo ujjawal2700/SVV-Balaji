@@ -31,6 +31,11 @@ import { TransportModule } from './transport/transport.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { StorefrontAuthModule } from './storefront/storefront-auth.module';
 import { StorefrontCatalogueModule } from './storefront/storefront-catalogue.module';
+import { StorefrontTraceModule } from './storefront/storefront-trace.module';
+import { RecallModule } from './recall/recall.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { CheckoutModule } from './checkout/checkout.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ReferralSettingsModule } from './referral-settings/referral-settings.module';
 import { ReferralsModule } from './referrals/referrals.module';
@@ -81,6 +86,11 @@ import { SchemesModule } from './schemes/schemes.module';
     // storefront session resolves to a Customer.
     StorefrontAuthModule,
     StorefrontCatalogueModule,
+    StorefrontTraceModule,
+    LoyaltyModule, // percentage-based rewards: settings, earn on delivery, reversal on return
+    RealtimeModule, // live admin order feed (socket.io), web push, reconciliation
+    CheckoutModule, // storefront checkout, stock holds, fulfilment pipeline
+    RecallModule, // forward/backward trace + batch freeze/recall (Super Admin & QA)
     CategoriesModule,
     ReferralSettingsModule,
     ReferralsModule,

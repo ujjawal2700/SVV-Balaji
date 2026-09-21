@@ -13,6 +13,9 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '../auth/types';
 import { useCanFn } from '../auth/useCan';
 import { useAuth } from '../auth/useAuth';
+import { BellOutlined } from '@ant-design/icons';
+import { enableOrderAlerts, orderAlertSupport } from '../live/orderAlerts';
+import { useLiveOrders } from '../live/useLiveOrders';
 import { NAV_SECTIONS, findNavItem, type AdminZone } from './navigation';
 import { useAdminZone } from './useAdminZone';
 
@@ -33,6 +36,23 @@ export function AppLayout() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const can = useCanFn();
+
+  // The whole panel listens for orders: any screen gets notified, and every orders view refreshes.
+  const live = useLiveOrders(can('ORDER_VIEW'), () => navigate('/b2c-orders'));
+  const [alertsReady, setAlertsReady] = useState(false);
+  useEffect(() => {
+    if (!can('ORDER_VIEW')) return;
+    void orderAlertSupport().then((s) => setAlertsReady(s === 'ready')).catch(() => undefined);
+  }, [can]);
+  const turnOnAlerts = async () => {
+    try {
+      const ok = await enableOrderAlerts();
+      message[ok ? 'success' : 'warning'](ok ? 'Order alerts are on for this device' : 'Order alerts were not enabled');
+      if (ok) setAlertsReady(false);
+    } catch {
+      message.error('Could not enable order alerts');
+    }
+  };
 
   /**
    * The menu is filtered by permission, not merely disabled. Someone with no
@@ -232,6 +252,14 @@ export function AppLayout() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {can('ORDER_VIEW') ? (
+              <Tag color={live === 'live' ? 'green' : live === 'connecting' ? 'default' : 'red'} title="Live order feed">
+                ● {live === 'live' ? 'Live' : live === 'connecting' ? 'Connecting' : 'Offline (catching up on reconnect)'}
+              </Tag>
+            ) : null}
+            {alertsReady ? (
+              <Button size="small" icon={<BellOutlined />} onClick={() => void turnOnAlerts()}>Enable order alerts</Button>
+            ) : null}
             {user?.branch ? <Tag>{user.branch.name}</Tag> : null}
             <Tag color="blue">{user ? ROLE_LABELS[user.role] : ''}</Tag>
 

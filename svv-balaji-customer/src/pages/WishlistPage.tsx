@@ -6,9 +6,12 @@ import {
   ShoppingOutlined,
 } from '@ant-design/icons';
 import { Button, Typography, message } from 'antd';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../cart/useCart';
+import { useCart } from '../cart/useCart';
+import { useCatalogueProducts } from '../hooks/useCatalogue';
+import { useToggleWishlist, useWishlist } from '../hooks/useWishlist';
+
 import { formatInr } from '../utils/money';
 
 
@@ -24,84 +27,35 @@ interface WishlistItem {
   badge?: string;
 }
 
-const initialWishlist: WishlistItem[] = [
-  {
-    id: 'w-1',
-    productId: 'premium-atta',
-    name: 'Aashirvaad Shudh Chakki Atta',
-    variant: '10 kg',
-    price: 450,
-    mrp: 480,
-    image: '/images/cat_atta_flour.jpg',
-    stockStatus: 'IN_STOCK',
-    badge: '6% off',
-  },
-  {
-    id: 'w-2',
-    productId: 'classic-namkeen-100x20',
-    name: 'Classic Namkeen Mix',
-    variant: '100g × 20',
-    price: 180,
-    mrp: 200,
-    image: '/images/classic_namkeen.jpg',
-    stockStatus: 'LOW_STOCK',
-    badge: '10% off',
-  },
-  {
-    id: 'w-3',
-    productId: 'aloo-bhujia-500g',
-    name: 'Aloo Bhujia Spicy',
-    variant: '500 g',
-    price: 180,
-    mrp: 200,
-    image: '/images/aloo_bhujia.jpg',
-    stockStatus: 'OUT_OF_STOCK',
-  },
-  {
-    id: 'w-4',
-    productId: 'santa-cruz',
-    name: 'Santa Cruz Organic Fruit Spread',
-    variant: '250 g',
-    price: 750,
-    mrp: 850,
-    image: '/images/santa_cruz.jpg',
-    stockStatus: 'IN_STOCK',
-    badge: '12% off',
-  },
-  {
-    id: 'w-5',
-    productId: 'premium-atta',
-    name: 'Tata Salt Iodised',
-    variant: '1 kg',
-    price: 25,
-    mrp: 30,
-    image: '/images/cat_salt.jpg',
-    stockStatus: 'IN_STOCK',
-    badge: '17% off',
-  },
-  {
-    id: 'w-6',
-    productId: 'aloo-bhujia-500g',
-    name: 'Moong Dal Namkeen',
-    variant: '200 g',
-    price: 60,
-    mrp: 70,
-    image: '/images/moong_dal.jpg',
-    stockStatus: 'IN_STOCK',
-    badge: '14% off',
-  },
-];
-
 export function WishlistPage() {
   const navigate = useNavigate();
   const cart = useCart();
-  const [items, setItems] = useState<WishlistItem[]>(initialWishlist);
+  const wishlist = useWishlist();
+  const toggle = useToggleWishlist();
+  const catalogue = useCatalogueProducts();
+  // The saved ids, joined to today's catalogue - so price, stock and unpublishing are always current.
+  const items: WishlistItem[] = useMemo(
+    () =>
+      catalogue.products
+        .filter((p) => wishlist.ids.has(p.id))
+        .map((p) => ({
+          id: p.id,
+          productId: p.id,
+          name: p.name,
+          variant: p.variant,
+          price: p.price ?? 0,
+          mrp: p.mrp ?? p.price ?? 0,
+          image: p.image,
+          stockStatus: p.purchasable ? ('IN_STOCK' as const) : ('OUT_OF_STOCK' as const),
+          badge: p.badge ?? undefined,
+        })),
+    [catalogue.products, wishlist.ids],
+  );
   // Track per-item qty in the add-flow (before actually adding)
   const [localQty, setLocalQty] = useState<Record<string, number>>({});
 
   const handleRemove = (id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
-    message.success('Removed from wishlist');
+    toggle.mutate({ productId: id, saved: true }, { onSuccess: () => message.success('Removed from wishlist') });
   };
 
   const getQty = (id: string) => localQty[id] || 0;

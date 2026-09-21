@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@ne
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InspectionStage, QualityResult } from '@prisma/client';
 import { QualityService } from './quality.service';
-import { CreateQualityInspectionDto } from './dto/quality.dto';
+import { CreateQualityInspectionDto, ReleaseBatchDto } from './dto/quality.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
@@ -44,9 +44,16 @@ export class QualityController {
   @RequirePermission('quality.release')
   @ApiOperation({
     summary: 'Release a finished goods batch for stocking/dispatch (FRD 21.5)',
-    description: 'Refuses unless the latest finished-goods inspection was a PASS.',
+    description:
+      'Refuses unless the latest finished-goods inspection was a PASS. In the same transaction the ' +
+      'packs are inwarded to the production warehouse (or warehouseId) as a PRODUCTION_INWARD ledger ' +
+      'entry (reference QA_RELEASE_AUTO) - no manual stock-in is needed.',
   })
-  release(@Param('fgBatchId') fgBatchId: string) {
-    return this.qualityService.releaseBatch(fgBatchId);
+  release(
+    @Param('fgBatchId') fgBatchId: string,
+    @Body() dto: ReleaseBatchDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.qualityService.releaseBatch(fgBatchId, user.sub, dto?.warehouseId);
   }
 }

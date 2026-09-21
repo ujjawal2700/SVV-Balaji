@@ -69,3 +69,23 @@ export class StockFinishedGoodsDto {
   @IsString()
   storageLocation?: string;
 }
+
+export class TransferFinishedGoodsDto {
+  @ApiProperty()
+  @IsString()
+  fromWarehouseId: string;
+
+  @ApiProperty()
+  @IsString()
+  toWarehouseId: string;
+
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  quantity: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  storageLocation?: string;
+}

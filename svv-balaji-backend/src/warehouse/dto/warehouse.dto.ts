@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { WarehouseKind } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateWarehouseDto {
@@ -18,6 +19,29 @@ export class CreateWarehouseDto {
   @IsOptional()
   @IsNumber()
   capacity?: number;
+
+  @ApiPropertyOptional({ enum: WarehouseKind, description: 'CENTRAL ships nationally by courier; OUTLET is a franchise store delivering locally.' })
+  @IsOptional()
+  @IsEnum(WarehouseKind)
+  kind?: WarehouseKind;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
+  @ApiPropertyOptional() @IsOptional() @Matches(/^[1-9]\d{5}$/, { message: 'Enter a valid 6-digit pincode' }) pincode?: string;
+
+  @ApiPropertyOptional({ description: 'Required for an OUTLET: where the store is, for the delivery-radius test.' })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(-90) @Max(90)
+  latitude?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(-180) @Max(180)
+  longitude?: number;
+
+  @ApiPropertyOptional({ description: 'How far this outlet delivers, km. Empty = the program default.' })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.5) @Max(100)
+  serviceRadiusKm?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() contactPhone?: string;
 }
 
 export class StockInDto {

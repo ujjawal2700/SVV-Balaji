@@ -2,7 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
 import { CodesService } from '../codes/codes.service';
-import { CreateFinishedGoodsBatchDto, StockFinishedGoodsDto } from './dto/packaging.dto';
+import {
+  CreateFinishedGoodsBatchDto,
+  StockFinishedGoodsDto,
+  TransferFinishedGoodsDto,
+} from './dto/packaging.dto';
 
 @Injectable()
 export class PackagingService {
@@ -179,10 +183,28 @@ export class PackagingService {
       );
     }
 
+    if (batch.holdStatus !== 'ACTIVE') {
+      throw new BadRequestException(`Batch is ${batch.holdStatus} - it cannot enter finished goods stock`);
+    }
+
     const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
 
     return this.prisma.$transaction(async (tx) => {
+      // QA release now inwards the packs automatically. This manual path stays for late
+      // corrections only, and must not push the stocked total past what was packed.
+      const inwarded = await tx.stockMovement.aggregate({
+        where: { fgBatchId, movementType: { in: ['STOCK_IN', 'PRODUCTION_INWARD'] } },
+        _sum: { quantity: true },
+      });
+      const already = Number(inwarded._sum.quantity ?? 0);
+      if (already + dto.quantity > batch.packCount) {
+        throw new BadRequestException(
+          `${already} of ${batch.packCount} packs are already in stock (QA release inwards them ` +
+            `automatically) - stocking ${dto.quantity} more would exceed what was packed`,
+        );
+      }
+
       const stock = await tx.finishedGoodsStock.upsert({
         where: { warehouseId_fgBatchId: { warehouseId: dto.warehouseId, fgBatchId } },
         update: {
@@ -212,6 +234,70 @@ export class PackagingService {
       });
 
       return stock;
+    });
+  }
+
+  /**
+   * Moves packs of a released batch between nodes (depot -> outlet). Total stock of the batch
+   * is unchanged; packs held for open orders cannot be moved out from under them.
+   */
+  async transfer(fgBatchId: string, dto: TransferFinishedGoodsDto, performedById: string) {
+    if (dto.fromWarehouseId === dto.toWarehouseId) {
+      throw new BadRequestException('Source and destination warehouses must differ');
+    }
+    const batch = await this.prisma.finishedGoodsBatch.findUnique({ where: { id: fgBatchId } });
+    if (!batch) throw new NotFoundException('Finished goods batch not found');
+    if (!batch.qaReleased || batch.holdStatus !== 'ACTIVE') {
+      throw new BadRequestException('Only QA-released, active batches can be transferred');
+    }
+    const dest = await this.prisma.warehouse.findUnique({ where: { id: dto.toWarehouseId } });
+    if (!dest || !dest.isActive) throw new NotFoundException('Destination warehouse not found or inactive');
+
+    return this.prisma.$transaction(async (tx) => {
+      const moved = await tx.finishedGoodsStock.updateMany({
+        where: {
+          warehouseId: dto.fromWarehouseId,
+          fgBatchId,
+          // free packs only: quantity - reservedQuantity >= requested
+          quantity: { gte: dto.quantity },
+        },
+        data: { quantity: { decrement: dto.quantity } },
+      });
+      const src = await tx.finishedGoodsStock.findUnique({
+        where: { warehouseId_fgBatchId: { warehouseId: dto.fromWarehouseId, fgBatchId } },
+      });
+      if (!src || moved.count === 0) {
+        throw new BadRequestException('Not enough stock of this batch in the source warehouse');
+      }
+      if (src.quantity < src.reservedQuantity) {
+        throw new BadRequestException(
+          `Only ${src.quantity + dto.quantity - src.reservedQuantity} unreserved packs can be transferred`,
+        );
+      }
+
+      await tx.finishedGoodsStock.upsert({
+        where: { warehouseId_fgBatchId: { warehouseId: dto.toWarehouseId, fgBatchId } },
+        update: { quantity: { increment: dto.quantity }, storageLocation: dto.storageLocation },
+        create: {
+          warehouseId: dto.toWarehouseId,
+          fgBatchId,
+          quantity: dto.quantity,
+          storageLocation: dto.storageLocation,
+        },
+      });
+
+      return tx.stockMovement.create({
+        data: {
+          fgBatchId,
+          fromWarehouseId: dto.fromWarehouseId,
+          toWarehouseId: dto.toWarehouseId,
+          movementType: 'TRANSFER',
+          quantity: dto.quantity,
+          unit: 'PACK',
+          reason: `Transferred batch ${batch.fgBatchNumber}`,
+          performedById,
+        },
+      });
     });
   }
 
@@ -347,6 +433,7 @@ export class PackagingService {
         packagingType: batch.packagingType,
         netWeight: `${batch.netWeight} ${batch.weightUnit}`,
         qaReleased: batch.qaReleased,
+        holdStatus: batch.holdStatus,
       },
       production: {
         productionBatchNumber: batch.productionBatch.productionBatchNumber,

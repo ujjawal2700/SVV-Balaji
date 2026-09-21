@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { StorefrontAuthService } from './storefront-auth.service';
 import { StorefrontAccountsController, StorefrontAuthController } from './storefront-auth.controller';
+import { StorefrontWishlistController, StorefrontWishlistService } from './storefront-wishlist';
 import { CustomerJwtStrategy } from './strategies/customer-jwt.strategy';
 
 @Module({
@@ -13,8 +14,8 @@ import { CustomerJwtStrategy } from './strategies/customer-jwt.strategy';
     PassportModule,
     JwtModule.register({}),
   ],
-  controllers: [StorefrontAuthController, StorefrontAccountsController],
-  providers: [StorefrontAuthService, CustomerJwtStrategy],
+  controllers: [StorefrontAuthController, StorefrontAccountsController, StorefrontWishlistController],
+  providers: [StorefrontAuthService, StorefrontWishlistService, CustomerJwtStrategy],
   exports: [StorefrontAuthService],
 })
 export class StorefrontAuthModule {}

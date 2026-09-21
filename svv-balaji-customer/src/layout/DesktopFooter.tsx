@@ -268,10 +268,6 @@ export function DesktopFooter() {
                 <span>Central Mandi Hub, Plot 42-B, Industrial Area, Sector 18</span>
               </div>
 
-              <div style={{ marginTop: 12, padding: '10px 14px', background: '#292524', borderRadius: 8, border: '1px solid #3f3f46' }}>
-                <span style={{ fontSize: 11, color: '#d6d3d1' }}>Assigned Field Rep:</span>
-                <strong style={{ display: 'block', color: '#34d399', fontSize: 13 }}>Ramesh Verma (+91 98765 43210)</strong>
-              </div>
             </div>
           </div>
         </div>
