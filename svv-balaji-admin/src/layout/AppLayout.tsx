@@ -149,21 +149,40 @@ export function AppLayout() {
       >
         <div
           style={{
-            height: 56,
+            height: 60,
             display: 'flex',
             alignItems: 'center',
             justifyContent: collapsed ? 'center' : 'flex-start',
-            padding: collapsed ? 0 : '0 20px',
+            padding: collapsed ? '0 8px' : '0 16px',
             borderBottom: '1px solid #f0f0f0',
             position: 'sticky',
             top: 0,
             zIndex: 2,
             background: '#fff',
+            gap: 10,
           }}
         >
-          <Typography.Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
-            {collapsed ? 'SVV' : 'SVV Balaji'}
-          </Typography.Text>
+          <img
+            src="/svv-balaji.png"
+            alt="SVV Balaji Logo"
+            style={{
+              height: collapsed ? 32 : 36,
+              width: 'auto',
+              maxHeight: 38,
+              objectFit: 'contain',
+              borderRadius: 6,
+            }}
+          />
+          {!collapsed && (
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <Typography.Text strong style={{ fontSize: 15, lineHeight: 1.2, whiteSpace: 'nowrap', color: '#1e293b' }}>
+                SVV Balaji
+              </Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                Super Admin
+              </Typography.Text>
+            </div>
+          )}
         </div>
 
         {!collapsed && (
@@ -171,7 +190,7 @@ export function AppLayout() {
             style={{
               padding: '10px 12px 6px 12px',
               position: 'sticky',
-              top: 56,
+              top: 60,
               zIndex: 1,
               background: '#fff',
               borderBottom: '1px solid #fafafa',
@@ -292,7 +311,7 @@ export function AppLayout() {
           </div>
         </Header>
 
-        <Content style={{ margin: 16, overflow: 'auto', paddingRight: 8 }}>
+        <Content style={{ margin: 16, overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}>
           {/* Screens are code-split (see App.tsx). The boundary sits here rather
               than around the whole app so the sider and header stay on screen
               while a chunk loads — the page swaps, the shell does not blink. */}

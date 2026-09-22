@@ -797,6 +797,111 @@ export class StorefrontAuthService {
     return { valid: true as const, referrerName: referrer.name };
   }
 
+  /**
+   * Public: Returns the current active referral program rules (coin amounts, trigger & FAQs)
+   * so the storefront Refer & Earn page can show live rates and dynamic FAQs.
+   */
+  async getReferralProgram() {
+    const settings = await this.referrals.getSettings(this.prisma);
+    return {
+      isActive: settings.isActive,
+      referrerRewardCoins: settings.referrerRewardCoins,
+      refereeRewardCoins: settings.refereeRewardCoins,
+      rewardTrigger: settings.rewardTrigger,
+      customerFaqs: settings.customerFaqs,
+      retailerFaqs: settings.retailerFaqs,
+    };
+  }
+
+  /**
+   * Authenticated: Returns the customer's referral metrics, code and referral list.
+   */
+  async getMyReferralSummary(accountId: string) {
+    const account = await this.prisma.customerAccount.findUnique({
+      where: { id: accountId },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            referralCode: true,
+            coinBalance: true,
+          },
+        },
+      },
+    });
+
+    if (!account?.customer) {
+      return {
+        referralCode: null,
+        coinBalance: 0,
+        totalReferred: 0,
+        successfulReferrals: 0,
+        pendingReferrals: 0,
+        totalCoinsEarned: 0,
+        referrals: [],
+      };
+    }
+
+    const customerId = account.customer.id;
+    const [referrals, coinTxns] = await Promise.all([
+      this.prisma.referral.findMany({
+        where: { referrerId: customerId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          referee: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              customerCode: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.coinTransaction.findMany({
+        where: {
+          customerId,
+          reason: 'REFERRAL_REFERRER_REWARD',
+        },
+      }),
+    ]);
+
+    const totalCoinsEarned = coinTxns.reduce((sum, tx) => sum + tx.amount, 0);
+    const successfulReferrals = referrals.filter((r) => r.rewardedAt !== null).length;
+    const pendingReferrals = referrals.filter((r) => r.rewardedAt === null).length;
+
+    return {
+      referralCode: account.customer.referralCode,
+      coinBalance: account.customer.coinBalance,
+      totalReferred: referrals.length,
+      successfulReferrals,
+      pendingReferrals,
+      totalCoinsEarned,
+      referrals: referrals.map((r) => {
+        const refereeNameParts = (r.referee?.name || 'Friend').trim().split(/\s+/);
+        const displayName = refereeNameParts.length > 1
+          ? `${refereeNameParts[0]} ${refereeNameParts[1][0]}.`
+          : refereeNameParts[0];
+        const rawPhone = r.referee?.phone || '';
+        const maskedPhone = rawPhone.length >= 6
+          ? `${rawPhone.slice(0, 3)}****${rawPhone.slice(-3)}`
+          : rawPhone;
+
+        return {
+          id: r.id,
+          code: r.code,
+          refereeName: displayName,
+          refereeMaskedPhone: maskedPhone,
+          createdAt: r.createdAt,
+          rewardedAt: r.rewardedAt,
+          status: r.rewardedAt ? ('QUALIFIED' as const) : ('PENDING' as const),
+        };
+      }),
+    };
+  }
+
   async rejectAccount(id: string, reviewerId: string, dto: RejectAccountDto) {
     const account = await this.prisma.customerAccount.findUnique({ where: { id } });
     if (!account) throw new NotFoundException('Account not found');

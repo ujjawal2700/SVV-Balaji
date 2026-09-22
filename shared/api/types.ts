@@ -2446,12 +2446,19 @@ export const REFERRAL_REWARD_TRIGGER_LABELS: Record<ReferralRewardTrigger, strin
   FIRST_DELIVERY: 'After First Order Delivery',
 };
 
+export interface ReferralFaqItem {
+  question: string;
+  answer: string;
+}
+
 export interface ReferralSettings {
   id: string;
   referrerRewardCoins: number;
   refereeRewardCoins: number;
   rewardTrigger: ReferralRewardTrigger;
   isActive: boolean;
+  customerFaqs?: ReferralFaqItem[];
+  retailerFaqs?: ReferralFaqItem[];
   updatedById: string | null;
   updatedAt: string;
   createdAt: string;
@@ -2462,6 +2469,8 @@ export interface UpdateReferralSettingsInput {
   refereeRewardCoins?: number;
   rewardTrigger?: ReferralRewardTrigger;
   isActive?: boolean;
+  customerFaqs?: ReferralFaqItem[];
+  retailerFaqs?: ReferralFaqItem[];
 }
 
 // ---------------------------------------------------------------------------

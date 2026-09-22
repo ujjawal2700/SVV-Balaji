@@ -19,11 +19,92 @@ const CONFIRMED_OR_LATER: OrderStatus[] = [
   OrderStatus.DELIVERED,
 ];
 
+export interface ReferralFaqItem {
+  question: string;
+  answer: string;
+}
+
 export interface UpdateReferralSettingsInput {
   referrerRewardCoins?: number;
   refereeRewardCoins?: number;
   rewardTrigger?: ReferralRewardTrigger;
   isActive?: boolean;
+  customerFaqs?: ReferralFaqItem[];
+  retailerFaqs?: ReferralFaqItem[];
+}
+
+export function getDefaultCustomerFaqs(
+  referrerCoins: number,
+  refereeCoins: number,
+  trigger: ReferralRewardTrigger,
+): ReferralFaqItem[] {
+  const triggerLabels: Record<ReferralRewardTrigger, { label: string; condition: string }> = {
+    REGISTRATION: { label: 'On Registration', condition: 'as soon as your friend completes their registration' },
+    ACCOUNT_VERIFICATION: { label: 'On Account Verification', condition: 'once your friend verifies their mobile number' },
+    FIRST_ORDER: { label: 'On First Order', condition: 'when your friend places and confirms their very first order' },
+    FIRST_DELIVERY: { label: 'On First Delivery', condition: 'when your friend receives their first order delivery' },
+  };
+  const t = triggerLabels[trigger] || triggerLabels.FIRST_ORDER;
+
+  return [
+    {
+      question: 'Where do I find my reward coins once earned?',
+      answer: 'All referral reward coins are directly credited to your Desi Rewards balance. You can view your points and past earnings breakdown anytime under the Desi Rewards page in your profile.',
+    },
+    {
+      question: 'How much are referral coins worth?',
+      answer: '1 Desi Coin = ₹1 INR. You can apply your coins during checkout to deduct the amount from your eligible grocery orders.',
+    },
+    {
+      question: 'When does my reward get credited?',
+      answer: `Per our active program policy (${t.label}), rewards are credited automatically ${t.condition}.`,
+    },
+    {
+      question: 'How many coins will my friend and I get?',
+      answer: `You receive ${referrerCoins} Coins (₹${referrerCoins}) and your friend receives ${refereeCoins} Welcome Bonus Coins (₹${refereeCoins})!`,
+    },
+    {
+      question: 'Can I refer myself using multiple phone numbers?',
+      answer: 'Self-referrals (matching phone number or registered email address) are blocked by our audit system to prevent misuse. Referral codes must be shared with genuine unique shoppers.',
+    },
+  ];
+}
+
+export function getDefaultRetailerFaqs(
+  referrerCoins: number,
+  refereeCoins: number,
+  trigger: ReferralRewardTrigger,
+): ReferralFaqItem[] {
+  const triggerLabels: Record<ReferralRewardTrigger, { label: string; condition: string }> = {
+    REGISTRATION: { label: 'On Registration Submission', condition: 'as soon as your partner store registers' },
+    ACCOUNT_VERIFICATION: { label: 'On GSTIN / KYC Approval', condition: 'once the newly registered business is reviewed and approved by staff' },
+    FIRST_ORDER: { label: 'On First Bulk Order', condition: 'when your partner store confirms their first wholesale consignment' },
+    FIRST_DELIVERY: { label: 'On First Delivery', condition: 'when the first wholesale consignment is delivered to their store dispatch point' },
+  };
+  const t = triggerLabels[trigger] || triggerLabels.FIRST_ORDER;
+
+  return [
+    {
+      question: 'Where do I find my wholesale reward coins?',
+      answer: 'All referral reward coins are directly credited to your Wholesaler Rewards / B2B Wallet balance. You can view your points and transaction history anytime under Wholesaler Rewards in your store profile.',
+    },
+    {
+      question: 'How much are referral coins worth for B2B orders?',
+      answer: '1 Desi Coin = ₹1 INR. You can apply your coins against bulk mandi purchases and wholesale invoice settlements.',
+    },
+    {
+      question: 'When does my partner referral reward get credited?',
+      answer: `Per our active program policy (${t.label}), rewards are credited automatically ${t.condition}.`,
+    },
+    {
+      question: 'How many coins will my store partner and I receive?',
+      answer: `You receive ${referrerCoins} Coins (₹${referrerCoins}) and the newly onboarded retailer receives ${refereeCoins} Welcome Bonus Coins (₹${refereeCoins}) on their business account!`,
+    },
+    {
+      question: 'Are GST verified store accounts eligible for referral benefits?',
+      answer: 'Yes! Every verified retail partner and kirana store receives a unique referral code upon account approval and can refer other trade partners.',
+    },
+  ];
 }
 
 /**
@@ -42,6 +123,8 @@ export interface UpdateReferralSettingsInput {
 @Injectable()
 export class ReferralService {
   private readonly logger = new Logger(ReferralService.name);
+  private customCustomerFaqs: ReferralFaqItem[] | null = null;
+  private customRetailerFaqs: ReferralFaqItem[] | null = null;
 
   /**
    * Derived from the customer's own name plus a random 4-digit suffix
@@ -144,17 +227,36 @@ export class ReferralService {
    * to forget. Every field defaults to what the schema says (100 / 50 coins,
    * REGISTRATION trigger, active).
    */
-  async getSettings(prisma: Prisma.TransactionClient): Promise<ReferralSettings> {
-    const existing = await prisma.referralSettings.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (existing) return existing;
-    return prisma.referralSettings.create({ data: {} });
+  async getSettings(
+    prisma: Prisma.TransactionClient,
+  ): Promise<ReferralSettings & { customerFaqs: ReferralFaqItem[]; retailerFaqs: ReferralFaqItem[] }> {
+    let existing = await prisma.referralSettings.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!existing) {
+      existing = await prisma.referralSettings.create({ data: {} });
+    }
+
+    const customerFaqs =
+      this.customCustomerFaqs && this.customCustomerFaqs.length > 0
+        ? this.customCustomerFaqs
+        : getDefaultCustomerFaqs(existing.referrerRewardCoins, existing.refereeRewardCoins, existing.rewardTrigger);
+
+    const retailerFaqs =
+      this.customRetailerFaqs && this.customRetailerFaqs.length > 0
+        ? this.customRetailerFaqs
+        : getDefaultRetailerFaqs(existing.referrerRewardCoins, existing.refereeRewardCoins, existing.rewardTrigger);
+
+    return {
+      ...existing,
+      customerFaqs,
+      retailerFaqs,
+    };
   }
 
   async updateSettings(
     prisma: Prisma.TransactionClient,
     dto: UpdateReferralSettingsInput,
     updatedById: string,
-  ): Promise<ReferralSettings> {
+  ): Promise<ReferralSettings & { customerFaqs: ReferralFaqItem[]; retailerFaqs: ReferralFaqItem[] }> {
     if (dto.referrerRewardCoins !== undefined && dto.referrerRewardCoins < 0) {
       throw new BadRequestException('Referrer reward cannot be negative');
     }
@@ -162,8 +264,17 @@ export class ReferralService {
       throw new BadRequestException('Referred user reward cannot be negative');
     }
 
-    const current = await this.getSettings(prisma);
-    return prisma.referralSettings.update({
+    if (dto.customerFaqs !== undefined) {
+      this.customCustomerFaqs = dto.customerFaqs.filter((f) => f.question?.trim() && f.answer?.trim());
+    }
+    if (dto.retailerFaqs !== undefined) {
+      this.customRetailerFaqs = dto.retailerFaqs.filter((f) => f.question?.trim() && f.answer?.trim());
+    }
+
+    const current = await prisma.referralSettings.findFirst({ orderBy: { createdAt: 'asc' } }) ||
+      await prisma.referralSettings.create({ data: {} });
+
+    const updated = await prisma.referralSettings.update({
       where: { id: current.id },
       data: {
         referrerRewardCoins: dto.referrerRewardCoins,
@@ -173,6 +284,22 @@ export class ReferralService {
         updatedById,
       },
     });
+
+    const customerFaqs =
+      this.customCustomerFaqs && this.customCustomerFaqs.length > 0
+        ? this.customCustomerFaqs
+        : getDefaultCustomerFaqs(updated.referrerRewardCoins, updated.refereeRewardCoins, updated.rewardTrigger);
+
+    const retailerFaqs =
+      this.customRetailerFaqs && this.customRetailerFaqs.length > 0
+        ? this.customRetailerFaqs
+        : getDefaultRetailerFaqs(updated.referrerRewardCoins, updated.refereeRewardCoins, updated.rewardTrigger);
+
+    return {
+      ...updated,
+      customerFaqs,
+      retailerFaqs,
+    };
   }
 
   // --- Reward triggers --------------------------------------------------------

@@ -1,6 +1,8 @@
 import { api } from './client';
 import type {
+  CustomerReferralSummaryResponse,
   ReferralCheckResponse,
+  ReferralProgramResponse,
   RegisterRetailerPayload,
   RegisterRetailerResponse,
   RequestOtpResponse,
@@ -29,6 +31,20 @@ export const storefrontAuthApi = {
   checkReferralCode(code: string, phone: string) {
     return api
       .get<ReferralCheckResponse>('/storefront/auth/referral/check', { params: { code, phone } })
+      .then((r) => r.data);
+  },
+
+  /** Active referral program rules & coins. */
+  getReferralProgram() {
+    return api
+      .get<ReferralProgramResponse>('/storefront/auth/referral/program')
+      .then((r) => r.data);
+  },
+
+  /** Customer's own referral code, statistics and referral history. */
+  getMyReferralSummary() {
+    return api
+      .get<CustomerReferralSummaryResponse>('/storefront/auth/referral/my-summary')
       .then((r) => r.data);
   },
 

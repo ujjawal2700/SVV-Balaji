@@ -37,6 +37,25 @@ export class StorefrontAuthController {
     return this.service.checkReferralCode(code, phone);
   }
 
+  @Get('referral/program')
+  @ApiOperation({
+    summary: 'Get active referral program configuration for storefront',
+    description: 'Public - returns coin amounts and trigger condition for Refer & Earn page.',
+  })
+  getReferralProgram() {
+    return this.service.getReferralProgram();
+  }
+
+  @Get('referral/my-summary')
+  @ApiBearerAuth()
+  @UseGuards(CustomerJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Get the logged-in customer\'s referral code, statistics and invited friends list',
+  })
+  getMyReferralSummary(@CurrentCustomer() customer: CustomerJwtPayload) {
+    return this.service.getMyReferralSummary(customer.sub);
+  }
+
   @Post('otp/request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

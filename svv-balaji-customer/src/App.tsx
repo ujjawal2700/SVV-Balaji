@@ -49,6 +49,9 @@ const AddressesPage = lazy(() => import('./pages/AddressesPage').then((m) => ({ 
 const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
 const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
 const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage').then((m) => ({ default: m.LoyaltyPage })));
+const ReferralPage = lazy(() =>
+  import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })),
+);
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -90,6 +93,8 @@ export function App() {
             static retailer profile rather than `useAuth()`. See ProfilePage.
           */}
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="refer" element={<ReferralPage />} />
+          <Route path="refer-and-earn" element={<ReferralPage />} />
 
           {/* --- Needs an account -------------------------------------------- */}
           <Route

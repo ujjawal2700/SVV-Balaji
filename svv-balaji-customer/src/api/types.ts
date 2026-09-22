@@ -101,3 +101,37 @@ export interface ReferralCheckResponse {
   valid: true;
   referrerName: string;
 }
+
+export interface ReferralFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface ReferralProgramResponse {
+  isActive: boolean;
+  referrerRewardCoins: number;
+  refereeRewardCoins: number;
+  rewardTrigger: 'REGISTRATION' | 'ACCOUNT_VERIFICATION' | 'FIRST_ORDER' | 'FIRST_DELIVERY';
+  customerFaqs?: ReferralFaqItem[];
+  retailerFaqs?: ReferralFaqItem[];
+}
+
+export interface CustomerReferralItem {
+  id: string;
+  code: string;
+  refereeName: string;
+  refereeMaskedPhone: string;
+  createdAt: string;
+  rewardedAt: string | null;
+  status: 'QUALIFIED' | 'PENDING';
+}
+
+export interface CustomerReferralSummaryResponse {
+  referralCode: string | null;
+  coinBalance: number;
+  totalReferred: number;
+  successfulReferrals: number;
+  pendingReferrals: number;
+  totalCoinsEarned: number;
+  referrals: CustomerReferralItem[];
+}

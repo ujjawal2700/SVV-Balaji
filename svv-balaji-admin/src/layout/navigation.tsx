@@ -15,6 +15,8 @@ import {
   PictureOutlined,
   CustomerServiceOutlined,
   ShopOutlined,
+  GiftOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import type { Permission } from '../auth/permissions';
@@ -717,6 +719,53 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: 'loyalty-referrals',
+    label: 'Referrals & Loyalty Program',
+    icon: <GiftOutlined />,
+    items: [
+      {
+        key: 'referrals',
+        path: '/referrals',
+        label: 'Referral Management',
+        permission: 'REFERRALS_VIEW',
+        description:
+          'Who referred whom, whether it qualified, what each side earned, and every customer\'s ' +
+          'complete coin history — including manual refunds, reversals and adjustments.',
+        endpoints: [
+          'GET /referrals',
+          'GET /referrals/ledger/:customerId',
+          'POST /referrals/ledger/:customerId/adjust',
+        ],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'referralSettings',
+        path: '/settings/referrals',
+        label: 'Referral & Reward Settings',
+        permission: 'REFERRAL_SETTINGS_VIEW',
+        description:
+          'Coin amounts, trigger, on/off switch and dynamic FAQs for the refer-a-friend program. Applies live ' +
+          'to referrals already in flight, not only ones created after a change.',
+        endpoints: ['GET /referral-settings', 'PATCH /referral-settings'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'loyaltySettings',
+        path: '/settings/loyalty',
+        label: 'Loyalty Rewards',
+        permission: 'LOYALTY_VIEW',
+        description:
+          'Percentage-based rewards: earn percentage per channel, point value, eligibility, ' +
+          'minimums, per-order cap and expiry. Points are credited when an order is delivered.',
+        endpoints: ['GET /loyalty/settings', 'PATCH /loyalty/settings'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
     key: 'administration',
     label: 'Administration',
     icon: <SettingOutlined />,
@@ -757,17 +806,6 @@ export const NAV_SECTIONS: NavSection[] = [
         workstream: 'WS2.2',
       },
       {
-        key: 'referralSettings',
-        path: '/settings/referrals',
-        label: 'Referral & Reward Settings',
-        permission: 'REFERRAL_SETTINGS_VIEW',
-        description:
-          'Coin amounts, trigger and on/off switch for the refer-a-friend program. Applies live ' +
-          'to referrals already in flight, not only ones created after a change.',
-        endpoints: ['GET /referral-settings', 'PATCH /referral-settings'],
-        workstream: 'WS2.5',
-      },
-      {
         key: 'checkoutSettings',
         path: '/settings/checkout',
         label: 'Checkout & Delivery',
@@ -785,32 +823,6 @@ export const NAV_SECTIONS: NavSection[] = [
         endpoints: ['GET /coupons', 'POST /coupons', 'PATCH /coupons/:id'],
         workstream: 'WS2.5',
         zone: 'commerce',
-      },
-      {
-        key: 'loyaltySettings',
-        path: '/settings/loyalty',
-        label: 'Loyalty Rewards',
-        permission: 'LOYALTY_VIEW',
-        description:
-          'Percentage-based rewards: earn percentage per channel, point value, eligibility, ' +
-          'minimums, per-order cap and expiry. Points are credited when an order is delivered.',
-        endpoints: ['GET /loyalty/settings', 'PATCH /loyalty/settings'],
-        workstream: 'WS2.5',
-      },
-      {
-        key: 'referrals',
-        path: '/referrals',
-        label: 'Referral Management',
-        permission: 'REFERRALS_VIEW',
-        description:
-          'Who referred whom, whether it qualified, what each side earned, and every customer\'s ' +
-          'complete coin history — including manual refunds, reversals and adjustments.',
-        endpoints: [
-          'GET /referrals',
-          'GET /referrals/ledger/:customerId',
-          'POST /referrals/ledger/:customerId/adjust',
-        ],
-        workstream: 'WS2.5',
       },
     ],
   },

@@ -99,10 +99,20 @@ export function LoginPage() {
     >
       <Card style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Typography.Title level={3} style={{ marginBottom: 4 }}>
+          <img
+            src="/svv-balaji.png"
+            alt="SVV Balaji"
+            style={{
+              height: 52,
+              width: 'auto',
+              objectFit: 'contain',
+              marginBottom: 10,
+            }}
+          />
+          <Typography.Title level={3} style={{ marginBottom: 2, marginTop: 0 }}>
             SVV Balaji
           </Typography.Title>
-          <Typography.Text type="secondary">Supply Chain Management</Typography.Text>
+          <Typography.Text type="secondary">Enterprise Admin Portal</Typography.Text>
         </div>
 
         {error ? (

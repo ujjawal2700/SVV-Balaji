@@ -140,8 +140,8 @@ export function ProfilePage() {
           iconBg: '#fdf4ff',
           iconColor: '#a21caf',
           label: 'Refer & Earn',
-          subtitle: referralCode ? `Your code: ${referralCode}` : 'Share your code with friends',
-          action: handleShareReferral,
+          subtitle: referralCode ? `Your code: ${referralCode} • Earn 100 coins` : 'Share your code with friends',
+          route: '/refer',
         },
       ],
     },
@@ -241,8 +241,8 @@ export function ProfilePage() {
           iconBg: '#fdf4ff',
           iconColor: '#a21caf',
           label: 'Refer a Store Partner',
-          subtitle: referralCode ? `Your code: ${referralCode}` : 'Share your code with other retailers',
-          action: handleShareReferral,
+          subtitle: referralCode ? `Your code: ${referralCode} • Earn 100 coins` : 'Share your code with other retailers',
+          route: '/refer',
         },
       ],
     },
@@ -352,7 +352,7 @@ export function ProfilePage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: '3px solid rgba(255,255,255,0.9)',
+                    border: '3px solid rgba(255,255,255,0.95)',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                   }}
                 >
@@ -530,7 +530,7 @@ export function ProfilePage() {
               <Button
                 type="primary"
                 block
-                style={{ background: '#ea580c', borderColor: '#ea580c', borderRadius: 8, fontWeight: 600 }}
+                style={{ background: '#ea580c', borderColor: '#ea580c', borderRadius: 8, fontWeight: 600, height: 40 }}
                 onClick={() => navigate('/register')}
               >
                 Become a Partner / Buy Wholesale &rarr;
@@ -775,7 +775,7 @@ export function ProfilePage() {
 
                 {isRetailer ? (
                   <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8 }}>
-                    <Tag color="orange" style={{ borderRadius: 12, fontWeight: 700, padding: '2px 10px' }}>
+                    <Tag color="green" style={{ borderRadius: 12, fontWeight: 700, padding: '2px 10px' }}>
                       GST: {retailerProfile?.gstin || '—'}
                     </Tag>
                   </div>
@@ -861,7 +861,7 @@ export function ProfilePage() {
                   <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
                     {isRetailer ? 'REWARD POINTS' : 'DESI REWARDS'}
                   </Typography.Text>
-                  <Typography.Text strong style={{ fontSize: 18, color: '#ea580c', display: 'block', marginTop: 2 }}>
+                  <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
                     {loyalty.points.toLocaleString('en-IN')} pts
                   </Typography.Text>
                   <Link to="/loyalty" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
@@ -876,7 +876,7 @@ export function ProfilePage() {
                   <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
                     {isRetailer ? stats.orderCount : stats.orderCount}
                   </Typography.Text>
-                  <Link to="/orders" style={{ fontSize: 11.5, color: '#f97316', fontWeight: 600 }}>
+                  <Link to="/orders" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
                     View Order History &rarr;
                   </Link>
                 </div>
@@ -1035,6 +1035,37 @@ export function ProfilePage() {
                                 </Typography.Text>
                               </div>
                               <RightOutlined style={{ color: '#94a3b8' }} />
+                            </div>
+
+                            <div
+                              onClick={() => navigate('/refer')}
+                              style={{
+                                border: '1px solid #fbcfe8',
+                                borderRadius: 12,
+                                padding: 16,
+                                cursor: 'pointer',
+                                background: 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                transition: 'all 0.2s ease',
+                              }}
+                              className="card-hover-shadow"
+                            >
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Typography.Text strong style={{ fontSize: 15, display: 'block', color: '#a21caf' }}>
+                                    🎁 Refer & Earn Rewards
+                                  </Typography.Text>
+                                  <Tag color="purple" style={{ borderRadius: 8, fontSize: 10, fontWeight: 700 }}>
+                                    Earn 100 Coins
+                                  </Tag>
+                                </div>
+                                <Typography.Text style={{ fontSize: 12, color: '#701a75' }}>
+                                  Invite friends & fellow shop partners to earn coins on orders
+                                </Typography.Text>
+                              </div>
+                              <RightOutlined style={{ color: '#c084fc' }} />
                             </div>
                           </div>
 
