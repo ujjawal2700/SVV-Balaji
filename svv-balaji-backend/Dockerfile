@@ -2,6 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# build tools needed for native modules (e.g. bcrypt) on Alpine, which has
+# no prebuilt musl binary and falls back to compiling from source
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
 COPY prisma ./prisma
 
