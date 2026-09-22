@@ -263,6 +263,11 @@ export const queryKeys = {
     all: ['referral-settings'] as const,
   },
 
+  supportSettings: {
+    all: ['support-settings'] as const,
+    storefront: (channel?: string) => ['support-settings', 'storefront', channel ?? 'all'] as const,
+  },
+
   loyalty: {
     all: ['loyalty'] as const,
     settings: ['loyalty', 'settings'] as const,

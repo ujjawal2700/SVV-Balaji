@@ -622,7 +622,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: 'support-resolution',
-    label: 'Customer Support & Resolution',
+    label: 'Support & Resolution',
     icon: <CustomerServiceOutlined />,
     items: [
       {
@@ -635,11 +635,21 @@ export const NAV_SECTIONS: NavSection[] = [
         workstream: 'WS2.5',
         zone: 'commerce',
       },
+      {
+        key: 'supportSettings',
+        path: '/settings/support',
+        label: 'Helpdesk & Support Settings',
+        permission: 'ORDER_VIEW',
+        description: 'Toll-free helpline, WhatsApp desk, operating hours, and dynamic FAQs for Customer & Retailer apps.',
+        endpoints: ['GET /support-settings', 'PATCH /support-settings'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
     ],
   },
   {
     key: 'crm',
-    label: 'Customer Management',
+    label: 'CRM & Accounts',
     icon: <UsergroupAddOutlined />,
     items: [
       {

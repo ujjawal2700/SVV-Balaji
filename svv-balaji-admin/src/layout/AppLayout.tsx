@@ -142,23 +142,28 @@ export function AppLayout() {
         collapsible
         collapsed={collapsed}
         trigger={null}
-        width={232}
+        width={240}
         theme="light"
         className="admin-sidebar"
-        style={{ overflowY: 'auto', overflowX: 'hidden', height: '100vh' }}
+        style={{
+          height: '100vh',
+          position: 'sticky',
+          top: 0,
+          left: 0,
+          zIndex: 10,
+          borderRight: '1px solid #e5e7eb',
+        }}
       >
         <div
           style={{
-            height: 60,
+            flexShrink: 0,
+            height: 62,
             display: 'flex',
             alignItems: 'center',
             justifyContent: collapsed ? 'center' : 'flex-start',
             padding: collapsed ? '0 8px' : '0 16px',
-            borderBottom: '1px solid #f0f0f0',
-            position: 'sticky',
-            top: 0,
-            zIndex: 2,
-            background: '#fff',
+            borderBottom: '1px solid #f0fdf4',
+            background: '#ffffff',
             gap: 10,
           }}
         >
@@ -166,20 +171,20 @@ export function AppLayout() {
             src="/svv-balaji.png"
             alt="SVV Balaji Logo"
             style={{
-              height: collapsed ? 32 : 36,
+              height: collapsed ? 34 : 38,
               width: 'auto',
-              maxHeight: 38,
+              maxHeight: 40,
               objectFit: 'contain',
               borderRadius: 6,
             }}
           />
           {!collapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <Typography.Text strong style={{ fontSize: 15, lineHeight: 1.2, whiteSpace: 'nowrap', color: '#1e293b' }}>
+              <Typography.Text strong style={{ fontSize: 15, lineHeight: 1.2, whiteSpace: 'nowrap', color: '#166534' }}>
                 SVV Balaji
               </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                Super Admin
+              <Typography.Text style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, color: '#e86a17' }}>
+                Enterprise Portal
               </Typography.Text>
             </div>
           )}
@@ -188,48 +193,49 @@ export function AppLayout() {
         {!collapsed && (
           <div
             style={{
+              flexShrink: 0,
               padding: '10px 12px 6px 12px',
-              position: 'sticky',
-              top: 60,
-              zIndex: 1,
-              background: '#fff',
-              borderBottom: '1px solid #fafafa',
+              background: '#ffffff',
+              borderBottom: '1px solid #f0fdf4',
             }}
           >
             <Input
-              prefix={<SearchOutlined style={{ color: '#8c8c8c' }} />}
+              prefix={<SearchOutlined style={{ color: '#16a34a' }} />}
               placeholder="Search menus..."
               size="small"
               allowClear
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
-                borderRadius: 6,
-                backgroundColor: '#f8fafc',
+                borderRadius: 8,
+                backgroundColor: '#f0fdf4',
+                borderColor: '#bbf7d0',
               }}
             />
           </div>
         )}
 
-        <Menu
-          mode="inline"
-          items={menuItems}
-          selectedKeys={[location.pathname]}
-          openKeys={activeOpenKeys}
-          onOpenChange={(keys) => {
-            if (!searchTerm.trim()) {
-              setUserOpenKeys(keys);
-            }
-          }}
-          onClick={({ key }) => navigate(key)}
-          style={{ borderInlineEnd: 'none' }}
-        />
+        <div className="sidebar-menu-scroll">
+          <Menu
+            mode="inline"
+            items={menuItems}
+            selectedKeys={[location.pathname]}
+            openKeys={activeOpenKeys}
+            onOpenChange={(keys) => {
+              if (!searchTerm.trim()) {
+                setUserOpenKeys(keys);
+              }
+            }}
+            onClick={({ key }) => navigate(key)}
+            style={{ borderInlineEnd: 'none' }}
+          />
 
-        {!collapsed && searchTerm.trim() && menuItems.length === 0 && (
-          <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
-            No matching menus found
-          </div>
-        )}
+          {!collapsed && searchTerm.trim() && menuItems.length === 0 && (
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+              No matching menus found
+            </div>
+          )}
+        </div>
       </Sider>
 
       <Layout style={{ overflow: 'hidden' }}>

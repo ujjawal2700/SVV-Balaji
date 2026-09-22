@@ -238,6 +238,11 @@ const ReferralSettingsPage = lazy(() =>
     default: m.ReferralSettingsPage,
   })),
 );
+const SupportSettingsPage = lazy(() =>
+  import('./pages/support-settings/SupportSettingsPage').then((m) => ({
+    default: m.SupportSettingsPage,
+  })),
+);
 const ReferralsPage = lazy(() =>
   import('./pages/referrals/ReferralsPage').then((m) => ({ default: m.ReferralsPage })),
 );
@@ -320,6 +325,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/roles': <RolesPermissionsPage />,
   '/settings/referrals': <ReferralSettingsPage />,
   '/settings/loyalty': <LoyaltySettingsPage />,
+  '/settings/support': <SupportSettingsPage />,
   '/settings/checkout': <CheckoutSettingsPage />,
   '/coupons': <CouponsPage />,
   '/referrals': <ReferralsPage />,

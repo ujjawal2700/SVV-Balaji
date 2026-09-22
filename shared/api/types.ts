@@ -2474,6 +2474,47 @@ export interface UpdateReferralSettingsInput {
 }
 
 // ---------------------------------------------------------------------------
+// Help & Customer Support Configuration (Dynamic Super Admin Managed)
+// ---------------------------------------------------------------------------
+
+export interface SupportFaqItem {
+  id?: string;
+  category?: string;
+  question: string;
+  answer: string;
+}
+
+export interface SupportSettings {
+  id?: string;
+  tollFreeNumber: string;
+  whatsappNumber: string;
+  supportEmail: string;
+  operatingHours: string;
+  officeAddress: string;
+  isPhoneSupportActive: boolean;
+  isWhatsappSupportActive: boolean;
+  isEmailSupportActive: boolean;
+  helpCategories: string[];
+  customerFaqs: SupportFaqItem[];
+  retailerFaqs: SupportFaqItem[];
+  updatedAt?: string;
+}
+
+export interface UpdateSupportSettingsInput {
+  tollFreeNumber?: string;
+  whatsappNumber?: string;
+  supportEmail?: string;
+  operatingHours?: string;
+  officeAddress?: string;
+  isPhoneSupportActive?: boolean;
+  isWhatsappSupportActive?: boolean;
+  isEmailSupportActive?: boolean;
+  helpCategories?: string[];
+  customerFaqs?: SupportFaqItem[];
+  retailerFaqs?: SupportFaqItem[];
+}
+
+// ---------------------------------------------------------------------------
 // Referral Management (17 Sep) — Super Admin reporting over what the program
 // above actually produced: who referred whom, whether it qualified, the coin
 // ledger behind any customer's balance, and manual corrections to it. See

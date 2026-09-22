@@ -143,126 +143,158 @@ export function HomePage() {
         }}
       >
         <div
-          className="store-container"
-          style={{
-            paddingTop: 28,
-            paddingBottom: 18,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 14,
-          }}
+          className="store-container home-mobile-header"
         >
           {/* Logo & Greeting / Delivery Address */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             <Link
               to="/"
+              className="home-logo-box"
               style={{
                 textDecoration: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#fafaf9',
-                padding: '4px 6px',
-                borderRadius: 14,
-                border: '1px solid #f1f5f9',
-                flexShrink: 0,
               }}
             >
               <img
                 src="/images/desi-tokri-cropped.png"
                 alt="Desi Tokri"
-                style={{ width: 56, height: 56, objectFit: 'contain' }}
+                className="home-logo-img"
               />
             </Link>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               {isRetailer ? (
                 <>
-                  <Typography.Title level={4} style={{ margin: 0, color: '#065f46', lineHeight: 1.25, fontSize: 17, fontWeight: 700 }}>
-                    Good Morning, {retailerProfile?.storeName || 'My Store'}
+                  <Typography.Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: '#065f46',
+                      lineHeight: 1.2,
+                      fontSize: 14,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {retailerProfile?.storeName || 'My Store'}
                   </Typography.Title>
-                  <div className="brand-title-font" style={{ fontSize: 11, color: '#b45309', fontWeight: 700, letterSpacing: '1px', marginTop: 4 }}>
-                    GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'} • Mandi Wholesale
+                  <div
+                    className="brand-title-font"
+                    style={{
+                      fontSize: 10,
+                      color: '#b45309',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                      marginTop: 2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'}
                   </div>
                 </>
               ) : (
-                <Link to="/addresses" style={{ textDecoration: 'none', display: 'block' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <EnvironmentOutlined style={{ color: '#ea580c', fontSize: 16 }} />
-                    <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Link to="/addresses" style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                    <EnvironmentOutlined style={{ color: '#ea580c', fontSize: 13, flexShrink: 0 }} />
+                    <Typography.Text
+                      strong
+                      style={{
+                        fontSize: 13,
+                        color: '#0f172a',
+                        lineHeight: 1.25,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: 'block',
+                      }}
+                    >
                       Deliver to Central Hub, Sec 18 ▾
                     </Typography.Text>
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ background: '#ecfdf5', color: '#047857', fontWeight: 700, padding: '2px 8px', borderRadius: 6, fontSize: 11 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#64748b',
+                      marginTop: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <span
+                      style={{
+                        background: '#ecfdf5',
+                        color: '#047857',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                        fontSize: 10,
+                        flexShrink: 0,
+                        lineHeight: 1.3,
+                      }}
+                    >
                       ⚡ 24 Mins
                     </span>
-                    <span style={{ color: '#cbd5e1' }}>•</span>
-                    <span style={{ fontWeight: 500 }}>100% Farm Traceable</span>
+                    <span className="home-header-badge-extra" style={{ color: '#cbd5e1' }}>•</span>
+                    <span
+                      className="home-header-badge-extra"
+                      style={{
+                        fontWeight: 500,
+                        fontSize: 10,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      100% Farm Traceable
+                    </span>
                   </div>
                 </Link>
               )}
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Link
               to="/trace"
-              style={{
-                background: '#f0fdf4',
-                color: '#15803d',
-                border: '1px solid #bbf7d0',
-                borderRadius: 12,
-                padding: '9px 14px',
-                fontSize: 13,
-                fontWeight: 600,
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-              }}
+              className="home-trace-btn"
+              title="Trace Batch QR"
             >
-              <QrcodeOutlined style={{ fontSize: 15 }} /> Trace
+              <QrcodeOutlined style={{ fontSize: 15 }} />
+              <span className="home-trace-text">Trace</span>
             </Link>
-            <Badge dot offset={[-4, 4]} color="#ef4444">
+            <Badge dot offset={[-3, 3]} color="#ef4444">
               <button
                 aria-label="Notifications"
+                className="home-bell-btn"
                 onClick={() => navigate(isRetailer ? '/profile' : '/profile')}
-                style={{
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s',
-                }}
               >
-                <BellOutlined style={{ fontSize: 20, color: '#334155' }} />
+                <BellOutlined style={{ fontSize: 17, color: '#334155' }} />
               </button>
             </Badge>
           </div>
         </div>
 
         {/* Mobile Search input */}
-        <div className="store-container" style={{ paddingTop: 0, paddingBottom: 20 }}>
+        <div className="store-container home-search-container" style={{ paddingTop: 0, paddingBottom: 14 }}>
           <Input
-            size="large"
-            placeholder="Search for atta, rice, dal, spices, namkeen..."
-            prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 18, marginRight: 6 }} />}
-            suffix={<BarcodeOutlined style={{ color: '#059669', fontSize: 20 }} />}
+            size="middle"
+            placeholder="Search atta, dal, rice, spices..."
+            prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 16, marginRight: 6 }} />}
+            suffix={<BarcodeOutlined style={{ color: '#059669', fontSize: 18 }} />}
+            className="home-search-input"
             style={{
-              borderRadius: 16,
-              height: 52,
-              fontSize: 14,
+              borderRadius: 12,
+              height: 44,
+              fontSize: 13,
               border: '1px solid #e2e8f0',
               background: '#f8fafc',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
             }}
             onPressEnter={(e) => {
               const val = (e.target as HTMLInputElement).value;
@@ -577,19 +609,44 @@ export function HomePage() {
         {/* ======================================================================= */}
         {/* MOBILE HERO CAROUSEL                                                    */}
         {/* ======================================================================= */}
-        <div className="mobile-only" style={{ borderRadius: 16, overflow: 'hidden' }}>
+        <div className="mobile-only home-mobile-carousel" style={{ borderRadius: 14, overflow: 'hidden' }}>
           <Carousel autoplay dotPosition="bottom">
             {heroSlides.map((slide) => (
               <div key={slide.id}>
                 <div
                   onClick={() => navigate(slide.ctaLinkPrimary)}
-                  style={{ height: 160, background: slide.background, color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                  className="home-carousel-slide"
+                  style={{ background: slide.background, color: '#fff' }}
                 >
-                  <div style={{ flex: 1, paddingRight: 16 }}>
-                    <Typography.Title level={3} style={{ color: '#fff', margin: 0, fontSize: 18 }}>{slide.title}</Typography.Title>
-                    <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, display: 'block' }}>{slide.description}</Typography.Text>
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                    <Typography.Title
+                      level={4}
+                      className="home-carousel-title"
+                      style={{ color: '#fff', margin: 0, fontSize: 15, fontWeight: 700, lineHeight: 1.25 }}
+                    >
+                      {slide.title}
+                    </Typography.Title>
+                    <Typography.Text
+                      className="home-carousel-desc"
+                      style={{
+                        color: 'rgba(255,255,255,0.85)',
+                        fontSize: 11,
+                        marginTop: 4,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {slide.description}
+                    </Typography.Text>
                   </div>
-                  <img src={slide.imageUrl} alt={slide.title} style={{ height: 90, width: 90, objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+                  <img
+                    src={slide.imageUrl}
+                    alt={slide.title}
+                    className="home-carousel-img"
+                  />
                 </div>
               </div>
             ))}
@@ -1061,11 +1118,7 @@ export function HomePage() {
 
           {/* Grid adapts: 2 columns on mobile, 4 columns on desktop */}
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              gap: 16,
-            }}
+            className="home-products-grid"
           >
             {popular.map((product) => {
               const cartLine = cart.lines.find((line) => line.productId === product.id);
@@ -1370,22 +1423,30 @@ function SectionHeader({ title, to, subtitle }: { title: string; to?: string; su
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'space-between',
-        marginBottom: 16,
-        gap: 12,
+        marginBottom: 14,
+        gap: 8,
       }}
     >
-      <div>
-        <Typography.Title level={4} style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1c1917' }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <Typography.Title
+          level={4}
+          className="home-section-title"
+          style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1c1917', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
           {title}
         </Typography.Title>
         {subtitle && (
-          <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+          <Typography.Text
+            type="secondary"
+            className="home-section-subtitle"
+            style={{ fontSize: 11.5, display: 'block', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
             {subtitle}
           </Typography.Text>
         )}
       </div>
       {to && (
-        <Link to={to} style={{ fontSize: 13, color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <Link to={to} style={{ fontSize: 12, color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           View All <RightOutlined style={{ fontSize: 10 }} />
         </Link>
       )}

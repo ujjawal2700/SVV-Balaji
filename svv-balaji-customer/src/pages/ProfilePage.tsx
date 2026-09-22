@@ -177,8 +177,8 @@ export function ProfilePage() {
           iconBg: '#eff6ff',
           iconColor: '#3b82f6',
           label: 'Help & Customer Support',
-          subtitle: 'Toll-free 1800-209-DESI',
-          action: () => message.info('Customer helpline: 1800-209-DESI'),
+          subtitle: 'Toll-free helpline, WhatsApp desk & FAQs',
+          route: '/help',
         },
       ],
     },
@@ -291,9 +291,9 @@ export function ProfilePage() {
           icon: <QuestionCircleOutlined />,
           iconBg: '#eff6ff',
           iconColor: '#3b82f6',
-          label: 'Distributor Desk Support',
-          subtitle: 'Direct manager line +91 1800-BALAJI',
-          action: () => message.info('Wholesale support: +91 1800-BALAJI'),
+          label: 'Help & Customer Support',
+          subtitle: 'Wholesale helpdesk, dispatch lines & trade FAQs',
+          route: '/help',
         },
       ],
     },
@@ -1066,6 +1066,32 @@ export function ProfilePage() {
                                 </Typography.Text>
                               </div>
                               <RightOutlined style={{ color: '#c084fc' }} />
+                            </div>
+
+                            <div
+                              onClick={() => navigate('/help')}
+                              style={{
+                                border: '1px solid #bfdbfe',
+                                borderRadius: 12,
+                                padding: 16,
+                                cursor: 'pointer',
+                                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                transition: 'all 0.2s ease',
+                              }}
+                              className="card-hover-shadow"
+                            >
+                              <div>
+                                <Typography.Text strong style={{ fontSize: 15, display: 'block', color: '#1d4ed8' }}>
+                                  🎧 Help & Customer Support
+                                </Typography.Text>
+                                <Typography.Text style={{ fontSize: 12, color: '#1e40af' }}>
+                                  Toll-free helpline, WhatsApp desk, live order help & FAQs
+                                </Typography.Text>
+                              </div>
+                              <RightOutlined style={{ color: '#3b82f6' }} />
                             </div>
                           </div>
 

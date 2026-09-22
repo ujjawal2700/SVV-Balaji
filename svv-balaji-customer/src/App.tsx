@@ -52,6 +52,9 @@ const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage').then((m) => ({ defa
 const ReferralPage = lazy(() =>
   import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })),
 );
+const HelpSupportPage = lazy(() =>
+  import('./pages/HelpSupportPage').then((m) => ({ default: m.HelpSupportPage })),
+);
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -95,6 +98,9 @@ export function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="refer" element={<ReferralPage />} />
           <Route path="refer-and-earn" element={<ReferralPage />} />
+          <Route path="help" element={<HelpSupportPage />} />
+          <Route path="support" element={<HelpSupportPage />} />
+          <Route path="help-and-support" element={<HelpSupportPage />} />
 
           {/* --- Needs an account -------------------------------------------- */}
           <Route

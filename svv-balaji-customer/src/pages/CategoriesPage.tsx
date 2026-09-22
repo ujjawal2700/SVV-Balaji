@@ -68,10 +68,10 @@ export function CategoriesPage() {
           style={{
             background: '#ffffff',
             borderBottom: '1px solid #f0eee9',
-            padding: '16px 20px',
+            padding: '12px 14px',
             display: 'flex',
             alignItems: 'center',
-            gap: 16,
+            gap: 12,
             position: 'sticky',
             top: 0,
             zIndex: 10,
@@ -81,9 +81,9 @@ export function CategoriesPage() {
             onClick={() => navigate(-1)}
             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           >
-            <ArrowLeftOutlined style={{ fontSize: 20, color: '#44403c' }} />
+            <ArrowLeftOutlined style={{ fontSize: 17, color: '#44403c' }} />
           </button>
-          <Typography.Title level={4} style={{ margin: 0, color: '#1c1917', fontSize: 18 }}>
+          <Typography.Title level={4} style={{ margin: 0, color: '#1c1917', fontSize: 16 }}>
             Categories
           </Typography.Title>
         </header>
@@ -92,9 +92,8 @@ export function CategoriesPage() {
         <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 120px)' }}>
           {/* Left Sidebar */}
           <div
-            className="hide-scrollbar"
+            className="hide-scrollbar category-mobile-sidebar"
             style={{
-              width: 80,
               background: '#ffffff',
               borderRight: '1px solid #f0eee9',
               overflowY: 'auto',
@@ -104,15 +103,14 @@ export function CategoriesPage() {
             {/* Default 'For You' Tab */}
             <div
               onClick={() => setSelectedCategoryId('for-you')}
+              className="category-mobile-sidebar-item"
               style={{
-                padding: '12px 4px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 8,
                 cursor: 'pointer',
                 background: selectedCategoryId === 'for-you' ? '#f5f4f2' : 'transparent',
-                borderLeft: selectedCategoryId === 'for-you' ? '4px solid #f97316' : '4px solid transparent',
+                borderLeft: selectedCategoryId === 'for-you' ? '3px solid #f97316' : '3px solid transparent',
                 position: 'relative',
               }}
             >
@@ -123,33 +121,32 @@ export function CategoriesPage() {
                     top: 0,
                     bottom: 0,
                     right: -1,
-                    width: 20,
+                    width: 14,
                     background: '#f5f4f2',
-                    borderTopLeftRadius: 16,
-                    borderBottomLeftRadius: 16,
+                    borderTopLeftRadius: 12,
+                    borderBottomLeftRadius: 12,
                     zIndex: 2,
                   }}
                 />
               )}
               <div
+                className="category-mobile-sidebar-img"
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 10,
+                  borderRadius: 8,
                   background: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
                   zIndex: 3,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
                 <img src="/images/cat_namkeen.jpg" alt="For You" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <Typography.Text
+                className="category-mobile-sidebar-text"
                 style={{
-                  fontSize: 11,
                   fontWeight: selectedCategoryId === 'for-you' ? 700 : 500,
                   color: selectedCategoryId === 'for-you' ? '#ea580c' : '#78716c',
                   textAlign: 'center',
@@ -167,15 +164,14 @@ export function CategoriesPage() {
                 <div
                   key={cat.id}
                   onClick={() => setSelectedCategoryId(cat.id)}
+                  className="category-mobile-sidebar-item"
                   style={{
-                    padding: '12px 4px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 8,
                     cursor: 'pointer',
                     background: isSelected ? '#f5f4f2' : 'transparent',
-                    borderLeft: isSelected ? '4px solid #f97316' : '4px solid transparent',
+                    borderLeft: isSelected ? '3px solid #f97316' : '3px solid transparent',
                     position: 'relative',
                   }}
                 >
@@ -186,33 +182,32 @@ export function CategoriesPage() {
                         top: 0,
                         bottom: 0,
                         right: -1,
-                        width: 20,
+                        width: 14,
                         background: '#f5f4f2',
-                        borderTopLeftRadius: 16,
-                        borderBottomLeftRadius: 16,
+                        borderTopLeftRadius: 12,
+                        borderBottomLeftRadius: 12,
                         zIndex: 2,
                       }}
                     />
                   )}
                   <div
+                    className="category-mobile-sidebar-img"
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
+                      borderRadius: 8,
                       background: '#fff',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       overflow: 'hidden',
                       zIndex: 3,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                     }}
                   >
                     <img src={cat.image} alt={cat.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                   </div>
                   <Typography.Text
+                    className="category-mobile-sidebar-text"
                     style={{
-                      fontSize: 11,
                       fontWeight: isSelected ? 700 : 500,
                       color: isSelected ? '#ea580c' : '#78716c',
                       textAlign: 'center',
@@ -227,12 +222,12 @@ export function CategoriesPage() {
           </div>
 
           {/* Right Content Area */}
-          <div className="hide-scrollbar" style={{ flex: 1, padding: '16px 16px 40px', overflowY: 'auto', background: '#f5f4f2' }}>
+          <div className="hide-scrollbar category-mobile-content">
             {selectedCategoryId === 'for-you' ? (
               <>
                 {/* Top Banner Carousel — Managed via Admin > Banner Management */}
                 {catBanners.length > 0 && (
-                  <div style={{ marginBottom: 20, borderRadius: 14, overflow: 'hidden' }}>
+                  <div style={{ marginBottom: 14, borderRadius: 12, overflow: 'hidden' }}>
                     <Carousel autoplay dotPosition="bottom">
                       {catBanners.map((banner) => (
                         <div key={banner.id}>
@@ -240,30 +235,30 @@ export function CategoriesPage() {
                             <div
                               style={{
                                 background: banner.backgroundColor || '#ea580c',
-                                padding: '16px 18px',
+                                padding: '10px 12px',
                                 color: '#ffffff',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                gap: 12,
-                                minHeight: 110,
+                                gap: 8,
+                                minHeight: 74,
                               }}
                             >
-                              <div style={{ flex: 1 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
                                 {banner.badgeText && (
-                                  <div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+                                  <div style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.22)', fontSize: 8.5, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase' }}>
                                     {banner.badgeText}
                                   </div>
                                 )}
-                                <Typography.Title level={5} style={{ margin: '0 0 4px 0', color: '#ffffff', fontWeight: 800, fontSize: 15 }}>
+                                <div style={{ margin: '0 0 2px 0', color: '#ffffff', fontWeight: 800, fontSize: 12.5, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                   {banner.title}
-                                </Typography.Title>
-                                <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11 }}>
+                                </div>
+                                <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: 10, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                   {banner.description}
-                                </Typography.Text>
+                                </div>
                               </div>
                               {banner.imageUrl && (
-                                <div style={{ width: 78, height: 78, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#fff' }}>
+                                <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#fff' }}>
                                   <img src={banner.imageUrl} alt={banner.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 </div>
                               )}
@@ -276,30 +271,31 @@ export function CategoriesPage() {
                 )}
 
                 {/* Trending */}
-                <div style={{ marginBottom: 24 }}>
-                  <Typography.Title level={5} style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 700 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <Typography.Title level={5} style={{ margin: '0 0 8px 0', fontSize: 13.5, fontWeight: 700 }}>
                     Trending
                   </Typography.Title>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {categories.slice(0, 4).map((cat) => (
                       <Link
                         key={cat.id}
                         to={`/products/${cat.id}`}
                         style={{
                           background: '#fff',
-                          borderRadius: 12,
-                          padding: 12,
+                          borderRadius: 10,
+                          padding: '8px 6px',
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
-                          gap: 8,
+                          gap: 6,
                           textDecoration: 'none',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                         }}
                       >
-                        <div style={{ width: 64, height: 64 }}>
+                        <div style={{ width: 44, height: 44 }}>
                           <img src={cat.image} alt={cat.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                         </div>
-                        <Typography.Text strong style={{ fontSize: 12, color: '#44403c', textAlign: 'center' }}>
+                        <Typography.Text strong style={{ fontSize: 11, color: '#44403c', textAlign: 'center', lineHeight: 1.2 }}>
                           {cat.name}
                         </Typography.Text>
                       </Link>
@@ -309,10 +305,10 @@ export function CategoriesPage() {
 
                 {/* Often Seen */}
                 <div>
-                  <Typography.Title level={5} style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 700 }}>
+                  <Typography.Title level={5} style={{ margin: '0 0 8px 0', fontSize: 13.5, fontWeight: 700 }}>
                     Often Seen
                   </Typography.Title>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px 8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 6px' }}>
                     {popularProducts.map((product, i) => (
                       <Link
                         key={`${product.id}-${i}`}
@@ -324,8 +320,8 @@ export function CategoriesPage() {
                             width: '100%',
                             aspectRatio: '1',
                             background: '#fff',
-                            borderRadius: 12,
-                            padding: 8,
+                            borderRadius: 10,
+                            padding: 6,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -333,7 +329,7 @@ export function CategoriesPage() {
                         >
                           <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                         </div>
-                        <Typography.Text style={{ fontSize: 10, color: '#44403c', textAlign: 'center', lineHeight: 1.2 }}>
+                        <Typography.Text style={{ fontSize: 9.5, color: '#44403c', textAlign: 'center', lineHeight: 1.2 }}>
                           {product.name}
                         </Typography.Text>
                       </Link>
@@ -350,57 +346,58 @@ export function CategoriesPage() {
                     <div
                       style={{
                         width: '100%',
-                        height: 120,
-                        borderRadius: 16,
+                        minHeight: 68,
+                        borderRadius: 12,
                         background: '#fff7ed',
                         border: '1px solid #ffedd5',
-                        marginBottom: 24,
+                        marginBottom: 14,
                         display: 'flex',
                         alignItems: 'center',
-                        padding: '0 20px',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
                         position: 'relative',
                         overflow: 'hidden',
                       }}
                     >
                       <div style={{ zIndex: 2 }}>
-                        <Typography.Title level={4} style={{ margin: 0, color: '#9a3412' }}>
+                        <Typography.Title level={5} style={{ margin: 0, color: '#9a3412', fontSize: 14, fontWeight: 700 }}>
                           {selectedCatData.name}
                         </Typography.Title>
-                        <Typography.Text style={{ color: '#ea580c', fontWeight: 600 }}>Up to 20% OFF</Typography.Text>
+                        <Typography.Text style={{ color: '#ea580c', fontWeight: 600, fontSize: 11 }}>Up to 20% OFF</Typography.Text>
                       </div>
                       <img
                         src={selectedCatData.image}
                         alt={selectedCatData.name}
-                        style={{ position: 'absolute', right: -20, bottom: -20, width: 120, height: 120, objectFit: 'contain', opacity: 0.8 }}
+                        style={{ width: 52, height: 52, objectFit: 'contain', opacity: 0.9 }}
                       />
                     </div>
 
-                    <Typography.Title level={5} style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 700 }}>
+                    <Typography.Title level={5} style={{ margin: '0 0 8px 0', fontSize: 13.5, fontWeight: 700 }}>
                       Shop by Subcategory
                     </Typography.Title>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px 8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 6px' }}>
                       {selectedCatData.subcategories?.map((sub) => (
                         <Link
                           key={sub.id}
                           to={`/products/${selectedCatData.id}`}
-                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textDecoration: 'none' }}
+                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none' }}
                         >
                           <div
                             style={{
                               width: '100%',
                               aspectRatio: '1',
                               background: '#fff',
-                              borderRadius: 12,
-                              padding: 8,
+                              borderRadius: 10,
+                              padding: 6,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                             }}
                           >
                             <img src={sub.image} alt={sub.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                           </div>
-                          <Typography.Text style={{ fontSize: 10, color: '#44403c', textAlign: 'center', lineHeight: 1.2, fontWeight: 500 }}>
+                          <Typography.Text style={{ fontSize: 9.5, color: '#44403c', textAlign: 'center', lineHeight: 1.2, fontWeight: 500 }}>
                             {sub.name}
                           </Typography.Text>
                         </Link>

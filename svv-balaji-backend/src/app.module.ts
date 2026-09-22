@@ -41,6 +41,7 @@ import { ReferralSettingsModule } from './referral-settings/referral-settings.mo
 import { ReferralsModule } from './referrals/referrals.module';
 import { BannersModule } from './banners/banners.module';
 import { SchemesModule } from './schemes/schemes.module';
+import { SupportSettingsModule } from './support-settings/support-settings.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { SchemesModule } from './schemes/schemes.module';
     ReferralsModule,
     BannersModule,
     SchemesModule,
+    SupportSettingsModule,
     // Still to land: DispatchModule (vehicle, route, POD), InvoicingModule
     // (GST invoice + GSP e-invoicing), FeedbackModule.
   ],

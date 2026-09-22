@@ -16,7 +16,16 @@ const at = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeri
 export function OrderTrackingPage() {
   const { orderId: orderNumber } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const justPlaced = Boolean((useLocation().state as { justPlaced?: boolean } | null)?.justPlaced);
+  const location = useLocation();
+  const justPlaced = Boolean((location.state as { justPlaced?: boolean } | null)?.justPlaced);
+
+  const handleBack = () => {
+    if (justPlaced) {
+      navigate('/orders', { replace: true });
+    } else {
+      navigate(-1);
+    }
+  };
 
   const order = useQuery({
     queryKey: ['storefront', 'orders', orderNumber],
@@ -30,7 +39,7 @@ export function OrderTrackingPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
       <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
-        <button onClick={() => navigate('/orders')} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
+        <button onClick={handleBack} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
         <Typography.Text strong style={{ fontSize: 16 }}>{orderNumber}</Typography.Text>
       </header>
 

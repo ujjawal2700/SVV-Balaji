@@ -14,6 +14,14 @@
   box-sizing: border-box;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 html,
 body,
 #root {
@@ -447,4 +455,474 @@ select {
   height: 0px !important;
 }
 
+/* ========================================================================= */
+/* 📱 MOBILE S (< 375px) SCREEN OPTIMIZATIONS (320px - 360px viewport)       */
+/* ========================================================================= */
+@media (max-width: 375px) {
+  .store-container {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .ant-typography h1, h1.ant-typography {
+    font-size: 18px !important;
+  }
+  .ant-typography h2, h2.ant-typography {
+    font-size: 16px !important;
+  }
+  .ant-typography h3, h3.ant-typography {
+    font-size: 14.5px !important;
+  }
+
+  .ant-card .ant-card-head {
+    padding: 0 10px !important;
+    min-height: 38px !important;
+  }
+  .ant-card .ant-card-head-title {
+    font-size: 13.5px !important;
+  }
+  .ant-card .ant-card-body {
+    padding: 10px !important;
+  }
+
+  /* Compact button styling on 320px */
+  .ant-btn {
+    font-size: 12px !important;
+    padding: 0 10px !important;
+  }
+  .ant-btn-sm {
+    font-size: 11px !important;
+    padding: 0 8px !important;
+  }
+
+  /* Prevent text wrapping in tag pills */
+  .ant-tag {
+    font-size: 10px !important;
+    padding: 0 5px !important;
+    margin-right: 4px !important;
+  }
+
+  width: 100%;
+}
+
+@media (min-width: 992px) {
+  .pdp-desktop-container {
+    max-width: 1240px;
+    margin: 16px auto;
+    padding: 0 20px;
+    display: grid !important;
+    grid-template-columns: 460px minmax(0, 1fr) !important;
+    gap: 24px !important;
+    align-items: start !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .pdp-desktop-container {
+    max-width: 1340px;
+    grid-template-columns: 500px minmax(0, 1fr) !important;
+    gap: 32px !important;
+  }
+}
+
+/* Left Gallery Column - Sticky on Desktop */
+.pdp-gallery-col {
+  width: 100%;
+}
+
+@media (min-width: 992px) {
+  .pdp-gallery-col {
+    position: sticky !important;
+    top: 130px !important;
+    z-index: 10;
+  }
+  .pdp-gallery-card {
+    background: #ffffff !important;
+    border-radius: 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05) !important;
+    padding: 24px !important;
+    overflow: hidden !important;
+  }
+  .pdp-gallery-card .product-detail-carousel {
+    height: 400px !important;
+  }
+  .pdp-gallery-card .product-detail-carousel .slick-slide > div,
+  .pdp-gallery-card .product-detail-carousel .slick-slide,
+  .pdp-gallery-card .product-detail-carousel img {
+    height: 380px !important;
+    max-height: 380px !important;
+  }
+}
+
+/* Right Content Column */
+.pdp-content-col {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 992px) {
+  .pdp-section-card {
+    border-radius: 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.03) !important;
+    margin-top: 16px !important;
+    padding: 24px !important;
+  }
+  .pdp-section-card:first-child {
+    margin-top: 0 !important;
+  }
+}
+
+/* Desktop Buy Action Panel */
+.pdp-desktop-buy-panel {
+  display: none;
+}
+
+@media (min-width: 992px) {
+  .pdp-desktop-buy-panel {
+    display: flex !important;
+    gap: 16px !important;
+    margin-top: 24px !important;
+    padding-top: 20px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+  /* Hide the fixed bottom floating action bar on tablet/desktop */
+  .pdp-fixed-bottom-bar {
+    display: none !important;
+  }
+}
+
+/* Related items grid for desktop */
+@media (min-width: 768px) {
+  .pdp-related-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 16px !important;
+    overflow-x: visible !important;
+    padding: 0 !important;
+  }
+  .pdp-related-grid > div {
+    width: auto !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .pdp-related-grid {
+    grid-template-columns: repeat(6, 1fr) !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Ultra-Sleek Modern Scrollbars
+   --------------------------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+}
+
+/* ========================================================================= */
+/* 📱 MOBILE S (< 375px) SCREEN OPTIMIZATIONS (320px - 360px viewport)       */
+/* ========================================================================= */
+@media (max-width: 375px) {
+  .store-container {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .ant-typography h1, h1.ant-typography {
+    font-size: 18px !important;
+  }
+  .ant-typography h2, h2.ant-typography {
+    font-size: 16px !important;
+  }
+  .ant-typography h3, h3.ant-typography {
+    font-size: 14.5px !important;
+  }
+
+  .ant-card .ant-card-head {
+    padding: 0 10px !important;
+    min-height: 38px !important;
+  }
+  .ant-card .ant-card-head-title {
+    font-size: 13.5px !important;
+  }
+  .ant-card .ant-card-body {
+    padding: 10px !important;
+  }
+
+  /* Compact button styling on 320px */
+  .ant-btn {
+    font-size: 12px !important;
+    padding: 0 10px !important;
+  }
+  .ant-btn-sm {
+    font-size: 11px !important;
+    padding: 0 8px !important;
+  }
+
+  /* Prevent text wrapping in tag pills */
+  .ant-tag {
+    font-size: 10px !important;
+    padding: 0 5px !important;
+    margin-right: 4px !important;
+  }
+
+  /* Modals on small screens */
+  .ant-modal .ant-modal-content {
+    padding: 14px 12px !important;
+  }
+
+  /* Input fields */
+  .ant-input {
+    font-size: 13px !important;
+  }
+}
+
+/* ========================================================================= */
+/* 📱 CATEGORIES MOBILE RESPONSIVE LAYOUT (320px - 767px)                    */
+/* ========================================================================= */
+.category-mobile-sidebar {
+  width: 72px;
+}
+.category-mobile-sidebar-item {
+  padding: 10px 4px;
+  gap: 6px;
+}
+.category-mobile-sidebar-img {
+  width: 38px;
+  height: 38px;
+}
+.category-mobile-sidebar-text {
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+.category-mobile-content {
+  flex: 1;
+  padding: 12px 10px 40px;
+  overflow-y: auto;
+  background: #f5f4f2;
+}
+
+@media (max-width: 360px) {
+  .category-mobile-sidebar {
+    width: 62px !important;
+  }
+  .category-mobile-sidebar-item {
+    padding: 8px 2px !important;
+    gap: 4px !important;
+  }
+  .category-mobile-sidebar-img {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .category-mobile-sidebar-text {
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+  }
+  .category-mobile-content {
+    padding: 8px 8px 36px !important;
+  }
+}
+
+/* ========================================================================= */
+/* 📱 HOME PAGE RESPONSIVE STYLES (320px - 480px)                            */
+/* ========================================================================= */
+.home-mobile-header {
+  padding-top: 14px;
+  padding-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.home-logo-box {
+  width: 40px;
+  height: 40px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #fafaf9;
+  border: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.home-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.home-trace-btn {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  height: 36px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  flex-shrink: 0;
+}
+
+.home-bell-btn {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.home-carousel-slide {
+  min-height: 120px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.home-carousel-img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  flex-shrink: 0;
+}
+
+.home-products-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .home-products-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-products-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .home-trace-text {
+    display: none !important;
+  }
+  .home-trace-btn {
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+  }
+  .home-bell-btn {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .home-header-badge-extra {
+    display: none !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .home-mobile-header {
+    padding-top: 10px !important;
+    padding-bottom: 8px !important;
+    gap: 6px !important;
+  }
+  .home-logo-box {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .home-logo-img {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  .home-carousel-slide {
+    min-height: 105px !important;
+    padding: 10px 10px !important;
+  }
+  .home-carousel-img {
+    width: 58px !important;
+    height: 58px !important;
+  }
+  .home-carousel-title {
+    font-size: 13.5px !important;
+  }
+  .home-carousel-desc {
+    font-size: 10px !important;
+  }
+  .home-search-container {
+    padding-bottom: 12px !important;
+  }
+  .home-search-input {
+    height: 40px !important;
+    font-size: 12px !important;
+  }
+  .price-deal-card {
+    flex: 0 0 135px !important;
+    min-width: 135px !important;
+    padding: 12px 10px !important;
+  }
+  .home-products-grid {
+    gap: 8px !important;
+  }
+  .home-section-title {
+    font-size: 15px !important;
+  }
+  .home-section-subtitle {
+    font-size: 10.5px !important;
+  }
+}
 
