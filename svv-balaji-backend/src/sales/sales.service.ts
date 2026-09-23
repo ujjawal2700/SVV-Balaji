@@ -15,7 +15,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { refundCouponForOrder } from '../checkout/coupons.service';
-import { heldByOthers } from '../checkout/stock-holds';
+import { heldByOthers, lockStockRows } from '../checkout/stock-holds';
 import { OrderEventsService } from '../realtime/order-events.service';
 import type { RecordReturnDto } from '../loyalty/dto/loyalty.dto';
 import {
@@ -558,8 +558,20 @@ export class SalesService {
     }
 
     const today = startOfDay(new Date());
+    const productIds = order.items.map((i) => i.productId);
 
     return this.prisma.$transaction(async (tx) => {
+      /**
+       * Serialise every other allocation (or re-allocation) competing for the
+       * same products in this warehouse. Without this, two concurrent
+       * `allocateCore`/`reallocate` calls can both read `reservedQuantity`
+       * before either writes it, both see the same "free" packs, and both
+       * increment - over-reserving the batch. `lockStockRows` locks in `id`
+       * order (see checkout/stock-holds.ts), so this can never deadlock
+       * against a checkout hold or another allocation doing the same thing.
+       */
+      await lockStockRows(tx, order.warehouseId, productIds);
+
       const created: Array<{
         orderItemId: string;
         fgBatchNumber: string;
@@ -929,6 +941,10 @@ export class SalesService {
       }
 
       const items = await tx.orderItem.findMany({ where: { id: { in: [...perLine.keys()] } } });
+
+      // Same race the fresh allocation guards against - see allocateCore.
+      await lockStockRows(tx, order.warehouseId, items.map((i) => i.productId));
+
       const created: Array<{ orderItemId: string; fgBatchNumber: string; quantity: number }> = [];
       const shortfalls: Array<{ orderItemId: string; productId: string; short: number }> = [];
 

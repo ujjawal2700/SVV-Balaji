@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  CustomerAccountStatus,
   CustomerStatus,
   CustomerType,
   PaymentTerms,
@@ -11,6 +12,7 @@ import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
 import { ReferralService } from '../common/referral.service';
+import { normalisePhone } from '../storefront/phone.util';
 import {
   CreateCustomerDto,
   UpdateCustomerDto,
@@ -50,6 +52,11 @@ export class CustomersService {
   async create(dto: CreateCustomerDto) {
     this.assertChannelRules(dto, dto.channel, true);
 
+    // Normalised once, up front, and reused for both the Customer row and the
+    // CustomerAccount below - the two must agree byte-for-byte or the OTP
+    // login this account creates will not find the customer it belongs to.
+    const phone = normalisePhone(dto.phone);
+
     if (dto.branchId) {
       const branch = await this.prisma.branch.findUnique({ where: { id: dto.branchId } });
       if (!branch) throw new NotFoundException('Branch not found');
@@ -72,10 +79,30 @@ export class CustomersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // A staff-registered person may already have a self-service storefront
+      // account (they downloaded the app before staff got to them) - that
+      // account, not a second one, is what must end up linked, so this stops
+      // rather than silently creating a Customer nothing can ever log into.
+      const existingAccount = await tx.customerAccount.findUnique({ where: { phone } });
+      if (existingAccount) {
+        throw new BadRequestException(
+          existingAccount.customerId
+            ? `A storefront account already exists for ${dto.phone} - it is already linked to a customer record. Edit that one instead.`
+            : `A storefront account already exists for ${dto.phone} (${existingAccount.status}). Resolve it from Retailer Approvals before registering a new record.`,
+        );
+      }
+
+      // Validated before the customer row exists - `referrals.validate` only
+      // needs the applicant's phone/email, and failing fast here means a bad
+      // code rejects the whole registration rather than silently dropping it.
+      const referrer = dto.referredByCode
+        ? await this.referrals.validate(tx, dto.referredByCode, { phone, email: dto.email })
+        : null;
+
       const customerCode = await this.sequence.nextInSeries(tx, `CUST-${dto.channel}`);
       const referralCode = await this.referrals.generateCode(tx, dto.name);
 
-      return tx.customer.create({
+      const customer = await tx.customer.create({
         data: {
           customerCode,
           referralCode,
@@ -83,11 +110,11 @@ export class CustomersService {
           type: dto.type,
           name: dto.name,
           contactName: dto.contactName,
-          phone: dto.phone,
+          phone,
           email: dto.email,
           gstin: dto.gstin,
-          billingAddress: dto.billingAddress,
-          shippingAddress: dto.shippingAddress ?? dto.billingAddress,
+          billingAddress: dto.billingAddress ?? '',
+          shippingAddress: dto.shippingAddress ?? dto.billingAddress ?? '',
           city: dto.city,
           district: dto.district,
           state: dto.state,
@@ -96,8 +123,38 @@ export class CustomersService {
           paymentTerms: dto.paymentTerms ?? PaymentTerms.PREPAID,
           branchId: dto.branchId,
           assignedToId: dto.assignedToId,
+          status: dto.status ?? CustomerStatus.ACTIVE,
         },
       });
+
+      if (referrer) {
+        await this.referrals.createRelationship(tx, referrer, customer.id, dto.referredByCode!);
+      }
+
+      // The point of all of the above: this customer can sign in on the
+      // storefront immediately, with the same phone number staff just typed,
+      // and land on the exact record just created - not provision a second,
+      // empty one on first OTP verify (see StorefrontAuthService.verifyOtp).
+      await tx.customerAccount.create({
+        data: {
+          phone,
+          email: dto.email,
+          fullName: dto.contactName || dto.name,
+          channel: dto.channel,
+          status: CustomerAccountStatus.ACTIVE,
+          phoneVerifiedAt: new Date(),
+          customerId: customer.id,
+          businessName: dto.channel === SalesChannel.B2B ? dto.name : undefined,
+          gstin: dto.gstin,
+          addressLine: dto.billingAddress || undefined,
+          city: dto.city,
+          district: dto.district,
+          state: dto.state,
+          pincode: dto.pincode,
+        },
+      });
+
+      return customer;
     });
   }
 
@@ -290,5 +347,101 @@ export class CustomersService {
       overLimit: limit !== null && exposure > limit,
       openOrders,
     };
+  }
+
+  /**
+   * Reward-coin wallet: the running ledger behind `Customer.coinBalance`, split
+   * into earned vs. used so admins can see how much of the balance has actually
+   * been redeemed rather than just the current total.
+   */
+  async walletLedger(id: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      select: { coinBalance: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    const transactions = await this.prisma.coinTransaction.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        reason: true,
+        note: true,
+        createdAt: true,
+        order: { select: { orderNumber: true } },
+      },
+    });
+
+    const earned = transactions.filter((t) => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+    const used = transactions.filter((t) => t.amount < 0).reduce((sum, t) => sum + -t.amount, 0);
+
+    return {
+      balance: customer.coinBalance,
+      totalEarned: earned,
+      totalUsed: used,
+      transactions,
+    };
+  }
+
+  /** A customer's raised support tickets, for the admin detail view. */
+  async supportTickets(id: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id }, select: { id: true } });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    return this.prisma.supportTicket.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        ticketNumber: true,
+        category: true,
+        subject: true,
+        description: true,
+        orderNumber: true,
+        status: true,
+        priority: true,
+        resolutionNote: true,
+        resolvedAt: true,
+        resolvedBy: { select: { id: true, fullName: true } },
+        createdAt: true,
+      },
+    });
+  }
+
+  /** A customer's saved-for-later products, with the current product name/price for display. */
+  async wishlist(id: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id }, select: { id: true } });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    return this.prisma.customerWishlistItem.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        productId: true,
+        createdAt: true,
+        product: { select: { id: true, name: true, sku: true, unit: true, images: true } },
+      },
+    });
+  }
+
+  /** Every product review this customer has left, for the admin detail view. */
+  async reviews(id: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id }, select: { id: true } });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    return this.prisma.productReview.findMany({
+      where: { customerId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        product: { select: { id: true, name: true, sku: true } },
+        order: { select: { orderNumber: true } },
+      },
+    });
   }
 }

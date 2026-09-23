@@ -4,6 +4,7 @@ import {
   ClockCircleOutlined,
   EyeOutlined,
   FilterOutlined,
+  PlusOutlined,
   SearchOutlined,
   ShopOutlined,
   UsergroupAddOutlined,
@@ -24,13 +25,15 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { CustomerAccount, CustomerAccountQuery, CustomerAccountStatus, SalesChannel } from '@shared/api/types';
 import { SALES_CHANNELS } from '@shared/api/types';
+import { Can } from '../../components/Can';
+import { CustomerFormModal } from '../customers/CustomerFormModal';
 import { DataTable } from '@shared/components/DataTable';
 import { PageHeader } from '@shared/components/PageHeader';
 import { useCustomerAccounts } from '@shared/hooks/useCustomerAccounts';
 import { EM_DASH, formatDateTime } from '@shared/utils/format';
-import { CustomerAccountReviewDrawer } from './CustomerAccountReviewDrawer';
 
 const { Text } = Typography;
 
@@ -156,10 +159,14 @@ export const MOCK_RETAILER_ACCOUNTS: CustomerAccount[] = [
  * Accessible via /b2b-accounts (Customer Management -> Retailer Approvals & Accounts)
  */
 export function CustomerAccountsPage() {
-  const [query, setQuery] = useState<CustomerAccountQuery>({});
+  const navigate = useNavigate();
+  // This page is the B2B retailer console only - B2C storefront accounts
+  // belong on the customer registry, not here, so the channel is fixed
+  // rather than left for the API's default (every channel).
+  const [query, setQuery] = useState<CustomerAccountQuery>({ channel: 'B2B' });
   const [statusFilter, setStatusFilter] = useState<CustomerAccountStatus | 'ALL'>('PENDING_APPROVAL');
-  const [reviewing, setReviewing] = useState<CustomerAccount | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const accountsQuery = useCustomerAccounts(query);
   const rawAccounts = useMemo(() => accountsQuery.data?.data ?? [], [accountsQuery.data]);
@@ -274,19 +281,33 @@ export function CustomerAccountsPage() {
       width: 120,
       fixed: 'right',
       render: (_, account) => (
-        <Button
-          type={account.status === 'PENDING_APPROVAL' ? 'primary' : 'default'}
-          size="small"
-          icon={<EyeOutlined />}
-          onClick={() => setReviewing(account)}
-          style={{
-            borderRadius: 6,
-            background: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
-            borderColor: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
-          }}
-        >
-          {account.status === 'PENDING_APPROVAL' ? 'Review & Approve' : 'View Vault'}
-        </Button>
+        <Space size={6}>
+          <Button
+            type={account.status === 'PENDING_APPROVAL' ? 'primary' : 'default'}
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/b2b-accounts/${account.id}`)}
+            style={{
+              borderRadius: 6,
+              background: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
+              borderColor: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
+            }}
+          >
+            {account.status === 'PENDING_APPROVAL' ? 'Review & Approve' : 'View Vault'}
+          </Button>
+          {account.status === 'ACTIVE' && account.customerId && (
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<ShopOutlined />}
+              onClick={() => navigate(`/b2b-customers/${account.customerId}`)}
+              style={{ borderRadius: 6 }}
+            >
+              Profile
+            </Button>
+          )}
+        </Space>
       ),
     },
   ];
@@ -298,15 +319,22 @@ export function CustomerAccountsPage() {
         title="Retailer Approvals & B2B Storefront Accounts"
         subtitle="Super Admin Verification Console: Inspect self-service Kirana/Retailer registrations, audit GSTIN compliance, verify shop locations, and approve B2B wholesale ordering."
         actions={
-          metrics.pending > 0 ? (
-            <Badge count={metrics.pending}>
-              <Tag color="gold" style={{ fontSize: 13, padding: '4px 12px', borderRadius: 16, fontWeight: 700 }}>
-                ⏳ {metrics.pending} Awaiting Super Admin Review
-              </Tag>
-            </Badge>
-          ) : (
-            <Tag color="green">All Registrations Reviewed</Tag>
-          )
+          <Space wrap>
+            <Can do="CUSTOMER_CREATE">
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)} style={{ borderRadius: 8 }}>
+                Register a Retailer
+              </Button>
+            </Can>
+            {metrics.pending > 0 ? (
+              <Badge count={metrics.pending}>
+                <Tag color="gold" style={{ fontSize: 13, padding: '4px 12px', borderRadius: 16, fontWeight: 700 }}>
+                  ⏳ {metrics.pending} Awaiting Super Admin Review
+                </Tag>
+              </Badge>
+            ) : (
+              <Tag color="green">All Registrations Reviewed</Tag>
+            )}
+          </Space>
         }
       />
 
@@ -402,8 +430,16 @@ export function CustomerAccountsPage() {
         </Space>
       </Card>
 
-      {/* Comprehensive Retailer Approval Review Drawer */}
-      <CustomerAccountReviewDrawer account={reviewing} onClose={() => setReviewing(null)} />
+      {registerOpen && (
+        <CustomerFormModal
+          open={registerOpen}
+          forceChannel="B2B"
+          onClose={() => {
+            setRegisterOpen(false);
+            void accountsQuery.refetch();
+          }}
+        />
+      )}
     </Space>
   );
 }

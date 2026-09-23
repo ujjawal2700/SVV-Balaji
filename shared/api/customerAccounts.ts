@@ -19,6 +19,11 @@ export const customerAccountsApi = {
     return unwrapList<CustomerAccount>(response.data);
   },
 
+  async get(id: string): Promise<CustomerAccount> {
+    const response = await api.get<CustomerAccount>(`/storefront/accounts/${id}`);
+    return response.data;
+  },
+
   async approve(id: string): Promise<CustomerAccount> {
     const response = await api.patch<CustomerAccount>(`/storefront/accounts/${id}/approve`);
     return response.data;

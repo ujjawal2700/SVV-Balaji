@@ -39,6 +39,38 @@ export function useCustomerCredit(id: string | undefined, enabled = true) {
   });
 }
 
+export function useCustomerWallet(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.customers.wallet(id ?? ''),
+    queryFn: () => customersApi.wallet(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCustomerWishlist(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.customers.wishlist(id ?? ''),
+    queryFn: () => customersApi.wishlist(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCustomerSupportTickets(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.customers.supportTickets(id ?? ''),
+    queryFn: () => customersApi.supportTickets(id as string),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCustomerReviews(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.customers.reviews(id ?? ''),
+    queryFn: () => customersApi.reviews(id as string),
+    enabled: Boolean(id),
+  });
+}
+
 export function useCreateCustomer() {
   const queryClient = useQueryClient();
 

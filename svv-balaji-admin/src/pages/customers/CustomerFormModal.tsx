@@ -33,6 +33,8 @@ interface CustomerFormModalProps {
   /** Present means edit; absent means create. */
   customer?: Customer | null;
   onClose: () => void;
+  /** Create only. Which channel this create-flow is for — decides the quick B2C form vs. the full retailer form. Ignored on edit. */
+  forceChannel?: SalesChannel;
 }
 
 /**
@@ -49,15 +51,20 @@ interface CustomerFormModalProps {
  * price list resolves for their orders, so changing it would retroactively
  * reprice a trading history.
  */
-export function CustomerFormModal({ open, customer, onClose }: CustomerFormModalProps) {
+export function CustomerFormModal({ open, customer, onClose, forceChannel }: CustomerFormModalProps) {
   const [form] = Form.useForm<CreateCustomerInput>();
   const { message } = AntApp.useApp();
   const createCustomer = useCreateCustomer();
   const updateCustomer = useUpdateCustomer();
 
   const isEdit = Boolean(customer);
-  const channel = Form.useWatch('channel', form) ?? customer?.channel ?? 'B2B';
+  // On create, the channel is decided by which button opened the modal
+  // ("Register a customer" vs "Register a retailer"), not asked - the
+  // quick-B2C branch below never even mounts a channel field.
+  const createChannel = forceChannel ?? 'B2C';
+  const channel = Form.useWatch('channel', form) ?? customer?.channel ?? createChannel;
   const isB2B = channel === 'B2B';
+  const isQuickCreate = !isEdit && createChannel === 'B2C';
 
   /**
    * Sales executives, to own the account. B2B only.
@@ -95,9 +102,14 @@ export function CustomerFormModal({ open, customer, onClose }: CustomerFormModal
         assignedToId: customer.assignedToId ?? undefined,
       });
     } else {
-      form.setFieldsValue({ channel: 'B2B', paymentTerms: 'PREPAID' });
+      form.setFieldsValue({
+        channel: createChannel,
+        type: createChannel === 'B2C' ? 'CONSUMER' : 'RETAILER',
+        paymentTerms: 'PREPAID',
+        status: 'ACTIVE',
+      });
     }
-  }, [open, customer, form]);
+  }, [open, customer, createChannel, form]);
 
   /**
    * Changing channel mid-form clears the fields that belong to the other one.
@@ -125,7 +137,15 @@ export function CustomerFormModal({ open, customer, onClose }: CustomerFormModal
         const updated = await updateCustomer.mutateAsync({ id: customer.id, input: rest });
         message.success(`${updated.name} updated`);
       } else {
-        const created = await createCustomer.mutateAsync(values);
+        // The quick-create form never registers channel/type/paymentTerms as
+        // fields at all, so they're merged in here to match what
+        // form.setFieldsValue above would have set if they were.
+        const created = await createCustomer.mutateAsync({
+          channel: createChannel,
+          type: createChannel === 'B2C' ? 'CONSUMER' : undefined,
+          paymentTerms: 'PREPAID',
+          ...values,
+        } as CreateCustomerInput);
         message.success(`${created.name} registered as ${created.customerCode}`);
       }
       onClose();
@@ -137,12 +157,59 @@ export function CustomerFormModal({ open, customer, onClose }: CustomerFormModal
     }
   };
 
+  if (isQuickCreate) {
+    // Quick B2C registration: exactly the four fields the front desk needs -
+    // channel, type, address and payment terms are all fixed defaults, filled
+    // in silently in handleSubmit rather than asked here. Editing an existing
+    // customer, or registering a retailer (below), still uses the full form -
+    // those fields are real for a B2B account from the moment it exists.
+    return (
+      <Modal
+        open={open}
+        width={480}
+        title="Register a customer"
+        okText="Register customer"
+        onOk={handleSubmit}
+        onCancel={onClose}
+        confirmLoading={createCustomer.isPending}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" requiredMark preserve={false}>
+          <Form.Item name="name" label="Full Name" rules={[required('Full name'), maxLength(160)]}>
+            <Input placeholder="Ramesh Kumar" />
+          </Form.Item>
+
+          <Form.Item name="phone" label="Phone Number" rules={[required('Phone number'), mobile()]}>
+            <Input addonBefore="+91" placeholder="00000 00000" />
+          </Form.Item>
+
+          <Form.Item name="status" label="Initial Status" rules={[required('Initial status')]}>
+            <Select
+              options={[
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'INACTIVE', label: 'Inactive' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="referredByCode"
+            label="Referral Code"
+            extra="Optional — the code of the existing customer who referred them"
+          >
+            <Input placeholder="Optional" style={{ textTransform: 'uppercase' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open={open}
       width={760}
-      title={isEdit ? `Edit ${customer?.name}` : 'Register a customer'}
-      okText={isEdit ? 'Save changes' : 'Register customer'}
+      title={isEdit ? `Edit ${customer?.name}` : 'Register a retailer'}
+      okText={isEdit ? 'Save changes' : 'Register retailer'}
       onOk={handleSubmit}
       onCancel={onClose}
       confirmLoading={createCustomer.isPending || updateCustomer.isPending}
@@ -158,11 +225,11 @@ export function CustomerFormModal({ open, customer, onClose }: CustomerFormModal
               extra={
                 isEdit
                   ? 'Fixed at registration — it decides which price list applies'
-                  : 'Choose this first: it decides which of the fields below apply'
+                  : 'Fixed by the "Register a retailer" action'
               }
             >
               <Select
-                disabled={isEdit}
+                disabled
                 onChange={handleChannelChange}
                 options={SALES_CHANNELS.map((value) => ({
                   value,
@@ -181,6 +248,30 @@ export function CustomerFormModal({ open, customer, onClose }: CustomerFormModal
             </Form.Item>
           </Col>
         </Row>
+
+        {!isEdit ? (
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item name="status" label="Initial Status" rules={[required('Initial status')]}>
+                <Select
+                  options={[
+                    { value: 'ACTIVE', label: 'Active' },
+                    { value: 'INACTIVE', label: 'Inactive' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="referredByCode"
+                label="Referral Code"
+                extra="Optional — the code of the existing customer who referred them"
+              >
+                <Input placeholder="Optional" style={{ textTransform: 'uppercase' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+        ) : null}
 
         <Row gutter={16}>
           <Col xs={24} md={12}>

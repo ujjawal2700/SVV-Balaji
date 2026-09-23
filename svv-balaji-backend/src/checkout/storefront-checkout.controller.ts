@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentCustomer } from '../storefront/decorators/current-customer.decorator';
 import { CustomerJwtAuthGuard } from '../storefront/guards/customer-jwt-auth.guard';
@@ -63,9 +63,19 @@ export class StorefrontCheckoutController {
   }
 
   @Post('checkout/sessions')
-  @ApiOperation({ summary: 'Start a checkout: hold the stock (15 min) and open the payment' })
-  async start(@CurrentCustomer() s: CustomerJwtPayload, @Body() dto: CheckoutDto) {
-    return this.checkout.startSession(await this.ctx.forAccount(s.sub), dto);
+  @ApiOperation({
+    summary: 'Start a checkout: hold the stock (15 min) and open the payment',
+    description:
+      'Send an `Idempotency-Key` header on every attempt (one per checkout, reused only on retry). ' +
+      'A retried or double-tapped request with the same key returns the session already opened for ' +
+      'it instead of taking a second stock hold.',
+  })
+  async start(
+    @CurrentCustomer() s: CustomerJwtPayload,
+    @Body() dto: CheckoutDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.checkout.startSession(await this.ctx.forAccount(s.sub), dto, idempotencyKey);
   }
 
   @Post('checkout/sessions/:id/confirm')

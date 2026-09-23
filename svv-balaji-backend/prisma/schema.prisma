@@ -262,6 +262,7 @@ model User {
   customerAccountsReviewed  CustomerAccount[]  @relation("CustomerAccountsReviewed")
   referralSettingsUpdated   ReferralSettings[]
   coinTransactionsPerformed CoinTransaction[]  @relation("CoinTransactionsPerformed")
+  supportTicketsResolved    SupportTicket[]    @relation("SupportTicketResolvedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1453,12 +1454,12 @@ model Product {
   priceLists PriceList[]
   orderItems OrderItem[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  wishlistedBy CustomerWishlistItem[]
+  reviews      ProductReview[]
 
   @@index([categoryId])
-  wishlistedBy CustomerWishlistItem[]
-
   @@map("products")
 }
 
@@ -1596,15 +1597,15 @@ model Warehouse {
   /// CENTRAL = the depot that ships nationally through the 3PL. OUTLET = a
   /// franchise store that delivers locally with its own riders. Both hold
   /// finished goods stock in the same table, so there is one inventory truth.
-  kind    WarehouseKind @default(CENTRAL)
-  city    String?
-  state   String?
-  pincode String?
+  kind            WarehouseKind @default(CENTRAL)
+  city            String?
+  state           String?
+  pincode         String?
   /// Where the node physically is, for the distance test at checkout.
-  latitude  Decimal? @db.Decimal(9, 6)
-  longitude Decimal? @db.Decimal(9, 6)
+  latitude        Decimal?      @db.Decimal(9, 6)
+  longitude       Decimal?      @db.Decimal(9, 6)
   /// How far this outlet delivers. Null = the program default (CheckoutSettings).
-  serviceRadiusKm Decimal? @db.Decimal(6, 2)
+  serviceRadiusKm Decimal?      @db.Decimal(6, 2)
   contactPhone    String?
 
   stockReservations StockReservation[]
@@ -1753,18 +1754,19 @@ model Customer {
   coinBalance      Int               @default(0)
   coinTransactions CoinTransaction[]
 
-  addresses        CustomerAddress[]
-  checkoutSessions CheckoutSession[]
+  addresses         CustomerAddress[]
+  checkoutSessions  CheckoutSession[]
   couponRedemptions CouponRedemption[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  wishlistItems  CustomerWishlistItem[]
+  supportTickets SupportTicket[]
+  productReviews ProductReview[]
 
   @@index([channel])
   @@index([status])
   @@index([branchId])
-  wishlistItems CustomerWishlistItem[]
-
   @@map("customers")
 }
 
@@ -2062,7 +2064,7 @@ model Order {
   returns     OrderReturn[]
 
   // ---- Storefront checkout (all null/default for staff-placed orders) ----
-  source OrderSource @default(STAFF)
+  source            OrderSource        @default(STAFF)
   /// LOCAL (franchise outlet, in-house rider) or SHIPROCKET (central depot, 3PL).
   /// Decided by the server from the delivery address; the customer never picks it.
   fulfillmentMethod FulfillmentMethod?
@@ -2080,27 +2082,28 @@ model Order {
   deliveryOtpAttempts   Int       @default(0)
   deliveryOtpVerifiedAt DateTime?
 
-  paymentMode     PaymentMode?
-  gatewayOrderId  String?
+  paymentMode      PaymentMode?
+  gatewayOrderId   String?
   gatewayPaymentId String?
 
-  discountTotal Decimal @default(0) @db.Decimal(14, 2)
-  deliveryFee   Decimal @default(0) @db.Decimal(14, 2)
-  couponCode    String?
+  discountTotal         Decimal @default(0) @db.Decimal(14, 2)
+  deliveryFee           Decimal @default(0) @db.Decimal(14, 2)
+  couponCode            String?
   loyaltyRedeemedPoints Int     @default(0)
   loyaltyRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
 
   riderName  String?
   riderPhone String?
 
-  checkoutSessionId String?  @unique
+  checkoutSessionId String?          @unique
   checkoutSession   CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
 
-  shipment          OrderShipment?
-  events            OrderEvent[]
+  shipment            OrderShipment?
+  events              OrderEvent[]
   paymentTransactions PaymentTransaction[]
-  stockReservations StockReservation[]
-  couponRedemption  CouponRedemption?
+  stockReservations   StockReservation[]
+  couponRedemption    CouponRedemption?
+  productReviews      ProductReview[]
 
   @@index([channel])
   @@index([status])
@@ -2626,13 +2629,12 @@ model CustomerAccount {
 
   otpChallenges CustomerOtpChallenge[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  sessions  CustomerSession[]
 
   @@index([status])
   @@index([channel])
-  sessions CustomerSession[]
-
   @@map("customer_accounts")
 }
 
@@ -2797,11 +2799,11 @@ model LoyaltySettings {
   pointsExpiryMonths Int?
 
   /// Whether customers may spend points at checkout.
-  redemptionEnabled Boolean @default(false)
+  redemptionEnabled    Boolean @default(false)
   /// Most of an order's value points can pay for.
-  maxRedemptionPercent Int @default(50)
+  maxRedemptionPercent Int     @default(50)
   /// Fewest points a redemption may use.
-  minRedeemPoints Int @default(0)
+  minRedeemPoints      Int     @default(0)
 
   /// Only orders delivered on/after this are ever credited by the catch-up
   /// sweep, so switching the feature on never retro-pays history.
@@ -2902,7 +2904,6 @@ model OrderReturn {
   @@map("order_returns")
 }
 
-
 // ---------------------------------------------------------------------------
 // Storefront checkout & fulfilment
 // ---------------------------------------------------------------------------
@@ -2967,7 +2968,7 @@ model CustomerAddress {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  label     String  @default("Home")
+  label     String   @default("Home")
   fullName  String
   phone     String
   line1     String
@@ -2992,25 +2993,25 @@ model CheckoutSettings {
   id String @id @default(uuid())
 
   /// A franchise outlet whose own radius is unset delivers this far.
-  localRadiusKm Decimal @default(5) @db.Decimal(6, 2)
+  localRadiusKm      Decimal @default(5) @db.Decimal(6, 2)
   /// The depot that fulfils everything outside local range and all B2B. Null = first active CENTRAL warehouse.
   centralWarehouseId String?
 
-  localBaseFee     Decimal  @default(30) @db.Decimal(10, 2)
-  localFreeAbove   Decimal? @default(499) @db.Decimal(12, 2)
-  shipBaseFee      Decimal  @default(60) @db.Decimal(10, 2)
-  shipFreeAbove    Decimal? @default(999) @db.Decimal(12, 2)
+  localBaseFee   Decimal  @default(30) @db.Decimal(10, 2)
+  localFreeAbove Decimal? @default(499) @db.Decimal(12, 2)
+  shipBaseFee    Decimal  @default(60) @db.Decimal(10, 2)
+  shipFreeAbove  Decimal? @default(999) @db.Decimal(12, 2)
   /// B2B bulk orders ship free above this (null = never free).
-  b2bFreeAbove     Decimal? @default(5000) @db.Decimal(12, 2)
-  b2bBaseFee       Decimal  @default(150) @db.Decimal(10, 2)
+  b2bFreeAbove   Decimal? @default(5000) @db.Decimal(12, 2)
+  b2bBaseFee     Decimal  @default(150) @db.Decimal(10, 2)
 
   /// ETA model. LOCAL: prepMinutes + distance x minutesPerKm. SHIPROCKET: whole days.
-  prepMinutes   Int @default(30)
-  minutesPerKm  Int @default(4)
-  shipMinDays   Int @default(3)
-  shipMaxDays   Int @default(6)
+  prepMinutes  Int @default(30)
+  minutesPerKm Int @default(4)
+  shipMinDays  Int @default(3)
+  shipMaxDays  Int @default(6)
 
-  codEnabled Boolean  @default(true)
+  codEnabled   Boolean  @default(true)
   codMaxAmount Decimal? @default(5000) @db.Decimal(12, 2)
 
   /// How long stock is held while a customer pays.
@@ -3045,6 +3046,16 @@ model CheckoutSession {
   /// is what makes confirming twice return the SAME order.
   orderId   String?
 
+  /// Client-supplied `Idempotency-Key` header on `POST /checkout/sessions`.
+  /// A double-tap or retried request with the same key returns the session
+  /// already created for it instead of opening a second stock hold - the same
+  /// idempotency `Order.checkoutSessionId` already gives confirm(), one step
+  /// earlier. Null for a client that sent no key, which is why the unique
+  /// constraint is scoped to (customerId, idempotencyKey): Postgres treats
+  /// every NULL as distinct, so keyless requests never collide with each
+  /// other.
+  idempotencyKey String?
+
   reservations StockReservation[]
   payments     PaymentTransaction[]
   order        Order?
@@ -3052,6 +3063,7 @@ model CheckoutSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([customerId, idempotencyKey])
   @@index([customerId])
   @@index([status, expiresAt])
   @@map("checkout_sessions")
@@ -3066,8 +3078,8 @@ model StockReservation {
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
   productId   String
 
-  quantity Int
-  status   ReservationStatus @default(HELD)
+  quantity  Int
+  status    ReservationStatus @default(HELD)
   /// Only meaningful while HELD; COMMITTED holds have none.
   expiresAt DateTime?
 
@@ -3106,6 +3118,14 @@ model PaymentTransaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Defensive guard, not a live race fix: `gatewayPaymentId` is only ever
+  /// written once, by `openPayment`, and later rows are `updateMany`'d by
+  /// `sessionId`, never re-created - so nothing today can produce a
+  /// duplicate. This stops the same real-world payment ever being attributed
+  /// to two transaction rows if that assumption ever breaks. Multiple NULLs
+  /// (every row before a payment ID exists) are unaffected - Postgres does
+  /// not treat NULL as equal to NULL in a unique index.
+  @@unique([gatewayPaymentId])
   @@index([sessionId])
   @@index([orderId])
   @@index([gatewayOrderId])
@@ -3123,8 +3143,8 @@ model OrderShipment {
   courier     String?
   trackingUrl String?
   labelUrl    String?
-  status      String  @default("CREATED")
-  events      Json    @default("[]")
+  status      String    @default("CREATED")
+  events      Json      @default("[]")
   lastEventAt DateTime?
 
   createdAt DateTime @default(now())
@@ -3158,24 +3178,24 @@ model OrderEvent {
 model Coupon {
   id String @id @default(uuid())
 
-  code        String  @unique
-  title       String
-  description String  @default("")
-  type        CouponType
-  value       Decimal @db.Decimal(12, 2)
-  minOrderValue Decimal @default(0) @db.Decimal(12, 2)
+  code          String     @unique
+  title         String
+  description   String     @default("")
+  type          CouponType
+  value         Decimal    @db.Decimal(12, 2)
+  minOrderValue Decimal    @default(0) @db.Decimal(12, 2)
   /// Cap for PERCENT coupons.
-  maxDiscount   Decimal? @db.Decimal(12, 2)
+  maxDiscount   Decimal?   @db.Decimal(12, 2)
 
   /// ALL | B2C | B2B
-  audience String @default("ALL")
-  validFrom DateTime?
-  expiresAt DateTime?
+  audience         String    @default("ALL")
+  validFrom        DateTime?
+  expiresAt        DateTime?
   /// Total uses across everyone / per customer. Null = unlimited.
   usageLimit       Int?
   perCustomerLimit Int?
-  usedCount        Int @default(0)
-  isActive Boolean @default(true)
+  usedCount        Int       @default(0)
+  isActive         Boolean   @default(true)
 
   redemptions CouponRedemption[]
 
@@ -3238,10 +3258,10 @@ model CustomerSession {
   userAgent String?
   ipAddress String?
 
-  createdAt  DateTime @default(now())
-  lastUsedAt DateTime @default(now())
-  expiresAt  DateTime
-  revokedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
   revokedReason String?
 
   @@index([accountId])
@@ -3264,4 +3284,93 @@ model CustomerWishlistItem {
   @@unique([customerId, productId])
   @@index([customerId])
   @@map("customer_wishlist_items")
+}
+
+/// A help-desk request raised by a storefront customer or retailer (the same
+/// Customer record, distinguished by `customer.type`). Ticket numbers are
+/// generated the same way as the other trace codes (SequenceService) so
+/// support staff can read them aloud on the phone.
+model SupportTicket {
+  id String @id @default(uuid())
+
+  /// Format: TKT-20260921-001.
+  ticketNumber String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  category    SupportTicketCategory
+  subject     String
+  description String
+
+  /// Free text as typed by the customer - not validated against Order, since
+  /// a customer may misremember or quote a WhatsApp-shared number.
+  orderNumber String?
+
+  status   SupportTicketStatus   @default(OPEN)
+  priority SupportTicketPriority @default(MEDIUM)
+
+  /// Staff response, set when the ticket is resolved/closed. Null while open.
+  resolutionNote String?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolvedBy     User?     @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+enum SupportTicketCategory {
+  ORDER_ISSUE
+  PAYMENT_REFUND
+  DELIVERY_DELAY
+  ACCOUNT_GST
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// A rating + comment a storefront customer or retailer leaves on a product
+/// they've bought. One row per (customer, product) - same shape for both
+/// channels, since nothing about a rating is channel-specific.
+model ProductReview {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// The order this review was left against, if the storefront asked for a
+  /// review from a specific delivered order. Null for a review left from the
+  /// product page rather than a post-delivery prompt.
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  rating  Int
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, productId])
+  @@index([customerId])
+  @@index([productId])
+  @@map("product_reviews")
 }

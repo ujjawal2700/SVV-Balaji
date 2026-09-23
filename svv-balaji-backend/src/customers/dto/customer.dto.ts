@@ -56,9 +56,12 @@ export class CreateCustomerDto {
   @IsString()
   gstin?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description: 'Required for B2B (goes on the tax invoice). Optional for a quick B2C registration - defaults to blank, filled in later.',
+  })
+  @IsOptional()
   @IsString()
-  billingAddress: string;
+  billingAddress?: string;
 
   @ApiPropertyOptional({ description: 'Defaults to the billing address when omitted' })
   @IsOptional()
@@ -105,6 +108,18 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   assignedToId?: string;
+
+  @ApiPropertyOptional({ enum: CustomerStatus, default: CustomerStatus.ACTIVE, description: 'Create only. Defaults to ACTIVE.' })
+  @IsOptional()
+  @IsEnum(CustomerStatus)
+  status?: CustomerStatus;
+
+  @ApiPropertyOptional({
+    description: 'Create only. Another customer\'s referral code, if this registration was referred - creates the Referral relationship.',
+  })
+  @IsOptional()
+  @IsString()
+  referredByCode?: string;
 }
 
 export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}

@@ -42,6 +42,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
 import type {
   Order,
@@ -82,13 +83,15 @@ export interface ExtendedOrder extends Order {
  * Super Admin Order Management Center (B2C & B2B)
  */
 export function OrdersPage() {
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const { message } = AntApp.useApp();
   const [query, setQuery] = useState<OrderQuery>({});
   const [formOpen, setFormOpen] = useState(false);
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
 
   // Filters state
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<PaymentStatus | undefined>(undefined);
   const [paymentModeFilter, setPaymentModeFilter] = useState<'all' | 'ONLINE' | 'COD'>('all');
   const [selectedWarehouseNode, setSelectedWarehouseNode] = useState<string | undefined>(undefined);

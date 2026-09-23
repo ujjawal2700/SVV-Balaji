@@ -21,6 +21,14 @@ export interface PaymentGateway {
   verifyPayment(input: { gatewayOrderId: string; paymentId: string; signature: string }): boolean;
   /** For the gateway's server-to-server webhook. */
   verifyWebhook(rawBody: string, signature: string): boolean;
+  /**
+   * Rebuilds the `clientConfig` `createOrder` returned, from an order id
+   * already issued and the amount already stored on the session - no network
+   * call. Lets an `Idempotency-Key` replay hand the browser back the same
+   * checkout widget config without opening a second gateway order (which
+   * would mean two orders for one payment).
+   */
+  clientConfigFor(gatewayOrderId: string, amountRupees: number): Record<string, unknown>;
 }
 
 export const PAYMENT_GATEWAY = Symbol('PAYMENT_GATEWAY');
@@ -48,7 +56,7 @@ export class MockPaymentGateway implements PaymentGateway {
 
   async createOrder(input: { amountRupees: number; receipt: string }): Promise<GatewayOrder> {
     const gatewayOrderId = `mock_order_${randomUUID()}`;
-    return { gatewayOrderId, clientConfig: { provider: 'mock', gatewayOrderId, amount: input.amountRupees, currency: 'INR' } };
+    return { gatewayOrderId, clientConfig: this.clientConfigFor(gatewayOrderId, input.amountRupees) };
   }
 
   verifyPayment(input: { gatewayOrderId: string; paymentId: string; signature: string }): boolean {
@@ -57,6 +65,10 @@ export class MockPaymentGateway implements PaymentGateway {
 
   verifyWebhook(): boolean {
     return false; // the mock has no webhook
+  }
+
+  clientConfigFor(gatewayOrderId: string, amountRupees: number): Record<string, unknown> {
+    return { provider: 'mock', gatewayOrderId, amount: amountRupees, currency: 'INR' };
   }
 }
 
@@ -90,10 +102,11 @@ export class RazorpayGateway implements PaymentGateway {
       throw new Error('The payment gateway could not start this payment');
     }
     const body = (await res.json()) as { id: string };
-    return {
-      gatewayOrderId: body.id,
-      clientConfig: { provider: 'razorpay', keyId: this.keyId, gatewayOrderId: body.id, amount, currency: 'INR' },
-    };
+    return { gatewayOrderId: body.id, clientConfig: this.clientConfigFor(body.id, input.amountRupees) };
+  }
+
+  clientConfigFor(gatewayOrderId: string, amountRupees: number): Record<string, unknown> {
+    return { provider: 'razorpay', keyId: this.keyId, gatewayOrderId, amount: Math.round(amountRupees * 100), currency: 'INR' };
   }
 
   /** Razorpay: HMAC_SHA256(order_id + "|" + payment_id, key_secret) == signature. */

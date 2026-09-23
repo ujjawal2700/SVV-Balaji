@@ -2080,6 +2080,16 @@ export interface Customer {
   /** Running coin total — see ReferralSettings and CoinTransaction. */
   coinBalance: number;
 
+  /** Last 20, newest first. Only present on the single-customer GET, not the list. */
+  orders?: {
+    id: string;
+    orderNumber: string;
+    orderDate: string;
+    status: OrderStatus;
+    total: string;
+    paymentStatus: PaymentStatus;
+  }[];
+
   createdAt: string;
   updatedAt: string;
 }
@@ -2091,6 +2101,56 @@ export interface CustomerCredit {
   outstanding: number;
   /** Null when there is no limit set. */
   availableCredit: number | null;
+}
+
+export interface CustomerWalletTransaction {
+  id: string;
+  amount: number;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  order?: { orderNumber: string } | null;
+}
+
+export interface CustomerWallet {
+  balance: number;
+  totalEarned: number;
+  totalUsed: number;
+  transactions: CustomerWalletTransaction[];
+}
+
+export interface CustomerProductReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  product: { id: string; name: string; sku: string };
+  order?: { orderNumber: string } | null;
+}
+
+export interface CustomerWishlistItem {
+  productId: string;
+  createdAt: string;
+  product: { id: string; name: string; sku: string; unit: string; images: string[] };
+}
+
+export type SupportTicketCategory = 'ORDER_ISSUE' | 'PAYMENT_REFUND' | 'DELIVERY_DELAY' | 'ACCOUNT_GST' | 'OTHER';
+export type SupportTicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+export type SupportTicketPriority = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface CustomerSupportTicket {
+  id: string;
+  ticketNumber: string;
+  category: SupportTicketCategory;
+  subject: string;
+  description: string;
+  orderNumber: string | null;
+  status: SupportTicketStatus;
+  priority: SupportTicketPriority;
+  resolutionNote: string | null;
+  resolvedAt: string | null;
+  resolvedBy?: { id: string; fullName: string } | null;
+  createdAt: string;
 }
 
 export interface CustomerQuery {
@@ -2110,7 +2170,8 @@ export interface CreateCustomerInput {
   phone: string;
   email?: string;
   gstin?: string;
-  billingAddress: string;
+  /** Required for B2B (tax invoice). Optional for a quick B2C registration. */
+  billingAddress?: string;
   shippingAddress?: string;
   city?: string;
   district?: string;
@@ -2120,6 +2181,10 @@ export interface CreateCustomerInput {
   paymentTerms?: PaymentTerms;
   branchId?: string;
   assignedToId?: string;
+  /** Create only. Defaults to ACTIVE. */
+  status?: CustomerStatus;
+  /** Create only. Another customer's referral code, if this signup was referred. */
+  referredByCode?: string;
 }
 
 /** Channel is absent on purpose — the server refuses to change it. */

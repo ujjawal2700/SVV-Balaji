@@ -218,3 +218,131 @@ body {
   height: 0px !important;
 }
 
+/* ---------------------------------------------------------------------------
+   Page Design System (v1, introduced 23 Sep 2026 on CustomerDetailPage)
+
+   Every list/detail page should build from these classes instead of typing
+   fontSize/fontWeight/color inline. Changing the look of every page - the
+   whole point of this file - means editing a rule here once, not hunting
+   through 145 page files. New pages: reach for these first; only fall back
+   to inline styles for one-off layout (flex/grid/gap), never for type or
+   colour that another page already uses.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --page-text-strong: #0f172a;
+  --page-text-body: #334155;
+  --page-text-muted: #64748b;
+  --page-text-faint: #94a3b8;
+  --page-border: #f1f5f9;
+  --page-border-soft: #e2e8f0;
+  --page-surface: #f8fafc;
+  --page-radius-lg: 16px;
+  --page-radius-md: 12px;
+  --page-radius-sm: 8px;
+}
+
+/* Page title row - name/heading + status pill, as in the header bar.
+   !important: antd's own Typography.Title CSS-in-JS otherwise wins the
+   specificity fight regardless of stylesheet order. */
+.page-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  color: var(--page-text-strong) !important;
+  letter-spacing: 0.2px;
+  margin: 0 !important;
+}
+
+/* All-caps section headers ("CONTACT INFORMATION", "ORDERS (2)" tab groups). */
+.page-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--page-text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  display: block;
+}
+
+/* Tiny all-caps caption above a value, e.g. "EMAIL ADDRESS" above the email. */
+.page-field-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--page-text-faint);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: block;
+}
+
+/* The value under a field-label. */
+.page-field-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--page-text-body);
+}
+
+/* Meta line under a title, e.g. "CUSTOMER ID: #... - MEMBER SINCE ...". */
+.page-meta {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--page-text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* White card surface used everywhere - header bar, info cards, stat cards. */
+.page-card {
+  background: #ffffff;
+  border-radius: var(--page-radius-lg);
+  border: 1px solid var(--page-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+/* Small square/rounded icon badge, e.g. next to a contact-info row or a
+   stat card. Pair with a `.page-icon-badge--{tone}` modifier for colour. */
+.page-icon-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.page-icon-badge--neutral { background: var(--page-surface); border: 1px solid var(--page-border-soft); color: var(--page-text-muted); }
+.page-icon-badge--slate   { background: #f1f5f9; color: #475569; }
+.page-icon-badge--green   { background: #e6f4ea; color: #16a34a; }
+.page-icon-badge--amber   { background: #fef3c7; color: #d97706; }
+.page-icon-badge--pink    { background: #fce7f3; color: #db2777; }
+.page-icon-badge--blue    { background: #f0f5ff; color: #1d4ed8; }
+.page-icon-badge--red     { background: #fff1f0; color: #cf1322; }
+
+/* Stat-card value, e.g. "22" total orders. */
+.page-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--page-text-strong);
+  line-height: 1;
+}
+
+/* Dark "notes" style card (admin-only annotations, internal callouts). */
+.page-dark-card {
+  background: var(--page-text-strong);
+  border-radius: var(--page-radius-lg);
+  padding: 24px 20px;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+}
+
+/* Rounded status pill, e.g. "ACTIVE CUSTOMER". Pair with a --tone modifier. */
+.page-pill {
+  border: none;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 11px;
+  padding: 2px 10px;
+  letter-spacing: 0.3px;
+}
+.page-pill--green  { background: #e6f4ea; color: #137333; }
+.page-pill--red    { background: #fff1f0; color: #cf1322; }
+.page-pill--slate  { background: #f1f5f9; color: #475569; }
+

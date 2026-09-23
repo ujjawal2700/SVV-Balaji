@@ -4,6 +4,7 @@ import {
   EditOutlined,
   EyeOutlined,
   FilterOutlined,
+  MoreOutlined,
   PlusOutlined,
   SearchOutlined,
   ShoppingOutlined,
@@ -19,6 +20,7 @@ import {
   Button,
   Card,
   Col,
+  Dropdown,
   Input,
   Row,
   Select,
@@ -32,6 +34,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
 import type {
   Customer,
@@ -45,7 +48,6 @@ import { PageHeader } from '../../components/PageHeader';
 import { BranchSelect } from '../../components/pickers';
 import { useCustomers, useSetCustomerStatus } from '@shared/hooks/useCustomers';
 import { EM_DASH, formatCurrency } from '../../utils/format';
-import { Customer360Drawer } from './Customer360Drawer';
 import { CustomerCreditDrawer } from './CustomerCreditDrawer';
 import { CustomerFormModal } from './CustomerFormModal';
 
@@ -228,18 +230,18 @@ export const MOCK_CUSTOMERS: Customer[] = [
 ];
 
 /**
- * Super Admin Customer CRM Registry (FRD Section 24)
- * Complete detailed view of B2C consumers and B2B commercial accounts.
+ * Super Admin B2C Customer CRM Registry (FRD Section 24)
+ * Dedicated management for B2C retail shoppers and consumer accounts.
  */
 export function CustomersPage() {
+  const navigate = useNavigate();
   const { message, modal } = AntApp.useApp();
-  const [query, setQuery] = useState<CustomerQuery>({});
-  const [activeTab, setActiveTab] = useState<'all' | 'b2c' | 'b2b' | 'blacklisted'>('all');
+  const [query, setQuery] = useState<CustomerQuery>({ channel: 'B2C' });
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'blacklisted'>('all');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [creditOf, setCreditOf] = useState<Customer | null>(null);
-  const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
 
   const customersQuery = useCustomers(query);
   const setStatusMutation = useSetCustomerStatus();
@@ -247,24 +249,25 @@ export function CustomersPage() {
   const rawCustomers = useMemo(() => customersQuery.data?.data ?? [], [customersQuery.data]);
   const allCustomers = useMemo(() => (rawCustomers.length > 0 ? rawCustomers : MOCK_CUSTOMERS), [rawCustomers]);
 
-  // CRM Analytics Metrics
-  const metrics = useMemo(() => {
-    const total = allCustomers.length;
-    const b2cCount = allCustomers.filter((c) => c.channel === 'B2C').length;
-    const b2bCount = allCustomers.filter((c) => c.channel === 'B2B').length;
-    const coinsTotal = allCustomers.reduce((acc, c) => acc + (c.coinBalance || 0), 0);
-    const blacklistedCount = allCustomers.filter((c) => c.status === 'BLACKLISTED').length;
+  // Strictly filter to B2C retail shoppers on this page
+  const b2cCustomers = useMemo(() => allCustomers.filter((c) => c.channel === 'B2C'), [allCustomers]);
 
-    return { total, b2cCount, b2bCount, coinsTotal, blacklistedCount };
-  }, [allCustomers]);
+  // B2C CRM Analytics Metrics
+  const metrics = useMemo(() => {
+    const total = b2cCustomers.length;
+    const activeCount = b2cCustomers.filter((c) => c.status === 'ACTIVE').length;
+    const blacklistedCount = b2cCustomers.filter((c) => c.status === 'BLACKLISTED').length;
+    const coinsTotal = b2cCustomers.reduce((acc, c) => acc + (c.coinBalance || 0), 0);
+
+    return { total, activeCount, blacklistedCount, coinsTotal };
+  }, [b2cCustomers]);
 
   // Tabbed row filtering
   const filteredRows = useMemo(() => {
-    if (activeTab === 'b2c') return allCustomers.filter((c) => c.channel === 'B2C');
-    if (activeTab === 'b2b') return allCustomers.filter((c) => c.channel === 'B2B');
-    if (activeTab === 'blacklisted') return allCustomers.filter((c) => c.status === 'BLACKLISTED');
-    return allCustomers;
-  }, [allCustomers, activeTab]);
+    if (activeTab === 'active') return b2cCustomers.filter((c) => c.status === 'ACTIVE');
+    if (activeTab === 'blacklisted') return b2cCustomers.filter((c) => c.status === 'BLACKLISTED');
+    return b2cCustomers;
+  }, [b2cCustomers, activeTab]);
 
   const patchQuery = (patch: Partial<CustomerQuery>) => setQuery((prev) => ({ ...prev, ...patch }));
 
@@ -304,9 +307,9 @@ export function CustomersPage() {
     {
       title: 'Customer & Code',
       key: 'name',
-      width: 200,
+      width: 210,
       render: (_, customer) => (
-        <Space align="center" size={8}>
+        <Space align="center" size={10}>
           <Avatar
             size="small"
             style={{
@@ -317,7 +320,10 @@ export function CustomersPage() {
             {customer.name.charAt(0).toUpperCase()}
           </Avatar>
           <Space direction="vertical" size={0}>
-            <Text strong style={{ fontSize: 13 }} type={customer.status === 'ACTIVE' ? undefined : 'secondary'}>
+            <Text
+              style={{ fontSize: 13, cursor: 'pointer', color: '#1677ff', fontWeight: 600 }}
+              onClick={() => navigate(`/b2c-customers/${customer.id}`)}
+            >
               {customer.name}
             </Text>
             <Text code style={{ fontSize: 10 }}>
@@ -329,39 +335,21 @@ export function CustomersPage() {
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
-      title: 'Channel & Type',
-      key: 'channel',
-      width: 110,
-      render: (_, customer) => (
-        <Space direction="vertical" size={0}>
-          <Tag color={CHANNEL_COLOUR[customer.channel]} style={{ fontSize: 10, margin: 0 }}>
-            {customer.channel}
-          </Tag>
-          <Text type="secondary" style={{ fontSize: 10 }}>
-            {customer.type.charAt(0) + customer.type.slice(1).toLowerCase()}
-          </Text>
-        </Space>
-      ),
-    },
-    {
       title: 'Contact Details',
       key: 'contact',
-      width: 150,
+      width: 170,
       render: (_, customer) => (
         <Space direction="vertical" size={0}>
-          <Space size={2}>
-            <Text style={{ fontSize: 12 }}>{customer.phone}</Text>
+          <Space size={4}>
+            <Text style={{ fontSize: 12, fontWeight: 500 }}>{customer.phone}</Text>
             <Tooltip title="WhatsApp Direct Chat">
-              <Button
-                type="text"
-                size="small"
-                style={{ padding: 0, height: 'auto' }}
-                icon={<WhatsAppOutlined style={{ color: '#52c41a', fontSize: 12 }} />}
+              <WhatsAppOutlined
+                style={{ color: '#22c55e', fontSize: 13, cursor: 'pointer' }}
                 onClick={() => window.open(`https://wa.me/91${customer.phone.replace(/[^0-9]/g, '')}`, '_blank')}
               />
             </Tooltip>
           </Space>
-          <Text type="secondary" style={{ fontSize: 11, maxWidth: 140 }} ellipsis>
+          <Text type="secondary" style={{ fontSize: 11, maxWidth: 150 }} ellipsis>
             {customer.contactName ?? customer.email ?? EM_DASH}
           </Text>
         </Space>
@@ -370,7 +358,7 @@ export function CustomersPage() {
     {
       title: 'Location',
       key: 'location',
-      width: 120,
+      width: 140,
       render: (_, customer) => (
         <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: true }}>
           {[customer.city, customer.state].filter(Boolean).join(', ') || EM_DASH}
@@ -380,53 +368,42 @@ export function CustomersPage() {
     {
       title: 'Referral & Rewards',
       key: 'referral',
-      width: 140,
+      width: 160,
       render: (_, customer) => (
         <Space direction="vertical" size={2}>
-          <Space size={2}>
-            <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>
+          <Space size={4}>
+            <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px', fontWeight: 500 }}>
               {customer.referralCode}
             </Tag>
             <Tooltip title="Copy Code">
-              <Button
-                type="text"
-                size="small"
-                style={{ padding: 0, height: 'auto' }}
-                icon={<CopyOutlined style={{ fontSize: 11 }} />}
+              <CopyOutlined
+                style={{ fontSize: 11, cursor: 'pointer', color: '#64748b' }}
                 onClick={() => handleCopyReferral(customer.referralCode)}
               />
             </Tooltip>
           </Space>
-          <Tag color="green" style={{ fontSize: 10, margin: 0, padding: '0 4px', width: 'fit-content' }}>
+          <Tag color="green" style={{ fontSize: 10, margin: 0, padding: '0 4px', fontWeight: 500, width: 'fit-content' }}>
             🪙 {customer.coinBalance ?? 0} Coins
           </Tag>
         </Space>
       ),
     },
     {
-      title: 'Payment / Credit',
+      title: 'Payment',
       key: 'credit',
-      width: 110,
-      render: (_, customer) =>
-        customer.channel === 'B2C' ? (
-          <Tag color="default" style={{ fontSize: 10, margin: 0 }}>Prepaid</Tag>
-        ) : (
-          <Space direction="vertical" size={0}>
-            <Text strong style={{ fontSize: 11 }}>
-              {customer.creditLimit ? formatCurrency(customer.creditLimit) : 'No Limit'}
-            </Text>
-            <Text type="secondary" style={{ fontSize: 10 }}>
-              {customer.paymentTerms.replace('_', ' ')}
-            </Text>
-          </Space>
-        ),
+      width: 90,
+      render: (_, customer) => (
+        <Tag color="default" style={{ fontSize: 10, margin: 0, fontWeight: 500 }}>
+          Prepaid
+        </Tag>
+      ),
     },
     {
       title: 'Status',
       key: 'status',
-      width: 90,
+      width: 100,
       render: (_, customer) => (
-        <Tag color={STATUS_COLOUR[customer.status]} style={{ fontSize: 10, margin: 0 }}>
+        <Tag color={STATUS_COLOUR[customer.status]} style={{ fontSize: 10, margin: 0, fontWeight: 500 }}>
           {customer.status}
         </Tag>
       ),
@@ -434,197 +411,177 @@ export function CustomersPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 140,
+      width: 120,
       fixed: 'right',
       render: (_, customer) => (
-        <Space size={2}>
-          <Tooltip title="View 360° Profile">
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => setDetailCustomer(customer)}
-              style={{ fontSize: 12 }}
-            >
-              Profile
-            </Button>
-          </Tooltip>
+        <Space size={6}>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/b2c-customers/${customer.id}`)}
+            style={{ borderRadius: 6, fontSize: 12, fontWeight: 500 }}
+          >
+            Profile
+          </Button>
 
-          {customer.channel === 'B2B' && (
-            <Tooltip title="Manage B2B Credit">
-              <Button
-                size="small"
-                icon={<CreditCardOutlined />}
-                onClick={() => setCreditOf(customer)}
-              />
-            </Tooltip>
-          )}
-
-          <Can do="CUSTOMER_EDIT">
-            <Tooltip title="Edit Account">
-              <Button
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => openEdit(customer)}
-              />
-            </Tooltip>
-          </Can>
-
-          <Can do="CUSTOMER_STATUS">
-            {STATUS_ACTIONS[customer.status].map((action) => (
-              <Tooltip key={action.next} title={action.label}>
-                <Button
-                  size="small"
-                  danger={action.next === 'BLACKLISTED'}
-                  onClick={() => handleStatusChange(customer, action.next, action.warning)}
-                  style={{ fontSize: 11, padding: '0 6px' }}
-                >
-                  {action.next === 'BLACKLISTED' ? 'Blacklist' : action.next === 'INACTIVE' ? 'Deactivate' : 'Activate'}
-                </Button>
-              </Tooltip>
-            ))}
-          </Can>
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'edit',
+                  icon: <EditOutlined />,
+                  label: 'Edit Customer',
+                  onClick: () => openEdit(customer),
+                },
+                ...(customer.channel === 'B2B'
+                  ? [
+                      {
+                        key: 'credit',
+                        icon: <CreditCardOutlined />,
+                        label: 'Manage B2B Credit',
+                        onClick: () => setCreditOf(customer),
+                      },
+                    ]
+                  : []),
+                { type: 'divider' as const },
+                ...STATUS_ACTIONS[customer.status].map((action) => ({
+                  key: action.next,
+                  danger: action.next === 'BLACKLISTED',
+                  label: action.label,
+                  onClick: () => handleStatusChange(customer, action.next, action.warning),
+                })),
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button size="small" icon={<MoreOutlined />} style={{ borderRadius: 6 }} />
+          </Dropdown>
         </Space>
       ),
     },
   ];
 
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      {/* Header */}
-      <PageHeader
-        title="Customer CRM & Account Registry"
-        subtitle="Manage B2C retail shoppers and B2B commercial buyers, coin balances, referral tracking, credit terms, and profile histories."
-        actions={
-          <Can do="CUSTOMER_CREATE">
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-              Register Customer
-            </Button>
-          </Can>
-        }
-      />
+    <div style={{ padding: '16px 8px 32px 8px', maxWidth: 1400, margin: '0 auto' }}>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        {/* Header */}
+        <PageHeader
+          title="B2C Customer CRM & Shopper Registry"
+          subtitle="Manage B2C retail shoppers, reward coin balances, referral tracking, and shopper account histories."
+          actions={
+            <Can do="CUSTOMER_CREATE">
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)} style={{ borderRadius: 8 }}>
+                Register B2C Customer
+              </Button>
+            </Can>
+          }
+        />
 
-      {/* CRM Summary Metrics */}
-      <Row gutter={[12, 12]}>
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Total CRM Accounts"
-              value={metrics.total}
-              prefix={<UsergroupAddOutlined style={{ color: '#1677ff', fontSize: 16 }} />}
-              valueStyle={{ fontSize: 20 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="B2C Retail Shoppers"
-              value={metrics.b2cCount}
-              prefix={<UserOutlined style={{ color: '#722ed1', fontSize: 16 }} />}
-              valueStyle={{ color: '#722ed1', fontSize: 20 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="B2B Commercial Accounts"
-              value={metrics.b2bCount}
-              prefix={<TeamOutlined style={{ color: '#1677ff', fontSize: 16 }} />}
-              valueStyle={{ color: '#1677ff', fontSize: 20 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Reward Coins Balance"
-              value={metrics.coinsTotal}
-              prefix="🪙"
-              valueStyle={{ color: '#389e0d', fontSize: 20 }}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Main CRM Table Card */}
-      <Card bodyStyle={{ padding: '12px 16px' }} style={{ borderRadius: 8 }}>
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Row gutter={[12, 12]} align="middle" justify="space-between">
-            <Col xs={24} md={12}>
-              <Tabs
-                activeKey={activeTab}
-                onChange={(key) => setActiveTab(key as any)}
-                size="small"
-                style={{ marginBottom: 0 }}
-                items={[
-                  { key: 'all', label: `All Customers (${metrics.total})` },
-                  { key: 'b2c', label: `B2C Shoppers (${metrics.b2cCount})` },
-                  { key: 'b2b', label: `B2B Accounts (${metrics.b2bCount})` },
-                  { key: 'blacklisted', label: `Blacklisted (${metrics.blacklistedCount})` },
-                ]}
+        {/* CRM Summary Metrics */}
+        <Row gutter={[12, 12]}>
+          <Col xs={24} sm={12} md={6}>
+            <Card size="small" style={{ borderRadius: 12 }}>
+              <Statistic
+                title="Total B2C Shoppers"
+                value={metrics.total}
+                prefix={<UserOutlined style={{ color: '#722ed1', fontSize: 16 }} />}
+                valueStyle={{ color: '#722ed1', fontSize: 20, fontWeight: 600 }}
               />
-            </Col>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card size="small" style={{ borderRadius: 12 }}>
+              <Statistic
+                title="Active Shoppers"
+                value={metrics.activeCount}
+                prefix={<UsergroupAddOutlined style={{ color: '#389e0d', fontSize: 16 }} />}
+                valueStyle={{ color: '#389e0d', fontSize: 20, fontWeight: 600 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card size="small" style={{ borderRadius: 12 }}>
+              <Statistic
+                title="Blacklisted Accounts"
+                value={metrics.blacklistedCount}
+                prefix={<UserOutlined style={{ color: '#cf1322', fontSize: 16 }} />}
+                valueStyle={{ color: '#cf1322', fontSize: 20, fontWeight: 600 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card size="small" style={{ borderRadius: 12 }}>
+              <Statistic
+                title="Reward Coins Balance"
+                value={metrics.coinsTotal}
+                prefix="🪙"
+                valueStyle={{ color: '#d46b08', fontSize: 20, fontWeight: 600 }}
+              />
+            </Card>
+          </Col>
+        </Row>
 
-            <Col xs={24} md={12}>
-              <Space style={{ width: '100%', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <Input.Search
-                  allowClear
+        {/* Main CRM Table Card */}
+        <Card bodyStyle={{ padding: '16px 20px' }} style={{ borderRadius: 12, border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Row gutter={[12, 12]} align="middle" justify="space-between">
+              <Col xs={24} md={12}>
+                <Tabs
+                  activeKey={activeTab}
+                  onChange={(key) => setActiveTab(key as any)}
                   size="small"
-                  placeholder="Search name, code, phone, email..."
-                  onSearch={(val) => patchQuery({ search: val || undefined })}
-                  style={{ width: 200 }}
+                  style={{ marginBottom: 0, fontWeight: 500 }}
+                  items={[
+                    { key: 'all', label: `All Shoppers (${metrics.total})` },
+                    { key: 'active', label: `Active (${metrics.activeCount})` },
+                    { key: 'blacklisted', label: `Blacklisted (${metrics.blacklistedCount})` },
+                  ]}
                 />
-                <Select<SalesChannel>
-                  allowClear
-                  size="small"
-                  placeholder="Channel"
-                  value={query.channel}
-                  onChange={(val) => patchQuery({ channel: val, type: undefined })}
-                  options={SALES_CHANNELS.map((val) => ({ value: val, label: val }))}
-                  style={{ width: 95 }}
-                />
-                <Select<CustomerStatus>
-                  allowClear
-                  size="small"
-                  placeholder="Status"
-                  value={query.status}
-                  onChange={(val) => patchQuery({ status: val })}
-                  options={(['ACTIVE', 'INACTIVE', 'BLACKLISTED'] as CustomerStatus[]).map((val) => ({
-                    value: val,
-                    label: val.charAt(0) + val.slice(1).toLowerCase(),
-                  }))}
-                  style={{ width: 105 }}
-                />
-              </Space>
-            </Col>
-          </Row>
+              </Col>
 
-          <Table<Customer>
-            columns={columns}
-            dataSource={filteredRows}
-            rowKey="id"
-            loading={customersQuery.isLoading}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
-            size="small"
-            scroll={{ x: 1100 }}
-          />
-        </Space>
-      </Card>
+              <Col xs={24} md={12}>
+                <Space style={{ width: '100%', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <Input.Search
+                    allowClear
+                    size="small"
+                    placeholder="Search name, code, phone, email..."
+                    onSearch={(val) => patchQuery({ search: val || undefined })}
+                    style={{ width: 220, borderRadius: 6 }}
+                  />
+                  <Select<CustomerStatus>
+                    allowClear
+                    size="small"
+                    placeholder="Status"
+                    value={query.status}
+                    onChange={(val) => patchQuery({ status: val })}
+                    options={(['ACTIVE', 'INACTIVE', 'BLACKLISTED'] as CustomerStatus[]).map((val) => ({
+                      value: val,
+                      label: val.charAt(0) + val.slice(1).toLowerCase(),
+                    }))}
+                    style={{ width: 110 }}
+                  />
+                </Space>
+              </Col>
+            </Row>
 
-      {/* Slide-over 360° Profile Drawer */}
-      <Customer360Drawer
-        customer={detailCustomer}
-        onClose={() => setDetailCustomer(null)}
-        onEdit={(cust) => {
-          setDetailCustomer(null);
-          openEdit(cust);
-        }}
-      />
+            <Table<Customer>
+              columns={columns}
+              dataSource={filteredRows}
+              rowKey="id"
+              loading={customersQuery.isLoading}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              size="small"
+              scroll={{ x: 900 }}
+            />
+          </Space>
+        </Card>
 
-      {/* Form & Credit Modals */}
-      <CustomerFormModal open={formOpen} customer={editing} onClose={closeForm} />
-      <CustomerCreditDrawer customer={creditOf} onClose={() => setCreditOf(null)} />
-    </Space>
+        {/* Form & Credit Modals */}
+        <CustomerFormModal open={formOpen} customer={editing} onClose={closeForm} />
+        <CustomerCreditDrawer customer={creditOf} onClose={() => setCreditOf(null)} />
+      </Space>
+    </div>
   );
 }

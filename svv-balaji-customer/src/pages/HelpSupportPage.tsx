@@ -38,12 +38,21 @@ import { useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useStorefrontSupport } from '@shared/hooks/useSupportSettings';
 import type { SupportFaqItem } from '@shared/api/types';
+import { useCreateSupportTicket, useSupportTickets } from '../hooks/useSupportTickets';
+import type { SupportTicketCategory } from '../api/supportTickets';
+
+const TICKET_STATUS_COLOUR: Record<string, string> = {
+  OPEN: 'gold',
+  IN_PROGRESS: 'blue',
+  RESOLVED: 'green',
+  CLOSED: 'default',
+};
 
 const { Title, Text, Paragraph } = Typography;
 
 export function HelpSupportPage() {
   const navigate = useNavigate();
-  const { role, customerProfile, retailerProfile } = useCustomerAuth();
+  const { role, customerProfile, retailerProfile, isLoggedIn } = useCustomerAuth();
   const { message } = AntApp.useApp();
 
   const isUserRetailer = role === 'RETAILER';
@@ -53,13 +62,21 @@ export function HelpSupportPage() {
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
-  const [ticketForm, setTicketForm] = useState({
+  const [ticketForm, setTicketForm] = useState<{
+    subject: string;
+    orderNumber: string;
+    category: SupportTicketCategory;
+    description: string;
+  }>({
     subject: '',
     orderNumber: '',
     category: 'ORDER_ISSUE',
     description: '',
   });
-  const [submittingTicket, setSubmittingTicket] = useState(false);
+
+  const ticketsQuery = useSupportTickets();
+  const myTickets = ticketsQuery.data ?? [];
+  const createTicket = useCreateSupportTicket();
 
   // Active FAQs based on user's role
   const activeFaqs: SupportFaqItem[] = useMemo(() => {
@@ -114,13 +131,24 @@ export function HelpSupportPage() {
       message.warning('Please fill in both subject and description');
       return;
     }
-    setSubmittingTicket(true);
-    setTimeout(() => {
-      setSubmittingTicket(false);
-      setTicketModalOpen(false);
-      message.success('Your support ticket has been submitted. Our executive will reach out shortly!');
-      setTicketForm({ subject: '', orderNumber: '', category: 'ORDER_ISSUE', description: '' });
-    }, 800);
+    createTicket.mutate(
+      {
+        category: ticketForm.category,
+        subject: ticketForm.subject.trim(),
+        description: ticketForm.description.trim(),
+        orderNumber: ticketForm.orderNumber.trim() || undefined,
+      },
+      {
+        onSuccess: (ticket) => {
+          setTicketModalOpen(false);
+          message.success(`Ticket ${ticket.ticketNumber} submitted. Our executive will reach out shortly!`);
+          setTicketForm({ subject: '', orderNumber: '', category: 'ORDER_ISSUE', description: '' });
+        },
+        onError: () => {
+          message.error('Could not submit your ticket. Please try again.');
+        },
+      },
+    );
   };
 
   return (
@@ -563,6 +591,78 @@ export function HelpSupportPage() {
           </div>
         </div>
 
+        {/* My Support Tickets - dynamic, real backend */}
+        {isLoggedIn && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
+              My Support Tickets
+            </div>
+            {ticketsQuery.isLoading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : myTickets.length === 0 ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '14px 12px',
+                  textAlign: 'center',
+                  color: '#64748b',
+                  fontSize: 12.5,
+                }}
+              >
+                No tickets raised yet. Use "Submit Ticket" above if you need help.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {myTickets.map((ticket) => (
+                  <div
+                    key={ticket.id}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 12,
+                      padding: '10px 12px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>{ticket.ticketNumber}</span>
+                      <Tag
+                        color={TICKET_STATUS_COLOUR[ticket.status]}
+                        style={{ margin: 0, fontSize: 10, borderRadius: 4 }}
+                      >
+                        {ticket.status.replace('_', ' ')}
+                      </Tag>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 2 }}>
+                      {ticket.subject}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                      Raised on {new Date(ticket.createdAt).toLocaleDateString()}
+                      {ticket.orderNumber ? ` · Order ${ticket.orderNumber}` : ''}
+                    </div>
+                    {ticket.resolutionNote && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          background: '#f0fdf4',
+                          borderRadius: 8,
+                          padding: '6px 8px',
+                          fontSize: 12,
+                          color: '#166534',
+                        }}
+                      >
+                        Support reply: {ticket.resolutionNote}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Category Filter Chips */}
         {categories.length > 0 && (
           <div
@@ -821,7 +921,7 @@ export function HelpSupportPage() {
             key="submit"
             type="primary"
             icon={<SendOutlined />}
-            loading={submittingTicket}
+            loading={createTicket.isPending}
             onClick={handleTicketSubmit}
             style={{ borderRadius: 8, background: '#059669', borderColor: '#059669', fontWeight: 600 }}
           >

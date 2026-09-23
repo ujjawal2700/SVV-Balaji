@@ -323,6 +323,11 @@ describe('SalesService', () => {
       stockMovement: {
         create: jest.fn(async ({ data }: any) => ({ id: 'mv-1', ...data })),
       },
+      // allocateCore/reallocate lock stock rows with `SELECT ... FOR UPDATE`
+      // (checkout/stock-holds.ts) before reading them. This in-memory mock
+      // has no real rows or transactions to lock, so it is a no-op stand-in -
+      // the row-locking behaviour itself is covered by stock-holds.spec.ts.
+      $queryRaw: jest.fn(async () => []),
       $transaction: jest.fn(async (fn: any) => fn(prisma)),
     };
 

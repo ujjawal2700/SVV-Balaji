@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
 import type { CreateProductInput, Product } from '../../api/types';
 import { Can } from '../../components/Can';
@@ -239,6 +240,8 @@ function ProductFormModal({
 }
 
 export function ProductsPage() {
+  const [searchParams] = useSearchParams();
+  const searchFilter = (searchParams.get('search') ?? '').toLowerCase();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [showDiscontinued, setShowDiscontinued] = useState(true);
@@ -249,7 +252,11 @@ export function ProductsPage() {
   const setActive = useSetProductActive();
   const remove = useDeleteProduct();
 
-  const rows = (products.data?.data ?? []).filter((p) => showDiscontinued || p.isActive);
+  const rows = (products.data?.data ?? []).filter((p) => {
+    const matchesActive = showDiscontinued || p.isActive;
+    const matchesSearch = !searchFilter || p.name.toLowerCase().includes(searchFilter) || p.sku.toLowerCase().includes(searchFilter);
+    return matchesActive && matchesSearch;
+  });
   const discontinuedCount = (products.data?.data ?? []).filter((p) => !p.isActive).length;
 
   const openEdit = (product: Product) => {

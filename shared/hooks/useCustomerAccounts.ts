@@ -11,6 +11,14 @@ export function useCustomerAccounts(query: CustomerAccountQuery = {}) {
   });
 }
 
+export function useCustomerAccount(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.customerAccounts.detail(id ?? ''),
+    queryFn: () => customerAccountsApi.get(id as string),
+    enabled: Boolean(id),
+  });
+}
+
 /**
  * Approval creates the Customer record the account then orders against, so
  * this invalidates the customer tree too — the credit/registry screens should

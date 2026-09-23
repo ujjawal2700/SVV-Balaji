@@ -68,6 +68,36 @@ export class CustomersController {
     return this.customersService.creditPosition(id);
   }
 
+  @Get(':id/wallet')
+  @RequirePermission('customers.view')
+  @ApiOperation({
+    summary: 'Reward-coin wallet ledger: current balance, total earned, total used',
+  })
+  wallet(@Param('id') id: string) {
+    return this.customersService.walletLedger(id);
+  }
+
+  @Get(':id/wishlist')
+  @RequirePermission('customers.view')
+  @ApiOperation({ summary: "Customer's saved-for-later products" })
+  wishlist(@Param('id') id: string) {
+    return this.customersService.wishlist(id);
+  }
+
+  @Get(':id/support-tickets')
+  @RequirePermission('customers.view')
+  @ApiOperation({ summary: "Customer's raised support tickets" })
+  supportTickets(@Param('id') id: string) {
+    return this.customersService.supportTickets(id);
+  }
+
+  @Get(':id/reviews')
+  @RequirePermission('customers.view')
+  @ApiOperation({ summary: "Customer's product reviews" })
+  reviews(@Param('id') id: string) {
+    return this.customersService.reviews(id);
+  }
+
   @Patch(':id')
   @RequirePermission('customers.edit')
   update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {

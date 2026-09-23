@@ -266,8 +266,32 @@ export class CheckoutService {
    * real availability is re-checked, and the reservation is written in one
    * transaction, so the last unit can only ever be promised to one buyer.
    * If a local outlet loses that race, the cart is re-routed to the next node.
+   *
+   * `idempotencyKey` (the client's `Idempotency-Key` header) makes a retried
+   * or double-tapped request return the SAME session rather than opening a
+   * second stock hold and a second gateway order. It is scoped per customer
+   * (`@@unique([customerId, idempotencyKey])`), and a request with no key
+   * behaves exactly as before - every keyless call opens its own session.
    */
-  async startSession(customer: Customer, dto: CheckoutDto) {
+  async startSession(customer: Customer, dto: CheckoutDto, idempotencyKey?: string) {
+    if (idempotencyKey) {
+      const existing = await this.prisma.checkoutSession.findUnique({
+        where: { customerId_idempotencyKey: { customerId: customer.id, idempotencyKey } },
+      });
+      if (existing) {
+        if (existing.status !== CheckoutSessionStatus.OPEN) {
+          // Aborted, expired, or already completed - that response was final.
+          // The client needs a new key to try again, the same way confirm()
+          // needs a fresh session once one is no longer OPEN.
+          throw new ConflictException({
+            code: 'IDEMPOTENCY_KEY_REUSED',
+            message: `This checkout attempt already resolved as ${existing.status}. Use a new Idempotency-Key to start another one.`,
+          });
+        }
+        return this.reopenPayment(existing);
+      }
+    }
+
     const settings = await this.settings.effective();
     await this.abortOpenSessions(customer.id);
 
@@ -284,6 +308,7 @@ export class CheckoutService {
                 quote: quote as unknown as Prisma.InputJsonValue,
                 paymentMode: quote.payment.mode,
                 expiresAt: new Date(Date.now() + settings.reservationTtlMinutes * 60_000),
+                idempotencyKey: idempotencyKey ?? null,
               },
             });
             await this.reservations.hold(tx, {
@@ -313,6 +338,25 @@ export class CheckoutService {
         quote,
       });
     }
+  }
+
+  /**
+   * The `Idempotency-Key` replay path: same session, same response shape as
+   * `openPayment`, but no second gateway order and no second
+   * `PaymentTransaction` row - both were already created the first time.
+   */
+  private reopenPayment(session: { id: string; expiresAt: Date; quote: unknown; paymentMode: PaymentMode; gatewayOrderId: string | null }) {
+    const quote = session.quote as unknown as StoredQuote;
+    const mode = session.paymentMode;
+    const amount = quote.totals.totalPayable;
+    const requiresPayment = mode === PaymentMode.ONLINE && amount > 0;
+    const gatewayConfig = requiresPayment && session.gatewayOrderId ? this.gateway.clientConfigFor(session.gatewayOrderId, amount) : null;
+    return {
+      sessionId: session.id,
+      expiresAt: session.expiresAt,
+      quote,
+      payment: { mode, amount, requiresPayment, gateway: gatewayConfig },
+    };
   }
 
   private async openPayment(sessionId: string, quote: StoredQuote) {

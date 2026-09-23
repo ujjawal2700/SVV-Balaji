@@ -52,6 +52,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
 import { formatCurrency } from '../../utils/format';
@@ -533,12 +534,13 @@ function ComplaintInspectionDrawer({
  * Complaints & Grievances Super Admin Console Page (`/complaints`)
  */
 export function ComplaintsPage() {
+  const [searchParams] = useSearchParams();
   const { message } = AntApp.useApp();
   const [complaints, setComplaints] = useState<ComplaintTicket[]>(MOCK_COMPLAINTS);
   const [activeChannelTab, setActiveChannelTab] = useState<'ALL' | 'B2C' | 'B2B'>('B2C');
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
 

@@ -690,6 +690,12 @@ export class StorefrontAuthService {
     });
   }
 
+  async getAccount(id: string) {
+    const account = await this.prisma.customerAccount.findUnique({ where: { id }, select: ACCOUNT_STAFF_SELECT });
+    if (!account) throw new NotFoundException('Account not found');
+    return account;
+  }
+
   async approveAccount(id: string, reviewerId: string) {
     const account = await this.prisma.customerAccount.findUnique({ where: { id } });
     if (!account) throw new NotFoundException('Account not found');

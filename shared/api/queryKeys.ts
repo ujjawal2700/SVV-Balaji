@@ -251,12 +251,17 @@ export const queryKeys = {
     // customer record is edited - so it is its own key and gets invalidated by
     // order mutations too.
     credit: (id: string) => [...queryKeys.customers.all, 'credit', id] as const,
+    wallet: (id: string) => [...queryKeys.customers.all, 'wallet', id] as const,
+    wishlist: (id: string) => [...queryKeys.customers.all, 'wishlist', id] as const,
+    supportTickets: (id: string) => [...queryKeys.customers.all, 'support-tickets', id] as const,
+    reviews: (id: string) => [...queryKeys.customers.all, 'reviews', id] as const,
   },
 
   customerAccounts: {
     all: ['customer-accounts'] as const,
     list: (query: CustomerAccountQuery) =>
       [...queryKeys.customerAccounts.all, 'list', query] as const,
+    detail: (id: string) => [...queryKeys.customerAccounts.all, 'detail', id] as const,
   },
 
   referralSettings: {

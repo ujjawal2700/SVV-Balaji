@@ -155,6 +155,13 @@ export class StorefrontAccountsController {
     return this.service.listAccounts({ channel: query.channel as SalesChannel | undefined, search: query.search });
   }
 
+  @Get(':id')
+  @RequirePermission('customerAccounts.view')
+  @ApiOperation({ summary: 'Get one storefront account by id', description: 'Full detail for the retailer approval/profile page.' })
+  getOne(@Param('id') id: string) {
+    return this.service.getAccount(id);
+  }
+
   @Patch(':id/approve')
   @RequirePermission('customerAccounts.review')
   @ApiOperation({ summary: 'Approve a retailer registration', description: 'Creates the Customer record it will order against.' })

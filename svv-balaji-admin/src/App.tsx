@@ -165,6 +165,15 @@ const InventoryPage = lazy(() =>
 const CustomersPage = lazy(() =>
   import('./pages/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
 );
+const CustomerDetailPage = lazy(() =>
+  import('./pages/customers/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })),
+);
+const RetailerDetailPage = lazy(() =>
+  import('./pages/customers/RetailerDetailPage').then((m) => ({ default: m.RetailerDetailPage })),
+);
+const RetailerApprovalPage = lazy(() =>
+  import('./pages/customer-accounts/RetailerApprovalPage').then((m) => ({ default: m.RetailerApprovalPage })),
+);
 const PriceListsPage = lazy(() =>
   import('./pages/pricing/PriceListsPage').then((m) => ({ default: m.PriceListsPage })),
 );
@@ -373,6 +382,10 @@ export function App() {
           ))}
 
           <Route path="/profile" element={SCREENS['/profile']} />
+          <Route path="/b2c-customers/:id" element={<CustomerDetailPage />} />
+          <Route path="/customers/:id" element={<CustomerDetailPage />} />
+          <Route path="/b2b-customers/:id" element={<RetailerDetailPage />} />
+          <Route path="/b2b-accounts/:id" element={<RetailerApprovalPage />} />
           <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
           {/* Creating and editing are separate grants (products.create / products.edit); the
               server enforces both, this just stops the screen opening for someone who cannot save. */}

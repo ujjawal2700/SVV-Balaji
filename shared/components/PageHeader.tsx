@@ -6,9 +6,13 @@ interface PageHeaderProps {
   subtitle?: ReactNode;
   /** Primary actions, right-aligned. Wrap role-gated ones in <Can>. */
   actions?: ReactNode;
+  /** Alias for actions for backward compatibility */
+  extra?: ReactNode;
 }
 
-export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, actions, extra }: PageHeaderProps) {
+  const rightContent = actions ?? extra;
+
   return (
     <div
       style={{
@@ -21,7 +25,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
       }}
     >
       <div>
-        <Typography.Title level={4} style={{ margin: 0 }}>
+        <Typography.Title level={4} className="page-title">
           {title}
         </Typography.Title>
         {subtitle ? (
@@ -30,7 +34,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
           </Typography.Text>
         ) : null}
       </div>
-      {actions ? <Space wrap>{actions}</Space> : null}
+      {rightContent ? <Space wrap>{rightContent}</Space> : null}
     </div>
   );
 }
