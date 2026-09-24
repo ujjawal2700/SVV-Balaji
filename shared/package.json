@@ -2,8 +2,5 @@
   "name": "@svv-balaji/shared",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "scripts": {
-    "preinstall": "node dist/setup.js"
-  }
+  "type": "module"
 }
