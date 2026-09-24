@@ -7,7 +7,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { Badge } from 'antd';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
 
 /**
@@ -29,6 +29,7 @@ const INACTIVE_COLOR = '#78716c';
 
 export function BottomNav() {
   const cart = useCart();
+  const location = useLocation();
 
   return (
     <nav
@@ -68,7 +69,9 @@ export function BottomNav() {
               textDecoration: 'none',
             }}
           >
-            {({ isActive }) => {
+            {({ isActive: routeActive }) => {
+              // A category's product list belongs under the Categories tab.
+              const isActive = routeActive || (tab.path === '/categories' && location.pathname.startsWith('/products/'));
               const Icon = isActive ? tab.activeIcon : tab.icon;
               const color = isActive ? ACTIVE_COLOR : INACTIVE_COLOR;
               const iconNode = <Icon style={{ fontSize: 22, color }} />;

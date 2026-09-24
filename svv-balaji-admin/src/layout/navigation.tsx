@@ -626,6 +626,16 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <CustomerServiceOutlined />,
     items: [
       {
+        key: 'support-tickets',
+        path: '/support-tickets',
+        label: 'Support Tickets',
+        permission: 'SUPPORT_TICKETS_VIEW',
+        description: 'Help-desk inbox for requests raised from the customer and retailer apps - read, reply and resolve.',
+        endpoints: ['GET /support-tickets', 'GET /support-tickets/:id', 'POST /support-tickets/:id/messages', 'PATCH /support-tickets/:id'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
         key: 'complaints',
         path: '/complaints',
         label: 'Complaints & Disputes',

@@ -37,6 +37,7 @@ import { useCatalogueProduct, useCatalogueProducts } from '../hooks/useCatalogue
 import { useLoyaltyEstimate } from '../loyalty/useLoyaltyEstimate';
 
 import { formatInr } from '../utils/money';
+import { ProductReviews, RatingBadge } from '../components/ProductReviews';
 
 
 /** One buyable pack size: the product's own pack, or one of its variants. */
@@ -406,39 +407,50 @@ export function ProductDetailPage() {
           position: 'sticky',
           top: 0,
           background: '#ffffff',
-          padding: '14px 16px',
+          padding: '10px 16px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
           zIndex: 100,
           borderBottom: '1px solid #e2e8f0',
           boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate(-1)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-          >
-            <ArrowLeftOutlined style={{ fontSize: 18, color: '#1e293b' }} />
-          </button>
-          <div>
-            <Typography.Text strong style={{ fontSize: 15, color: '#0f172a' }}>
-              {(activeProduct as any).name}
-            </Typography.Text>
-            <span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>
-              {isRetailer ? '🏪 B2B Wholesale Mandi Catalog' : '👤 Retail Consumer Catalog'}
-            </span>
-          </div>
+        <button
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}
+        >
+          <ArrowLeftOutlined style={{ fontSize: 20, color: '#1e293b' }} />
+        </button>
+
+        <div
+          role="search"
+          onClick={() => navigate('/search')}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            margin: '0 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: '0 12px',
+            height: 40,
+            cursor: 'text',
+          }}
+        >
+          <SearchOutlined style={{ fontSize: 16, color: '#94a3b8' }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Search for products
+          </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <SearchOutlined style={{ fontSize: 18, color: '#475569', cursor: 'pointer' }} onClick={() => navigate('/products/atta-dal')} />
-          <div style={{ cursor: 'pointer', position: 'relative' }} onClick={() => navigate('/cart')}>
-            <Badge count={cart.count} size="small" offset={[-2, 2]} color={isRetailer ? '#059669' : '#ea580c'}>
-              <ShoppingCartOutlined style={{ fontSize: 20, color: '#1e293b' }} />
-            </Badge>
-          </div>
+        <div style={{ cursor: 'pointer', position: 'relative', flexShrink: 0 }} onClick={() => navigate('/cart')} aria-label="Cart">
+          <Badge count={cart.count} size="small" offset={[-2, 2]} color={isRetailer ? '#059669' : '#ea580c'}>
+            <ShoppingCartOutlined style={{ fontSize: 22, color: '#1e293b' }} />
+          </Badge>
         </div>
       </header>
 
@@ -685,19 +697,20 @@ export function ProductDetailPage() {
           )}
         </div>
 
-        {/* Rating - only shown when staff have entered one; nothing is invented. */}
-        {(activeProduct as any).rating && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 14 }}>
-            <div style={{ background: '#388e3c', color: '#fff', padding: '2px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}>
-              {(activeProduct as any).rating} <StarFilled style={{ fontSize: 10 }} />
-            </div>
-            {(activeProduct as any).reviewCount ? (
-              <Typography.Text style={{ color: '#878787', fontSize: 13 }}>
-                {(activeProduct as any).reviewCount} Ratings &amp; Reviews
-              </Typography.Text>
-            ) : null}
-          </div>
-        )}
+        {/* Rating - from real customer reviews; hidden until someone has rated it. */}
+        {detail && detail.reviewCount ? (
+          <a
+            href="#ratings-reviews"
+            onClick={(e) => {
+              e.preventDefault();
+              document.getElementById('ratings-reviews')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            style={{ display: 'inline-flex', marginTop: 4, marginBottom: 14, textDecoration: 'none' }}
+          >
+            <RatingBadge rating={detail.rating} count={detail.reviewCount} size="md" />
+            <Typography.Text style={{ color: '#878787', fontSize: 13, marginLeft: 6 }}>Ratings &amp; Reviews</Typography.Text>
+          </a>
+        ) : null}
 
         {/* ========================================================================= */}
         {/* 🏪 WHOLESALE PRICING & TIER TABLE (MOST IMPORTANT B2B SECTION)             */}
@@ -1472,6 +1485,15 @@ export function ProductDetailPage() {
           />
         </div>
       )}
+
+      {detail ? (
+        <ProductReviews
+          rating={detail.rating}
+          count={detail.reviewCount ?? 0}
+          breakdown={detail.ratingBreakdown ?? { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }}
+          reviews={detail.reviews ?? []}
+        />
+      ) : null}
 
       {/* Frequently Asked Questions (FAQs) */}
       {(activeProduct as any).faqs && (

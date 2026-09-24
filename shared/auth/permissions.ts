@@ -183,6 +183,8 @@ export const PERMISSIONS = {
   REFERRAL_SETTINGS_MANAGE: 'referralSettings.manage',
   REFERRALS_VIEW: 'referrals.view',
   REFERRALS_ADJUST: 'referrals.adjust',
+  SUPPORT_TICKETS_VIEW: 'supportTickets.view',
+  SUPPORT_TICKETS_REPLY: 'supportTickets.reply',
   WALLET_VIEW: 'wallet.view',
   WALLET_MANAGE: 'wallet.manage',
   BANNER_VIEW: 'banners.view',

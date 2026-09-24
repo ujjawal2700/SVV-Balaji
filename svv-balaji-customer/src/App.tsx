@@ -34,6 +34,7 @@ const ProductsPage = lazy(() =>
 const CategoriesPage = lazy(() =>
   import('./pages/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
 );
+const SearchPage = lazy(() => import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })));
 const ProductDetailPage = lazy(() =>
   import('./pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })),
 );
@@ -54,6 +55,9 @@ const ReferralPage = lazy(() =>
 );
 const HelpSupportPage = lazy(() =>
   import('./pages/HelpSupportPage').then((m) => ({ default: m.HelpSupportPage })),
+);
+const OrderSupportPage = lazy(() =>
+  import('./pages/OrderSupportPage').then((m) => ({ default: m.OrderSupportPage })),
 );
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
@@ -77,6 +81,7 @@ export function App() {
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="products/:categoryId" element={<ProductsPage />} />
           <Route path="product-detail/:productId" element={<ProductDetailPage />} />
+          <Route path="search" element={<SearchPage />} />
           <Route path="cart" element={<CartPage />} />
 
           {/*
@@ -112,6 +117,9 @@ export function App() {
             }
           />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/support" element={<OrderSupportPage />} />
+          <Route path="orders/:orderId/support" element={<OrderSupportPage />} />
+          <Route path="order-support" element={<OrderSupportPage />} />
           <Route path="orders/:orderId" element={<OrderTrackingPage />} />
           <Route path="addresses" element={<AddressesPage />} />
           <Route path="wishlist" element={<WishlistPage />} />

@@ -72,9 +72,9 @@ export function toShelfProduct(card: StorefrontProductCard): ShelfProduct {
  * to be hardcoded here now live in the database, so falling back to a mock
  * copy would resurrect anything Super Admin deleted or unpublished.
  */
-export function useCatalogueProducts(query: Omit<StorefrontCatalogueQuery, 'channel'> = {}) {
+export function useCatalogueProducts(query: Omit<StorefrontCatalogueQuery, 'channel'> = {}, options: { enabled?: boolean } = {}) {
   const channel = useChannel();
-  const result = useStorefrontProducts({ ...query, channel }, storefrontApi);
+  const result = useStorefrontProducts({ ...query, channel }, storefrontApi, options);
   return {
     ...result,
     products: (result.data ?? []).map(toShelfProduct),

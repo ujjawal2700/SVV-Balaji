@@ -1521,6 +1521,22 @@ export interface StorefrontProductDetail extends StorefrontProductCard {
   offers: Array<{ title: string; description: string }>;
   variants: StorefrontVariant[];
   priceTiers: StorefrontPriceTier[];
+  /** How many customers gave each star, from real reviews. */
+  ratingBreakdown: Record<'1' | '2' | '3' | '4' | '5', number>;
+  /** Newest customer ratings (up to 20), with their review text when they wrote one. */
+  reviews: StorefrontProductReview[];
+}
+
+export interface StorefrontProductReview {
+  id: string;
+  rating: number;
+  /** Null when the shopper only gave stars. */
+  comment: string | null;
+  /** First name + last initial - never a full name or phone. */
+  author: string;
+  /** Left from a delivered order. */
+  verifiedPurchase: boolean;
+  date: string;
 }
 
 export type StockStatus = 'OK' | 'LOW' | 'CRITICAL';

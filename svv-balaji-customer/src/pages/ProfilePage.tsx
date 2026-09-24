@@ -108,15 +108,6 @@ export function ProfilePage() {
           route: '/orders',
         },
         {
-          key: 'reorder',
-          icon: <SyncOutlined />,
-          iconBg: '#faf5ff',
-          iconColor: '#9333ea',
-          label: 'Order Again / Frequent Purchases',
-          subtitle: 'Quick 1-tap reorder from past deliveries',
-          route: '/orders',
-        },
-        {
           key: 'loyalty',
           icon: <TrophyOutlined />,
           iconBg: '#fffbeb',
@@ -954,32 +945,6 @@ export function ProfilePage() {
                                 </Typography.Text>
                                 <Typography.Text style={{ fontSize: 12, color: '#64748b' }}>
                                   Check live delivery status and past order receipts
-                                </Typography.Text>
-                              </div>
-                              <RightOutlined style={{ color: '#94a3b8' }} />
-                            </div>
-
-                            <div
-                              onClick={() => navigate('/orders')}
-                              style={{
-                                border: '1px solid #e2e8f0',
-                                borderRadius: 12,
-                                padding: 16,
-                                cursor: 'pointer',
-                                background: '#f8fafc',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                transition: 'all 0.2s ease',
-                              }}
-                              className="card-hover-shadow"
-                            >
-                              <div>
-                                <Typography.Text strong style={{ fontSize: 15, display: 'block', color: '#9333ea' }}>
-                                  🔄 Order Again / Frequent Items
-                                </Typography.Text>
-                                <Typography.Text style={{ fontSize: 12, color: '#64748b' }}>
-                                  1-tap instant replenishment from prior orders
                                 </Typography.Text>
                               </div>
                               <RightOutlined style={{ color: '#94a3b8' }} />

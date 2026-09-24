@@ -30,6 +30,7 @@ export class StorefrontCatalogueController {
   })
   @ApiQuery({ name: 'topPick', required: false, type: Boolean })
   @ApiQuery({ name: 'dailyStaple', required: false, type: Boolean })
+  @ApiQuery({ name: 'q', required: false, description: 'Search text - every word must match name, brand, SKU, pack label or category' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   list(
     @Query('channel') channel: SalesChannel = SalesChannel.B2C,
@@ -38,6 +39,7 @@ export class StorefrontCatalogueController {
     @Query('topPick') topPick?: string,
     @Query('dailyStaple') dailyStaple?: string,
     @Query('limit') limit?: string,
+    @Query('q') q?: string,
   ) {
     const parsedLimit = limit ? Number(limit) : undefined;
     return this.service.listProducts({
@@ -46,6 +48,7 @@ export class StorefrontCatalogueController {
       categorySlug,
       topPick: topPick === 'true',
       dailyStaple: dailyStaple === 'true',
+      q: q?.slice(0, 80),
       // A non-numeric limit would reach Prisma as NaN and 500 - ignore it instead.
       limit: parsedLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : undefined,
     });

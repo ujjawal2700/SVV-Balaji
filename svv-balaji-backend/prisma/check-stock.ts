@@ -20,13 +20,13 @@ async function checkStock() {
     console.log(`- ${p.name} (SKU: ${p.sku}, ID: ${p.id}) | Storefront: ${p.showOnStorefront}`);
   }
 
-  const batches = await prisma.batch.findMany({
-    select: { id: true, batchCode: true, productId: true, qualityGrade: true, holdStatus: true, currentQuantity: true },
+  const batches = await prisma.rawMaterialBatch.findMany({
+    select: { id: true, batchNumber: true, farmerId: true, status: true, quantity: true },
     take: 10,
   });
-  console.log('\nBatches in DB:');
+  console.log('\nRaw Material Batches in DB:');
   for (const b of batches) {
-    console.log(`- ${b.batchCode} | Product: ${b.productId} | Grade: ${b.qualityGrade} | Hold: ${b.holdStatus} | Qty: ${b.currentQuantity}`);
+    console.log(`- ${b.batchNumber} | Farmer: ${b.farmerId} | Status: ${b.status} | Qty: ${b.quantity}`);
   }
 
   const stock = await prisma.warehouseStock.findMany({

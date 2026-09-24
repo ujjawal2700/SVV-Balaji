@@ -16,6 +16,8 @@ export interface StorefrontCatalogueQuery {
   topPick?: boolean;
   /** Only products pinned to the "Best of the Basics" shelf. */
   dailyStaple?: boolean;
+  /** Free-text search across name, brand, SKU, pack label and category. */
+  q?: string;
   limit?: number;
 }
 
@@ -40,6 +42,7 @@ export const storefrontCatalogueApi = {
         ...(query.categorySlug ? { categorySlug: query.categorySlug } : {}),
         ...(query.topPick ? { topPick: true } : {}),
         ...(query.dailyStaple ? { dailyStaple: true } : {}),
+        ...(query.q?.trim() ? { q: query.q.trim() } : {}),
         ...(query.limit ? { limit: query.limit } : {}),
       },
     });

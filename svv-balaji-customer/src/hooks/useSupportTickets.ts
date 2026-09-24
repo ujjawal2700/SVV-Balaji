@@ -22,3 +22,24 @@ export function useCreateSupportTicket() {
     onSuccess: () => qc.invalidateQueries({ queryKey: SUPPORT_TICKETS_KEY }),
   });
 }
+
+/** One of my tickets with the full conversation, refreshed every 15s while open so staff replies appear. */
+export function useSupportTicketThread(id: string | null) {
+  return useQuery({
+    queryKey: [...SUPPORT_TICKETS_KEY, 'thread', id],
+    queryFn: () => supportTicketsApi.get(id as string),
+    enabled: Boolean(id),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useReplyToSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => supportTicketsApi.reply(id, body),
+    onSuccess: (thread) => {
+      qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', thread.id], thread);
+      void qc.invalidateQueries({ queryKey: SUPPORT_TICKETS_KEY, exact: true });
+    },
+  });
+}

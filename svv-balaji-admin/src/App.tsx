@@ -165,6 +165,9 @@ const InventoryPage = lazy(() =>
 const CustomersPage = lazy(() =>
   import('./pages/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
 );
+const SupportTicketsPage = lazy(() =>
+  import('./pages/support-tickets/SupportTicketsPage').then((m) => ({ default: m.SupportTicketsPage })),
+);
 const OrderDetailPage = lazy(() =>
   import('./pages/sales/OrderDetailPage').then((m) => ({ default: m.OrderDetailPage })),
 );
@@ -326,6 +329,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/b2b-orders': <B2BOrdersPage />,
   '/franchise-orders': <FranchiseOrdersPage />,
   '/franchises': <FranchiseOrdersPage />,
+  '/support-tickets': <SupportTicketsPage />,
   '/complaints': <ComplaintsPage />,
   '/b2b-accounts': <CustomerAccountsPage />,
   '/earnings': <EarningsFinancePage />,

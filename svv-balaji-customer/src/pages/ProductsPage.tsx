@@ -16,6 +16,7 @@ import { useCart } from '../cart/useCart';
 import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { formatInr } from '../utils/money';
+import { RatingBadge } from '../components/ProductReviews';
 
 
 export function ProductsPage() {
@@ -397,6 +398,11 @@ export function ProductsPage() {
                         <Typography.Text strong style={{ display: 'block', fontSize: 12, lineHeight: 1.25, color: '#1c1917', minHeight: 30 }}>
                           {product.name}
                         </Typography.Text>
+                        {product.rating && product.reviewCount ? (
+                          <div style={{ marginTop: 3 }}>
+                            <RatingBadge rating={product.rating} count={product.reviewCount} />
+                          </div>
+                        ) : null}
                         <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2, display: 'block' }}>
                           {product.variant || (product as any).weight || '1 pack'}
                         </Typography.Text>
@@ -683,6 +689,11 @@ export function ProductsPage() {
                           <Typography.Text strong style={{ display: 'block', fontSize: 13, lineHeight: 1.3, color: '#1c1917' }}>
                             {product.name}
                           </Typography.Text>
+                          {product.rating && product.reviewCount ? (
+                            <div style={{ marginTop: 3 }}>
+                              <RatingBadge rating={product.rating} count={product.reviewCount} />
+                            </div>
+                          ) : null}
                           <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 2, display: 'block' }}>
                             {product.variant || (product as any).weight || '1 pack'}
                           </Typography.Text>

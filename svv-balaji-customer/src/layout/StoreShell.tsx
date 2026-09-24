@@ -10,6 +10,9 @@ import { DesktopHeader } from './DesktopHeader';
  */
 const TAB_ROUTES = ['/', '/categories', '/cart', '/orders', '/profile'];
 
+/** Browsing pages that keep the tab bar even though they have no tab of their own (a category's product list). */
+const TAB_BAR_PREFIXES = ['/products/'];
+
 /**
  * The shell frame every storefront page renders inside.
  *
@@ -22,7 +25,8 @@ const TAB_ROUTES = ['/', '/categories', '/cart', '/orders', '/profile'];
  */
 export function StoreShell() {
   const location = useLocation();
-  const isTabRoute = TAB_ROUTES.includes(location.pathname);
+  const isTabRoute =
+    TAB_ROUTES.includes(location.pathname) || TAB_BAR_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
 
   return (
     <Layout style={{ minHeight: '100dvh', background: '#fafaf9', display: 'flex', flexDirection: 'column' }}>

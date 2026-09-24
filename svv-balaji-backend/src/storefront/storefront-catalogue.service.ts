@@ -71,8 +71,11 @@ export class StorefrontCatalogueService {
     topPick?: boolean;
     /** Only products pinned to the "Best of the Basics" shelf. */
     dailyStaple?: boolean;
+    /** Free-text search: every word must appear in the name, brand, SKU, pack label or category. */
+    q?: string;
     limit?: number;
   }) {
+    const words = (params.q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 6);
     const products = await this.prisma.product.findMany({
       take: params.limit,
       where: {
@@ -91,6 +94,21 @@ export class StorefrontCatalogueService {
                   { parent: { slug: params.categorySlug } },
                 ],
               },
+            }
+          : {}),
+        ...(words.length
+          ? {
+              AND: words.map((w) => ({
+                OR: [
+                  { name: { contains: w, mode: 'insensitive' as const } },
+                  { brand: { contains: w, mode: 'insensitive' as const } },
+                  { sku: { contains: w, mode: 'insensitive' as const } },
+                  { packLabel: { contains: w, mode: 'insensitive' as const } },
+                  { description: { contains: w, mode: 'insensitive' as const } },
+                  { category: { name: { contains: w, mode: 'insensitive' as const } } },
+                  { category: { parent: { name: { contains: w, mode: 'insensitive' as const } } } },
+                ],
+              })),
             }
           : {}),
       },
@@ -154,9 +172,10 @@ export class StorefrontCatalogueService {
     params: { channel: SalesChannel; customerType?: CustomerType },
     opts: { detailed?: boolean } = {},
   ) {
-    const [price, availability] = await Promise.all([
+    const [price, availability, ratings] = await Promise.all([
       this.resolvePriceQuietly(product.id, params),
       this.availability(product.id),
+      this.ratingSummary(product.id),
     ]);
 
     const card = {
@@ -180,8 +199,9 @@ export class StorefrontCatalogueService {
       packLabel: product.packLabel ?? null,
       mrp: product.mrp === null || product.mrp === undefined ? null : Number(product.mrp),
       badge: product.badge ?? null,
-      rating: product.rating === null || product.rating === undefined ? null : Number(product.rating),
-      reviewCount: product.reviewCount ?? null,
+      // From real customer reviews only - never the old staff-entered figure.
+      rating: ratings.average,
+      reviewCount: ratings.count,
     };
 
     if (!opts.detailed) return card;
@@ -232,7 +252,55 @@ export class StorefrontCatalogueService {
       offers: (product.offers ?? []).map((o) => ({ title: o.title, description: o.description })),
       variants: await this.variantCards(product, params),
       priceTiers: tiers,
+      ratingBreakdown: ratings.breakdown,
+      reviews: await this.latestReviews(product.id),
     };
+  }
+
+  /** Average (1 decimal) and count of real customer ratings, plus how many gave each star. */
+  private async ratingSummary(productId: string) {
+    const rows = await this.prisma.productReview.groupBy({
+      by: ['rating'],
+      where: { productId },
+      _count: { _all: true },
+    });
+    const breakdown: Record<'1' | '2' | '3' | '4' | '5', number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    let count = 0;
+    let sum = 0;
+    for (const r of rows) {
+      const key = String(r.rating) as keyof typeof breakdown;
+      if (!(key in breakdown)) continue;
+      breakdown[key] = r._count._all;
+      count += r._count._all;
+      sum += r.rating * r._count._all;
+    }
+    return { average: count ? Math.round((sum / count) * 10) / 10 : null, count, breakdown };
+  }
+
+  /**
+   * The newest ratings for the product page - star-only ones included, so a
+   * shopper who rated without writing still shows up. The reviewer is shown as
+   * first name + initial - never a phone number or full name.
+   */
+  private async latestReviews(productId: string) {
+    const rows = await this.prisma.productReview.findMany({
+      where: { productId },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+      select: { id: true, rating: true, comment: true, updatedAt: true, orderId: true, customer: { select: { name: true } } },
+    });
+    return rows.map((r) => {
+        const parts = (r.customer?.name ?? 'Customer').trim().split(/\s+/);
+        const author = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
+        return {
+          id: r.id,
+          rating: r.rating,
+          comment: r.comment?.trim() || null,
+          author,
+          verifiedPurchase: r.orderId !== null,
+          date: r.updatedAt,
+        };
+      });
   }
 
   /**

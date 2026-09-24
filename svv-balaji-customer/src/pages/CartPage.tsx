@@ -20,6 +20,8 @@ import { useLoyaltyEstimate } from '../loyalty/useLoyaltyEstimate';
 import { couponsApi } from '@shared/api/coupons';
 import type { Coupon } from '@shared/api/types';
 import { checkoutApi, type OfferCoupon, type Address } from '../api/checkout';
+import Lottie from 'lottie-react';
+import shoppingCartAnimation from '../assets/animations/shopping-cart.json';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useToggleWishlist } from '../hooks/useWishlist';
 import { AddressFormModal } from '../components/AddressFormModal';
@@ -99,11 +101,21 @@ export function CartPage() {
         </header>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <Empty
-            image={<ShoppingOutlined style={{ fontSize: 64, color: '#059669' }} />}
-            description={<Typography.Text type="secondary" style={{ fontSize: 16 }}>Your wholesale cart is currently empty</Typography.Text>}
+            image={<Lottie animationData={shoppingCartAnimation} loop autoplay style={{ width: 260, height: 260, margin: '0 auto' }} />}
+            imageStyle={{ height: 'auto', marginBottom: 8 }}
+            description={
+              <div>
+                <Typography.Text strong style={{ fontSize: 18, display: 'block', color: '#1c1917' }}>
+                  Your cart is empty
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 14 }}>
+                  {role === 'RETAILER' ? 'Add products from the wholesale catalogue to place a bulk order.' : 'Looks like you haven’t added anything yet.'}
+                </Typography.Text>
+              </div>
+            }
           >
             <Button type="primary" size="large" style={{ background: '#059669', borderColor: '#059669', borderRadius: 8, marginTop: 12 }} onClick={() => navigate('/')}>
-              Explore Wholesale Catalog
+              {role === 'RETAILER' ? 'Explore Wholesale Catalog' : 'Start Shopping'}
             </Button>
           </Empty>
         </div>

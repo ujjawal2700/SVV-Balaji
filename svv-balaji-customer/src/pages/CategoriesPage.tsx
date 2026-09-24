@@ -8,6 +8,7 @@ import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { formatInr } from '../utils/money';
+import { RatingBadge } from '../components/ProductReviews';
 
 interface CategoryPageBanner {
   id: string;
@@ -664,6 +665,11 @@ export function CategoriesPage() {
                           <Typography.Text strong style={{ fontSize: 13, color: '#1e293b', textAlign: 'center', marginBottom: 4 }}>
                             {product.name}
                           </Typography.Text>
+                          {product.rating && product.reviewCount ? (
+                            <div style={{ marginTop: 3 }}>
+                              <RatingBadge rating={product.rating} count={product.reviewCount} />
+                            </div>
+                          ) : null}
                           <Typography.Text strong style={{ fontSize: 14, color: '#ea580c' }}>
                             {product.price !== null ? formatInr(product.price) : 'N/A'}
                           </Typography.Text>

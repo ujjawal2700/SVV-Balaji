@@ -40,6 +40,7 @@ import { useStorefrontSupport } from '@shared/hooks/useSupportSettings';
 import type { SupportFaqItem } from '@shared/api/types';
 import { useCreateSupportTicket, useSupportTickets } from '../hooks/useSupportTickets';
 import type { SupportTicketCategory } from '../api/supportTickets';
+import { TicketChat } from '../components/TicketChat';
 
 const TICKET_STATUS_COLOUR: Record<string, string> = {
   OPEN: 'gold',
@@ -77,6 +78,7 @@ export function HelpSupportPage() {
   const ticketsQuery = useSupportTickets();
   const myTickets = ticketsQuery.data ?? [];
   const createTicket = useCreateSupportTicket();
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
 
   // Active FAQs based on user's role
   const activeFaqs: SupportFaqItem[] = useMemo(() => {
@@ -141,8 +143,9 @@ export function HelpSupportPage() {
       {
         onSuccess: (ticket) => {
           setTicketModalOpen(false);
-          message.success(`Ticket ${ticket.ticketNumber} submitted. Our executive will reach out shortly!`);
+          message.success(`Ticket ${ticket.ticketNumber} submitted. Our support team will reply here shortly!`);
           setTicketForm({ subject: '', orderNumber: '', category: 'ORDER_ISSUE', description: '' });
+          setOpenTicketId(ticket.id);
         },
         onError: () => {
           message.error('Could not submit your ticket. Please try again.');
@@ -618,16 +621,23 @@ export function HelpSupportPage() {
                 {myTickets.map((ticket) => (
                   <div
                     key={ticket.id}
+                    onClick={() => setOpenTicketId(ticket.id)}
                     style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
+                      background: ticket.hasNewReply ? '#f0fdf4' : '#ffffff',
+                      border: `1px solid ${ticket.hasNewReply ? '#86efac' : '#e2e8f0'}`,
                       borderRadius: 12,
                       padding: '10px 12px',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                      cursor: 'pointer',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>{ticket.ticketNumber}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>
+                        {ticket.ticketNumber}
+                        {ticket.hasNewReply ? (
+                          <Tag color="green" style={{ marginLeft: 6, fontSize: 10, borderRadius: 4 }}>New reply</Tag>
+                        ) : null}
+                      </span>
                       <Tag
                         color={TICKET_STATUS_COLOUR[ticket.status]}
                         style={{ margin: 0, fontSize: 10, borderRadius: 4 }}
@@ -642,20 +652,27 @@ export function HelpSupportPage() {
                       Raised on {new Date(ticket.createdAt).toLocaleDateString()}
                       {ticket.orderNumber ? ` · Order ${ticket.orderNumber}` : ''}
                     </div>
-                    {ticket.resolutionNote && (
+                    {ticket.lastMessage ? (
                       <div
                         style={{
                           marginTop: 6,
-                          background: '#f0fdf4',
+                          background: ticket.lastMessage.author === 'STAFF' ? '#f0fdf4' : '#f8fafc',
                           borderRadius: 8,
                           padding: '6px 8px',
                           fontSize: 12,
-                          color: '#166534',
+                          color: ticket.lastMessage.author === 'STAFF' ? '#166534' : '#475569',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        Support reply: {ticket.resolutionNote}
+                        {ticket.lastMessage.author === 'STAFF' ? 'Support: ' : 'You: '}
+                        {ticket.lastMessage.preview}
                       </div>
-                    )}
+                    ) : null}
+                    <div style={{ fontSize: 11.5, color: '#2563eb', fontWeight: 600, marginTop: 6 }}>
+                      {ticket.hasNewReply ? 'Read reply & respond →' : 'View conversation →'}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -986,6 +1003,7 @@ export function HelpSupportPage() {
           </div>
         </div>
       </Modal>
+      <TicketChat ticketId={openTicketId} accent={isUserRetailer ? '#059669' : '#ea580c'} onClose={() => setOpenTicketId(null)} />
     </div>
   );
 }

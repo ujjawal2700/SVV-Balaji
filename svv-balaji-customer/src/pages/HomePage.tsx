@@ -34,6 +34,7 @@ import { useCategoryTree } from '../hooks/useCategoryTree';
 // re-read from the live catalogue below, so an admin edit reaches this shelf too.
 import { buyAgainProducts as buyAgainHistory } from '../mock/homeMockData';
 import { formatInr } from '../utils/money';
+import { RatingBadge } from '../components/ProductReviews';
 
 
 interface HeroSlide {
@@ -296,10 +297,9 @@ export function HomePage() {
               background: '#f8fafc',
               boxShadow: '0 1px 4px rgba(0,0,0,0.02)',
             }}
-            onPressEnter={(e) => {
-              const val = (e.target as HTMLInputElement).value;
-              if (val.trim()) navigate(`/products/atta-dal?q=${encodeURIComponent(val.trim())}`);
-            }}
+            readOnly
+            onClick={() => navigate('/search')}
+            onFocus={() => navigate('/search')}
           />
         </div>
       </header>
@@ -921,6 +921,11 @@ export function HomePage() {
                     <Typography.Text style={{ fontSize: 12, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                       {product.name}
                     </Typography.Text>
+                    {product.rating && product.reviewCount ? (
+                      <div style={{ marginTop: 3 }}>
+                        <RatingBadge rating={product.rating} count={product.reviewCount} />
+                      </div>
+                    ) : null}
                     <Typography.Text style={{ fontSize: 11, color: '#78716c', marginTop: 2 }}>
                       {product.weight}
                     </Typography.Text>
@@ -997,6 +1002,11 @@ export function HomePage() {
                       <Typography.Text strong style={{ fontSize: 13, lineHeight: 1.25, height: 32, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', color: '#1c1917' }}>
                         {product.name}
                       </Typography.Text>
+                      {product.rating && product.reviewCount ? (
+                        <div style={{ marginTop: 3 }}>
+                          <RatingBadge rating={product.rating} count={product.reviewCount} />
+                        </div>
+                      ) : null}
                       <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
                         {product.weight}
                       </Typography.Text>
@@ -1161,6 +1171,11 @@ export function HomePage() {
                       <Typography.Text strong style={{ display: 'block', fontSize: 14, color: '#1c1917', lineHeight: 1.3 }}>
                         {product.name}
                       </Typography.Text>
+                      {product.rating && product.reviewCount ? (
+                        <div style={{ marginTop: 3 }}>
+                          <RatingBadge rating={product.rating} count={product.reviewCount} />
+                        </div>
+                      ) : null}
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {product.variant}
                       </Typography.Text>

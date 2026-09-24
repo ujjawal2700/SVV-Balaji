@@ -117,15 +117,36 @@ export interface OfferCoupon {
   expiresAt: string | null;
 }
 
+export interface OrderLine {
+  productId: string;
+  name: string | null;
+  imageUrl: string | null;
+  unit: string;
+  mrp: number | null;
+  quantity: number;
+  unitPrice: number;
+  /** False when the product has since been taken off sale - it can't be reordered. */
+  available: boolean;
+}
+
+export interface ProductReview {
+  rating: number;
+  comment: string | null;
+}
+
 export interface OrderSummaryRow {
   orderNumber: string;
   status: string;
   placedAt: string;
+  deliveredAt: string | null;
   total: number;
   fulfillmentMethod: FulfillmentMethod | null;
   nodeName: string;
   itemCount: number;
   items: Array<string | null>;
+  lines: OrderLine[];
+  /** Delivered, and at least one product in it hasn't been rated yet. */
+  reviewPending: boolean;
 }
 
 export interface OrderDetail {
@@ -136,7 +157,7 @@ export interface OrderDetail {
   deliveredAt: string | null;
   fulfillment: { method: FulfillmentMethod | null; nodeName: string; nodeCity: string | null; distanceKm: number | null; etaMin: string | null; etaMax: string | null; etaLabel: string | null };
   address: { fullName: string; phone: string; line1: string; line2: string | null; landmark: string | null; city: string; state: string; pincode: string };
-  items: Array<{ productId?: string; name: string | null; sku: string | null; imageUrl?: string | null; quantity: number; unitPrice: number; gstRatePercent: number; discount: number; total: number }>;
+  items: Array<{ productId: string; name: string | null; sku: string | null; imageUrl?: string | null; mrp: number | null; unit: string; available: boolean; quantity: number; unitPrice: number; gstRatePercent: number; discount: number; total: number; review: ProductReview | null }>;
   totals: {
     subtotal: number; discount: number; couponCode: string | null;
     loyaltyRedeemedPoints: number; loyaltyRedeemedInr: number;
@@ -165,6 +186,10 @@ export const checkoutApi = {
   coupons: () => api.get<OfferCoupon[]>('/storefront/coupons').then((r) => r.data),
   orders: () => api.get<OrderSummaryRow[]>('/storefront/orders').then((r) => r.data),
   order: (orderNumber: string) => api.get<OrderDetail>(`/storefront/orders/${encodeURIComponent(orderNumber)}`).then((r) => r.data),
+  reviewProduct: (orderNumber: string, body: { productId: string; rating: number; comment?: string }) =>
+    api
+      .post<{ productId: string } & ProductReview>(`/storefront/orders/${encodeURIComponent(orderNumber)}/reviews`, body)
+      .then((r) => r.data),
 };
 
 /** The server's error, in a form the UI can branch on (`code`) and show (`message`). */

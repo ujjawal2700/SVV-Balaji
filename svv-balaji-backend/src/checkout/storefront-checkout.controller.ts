@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CurrentCustomer } from '../storefront/decorators/current-customer.decorator';
 import { CustomerJwtAuthGuard } from '../storefront/guards/customer-jwt-auth.guard';
 import type { CustomerJwtPayload } from '../storefront/strategies/customer-jwt.strategy';
@@ -9,6 +10,12 @@ import { CouponsService } from './coupons.service';
 import { CustomerContextService } from './customer-context.service';
 import { CheckoutDto, ConfirmCheckoutDto } from './dto/checkout.dto';
 import { StorefrontOrdersService } from './storefront-orders.service';
+
+export class ReviewProductDto {
+  @ApiProperty() @IsString() productId!: string;
+  @ApiProperty({ minimum: 1, maximum: 5 }) @IsInt() @Min(1) @Max(5) rating!: number;
+  @ApiPropertyOptional({ maxLength: 1000 }) @IsOptional() @IsString() @MaxLength(1000) comment?: string;
+}
 
 /**
  * Everything a signed-in shopper does to buy: addresses, quote, pay, track.
@@ -112,5 +119,16 @@ export class StorefrontCheckoutController {
   @Get('orders/:orderNumber')
   async myOrder(@CurrentCustomer() s: CustomerJwtPayload, @Param('orderNumber') orderNumber: string) {
     return this.orders.detail((await this.ctx.forAccount(s.sub)).id, orderNumber);
+  }
+
+  @Post('orders/:orderNumber/reviews')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Rate a product from one of my delivered orders (one review per product, replaces an earlier one)' })
+  async reviewProduct(
+    @CurrentCustomer() s: CustomerJwtPayload,
+    @Param('orderNumber') orderNumber: string,
+    @Body() dto: ReviewProductDto,
+  ) {
+    return this.orders.review((await this.ctx.forAccount(s.sub)).id, orderNumber, dto);
   }
 }

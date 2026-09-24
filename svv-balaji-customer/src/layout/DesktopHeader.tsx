@@ -43,7 +43,7 @@ export function DesktopHeader() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/products/atta-dal?q=${encodeURIComponent(searchQuery.trim())}`);
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 

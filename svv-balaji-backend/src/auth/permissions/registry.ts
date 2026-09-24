@@ -1318,6 +1318,27 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   {
+    key: 'supportTickets',
+    label: 'Support Tickets',
+    path: '/support-tickets',
+    viewKey: 'supportTickets.view',
+    permissions: [
+      {
+        key: 'supportTickets.view',
+        label: 'View customer & retailer support tickets',
+        description: 'The help-desk inbox: every ticket raised from the storefront apps and its conversation.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'supportTickets.reply',
+        label: 'Reply to and resolve support tickets',
+        description: 'Send replies the customer sees in their app, and change a ticket status or priority.',
+        defaultRoles: [BM, ST],
+      },
+    ],
+  },
+
+  {
     key: 'wallet',
     label: 'Wallet & Redemption Settings',
     path: '/wallet',

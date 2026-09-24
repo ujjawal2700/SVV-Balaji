@@ -1,4 +1,4 @@
-import { PrismaClient, WarehouseKind, BatchHoldStatus, QualityGrade } from '@prisma/client';
+import { PrismaClient, WarehouseKind, BatchHoldStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -9,9 +9,7 @@ async function main() {
   const branch = await prisma.branch.findFirst() || await prisma.branch.create({
     data: {
       name: 'SVV Balaji Central Branch',
-      code: 'SVV-MAIN',
-      city: 'Indore',
-      state: 'Madhya Pradesh',
+      location: 'Indore, Madhya Pradesh',
       address: 'Industrial Area, Sanwer Road, Indore',
     },
   });
@@ -24,7 +22,6 @@ async function main() {
     central = await prisma.warehouse.create({
       data: {
         name: 'Bhopal Central Depot',
-        code: 'WH-CENTRAL-01',
         kind: WarehouseKind.CENTRAL,
         location: 'Govindpura Industrial Area, Bhopal',
         city: 'Bhopal',
@@ -45,7 +42,6 @@ async function main() {
     outlet = await prisma.warehouse.create({
       data: {
         name: 'Indore City Express Outlet',
-        code: 'OUTLET-IND-01',
         kind: WarehouseKind.OUTLET,
         location: '509, Corporate House, RNT Marg, Indore',
         city: 'Indore',
@@ -72,32 +68,32 @@ async function main() {
   }
   console.log(`Local Outlet: ${outlet.name} (Lat: ${outlet.latitude}, Lng: ${outlet.longitude}, Radius: ${outlet.serviceRadiusKm} km)`);
 
-  // 4. Update Checkout Settings to point to Central Warehouse
+  // 4. Update Checkout Settings (field names aligned with current schema)
   await prisma.checkoutSettings.upsert({
     where: { id: 'default' },
     update: {
       centralWarehouseId: central.id,
       localRadiusKm: 20,
-      localEtaMinutesPerKm: 3,
-      localPrepMinutes: 20,
-      localFeeBase: 0,
-      courierEtaDaysMin: 2,
-      courierEtaDaysMax: 4,
-      courierFeeBase: 0,
-      codAvailable: true,
+      minutesPerKm: 3,
+      prepMinutes: 20,
+      localBaseFee: 0,
+      shipMinDays: 2,
+      shipMaxDays: 4,
+      shipBaseFee: 0,
+      codEnabled: true,
       updatedAt: new Date(),
     },
     create: {
       id: 'default',
       centralWarehouseId: central.id,
       localRadiusKm: 20,
-      localEtaMinutesPerKm: 3,
-      localPrepMinutes: 20,
-      localFeeBase: 0,
-      courierEtaDaysMin: 2,
-      courierEtaDaysMax: 4,
-      courierFeeBase: 0,
-      codAvailable: true,
+      minutesPerKm: 3,
+      prepMinutes: 20,
+      localBaseFee: 0,
+      shipMinDays: 2,
+      shipMaxDays: 4,
+      shipBaseFee: 0,
+      codEnabled: true,
     },
   });
 
@@ -107,17 +103,55 @@ async function main() {
   });
   console.log(`Found ${products.length} Storefront Products to seed stock for.`);
 
+  // Ensure a seed user exists to satisfy the required `packedById` and `createdById` fields
+  let seedUser = await prisma.user.findFirst({ where: { email: 'seed@svvbalaji.com' } });
+  if (!seedUser) {
+    seedUser = await prisma.user.findFirst();
+  }
+  if (!seedUser) {
+    throw new Error('No user found in the database. Please seed users first.');
+  }
+
+  // Ensure a recipe exists for the production batch (required field)
+  let recipe = await prisma.recipe.findFirst();
+  if (!recipe) {
+    const firstProduct = products[0];
+    if (!firstProduct) {
+      throw new Error('No storefront products found. Please seed products first.');
+    }
+    recipe = await prisma.recipe.create({
+      data: {
+        recipeCode: 'REC-SEED-001',
+        name: 'Default Milling Recipe',
+        productId: firstProduct.id,
+        version: 1,
+        status: 'APPROVED',
+        description: 'Seed recipe for storefront stock seeding',
+        createdById: seedUser.id,
+      },
+    });
+  }
+
   // Create a default production batch header if needed
   let prodBatch = await prisma.productionBatch.findFirst();
   if (!prodBatch) {
+    const firstProduct = products[0];
+    if (!firstProduct) {
+      throw new Error('No storefront products found. Please seed products first.');
+    }
     prodBatch = await prisma.productionBatch.create({
       data: {
-        batchCode: 'PROD-STORE-2026',
-        productName: 'Storefront Milling Run',
-        outputQuantity: 5000,
+        productionBatchNumber: 'PB-20260101-001',
+        productId: firstProduct.id,
+        recipeId: recipe.id,
+        recipeVersion: recipe.version,
+        productionType: 'SINGLE_GRAIN',
+        plannedQuantity: 5000,
         unit: 'KG',
+        productionDate: new Date(),
         status: 'COMPLETED',
         branchId: branch.id,
+        createdById: seedUser.id,
       },
     });
   }
@@ -153,6 +187,7 @@ async function main() {
         packCount: 1000,
         qaReleased: true,
         holdStatus: BatchHoldStatus.ACTIVE,
+        packedById: seedUser.id,
       },
     });
 
@@ -173,7 +208,7 @@ async function main() {
         fgBatchId: fgBatch.id,
         quantity: 500,
         reservedQuantity: 0,
-        location: 'Aisle-01-Depot',
+        storageLocation: 'Aisle-01-Depot',
       },
     });
 
@@ -194,7 +229,7 @@ async function main() {
         fgBatchId: fgBatch.id,
         quantity: 100,
         reservedQuantity: 0,
-        location: 'Rack-Front-01',
+        storageLocation: 'Rack-Front-01',
       },
     });
 
