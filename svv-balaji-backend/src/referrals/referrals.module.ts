@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Module, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiProperty, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString, NotEquals } from 'class-validator';
-import { SalesChannel } from '@prisma/client';
+import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, NotEquals } from 'class-validator';
+import { CoinSource, SalesChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReferralService } from '../common/referral.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,6 +23,15 @@ export class AdjustCoinBalanceDto {
   @IsString()
   @IsNotEmpty()
   note: string;
+
+  @ApiPropertyOptional({
+    enum: CoinSource,
+    default: CoinSource.LOYALTY,
+    description: 'Which wallet pool this correction applies to - defaults to LOYALTY for historical callers.',
+  })
+  @IsOptional()
+  @IsEnum(CoinSource)
+  source?: CoinSource;
 }
 
 /**

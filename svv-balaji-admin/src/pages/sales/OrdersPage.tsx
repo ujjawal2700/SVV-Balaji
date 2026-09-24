@@ -42,7 +42,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
 import type {
   Order,
@@ -58,7 +58,6 @@ import { CustomerSelect, WarehouseSelect } from '../../components/pickers';
 import { useOrders } from '@shared/hooks/useSales';
 import { EM_DASH, formatCurrency, formatDate, formatDateTime } from '../../utils/format';
 import { PAYMENT_STATUS_COLOUR, PAYMENT_STATUS_LABEL } from '@shared/utils/paymentStatus';
-import { OrderDetailDrawer } from './OrderDetailDrawer';
 import { OrderFormModal } from './OrderFormModal';
 import { ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from './orderStatus';
 import { downloadOrderBill } from '../../utils/invoiceGenerator';
@@ -88,7 +87,7 @@ export function OrdersPage() {
   const { message } = AntApp.useApp();
   const [query, setQuery] = useState<OrderQuery>({});
   const [formOpen, setFormOpen] = useState(false);
-  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -97,7 +96,8 @@ export function OrdersPage() {
   const [selectedWarehouseNode, setSelectedWarehouseNode] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  const ordersQuery = useOrders(query);
+  // B2C only - retailer (B2B) orders live on their own page and must never mix in here.
+  const ordersQuery = useOrders({ ...query, channel: 'B2C' });
 
   const rawOrders = useMemo(() => ordersQuery.data?.data ?? [], [ordersQuery.data]);
   // Rows are the API's orders, enriched ONLY from what each order carries - no invented
@@ -345,11 +345,11 @@ export function OrdersPage() {
               icon={<EyeOutlined />}
               onClick={(e) => {
                 e.stopPropagation();
-                setOpenOrderId(record.id);
+                navigate(`/b2c-orders/${record.id}`);
               }}
               style={{ fontSize: 11 }}
             >
-              Drawer
+              View
             </Button>
           </Tooltip>
           <Tooltip title="Download / Print Bill">
@@ -494,16 +494,15 @@ export function OrdersPage() {
             size="small"
             scroll={{ x: 1250 }}
             onRow={(record) => ({
-              onClick: () => setOpenOrderId(record.id),
+              onClick: () => navigate(`/b2c-orders/${record.id}`),
               style: { cursor: 'pointer' },
             })}
           />
         </Space>
       </Card>
 
-      {/* Form & Granular Order Detail Drawer */}
+      {/* Order form */}
       <OrderFormModal open={formOpen} onClose={() => setFormOpen(false)} />
-      <OrderDetailDrawer orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
     </Space>
   );
 }

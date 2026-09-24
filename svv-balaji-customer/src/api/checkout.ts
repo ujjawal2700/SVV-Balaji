@@ -44,7 +44,10 @@ export interface CheckoutRequest {
   addressId: string;
   items: Array<{ productId: string; quantity: number }>;
   couponCode?: string;
+  /** Loyalty points to spend - or, in wallet COMBINED mode, the total wallet coins to spend. */
   redeemPoints?: number;
+  /** Referral coins to spend. Only meaningful in wallet SEPARATE mode. */
+  redeemReferralPoints?: number;
   paymentMode?: PaymentMode;
   /** The total the customer was shown - the server only compares it to notice a price change. */
   expectedTotal?: number;
@@ -69,11 +72,19 @@ export interface Quote {
     gross: number; discount: number; taxable: number; tax: number; total: number;
   }>;
   totals: {
-    subtotal: number; couponDiscount: number; loyaltyDiscount: number; discount: number;
+    subtotal: number; couponDiscount: number; loyaltyDiscount: number; referralDiscount: number; discount: number;
     taxable: number; tax: number; deliveryFee: number; totalPayable: number;
   };
   coupon: { code: string; discount: number } | null;
   loyalty: { enabled: boolean; balance: number; pointValueInr: number; redeemPoints: number; maxPoints: number; minPoints: number };
+  referral: { enabled: boolean; balance: number; pointValueInr: number; redeemPoints: number; maxPoints: number; minPoints: number };
+  wallet: {
+    mode: 'SEPARATE' | 'COMBINED';
+    combined: {
+      enabled: boolean; balance: number; pointValueInr: number;
+      maxPoints: number; minPoints: number; redeemPoints: number;
+    } | null;
+  };
   payment: { mode: PaymentMode; allowedModes: PaymentMode[]; codUnavailableReason: string | null; creditUnavailableReason: string | null };
 }
 
@@ -126,7 +137,12 @@ export interface OrderDetail {
   fulfillment: { method: FulfillmentMethod | null; nodeName: string; nodeCity: string | null; distanceKm: number | null; etaMin: string | null; etaMax: string | null; etaLabel: string | null };
   address: { fullName: string; phone: string; line1: string; line2: string | null; landmark: string | null; city: string; state: string; pincode: string };
   items: Array<{ productId?: string; name: string | null; sku: string | null; imageUrl?: string | null; quantity: number; unitPrice: number; gstRatePercent: number; discount: number; total: number }>;
-  totals: { subtotal: number; discount: number; couponCode: string | null; loyaltyRedeemedPoints: number; loyaltyRedeemedInr: number; tax: number; deliveryFee: number; total: number };
+  totals: {
+    subtotal: number; discount: number; couponCode: string | null;
+    loyaltyRedeemedPoints: number; loyaltyRedeemedInr: number;
+    referralRedeemedPoints: number; referralRedeemedInr: number;
+    tax: number; deliveryFee: number; total: number;
+  };
   payment: { mode: PaymentMode | null; status: string; reference: string | null };
   deliveryOtp: string | null;
   rider: { name: string | null; phone: string | null } | null;

@@ -27,6 +27,7 @@ import {
   Collapse,
   Divider,
   Empty,
+  Input,
   Modal,
   Skeleton,
   Spin,
@@ -82,6 +83,9 @@ export function ReferralPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summary, setSummary] = useState<CustomerReferralSummaryResponse | null>(null);
 
+  const [applyCodeInput, setApplyCodeInput] = useState('');
+  const [applyingCode, setApplyingCode] = useState(false);
+
   // Fetch program rules & active configuration
   useEffect(() => {
     let mounted = true;
@@ -100,6 +104,22 @@ export function ReferralPage() {
       mounted = false;
     };
   }, []);
+
+  const refreshSummary = () => {
+    if (isGuest) return;
+    setSummaryLoading(true);
+    return storefrontAuthApi
+      .getMyReferralSummary()
+      .then((res) => {
+        if (res) setSummary(res);
+      })
+      .catch(() => {
+        // Non-critical fallback
+      })
+      .finally(() => {
+        setSummaryLoading(false);
+      });
+  };
 
   // Fetch customer's own referral metrics & history
   useEffect(() => {
@@ -121,6 +141,28 @@ export function ReferralPage() {
       mounted = false;
     };
   }, [isGuest]);
+
+  const handleApplyReferralCode = () => {
+    const code = applyCodeInput.trim();
+    if (!code) {
+      message.info('Enter a referral code to apply.');
+      return;
+    }
+    setApplyingCode(true);
+    storefrontAuthApi
+      .applyReferralCode(code)
+      .then((res) => {
+        message.success(`Applied! You're referred by ${res.referrerName}.`);
+        setApplyCodeInput('');
+        return refreshSummary();
+      })
+      .catch((err) => {
+        message.error(err?.response?.data?.message || 'Could not apply this referral code.');
+      })
+      .finally(() => {
+        setApplyingCode(false);
+      });
+  };
 
   const activeReferralCode =
     summary?.referralCode ||
@@ -490,6 +532,78 @@ export function ReferralPage() {
             </div>
           )}
         </Card>
+
+        {/* ========================================================================= */}
+        {/* 🎫 APPLIED REFERRAL CODE — who referred you, or the option to add one     */}
+        {/* ========================================================================= */}
+        {!isGuest && !summaryLoading && (
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 16,
+              border: '1px solid #e2e8f0',
+              marginBottom: 24,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            }}
+            bodyStyle={{ padding: '18px 20px' }}
+          >
+            {summary?.appliedReferral ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <Avatar size={40} icon={<CheckCircleFilled />} style={{ background: '#ecfdf5', color: '#059669', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block' }}>
+                    You were referred by {summary.appliedReferral.referrerName}
+                  </Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+                    Code applied: <strong style={{ fontFamily: 'monospace' }}>{summary.appliedReferral.code}</strong>
+                  </Typography.Text>
+                </div>
+                {summary.appliedReferral.status === 'QUALIFIED' ? (
+                  <Tag color="green" style={{ fontWeight: 700, margin: 0 }}>
+                    +{program.refereeRewardCoins} Coins Credited
+                  </Tag>
+                ) : (
+                  <Tag color="gold" style={{ fontWeight: 600, margin: 0 }}>
+                    Pending Reward
+                  </Tag>
+                )}
+              </div>
+            ) : summary?.canApplyReferralCode ? (
+              <div>
+                <Typography.Text strong style={{ fontSize: 14, color: '#0f172a', display: 'block', marginBottom: 4 }}>
+                  Have a friend's referral code?
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 12 }}>
+                  Apply it now to get {program.refereeRewardCoins} welcome coins. This only works before your first order.
+                </Typography.Text>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Input
+                    value={applyCodeInput}
+                    onChange={(e) => setApplyCodeInput(e.target.value.toUpperCase())}
+                    placeholder="Enter referral code"
+                    style={{ borderRadius: 10, height: 42, fontFamily: 'monospace', letterSpacing: 1 }}
+                    onPressEnter={handleApplyReferralCode}
+                  />
+                  <Button
+                    type="primary"
+                    loading={applyingCode}
+                    onClick={handleApplyReferralCode}
+                    style={{ background: brandPrimary, borderColor: brandPrimary, borderRadius: 10, height: 42, fontWeight: 700 }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Avatar size={36} icon={<InfoCircleOutlined />} style={{ background: '#f1f5f9', color: '#64748b', flexShrink: 0 }} />
+                <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>
+                  No referral code was applied to your account, and it's no longer available since you've already placed an order.
+                </Typography.Text>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* ========================================================================= */}
         {/* 📊 REFERRAL PERFORMANCE STATS (FOR LOGGED IN USERS)                       */}

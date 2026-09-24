@@ -179,7 +179,21 @@ export function OrderTrackingPage() {
               </div>
               <Divider style={{ margin: '12px 0 10px' }} />
               <Line label="Subtotal" value={formatInr(o.totals.subtotal)} />
-              {o.totals.discount > 0 ? <Line label={o.totals.couponCode ? `Discount (${o.totals.couponCode}${o.totals.loyaltyRedeemedPoints ? ` + ${o.totals.loyaltyRedeemedPoints} pts` : ''})` : 'Loyalty points'} value={`− ${formatInr(o.totals.discount)}`} green /> : null}
+              {o.totals.discount > 0 ? (
+                <Line
+                  label={
+                    o.totals.couponCode
+                      ? `Discount (${o.totals.couponCode}${o.totals.loyaltyRedeemedPoints ? ` + ${o.totals.loyaltyRedeemedPoints} pts` : ''}${o.totals.referralRedeemedPoints ? ` + ${o.totals.referralRedeemedPoints} referral coins` : ''})`
+                      : o.totals.loyaltyRedeemedPoints && o.totals.referralRedeemedPoints
+                        ? 'Loyalty points + referral coins'
+                        : o.totals.referralRedeemedPoints
+                          ? 'Referral coins'
+                          : 'Loyalty points'
+                  }
+                  value={`− ${formatInr(o.totals.discount)}`}
+                  green
+                />
+              ) : null}
               <Line label="GST" value={formatInr(o.totals.tax)} />
               <Line label="Delivery" value={o.totals.deliveryFee === 0 ? 'FREE' : formatInr(o.totals.deliveryFee)} />
               <Divider style={{ margin: '10px 0' }} />
@@ -190,12 +204,15 @@ export function OrderTrackingPage() {
             </Card>
 
             <Card title="Order history">
-              {o.timeline.map((t, i) => (
-                <div key={`${t.type}-${i}`} style={{ fontSize: 13, marginBottom: 6 }}>
-                  <strong>{statusLabel(t.type, o.fulfillment.method) === t.type ? t.type.replace(/_/g, ' ').toLowerCase() : statusLabel(t.type, o.fulfillment.method)}</strong>
-                  <span style={{ color: '#64748b' }}> · {at(t.at)}{t.note ? ` · ${t.note}` : ''}</span>
-                </div>
-              ))}
+              {o.timeline.map((t, i) => {
+                const formattedNote = formatTimelineNote(t.note);
+                return (
+                  <div key={`${t.type}-${i}`} style={{ fontSize: 13, marginBottom: 6 }}>
+                    <strong>{statusLabel(t.type, o.fulfillment.method) === t.type ? t.type.replace(/_/g, ' ').toLowerCase() : statusLabel(t.type, o.fulfillment.method)}</strong>
+                    <span style={{ color: '#64748b' }}> · {at(t.at)}{formattedNote ? ` · ${formattedNote}` : ''}</span>
+                  </div>
+                );
+              })}
             </Card>
           </>
         ) : null}
@@ -241,4 +258,11 @@ function getFallbackImage(name?: string | null): string {
     return '/images/cat_namkeen.jpg';
   }
   return '/images/cat_namkeen.jpg';
+}
+
+function formatTimelineNote(note: string | null | undefined): string | null {
+  if (!note) return null;
+  if (note.includes('SHIPROCKET') || note.includes('Main Store')) return 'Standard Courier Delivery';
+  if (note.includes('LOCAL')) return 'Express Local Delivery';
+  return note.replace(/Shiprocket/gi, 'Courier Partner');
 }

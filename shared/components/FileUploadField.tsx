@@ -159,34 +159,60 @@ export function FileUploadField({
   };
 
   if (value) {
+    const isImg = /\.(jpg|jpeg|png|webp|gif|svg)($|\?)/i.test(value) || value.startsWith('data:image/') || value.startsWith('/images/') || value.includes('cloudinary') || value.includes('http');
     return (
-      <Alert
-        type="success"
-        showIcon
-        icon={<PaperClipOutlined />}
-        message={
-          <Space size={8} wrap>
-            <Typography.Text>{fileName ?? 'File attached'}</Typography.Text>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 12px',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
+          {isImg ? (
+            <img
+              src={value}
+              alt="Preview"
+              style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }}
+            />
+          ) : (
+            <PaperClipOutlined style={{ fontSize: 20, color: '#64748b' }} />
+          )}
+          <div style={{ overflow: 'hidden' }}>
+            <Typography.Text strong style={{ fontSize: 13, display: 'block' }} ellipsis>
+              {fileName ?? 'Attached Photo'}
+            </Typography.Text>
             {savedNote ? (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                 {savedNote}
               </Typography.Text>
             ) : null}
-            <Typography.Link href={value} target="_blank" rel="noreferrer noopener">
-              View
-            </Typography.Link>
-            <Typography.Link
-              onClick={() => {
-                setFileName(null);
-                setSavedNote(null);
-                onChange?.(undefined);
-              }}
-            >
-              Replace
-            </Typography.Link>
-          </Space>
-        }
-      />
+          </div>
+        </div>
+        <Space size={8}>
+          <Typography.Link href={value} target="_blank" rel="noreferrer noopener" style={{ fontSize: 13 }}>
+            View
+          </Typography.Link>
+          <Button
+            type="link"
+            danger
+            size="small"
+            style={{ padding: 0, fontSize: 13 }}
+            onClick={() => {
+              setFileName(null);
+              setSavedNote(null);
+              onChange?.(undefined);
+            }}
+          >
+            Remove
+          </Button>
+        </Space>
+      </div>
     );
   }
 

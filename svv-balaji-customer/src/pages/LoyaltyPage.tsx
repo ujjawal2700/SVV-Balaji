@@ -19,6 +19,14 @@ function describe(item: LoyaltyHistoryItem): { title: string; subtitle: string }
       return { title: `Reversed${item.orderNumber ? ` on ${item.orderNumber}` : ''}`, subtitle: 'An item from this order was returned' };
     case 'LOYALTY_EXPIRY':
       return { title: 'Points expired', subtitle: 'Not used before the expiry date' };
+    case 'LOYALTY_REDEMPTION':
+      return { title: `Points used${item.orderNumber ? ` on ${item.orderNumber}` : ''}`, subtitle: 'Spent at checkout' };
+    case 'LOYALTY_REDEMPTION_REFUND':
+      return { title: `Points returned${item.orderNumber ? ` from ${item.orderNumber}` : ''}`, subtitle: 'The order was cancelled' };
+    case 'REFERRAL_REDEMPTION':
+      return { title: `Referral coins used${item.orderNumber ? ` on ${item.orderNumber}` : ''}`, subtitle: 'Spent at checkout' };
+    case 'REFERRAL_REDEMPTION_REFUND':
+      return { title: `Referral coins returned${item.orderNumber ? ` from ${item.orderNumber}` : ''}`, subtitle: 'The order was cancelled' };
     case 'REFERRAL_REFERRER_REWARD':
       return { title: 'Referral reward', subtitle: 'A friend you referred joined' };
     case 'REFERRAL_REFEREE_REWARD':
@@ -44,12 +52,13 @@ export function LoyaltyPage() {
     ? [
         `You earn ${program.earnPercent}% of the eligible value of each order${
           program.calculationBase === 'INCLUDING_TAX' ? ' (including GST)' : ' (before GST)'
-        }, credited once the order is delivered.`,
+        }, after coupon and coin discounts, credited once the order is delivered.`,
         `1 point is worth ${inr(program.pointValueInr)}.`,
         'Only eligible products count. Delivery charges never earn points.',
         program.appliesToDiscountedProducts
           ? 'Discounted products earn points too.'
           : 'Products sold below their MRP do not earn points.',
+        ...(program.minEligibleItemAmount ? [`An item earns only if its line value is at least ${inr(program.minEligibleItemAmount)}.`] : []),
         ...(program.minEligibleOrderAmount ? [`Orders need at least ${inr(program.minEligibleOrderAmount)} of eligible items to earn.`] : []),
         ...(program.maxRewardPerOrderInr ? [`A single order can earn up to ${inr(program.maxRewardPerOrderInr)} in rewards.`] : []),
         program.expiryMonths ? `Points expire ${program.expiryMonths} months after delivery.` : 'Your points do not expire.',
@@ -104,9 +113,14 @@ export function LoyaltyPage() {
               <Typography.Title level={2} style={{ color: '#fff', margin: '0 0 4px', fontSize: 36, fontWeight: 800 }}>
                 {loyalty.points.toLocaleString('en-IN')} <span style={{ fontSize: 18, fontWeight: 600, opacity: 0.85 }}>pts</span>
               </Typography.Title>
-              <Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+              <Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, display: 'block' }}>
                 Worth {inr(loyalty.pointsValueInr)} • {loyalty.lifetimePoints.toLocaleString('en-IN')} earned so far
               </Typography.Text>
+              {loyalty.referralCoins > 0 ? (
+                <Typography.Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+                  {loyalty.loyaltyPoints.toLocaleString('en-IN')} loyalty points + {loyalty.referralCoins.toLocaleString('en-IN')} referral coins
+                </Typography.Text>
+              ) : null}
             </>
           )}
         </div>

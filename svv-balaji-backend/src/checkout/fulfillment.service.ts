@@ -15,7 +15,7 @@ import type { AddressSnapshot } from './addresses.service';
 import { SHIPPING_PROVIDER, type ShippingProvider } from './shipping/shipping-provider';
 
 const MAX_OTP_ATTEMPTS = 5;
-const FG_NUMBER = /FG-\d{8}-\d{3,}/i;
+const FG_NUMBER = /FG-[A-Z0-9_-]+/i;
 
 /**
  * What staff do to a storefront order after it is placed.

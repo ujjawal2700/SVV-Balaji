@@ -16,6 +16,13 @@ import { OTP_LENGTH } from '../otp.config';
 export const AUTH_AUDIENCES = ['CUSTOMER', 'RETAILER'] as const;
 export type AuthAudience = (typeof AUTH_AUDIENCES)[number];
 
+export class ApplyReferralCodeDto {
+  @ApiProperty({ example: 'RAUNAK4821' })
+  @IsString()
+  @MaxLength(20)
+  code!: string;
+}
+
 export class RequestOtpDto {
   @ApiProperty({ example: '9111966732', description: 'Indian mobile number, any common format' })
   @IsString()

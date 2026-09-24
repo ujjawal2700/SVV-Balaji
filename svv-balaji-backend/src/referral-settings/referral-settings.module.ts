@@ -1,6 +1,17 @@
 import { Body, Controller, Get, Module, Patch, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { ReferralRewardTrigger } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReferralService } from '../common/referral.service';
@@ -9,6 +20,16 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+
+export class ReferralFaqItemDto {
+  @ApiProperty()
+  @IsString()
+  question!: string;
+
+  @ApiProperty()
+  @IsString()
+  answer!: string;
+}
 
 export class UpdateReferralSettingsDto {
   @ApiPropertyOptional({ example: 100 })
@@ -32,6 +53,48 @@ export class UpdateReferralSettingsDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [ReferralFaqItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReferralFaqItemDto)
+  customerFaqs?: ReferralFaqItemDto[];
+
+  @ApiPropertyOptional({ type: [ReferralFaqItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReferralFaqItemDto)
+  retailerFaqs?: ReferralFaqItemDto[];
+
+  @ApiPropertyOptional({ description: 'Whether referral coins can be redeemed at checkout at all.' })
+  @IsOptional()
+  @IsBoolean()
+  redemptionEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: 1, description: 'What one referral coin is worth, in INR.' })
+  @IsOptional()
+  @IsNumber()
+  pointValueInr?: number;
+
+  @ApiPropertyOptional({ example: 50, description: '% of an order\'s payable amount referral coins may cover.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  maxRedemptionPercent?: number;
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minRedeemPoints?: number;
+
+  @ApiPropertyOptional({ description: 'Months until an earned referral coin lapses; omit/null = never expires.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  pointsExpiryMonths?: number;
 }
 
 /**

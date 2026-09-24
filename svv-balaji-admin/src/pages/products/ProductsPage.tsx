@@ -1,7 +1,8 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { PictureOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Alert,
   App as AntApp,
+  Avatar,
   Button,
   Card,
   Divider,
@@ -270,6 +271,23 @@ export function ProductsPage() {
   };
 
   const columns: ColumnsType<Product> = [
+    {
+      title: 'Photo',
+      key: 'image',
+      width: 70,
+      render: (_, product) => {
+        const image = product.images?.[0];
+        return (
+          <Avatar
+            shape="square"
+            size={44}
+            src={image}
+            icon={!image ? <PictureOutlined /> : undefined}
+            style={{ backgroundColor: '#f1f5f9', color: '#94a3b8', borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'cover' }}
+          />
+        );
+      },
+    },
     {
       title: 'Product',
       dataIndex: 'name',

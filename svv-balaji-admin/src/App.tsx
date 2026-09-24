@@ -165,6 +165,9 @@ const InventoryPage = lazy(() =>
 const CustomersPage = lazy(() =>
   import('./pages/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
 );
+const OrderDetailPage = lazy(() =>
+  import('./pages/sales/OrderDetailPage').then((m) => ({ default: m.OrderDetailPage })),
+);
 const CustomerDetailPage = lazy(() =>
   import('./pages/customers/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })),
 );
@@ -387,6 +390,10 @@ export function App() {
           <Route path="/b2b-customers/:id" element={<RetailerDetailPage />} />
           <Route path="/b2b-accounts/:id" element={<RetailerApprovalPage />} />
           <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
+          <Route element={<RequirePermission permission={PERMISSIONS.ORDER_VIEW} />}>
+            <Route path="/b2c-orders/:id" element={<OrderDetailPage />} />
+            <Route path="/b2b-orders/:id" element={<OrderDetailPage />} />
+          </Route>
           {/* Creating and editing are separate grants (products.create / products.edit); the
               server enforces both, this just stops the screen opening for someone who cannot save. */}
           <Route element={<RequirePermission permission={PERMISSIONS.PRODUCT_CREATE} />}>

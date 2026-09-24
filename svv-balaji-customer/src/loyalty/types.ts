@@ -10,7 +10,10 @@ export interface LoyaltyApi {
   isLoading: boolean;
   /** Program is on for this account's channel. False for guests. */
   enabled: boolean;
+  /** Whole wallet: loyalty points + referral coins. */
   points: number;
+  loyaltyPoints: number;
+  referralCoins: number;
   pointsValueInr: number;
   lifetimePoints: number;
   program: LoyaltyProgram | null;

@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import {
+  CoinSource,
+  CoinTransactionReason,
   Customer,
   CustomerStatus,
   OrderStatus,
@@ -9,6 +11,13 @@ import {
   ReferralSettings,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { maxRedeemablePoints } from '../checkout/checkout.calculator';
+
+function addMonths(from: Date, months: number): Date {
+  const d = new Date(from);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
 
 /** Statuses that mean "this order was placed and accepted", for the FIRST_ORDER trigger. */
 const CONFIRMED_OR_LATER: OrderStatus[] = [
@@ -31,6 +40,11 @@ export interface UpdateReferralSettingsInput {
   isActive?: boolean;
   customerFaqs?: ReferralFaqItem[];
   retailerFaqs?: ReferralFaqItem[];
+  redemptionEnabled?: boolean;
+  pointValueInr?: number;
+  maxRedemptionPercent?: number;
+  minRedeemPoints?: number;
+  pointsExpiryMonths?: number | null;
 }
 
 export function getDefaultCustomerFaqs(
@@ -263,6 +277,15 @@ export class ReferralService {
     if (dto.refereeRewardCoins !== undefined && dto.refereeRewardCoins < 0) {
       throw new BadRequestException('Referred user reward cannot be negative');
     }
+    if (dto.pointValueInr !== undefined && dto.pointValueInr <= 0) {
+      throw new BadRequestException('Referral coin value must be a positive amount');
+    }
+    if (dto.maxRedemptionPercent !== undefined && (dto.maxRedemptionPercent < 0 || dto.maxRedemptionPercent > 100)) {
+      throw new BadRequestException('Max redemption percent must be between 0 and 100');
+    }
+    if (dto.minRedeemPoints !== undefined && dto.minRedeemPoints < 0) {
+      throw new BadRequestException('Minimum redeemable coins cannot be negative');
+    }
 
     if (dto.customerFaqs !== undefined) {
       this.customCustomerFaqs = dto.customerFaqs.filter((f) => f.question?.trim() && f.answer?.trim());
@@ -281,6 +304,11 @@ export class ReferralService {
         refereeRewardCoins: dto.refereeRewardCoins,
         rewardTrigger: dto.rewardTrigger,
         isActive: dto.isActive,
+        redemptionEnabled: dto.redemptionEnabled,
+        pointValueInr: dto.pointValueInr,
+        maxRedemptionPercent: dto.maxRedemptionPercent,
+        minRedeemPoints: dto.minRedeemPoints,
+        pointsExpiryMonths: dto.pointsExpiryMonths,
         updatedById,
       },
     });
@@ -372,6 +400,11 @@ export class ReferralService {
     const referral = await prisma.referral.findUnique({ where: { refereeId } });
     if (!referral || referral.rewardedAt) return;
 
+    const expiresAt =
+      settings.pointsExpiryMonths && settings.pointsExpiryMonths > 0
+        ? addMonths(new Date(), settings.pointsExpiryMonths)
+        : null;
+
     await prisma.$transaction(async (tx) => {
       // Re-checked inside the transaction: two trigger events racing for the
       // same referee (unlikely, but the two order triggers both call this)
@@ -381,28 +414,40 @@ export class ReferralService {
 
       await tx.customer.update({
         where: { id: fresh.referrerId },
-        data: { coinBalance: { increment: settings.referrerRewardCoins } },
+        data: {
+          coinBalance: { increment: settings.referrerRewardCoins },
+          referralCoinBalance: { increment: settings.referrerRewardCoins },
+        },
       });
       await tx.customer.update({
         where: { id: fresh.refereeId },
-        data: { coinBalance: { increment: settings.refereeRewardCoins } },
+        data: {
+          coinBalance: { increment: settings.refereeRewardCoins },
+          referralCoinBalance: { increment: settings.refereeRewardCoins },
+        },
       });
       await tx.coinTransaction.create({
         data: {
           customerId: fresh.referrerId,
           amount: settings.referrerRewardCoins,
-          reason: 'REFERRAL_REFERRER_REWARD',
+          reason: CoinTransactionReason.REFERRAL_REFERRER_REWARD,
+          source: CoinSource.REFERRAL,
           referralId: fresh.id,
           orderId,
+          expiresAt,
+          remainingAmount: settings.referrerRewardCoins,
         },
       });
       await tx.coinTransaction.create({
         data: {
           customerId: fresh.refereeId,
           amount: settings.refereeRewardCoins,
-          reason: 'REFERRAL_REFEREE_REWARD',
+          reason: CoinTransactionReason.REFERRAL_REFEREE_REWARD,
+          source: CoinSource.REFERRAL,
           referralId: fresh.id,
           orderId,
+          expiresAt,
+          remainingAmount: settings.refereeRewardCoins,
         },
       });
       await tx.referral.update({ where: { id: fresh.id }, data: { rewardedAt: new Date() } });
@@ -549,7 +594,7 @@ export class ReferralService {
   async adjustBalance(
     prisma: PrismaService,
     customerId: string,
-    input: { amount: number; note: string },
+    input: { amount: number; note: string; source?: CoinSource },
     performedById: string,
   ) {
     if (!Number.isInteger(input.amount) || input.amount === 0) {
@@ -558,6 +603,10 @@ export class ReferralService {
     if (!input.note?.trim()) {
       throw new BadRequestException('A reason is required for a manual adjustment');
     }
+    // Historical callers (before the wallet split) always meant loyalty -
+    // that pool existed first and manual adjustments predate referral
+    // redemption entirely.
+    const source = input.source ?? CoinSource.LOYALTY;
 
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) throw new NotFoundException('Customer not found');
@@ -566,21 +615,139 @@ export class ReferralService {
         `This would take ${customer.name}'s balance below zero (currently ${customer.coinBalance} coins)`,
       );
     }
+    const poolBalance = source === CoinSource.REFERRAL ? customer.referralCoinBalance : customer.loyaltyCoinBalance;
+    if (poolBalance + input.amount < 0) {
+      throw new BadRequestException(
+        `This would take ${customer.name}'s ${source.toLowerCase()} coin balance below zero (currently ${poolBalance} coins)`,
+      );
+    }
 
     return prisma.$transaction(async (tx) => {
       await tx.customer.update({
         where: { id: customerId },
-        data: { coinBalance: { increment: input.amount } },
+        data: {
+          coinBalance: { increment: input.amount },
+          ...(source === CoinSource.REFERRAL
+            ? { referralCoinBalance: { increment: input.amount } }
+            : { loyaltyCoinBalance: { increment: input.amount } }),
+        },
       });
       return tx.coinTransaction.create({
         data: {
           customerId,
           amount: input.amount,
-          reason: 'MANUAL_ADJUSTMENT',
+          reason: CoinTransactionReason.MANUAL_ADJUSTMENT,
+          source,
           note: input.note.trim(),
           performedById,
         },
       });
     });
+  }
+
+  // --- Redemption (referral coins spent at checkout) --------------------------
+
+  /** What a customer could spend on an order worth `payableBase` (rupees, goods after coupon). */
+  async redemptionOffer(prisma: PrismaService, customerId: string, payableBase: number) {
+    const settings = await this.getSettings(prisma);
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+      select: { referralCoinBalance: true },
+    });
+    const pointValueInr = Number(settings.pointValueInr);
+    const enabled = settings.isActive && settings.redemptionEnabled;
+    return {
+      enabled,
+      balance: customer.referralCoinBalance,
+      pointValueInr,
+      minPoints: settings.minRedeemPoints,
+      maxPercent: settings.maxRedemptionPercent,
+      maxPoints: enabled
+        ? maxRedeemablePoints({
+            balance: customer.referralCoinBalance,
+            payableBase,
+            maxPercent: settings.maxRedemptionPercent,
+            pointValueInr,
+            minPoints: settings.minRedeemPoints,
+          })
+        : 0,
+    };
+  }
+
+  /**
+   * Spend referral coins on an order, inside the order's transaction. Mirrors
+   * LoyaltyService.redeemForOrder exactly: a conditional balance update as the
+   * race guard, then draw down the soonest-expiring earned lots first.
+   */
+  async redeemForOrder(
+    tx: Prisma.TransactionClient,
+    input: { customerId: string; orderId: string; points: number; valueInr: number },
+  ) {
+    if (input.points <= 0) return;
+    const res = await tx.customer.updateMany({
+      where: { id: input.customerId, referralCoinBalance: { gte: input.points } },
+      data: { coinBalance: { decrement: input.points }, referralCoinBalance: { decrement: input.points } },
+    });
+    if (res.count === 0) throw new BadRequestException('You no longer have enough referral coins for this redemption');
+
+    let left = input.points;
+    const lots = await tx.coinTransaction.findMany({
+      where: {
+        customerId: input.customerId,
+        reason: { in: [CoinTransactionReason.REFERRAL_REFERRER_REWARD, CoinTransactionReason.REFERRAL_REFEREE_REWARD] },
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: [{ expiresAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+    });
+    for (const lot of lots) {
+      if (left <= 0) break;
+      const take = Math.min(left, lot.remainingAmount ?? 0);
+      await tx.coinTransaction.update({ where: { id: lot.id }, data: { remainingAmount: { decrement: take } } });
+      left -= take;
+    }
+
+    await tx.coinTransaction.create({
+      data: {
+        customerId: input.customerId,
+        amount: -input.points,
+        reason: CoinTransactionReason.REFERRAL_REDEMPTION,
+        source: CoinSource.REFERRAL,
+        orderId: input.orderId,
+        note: `Redeemed ${input.points} referral coins (Rs ${input.valueInr.toFixed(2)}) at checkout`,
+      },
+    });
+  }
+
+  /** Cancelled before delivery: hand the spent referral coins back (once). */
+  async refundRedemptionForOrder(tx: Prisma.TransactionClient, orderId: string): Promise<number> {
+    const rows = await tx.coinTransaction.findMany({
+      where: {
+        orderId,
+        reason: { in: [CoinTransactionReason.REFERRAL_REDEMPTION, CoinTransactionReason.REFERRAL_REDEMPTION_REFUND] },
+      },
+    });
+    if (rows.length === 0) return 0;
+    const spent = -rows.filter((r) => r.reason === CoinTransactionReason.REFERRAL_REDEMPTION).reduce((n, r) => n + r.amount, 0);
+    const refunded = rows
+      .filter((r) => r.reason === CoinTransactionReason.REFERRAL_REDEMPTION_REFUND)
+      .reduce((n, r) => n + r.amount, 0);
+    const owed = spent - refunded;
+    if (owed <= 0) return 0;
+    const customerId = rows[0].customerId;
+    await tx.coinTransaction.create({
+      data: {
+        customerId,
+        amount: owed,
+        reason: CoinTransactionReason.REFERRAL_REDEMPTION_REFUND,
+        source: CoinSource.REFERRAL,
+        orderId,
+        note: 'Order cancelled - redeemed referral coins returned',
+      },
+    });
+    await tx.customer.update({
+      where: { id: customerId },
+      data: { coinBalance: { increment: owed }, referralCoinBalance: { increment: owed } },
+    });
+    return owed;
   }
 }

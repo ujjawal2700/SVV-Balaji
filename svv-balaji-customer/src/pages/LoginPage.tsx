@@ -144,14 +144,12 @@ export function LoginPage() {
           <Typography.Text strong style={{ fontSize: 15, color: 'inherit' }}>
             Back
           </Typography.Text>
-        </button>
+        </button>        <div className="login-form-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
 
-        <div className="login-form-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: '400px', margin: '0 auto', width: '100%' }}>
+          <img src="/images/desi-tokri-cropped.png" alt="Desi Tokri" className="login-logo" style={{ height: '56px', marginBottom: '20px' }} />
 
-          <img src="/images/desi-tokri-cropped.png" alt="Desi Tokri" className="login-logo" style={{ height: '70px', marginBottom: '60px' }} />
-
-          <div className="login-text-container" style={{ marginBottom: '32px' }}>
-            <Typography.Title level={2} style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#15803d', fontFamily: 'serif' }}>
+          <div className="login-text-container" style={{ marginBottom: '20px' }}>
+            <Typography.Title level={2} style={{ margin: '0 0 6px 0', fontWeight: 600, color: '#15803d', fontFamily: 'serif' }}>
               {loginRole === 'RETAILER' ? 'Partner with Us' : 'Your Cravings Stop Here'}
             </Typography.Title>
             <Typography.Text style={{ color: '#64748b', fontSize: 14 }}>
@@ -159,12 +157,12 @@ export function LoginPage() {
             </Typography.Text>
           </div>
 
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
             <div
               onClick={() => navigate('/login', { replace: true })}
               style={{
                 flex: 1,
-                padding: '12px',
+                padding: '10px 12px',
                 borderRadius: '12px',
                 border: loginRole === 'CUSTOMER' ? '2px solid #15803d' : '2px solid #f1f5f9',
                 backgroundColor: loginRole === 'CUSTOMER' ? '#f0fdf4' : '#f8fafc',
@@ -179,7 +177,7 @@ export function LoginPage() {
               onClick={() => navigate('/retailers/login', { replace: true })}
               style={{
                 flex: 1,
-                padding: '12px',
+                padding: '10px 12px',
                 borderRadius: '12px',
                 border: loginRole === 'RETAILER' ? '2px solid #15803d' : '2px solid #f1f5f9',
                 backgroundColor: loginRole === 'RETAILER' ? '#f0fdf4' : '#f8fafc',
@@ -195,7 +193,7 @@ export function LoginPage() {
 
 
           {step === 'PHONE' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>Mobile Number</Typography.Text>
                 <Input
@@ -212,7 +210,7 @@ export function LoginPage() {
                 />
               </div>
 
-              <div className="login-button-container" style={{ marginTop: 16 }}>
+              <div className="login-button-container" style={{ marginTop: 12 }}>
                 <Button
                   className="login-button"
                   type="primary"
@@ -228,7 +226,7 @@ export function LoginPage() {
                     fontWeight: 600,
                     fontSize: 16,
                     color: '#fff',
-                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)',
+                    boxShadow: '0 4px 10px rgba(21, 128, 61, 0.3)',
                     width: '100%',
                   }}
                 >
@@ -237,7 +235,7 @@ export function LoginPage() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               {isNewAccount && loginRole === 'CUSTOMER' && (
                 <div>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>Your Name (optional)</Typography.Text>
@@ -301,7 +299,7 @@ export function LoginPage() {
                 </div>
               </div>
 
-              <div className="login-button-container" style={{ marginTop: 16 }}>
+              <div className="login-button-container" style={{ marginTop: 12 }}>
                 <Button
                   className="login-button"
                   type="primary"
@@ -317,7 +315,7 @@ export function LoginPage() {
                     fontWeight: 600,
                     fontSize: 16,
                     color: '#fff',
-                    boxShadow: '0 4px 10px rgba(245, 158, 11, 0.3)',
+                    boxShadow: '0 4px 10px rgba(21, 128, 61, 0.3)',
                     width: '100%',
                   }}
                 >
@@ -328,7 +326,7 @@ export function LoginPage() {
           )}
 
           {loginRole === 'RETAILER' && (
-            <div style={{ display: 'flex', alignItems: 'center', margin: '40px 0', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '24px 0', color: '#94a3b8' }}>
               <div style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
               <span style={{ padding: '0 16px', fontSize: 12, fontWeight: 500 }}>OR</span>
               <div style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
@@ -345,8 +343,6 @@ export function LoginPage() {
               </Typography.Text>
             </div>
           )}
-
-
 
         </div>
       </div>
@@ -394,19 +390,22 @@ export function LoginPage() {
             clip-path: ellipse(80% 150% at -25% 100%);
             display: flex;
             flex-direction: column;
-            padding-top: 40px;
+            padding-top: 24px;
+            padding-bottom: 24px;
+            overflow-y: auto;
           }
           .login-back-btn {
             background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
             margin-left: 10%;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             align-self: flex-start;
             color: #64748b;
           }
           .login-form-container {
             margin: auto 0 auto 10% !important;
             max-width: 420px !important;
-            padding-bottom: 60px;
+            padding-top: 10px;
+            padding-bottom: 24px;
           }
           .login-logo {
             align-self: flex-start;
@@ -418,8 +417,7 @@ export function LoginPage() {
             text-align: left;
           }
           .login-button {
-            width: auto !important;
-            padding: 0 40px !important;
+            width: 100% !important;
           }
         }
         @media (max-width: 991px) {
@@ -435,7 +433,7 @@ export function LoginPage() {
           }
           .login-back-btn {
             background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
-            margin-bottom: 40px;
+            margin-bottom: 24px;
             align-self: flex-start;
             color: #64748b;
           }

@@ -2524,6 +2524,16 @@ export interface ReferralSettings {
   isActive: boolean;
   customerFaqs?: ReferralFaqItem[];
   retailerFaqs?: ReferralFaqItem[];
+  /** Whether referral coins can be redeemed at checkout at all. */
+  redemptionEnabled: boolean;
+  /** What one referral coin is worth, in INR. */
+  pointValueInr: number;
+  /** % of an order's payable amount referral coins may cover. */
+  maxRedemptionPercent: number;
+  /** A redemption below this many coins is refused outright. */
+  minRedeemPoints: number;
+  /** Months until an earned referral coin lapses if unspent; null = never. */
+  pointsExpiryMonths: number | null;
   updatedById: string | null;
   updatedAt: string;
   createdAt: string;
@@ -2536,6 +2546,35 @@ export interface UpdateReferralSettingsInput {
   isActive?: boolean;
   customerFaqs?: ReferralFaqItem[];
   retailerFaqs?: ReferralFaqItem[];
+  redemptionEnabled?: boolean;
+  pointValueInr?: number;
+  maxRedemptionPercent?: number;
+  minRedeemPoints?: number;
+  pointsExpiryMonths?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Wallet (unified referral + loyalty coin redemption) configuration
+// ---------------------------------------------------------------------------
+
+export type WalletRedemptionMode = 'SEPARATE' | 'COMBINED';
+
+export interface WalletSettings {
+  id: string;
+  redemptionMode: WalletRedemptionMode;
+  updatedById: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface UpdateWalletSettingsInput {
+  redemptionMode?: WalletRedemptionMode;
+}
+
+export interface WalletBalance {
+  referralBalance: number;
+  loyaltyBalance: number;
+  totalBalance: number;
 }
 
 // ---------------------------------------------------------------------------

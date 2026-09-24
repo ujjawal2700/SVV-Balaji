@@ -14,6 +14,7 @@ import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { WalletService } from '../wallet/wallet.service';
 import { refundCouponForOrder } from '../checkout/coupons.service';
 import { heldByOthers, lockStockRows } from '../checkout/stock-holds';
 import { OrderEventsService } from '../realtime/order-events.service';
@@ -63,6 +64,7 @@ export class SalesService {
     private readonly pricing: PricingService,
     private readonly referrals: ReferralService,
     private readonly loyalty: LoyaltyService,
+    private readonly wallet: WalletService,
     private readonly events: OrderEventsService,
   ) {}
 
@@ -267,7 +269,7 @@ export class SalesService {
       where,
       orderBy: { orderDate: 'desc' },
       include: {
-        customer: { select: { customerCode: true, name: true, channel: true, phone: true } },
+        customer: { select: { customerCode: true, name: true, channel: true, phone: true, gstin: true, contactName: true } },
         items: {
           select: {
             productId: true, quantity: true, lineTotal: true, nameSnapshot: true, skuSnapshot: true,
@@ -1098,7 +1100,7 @@ export class SalesService {
       // Storefront orders: give back everything the customer put up. All in this
       // transaction, so a half-cancelled order cannot exist.
       await tx.stockReservation.updateMany({ where: { orderId: id, status: 'COMMITTED' }, data: { status: 'RELEASED' } });
-      await this.loyalty.refundRedemptionForOrder(tx, id);
+      await this.wallet.refundRedemptionForOrder(tx, id);
       await refundCouponForOrder(tx, id);
 
       return tx.order.update({

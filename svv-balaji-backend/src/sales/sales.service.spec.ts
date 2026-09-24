@@ -1,5 +1,6 @@
 import { OrderEventsService } from '../realtime/order-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { WalletService } from '../wallet/wallet.service';
 import { BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,6 +27,7 @@ describe('SalesService', () => {
   let orderItems: any[];
   let orderReturns: any[];
   let loyalty: { creditForDeliveredOrder: jest.Mock; reverseForReturn: jest.Mock; refundRedemptionForOrder: jest.Mock };
+  let wallet: { refundRedemptionForOrder: jest.Mock };
   let events: { publish: jest.Mock };
   let referrals: any[];
   let referralSettings: any;
@@ -72,6 +74,9 @@ describe('SalesService', () => {
       creditForDeliveredOrder: jest.fn(async () => ({ credited: true, points: 0 })),
       reverseForReturn: jest.fn(async () => ({ pointsReversed: 0 })),
       refundRedemptionForOrder: jest.fn(async () => 0),
+    };
+    wallet = {
+      refundRedemptionForOrder: jest.fn(async () => ({ loyaltyRefunded: 0, referralRefunded: 0 })),
     };
     events = { publish: jest.fn() };
     referrals = [];
@@ -348,6 +353,7 @@ describe('SalesService', () => {
       pricing as unknown as PricingService,
       new ReferralService(),
       loyalty as unknown as LoyaltyService,
+      wallet as unknown as WalletService,
       events as unknown as OrderEventsService,
     );
   });

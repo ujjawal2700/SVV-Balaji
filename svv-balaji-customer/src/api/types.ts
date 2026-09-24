@@ -126,6 +126,13 @@ export interface CustomerReferralItem {
   status: 'QUALIFIED' | 'PENDING';
 }
 
+export interface AppliedReferral {
+  code: string;
+  referrerName: string;
+  status: 'QUALIFIED' | 'PENDING';
+  rewardedAt: string | null;
+}
+
 export interface CustomerReferralSummaryResponse {
   referralCode: string | null;
   coinBalance: number;
@@ -134,4 +141,6 @@ export interface CustomerReferralSummaryResponse {
   pendingReferrals: number;
   totalCoinsEarned: number;
   referrals: CustomerReferralItem[];
+  appliedReferral: AppliedReferral | null;
+  canApplyReferralCode: boolean;
 }

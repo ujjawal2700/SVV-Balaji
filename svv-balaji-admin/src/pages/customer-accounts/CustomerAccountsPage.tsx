@@ -278,36 +278,22 @@ export function CustomerAccountsPage() {
     {
       title: 'Action',
       key: 'actions',
-      width: 120,
+      width: 140,
       fixed: 'right',
       render: (_, account) => (
-        <Space size={6}>
-          <Button
-            type={account.status === 'PENDING_APPROVAL' ? 'primary' : 'default'}
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => navigate(`/b2b-accounts/${account.id}`)}
-            style={{
-              borderRadius: 6,
-              background: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
-              borderColor: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
-            }}
-          >
-            {account.status === 'PENDING_APPROVAL' ? 'Review & Approve' : 'View Vault'}
-          </Button>
-          {account.status === 'ACTIVE' && account.customerId && (
-            <Button
-              size="small"
-              type="primary"
-              ghost
-              icon={<ShopOutlined />}
-              onClick={() => navigate(`/b2b-customers/${account.customerId}`)}
-              style={{ borderRadius: 6 }}
-            >
-              Profile
-            </Button>
-          )}
-        </Space>
+        <Button
+          type={account.status === 'PENDING_APPROVAL' ? 'primary' : 'default'}
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() => navigate(`/b2b-accounts/${account.id}`)}
+          style={{
+            borderRadius: 6,
+            background: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
+            borderColor: account.status === 'PENDING_APPROVAL' ? '#f97316' : undefined,
+          }}
+        >
+          {account.status === 'PENDING_APPROVAL' ? 'Review & Approve' : 'View Account'}
+        </Button>
       ),
     },
   ];

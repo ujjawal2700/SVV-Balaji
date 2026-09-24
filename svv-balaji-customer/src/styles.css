@@ -926,3 +926,34 @@ select {
   }
 }
 
+/* Checkout: app-like phone layout - edge-to-edge cards, tighter spacing,
+   safe-area aware fixed bottom bar, instead of a shrunk desktop page. */
+@media (max-width: 767px) {
+  .checkout-main {
+    padding: 12px 0 8px !important;
+  }
+  .checkout-page .ant-card {
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    box-shadow: none !important;
+  }
+  .checkout-page .ant-card + .ant-card {
+    margin-top: 8px;
+  }
+  .checkout-page .ant-card-body {
+    padding: 14px !important;
+  }
+  .checkout-page .ant-card-head {
+    padding: 0 14px !important;
+    min-height: 44px !important;
+  }
+  .checkout-page .ant-card-head-title {
+    padding: 10px 0 !important;
+  }
+  .checkout-page header {
+    padding: 12px 14px !important;
+  }
+}
+
+

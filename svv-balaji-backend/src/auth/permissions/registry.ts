@@ -1318,6 +1318,27 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   {
+    key: 'wallet',
+    label: 'Wallet & Redemption Settings',
+    path: '/wallet',
+    viewKey: 'wallet.view',
+    permissions: [
+      {
+        key: 'wallet.view',
+        label: "View a customer's combined wallet balance",
+        description: 'Referral coins and loyalty coins together, and how the two pools are configured to redeem.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'wallet.manage',
+        label: 'Configure wallet redemption mode',
+        description: 'Whether referral coins and loyalty coins redeem separately or as one combined balance at checkout.',
+        defaultRoles: [],
+      },
+    ],
+  },
+
+  {
     key: 'banners',
     label: 'Banner Management',
     path: '/banners',

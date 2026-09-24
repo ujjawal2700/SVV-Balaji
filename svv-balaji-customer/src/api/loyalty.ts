@@ -10,8 +10,12 @@ export type LoyaltyLedgerType =
   | 'LOYALTY_EARN'
   | 'LOYALTY_REVERSAL'
   | 'LOYALTY_EXPIRY'
+  | 'LOYALTY_REDEMPTION'
+  | 'LOYALTY_REDEMPTION_REFUND'
   | 'REFERRAL_REFERRER_REWARD'
   | 'REFERRAL_REFEREE_REWARD'
+  | 'REFERRAL_REDEMPTION'
+  | 'REFERRAL_REDEMPTION_REFUND'
   | 'MANUAL_ADJUSTMENT';
 
 export interface LoyaltyHistoryItem {
@@ -28,6 +32,7 @@ export interface LoyaltyProgram {
   earnPercent: number;
   pointValueInr: number;
   expiryMonths: number | null;
+  minEligibleItemAmount: number | null;
   minEligibleOrderAmount: number | null;
   maxRewardPerOrderInr: number | null;
   appliesToDiscountedProducts: boolean;
@@ -36,7 +41,10 @@ export interface LoyaltyProgram {
 
 export interface LoyaltySummary {
   enabled: boolean;
+  /** Whole wallet: loyalty points + referral coins. */
   balance: number;
+  loyaltyBalance: number;
+  referralBalance: number;
   balanceValueInr: number;
   lifetimeEarned: number;
   program: LoyaltyProgram | null;

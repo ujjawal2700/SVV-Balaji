@@ -39,6 +39,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ReferralSettingsModule } from './referral-settings/referral-settings.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { WalletModule } from './wallet/wallet.module';
 import { BannersModule } from './banners/banners.module';
 import { SchemesModule } from './schemes/schemes.module';
 import { SupportSettingsModule } from './support-settings/support-settings.module';
@@ -95,6 +96,7 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
     CategoriesModule,
     ReferralSettingsModule,
     ReferralsModule,
+    WalletModule, // unified referral + loyalty coin balance and combined/separate redemption config
     BannersModule,
     SchemesModule,
     SupportSettingsModule,

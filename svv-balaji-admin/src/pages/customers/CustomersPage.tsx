@@ -388,16 +388,7 @@ export function CustomersPage() {
         </Space>
       ),
     },
-    {
-      title: 'Payment',
-      key: 'credit',
-      width: 90,
-      render: (_, customer) => (
-        <Tag color="default" style={{ fontSize: 10, margin: 0, fontWeight: 500 }}>
-          Prepaid
-        </Tag>
-      ),
-    },
+
     {
       title: 'Status',
       key: 'status',

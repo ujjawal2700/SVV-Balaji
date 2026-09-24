@@ -12,12 +12,14 @@ import {
   DashboardOutlined,
   DownloadOutlined,
   EnvironmentOutlined,
+  ExclamationCircleOutlined,
   HistoryOutlined,
   HomeOutlined,
   InboxOutlined,
   LinkOutlined,
   PhoneOutlined,
   PrinterOutlined,
+  QuestionCircleOutlined,
   RocketOutlined,
   SafetyCertificateOutlined,
   ShoppingOutlined,
@@ -192,17 +194,46 @@ export function OrderDetailDrawer({
           break;
       }
     } catch (error) {
-      message.error(apiErrorMessage(error, `Could not ${step.label.toLowerCase()}`), 10);
+      const msg = apiErrorMessage(error, `Could not ${step.label.toLowerCase()}`);
+      message.error(msg, 10);
+      if (msg.toLowerCase().includes('scan') || msg.toLowerCase().includes('batch')) {
+        setActiveTab('fulfillment');
+      }
     }
   };
 
   const confirmStep = () => {
     if (!step) return;
     modal.confirm({
-      title: `${step.label}?`,
-      content: step.effect,
+      centered: true,
+      title: (
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+          {step.label}?
+        </span>
+      ),
+      icon: <QuestionCircleOutlined style={{ color: '#1677ff', fontSize: 22 }} />,
+      content: (
+        <div style={{ marginTop: 10, padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <Text style={{ fontSize: 13, color: '#334155', lineHeight: '1.5' }}>
+            {step.effect}
+          </Text>
+        </div>
+      ),
       okText: step.label,
-      width: 480,
+      okButtonProps: {
+        style: {
+          borderRadius: 6,
+          height: 36,
+          padding: '0 18px',
+          fontWeight: 600,
+          backgroundColor: '#0f766e',
+          borderColor: '#0f766e',
+        },
+      },
+      cancelButtonProps: {
+        style: { borderRadius: 6, height: 36, padding: '0 16px' },
+      },
+      width: 440,
       onOk: runStep,
     });
   };
@@ -211,22 +242,35 @@ export function OrderDetailDrawer({
     if (!data) return;
     setCancelReason('');
     modal.confirm({
-      title: `Cancel Order ${data.orderNumber}?`,
-      width: 480,
+      centered: true,
+      title: (
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#991b1b' }}>
+          Cancel Order {data.orderNumber}?
+        </span>
+      ),
+      icon: <ExclamationCircleOutlined style={{ color: '#ef4444', fontSize: 22 }} />,
+      width: 460,
       content: (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          <Text>
+        <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 8 }}>
+          <Text style={{ fontSize: 13, color: '#475569' }}>
             Stock reservations will be released back to available inventory.
           </Text>
           <Input.TextArea
-            rows={2}
+            rows={3}
             placeholder="Reason for cancellation — required"
             onChange={(e) => setCancelReason(e.target.value)}
+            style={{ borderRadius: 6 }}
           />
         </Space>
       ),
       okText: 'Cancel Order',
-      okButtonProps: { danger: true },
+      okButtonProps: {
+        danger: true,
+        style: { borderRadius: 6, height: 36, padding: '0 18px', fontWeight: 600 },
+      },
+      cancelButtonProps: {
+        style: { borderRadius: 6, height: 36, padding: '0 16px' },
+      },
       onOk: async () => {
         const reason = cancelReason.trim();
         if (!reason) {

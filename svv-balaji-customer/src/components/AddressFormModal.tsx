@@ -75,7 +75,18 @@ export function AddressFormModal({
   };
 
   return (
-    <Modal open={open} title={address ? 'Edit address' : 'Add delivery address'} onCancel={onClose} onOk={() => void save()} okText="Save address" confirmLoading={saving} destroyOnClose>
+    <Modal
+      open={open}
+      title={address ? 'Edit address' : 'Add delivery address'}
+      onCancel={onClose}
+      onOk={() => void save()}
+      okText="Save address"
+      confirmLoading={saving}
+      destroyOnClose
+      width={520}
+      centered
+      styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto', paddingRight: 8 } }}
+    >
       <Form form={form} layout="vertical" requiredMark={false}>
         <Form.Item name="label" label="Save as"><Input placeholder="Home / Office" maxLength={30} /></Form.Item>
         <Form.Item name="fullName" label="Full name" rules={[{ required: true, min: 2, message: 'Enter the name' }]}><Input /></Form.Item>

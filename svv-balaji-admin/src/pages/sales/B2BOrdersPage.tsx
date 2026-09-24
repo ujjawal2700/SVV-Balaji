@@ -53,8 +53,8 @@ import { WarehouseSelect } from '../../components/pickers';
 import { EM_DASH, formatCurrency, formatDate, formatDateTime } from '../../utils/format';
 import { PAYMENT_STATUS_COLOUR, PAYMENT_STATUS_LABEL } from '@shared/utils/paymentStatus';
 import { useOrders } from '@shared/hooks/useSales';
-import { OrderDetailDrawer } from './OrderDetailDrawer';
 import { paymentLabel } from './OrderDetailParts';
+import { useNavigate } from 'react-router-dom';
 import { OrderFormModal } from './OrderFormModal';
 import { ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from './orderStatus';
 import { downloadOrderBill } from '../../utils/invoiceGenerator';
@@ -109,7 +109,7 @@ export function B2BOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [cityFilter, setCityFilter] = useState<string>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
-  const [drawerOrderId, setDrawerOrderId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Filter B2B Orders based on search and filters
@@ -130,6 +130,26 @@ export function B2BOrdersPage() {
     });
   }, [ordersList, search, statusFilter, cityFilter, paymentFilter]);
 
+  // Every figure below is summed from the real B2B orders - nothing hard-coded.
+  const stats = useMemo(() => {
+    const live = ordersList.filter((o) => o.status !== 'CANCELLED' && o.status !== 'DRAFT');
+    const units = (o: B2BOrder) => ((o as any).items ?? []).reduce((n: number, i: any) => n + Number(i.quantity ?? 0), 0);
+    const inTransit = live.filter((o) => o.status === 'DISPATCHED');
+    const creditDue = live.filter((o) => o.paymentTerms !== 'PREPAID' && o.paymentStatus !== 'PAID' && o.paymentStatus !== 'REFUNDED');
+    const awaitingAllocation = live.filter((o) => o.status === 'PLACED' || o.status === 'CONFIRMED');
+    return {
+      volume: live.reduce((sum, o) => sum + Number(o.total ?? 0), 0),
+      liveCount: live.length,
+      retailerAppCount: live.filter((o) => (o as any).source === 'STOREFRONT').length,
+      inTransitCount: inTransit.length,
+      inTransitUnits: inTransit.reduce((n, o) => n + units(o), 0),
+      creditDue: creditDue.reduce((sum, o) => sum + Number(o.total ?? 0), 0),
+      creditDueCount: creditDue.length,
+      awaitingAllocationCount: awaitingAllocation.length,
+      awaitingAllocationValue: awaitingAllocation.reduce((sum, o) => sum + Number(o.total ?? 0), 0),
+    };
+  }, [ordersList]);
+
   const cityOptions = useMemo(
     () => Array.from(new Set(ordersList.map((o) => o.deliveryCity).filter(Boolean) as string[])).sort(),
     [ordersList],
@@ -148,9 +168,14 @@ export function B2BOrdersPage() {
           <Text type="secondary" style={{ fontSize: 11 }}>
             GSTIN: <Text strong style={{ fontSize: 11, color: '#722ed1' }}>{record.gstin ?? '—'}</Text>
           </Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {formatDate(record.orderDate)}
-          </Text>
+          <Space size={4}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {formatDate(record.orderDate)}
+            </Text>
+            <Tag color={(record as any).source === 'STOREFRONT' ? 'green' : 'default'} style={{ fontSize: 10, margin: 0 }}>
+              {(record as any).source === 'STOREFRONT' ? 'Retailer app' : 'Staff'}
+            </Tag>
+          </Space>
         </Space>
       ),
     },
@@ -175,7 +200,9 @@ export function B2BOrdersPage() {
       width: 200,
       render: (_, record) => (
         <Space direction="vertical" size={2}>
-          <Text style={{ fontSize: 12, fontWeight: 600, color: '#1f1f1f' }}>{record.customer?.name ?? '—'}</Text>
+          <Text style={{ fontSize: 12, fontWeight: 600, color: '#1f1f1f' }}>
+            {(record.customer as any)?.contactName ?? record.customer?.name ?? '—'}
+          </Text>
           <Text type="secondary" style={{ fontSize: 11 }}>
             {record.contactPersonMobile ?? '—'}
           </Text>
@@ -210,6 +237,11 @@ export function B2BOrdersPage() {
           <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>
             {record.paymentTerms.replace('_', ' ')}
           </Tag>
+          {Number((record as any).loyaltyRedeemedPoints ?? 0) + Number((record as any).referralRedeemedPoints ?? 0) > 0 ? (
+            <Text type="secondary" style={{ fontSize: 10 }}>
+              Coins used: {formatCurrency(Number((record as any).loyaltyRedeemedInr ?? 0) + Number((record as any).referralRedeemedInr ?? 0))}
+            </Text>
+          ) : null}
         </Space>
       ),
     },
@@ -269,17 +301,17 @@ export function B2BOrdersPage() {
       width: 150,
       render: (_, record) => (
         <Space size={4}>
-          <Tooltip title="Open Granular B2B Drawer">
+          <Tooltip title="Open order details">
             <Button
               type="primary"
               size="small"
               icon={<EyeOutlined />}
               onClick={(e) => {
                 e.stopPropagation();
-                setDrawerOrderId(record.id);
+                navigate(`/b2b-orders/${record.id}`);
               }}
             >
-              Drawer
+              View
             </Button>
           </Tooltip>
           <Tooltip title="Download / Print Bill">
@@ -320,60 +352,57 @@ export function B2BOrdersPage() {
         }
       />
 
-      {/* Metric Cards Banner at Top */}
+      {/* Live B2B metrics */}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderLeft: '4px solid #1677ff', borderRadius: 8 }}>
+          <Card size="small" loading={ordersQuery.isLoading} style={{ borderLeft: '4px solid #1677ff', borderRadius: 8 }}>
             <Statistic
-              title={<Text type="secondary" style={{ fontSize: 12 }}>Total B2B Active Volume</Text>}
-              value="₹25.68 Lakhs"
+              title={<Text type="secondary" style={{ fontSize: 12 }}>Total B2B Order Value</Text>}
+              value={formatCurrency(stats.volume)}
               valueStyle={{ color: '#0958d9', fontSize: 20, fontWeight: 700 }}
               prefix={<BankOutlined />}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              5 Active Wholesale Purchase Orders
+              {stats.liveCount} active order{stats.liveCount === 1 ? '' : 's'} · {stats.retailerAppCount} from retailer app
             </Text>
           </Card>
         </Col>
-
         <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderLeft: '4px solid #52c41a', borderRadius: 8 }}>
+          <Card size="small" loading={ordersQuery.isLoading} style={{ borderLeft: '4px solid #52c41a', borderRadius: 8 }}>
             <Statistic
-              title={<Text type="secondary" style={{ fontSize: 12 }}>Bulk Freight In Transit</Text>}
-              value="32,700 KG"
+              title={<Text type="secondary" style={{ fontSize: 12 }}>In Transit</Text>}
+              value={`${stats.inTransitCount} order${stats.inTransitCount === 1 ? '' : 's'}`}
               valueStyle={{ color: '#389e0d', fontSize: 20, fontWeight: 700 }}
               prefix={<TruckOutlined />}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              2 Heavy Duty Trucks En-route
+              {stats.inTransitUnits} pack{stats.inTransitUnits === 1 ? '' : 's'} dispatched, not yet delivered
             </Text>
           </Card>
         </Col>
-
         <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderLeft: '4px solid #fa8c16', borderRadius: 8 }}>
+          <Card size="small" loading={ordersQuery.isLoading} style={{ borderLeft: '4px solid #fa8c16', borderRadius: 8 }}>
             <Statistic
-              title={<Text type="secondary" style={{ fontSize: 12 }}>Credit Ledger Due (Net 30)</Text>}
-              value="₹7.86 Lakhs"
+              title={<Text type="secondary" style={{ fontSize: 12 }}>Credit Due</Text>}
+              value={formatCurrency(stats.creditDue)}
               valueStyle={{ color: '#d46b08', fontSize: 20, fontWeight: 700 }}
               prefix={<CreditCardOutlined />}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              Approved B2B Company Credit Lines
+              {stats.creditDueCount} unpaid order{stats.creditDueCount === 1 ? '' : 's'} on credit terms
             </Text>
           </Card>
         </Col>
-
         <Col xs={24} sm={12} md={6}>
-          <Card size="small" style={{ borderLeft: '4px solid #722ed1', borderRadius: 8 }}>
+          <Card size="small" loading={ordersQuery.isLoading} style={{ borderLeft: '4px solid #722ed1', borderRadius: 8 }}>
             <Statistic
-              title={<Text type="secondary" style={{ fontSize: 12 }}>Pending FEFO Allocations</Text>}
-              value="2 Bulk Orders"
+              title={<Text type="secondary" style={{ fontSize: 12 }}>Awaiting Allocation</Text>}
+              value={`${stats.awaitingAllocationCount} order${stats.awaitingAllocationCount === 1 ? '' : 's'}`}
               valueStyle={{ color: '#531dab', fontSize: 20, fontWeight: 700 }}
               prefix={<ContainerOutlined />}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              Awaiting Warehouse Allocation
+              {formatCurrency(stats.awaitingAllocationValue)} placed/confirmed, no batches yet
             </Text>
           </Card>
         </Col>
@@ -401,11 +430,7 @@ export function B2BOrdersPage() {
               onChange={(val) => setStatusFilter(val)}
               options={[
                 { label: 'All Statuses', value: 'ALL' },
-                { label: 'Placed', value: 'PLACED' },
-                { label: 'Allocated', value: 'ALLOCATED' },
-                { label: 'Packed', value: 'PACKED' },
-                { label: 'Dispatched', value: 'DISPATCHED' },
-                { label: 'Delivered', value: 'DELIVERED' },
+                ...Object.entries(ORDER_STATUS_LABEL).map(([value, label]) => ({ label, value })),
               ]}
             />
           </Col>
@@ -431,9 +456,7 @@ export function B2BOrdersPage() {
               onChange={(val) => setPaymentFilter(val)}
               options={[
                 { label: 'All Payments', value: 'ALL' },
-                { label: 'Paid', value: 'PAID' },
-                { label: 'Pending', value: 'PENDING' },
-                { label: 'Partial', value: 'PARTIAL' },
+                ...Object.entries(PAYMENT_STATUS_LABEL).map(([value, label]) => ({ label, value })),
               ]}
             />
           </Col>
@@ -459,6 +482,7 @@ export function B2BOrdersPage() {
         <Table
           dataSource={filteredOrders}
           columns={columns}
+          loading={ordersQuery.isLoading}
           rowKey="id"
           scroll={{ x: 1600 }}
           pagination={{
@@ -467,14 +491,12 @@ export function B2BOrdersPage() {
             showTotal: (total) => `Total ${total} B2B Wholesale Purchase Orders`,
           }}
           onRow={(record) => ({
-            onClick: () => setDrawerOrderId(record.id),
+            onClick: () => navigate(`/b2b-orders/${record.id}`),
             style: { cursor: 'pointer' },
           })}
         />
       </Card>
 
-      {/* Order Detail Drawer */}
-      <OrderDetailDrawer orderId={drawerOrderId} onClose={() => setDrawerOrderId(null)} />
 
       {/* Order Creation Modal */}
       <OrderFormModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} />

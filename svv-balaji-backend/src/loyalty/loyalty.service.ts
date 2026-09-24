@@ -7,6 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import {
+  CoinSource,
   CoinTransactionReason,
   CustomerType,
   LoyaltyEligibility,
@@ -230,6 +231,7 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
               customerId: order.customerId,
               amount: result.points,
               reason: CoinTransactionReason.LOYALTY_EARN,
+              source: CoinSource.LOYALTY,
               orderId: order.id,
               expiresAt,
               remainingAmount: result.points,
@@ -238,7 +240,7 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
           });
           await tx.customer.update({
             where: { id: order.customerId },
-            data: { coinBalance: { increment: result.points } },
+            data: { coinBalance: { increment: result.points }, loyaltyCoinBalance: { increment: result.points } },
           });
           await tx.loyaltyOrderEarn.update({ where: { id: earn.id }, data: { coinTransactionId: coin.id } });
         }
@@ -305,11 +307,15 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
           customerId: earn.customerId,
           amount: -debit,
           reason: CoinTransactionReason.LOYALTY_REVERSAL,
+          source: CoinSource.LOYALTY,
           orderId,
           note: 'Eligible item returned/refunded',
         },
       });
-      await tx.customer.update({ where: { id: earn.customerId }, data: { coinBalance: { decrement: debit } } });
+      await tx.customer.update({
+        where: { id: earn.customerId },
+        data: { coinBalance: { decrement: debit }, loyaltyCoinBalance: { decrement: debit } },
+      });
       pointsReversed += debit;
     }
     return { pointsReversed };
@@ -320,18 +326,21 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
   /** What a customer could spend on an order worth `payableBase` (rupees, goods after coupon). */
   async redemptionOffer(customerId: string, payableBase: number) {
     const settings = await this.getSettings();
-    const customer = await this.prisma.customer.findUniqueOrThrow({ where: { id: customerId }, select: { coinBalance: true } });
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+      select: { loyaltyCoinBalance: true },
+    });
     const pointValueInr = Number(settings.pointValueInr);
     const enabled = settings.isActive && settings.redemptionEnabled;
     return {
       enabled,
-      balance: customer.coinBalance,
+      balance: customer.loyaltyCoinBalance,
       pointValueInr,
       minPoints: settings.minRedeemPoints,
       maxPercent: settings.maxRedemptionPercent,
       maxPoints: enabled
         ? maxRedeemablePoints({
-            balance: customer.coinBalance,
+            balance: customer.loyaltyCoinBalance,
             payableBase,
             maxPercent: settings.maxRedemptionPercent,
             pointValueInr,
@@ -350,8 +359,8 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
   async redeemForOrder(tx: Prisma.TransactionClient, input: { customerId: string; orderId: string; points: number; valueInr: number }) {
     if (input.points <= 0) return;
     const res = await tx.customer.updateMany({
-      where: { id: input.customerId, coinBalance: { gte: input.points } },
-      data: { coinBalance: { decrement: input.points } },
+      where: { id: input.customerId, loyaltyCoinBalance: { gte: input.points } },
+      data: { coinBalance: { decrement: input.points }, loyaltyCoinBalance: { decrement: input.points } },
     });
     if (res.count === 0) throw new BadRequestException('You no longer have enough loyalty points for this redemption');
 
@@ -372,6 +381,7 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
         customerId: input.customerId,
         amount: -input.points,
         reason: CoinTransactionReason.LOYALTY_REDEMPTION,
+        source: CoinSource.LOYALTY,
         orderId: input.orderId,
         note: `Redeemed ${input.points} points (Rs ${input.valueInr.toFixed(2)}) at checkout`,
       },
@@ -393,11 +403,15 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
         customerId,
         amount: owed,
         reason: CoinTransactionReason.LOYALTY_REDEMPTION_REFUND,
+        source: CoinSource.LOYALTY,
         orderId,
         note: 'Order cancelled - redeemed points returned',
       },
     });
-    await tx.customer.update({ where: { id: customerId }, data: { coinBalance: { increment: owed } } });
+    await tx.customer.update({
+      where: { id: customerId },
+      data: { coinBalance: { increment: owed }, loyaltyCoinBalance: { increment: owed } },
+    });
     return owed;
   }
 
@@ -435,11 +449,15 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
               customerId: fresh.customerId,
               amount: -lapse,
               reason: CoinTransactionReason.LOYALTY_EXPIRY,
+              source: CoinSource.LOYALTY,
               orderId: fresh.orderId,
               note: 'Points expired',
             },
           });
-          await tx.customer.update({ where: { id: fresh.customerId }, data: { coinBalance: { decrement: lapse } } });
+          await tx.customer.update({
+            where: { id: fresh.customerId },
+            data: { coinBalance: { decrement: lapse }, loyaltyCoinBalance: { decrement: lapse } },
+          });
           total += lapse;
         }
       });
@@ -488,19 +506,32 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
     const rules = this.rulesFor(settings, channel);
     const customer = await this.prisma.customer.findUniqueOrThrow({
       where: { id: customerId },
-      select: { coinBalance: true },
+      select: { coinBalance: true, loyaltyCoinBalance: true, referralCoinBalance: true },
     });
 
     const soonCutoff = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const [history, lifetime, expiring] = await Promise.all([
+    const [history, lifetime, expiring, referralSettings] = await Promise.all([
       this.prisma.coinTransaction.findMany({
         where: { customerId },
         orderBy: { createdAt: 'desc' },
         take: 50,
         include: { order: { select: { orderNumber: true } } },
       }),
+      // "Earned" means genuinely earned - redemption refunds only give back
+      // coins the customer already had, so they must not inflate this.
       this.prisma.coinTransaction.aggregate({
-        where: { customerId, amount: { gt: 0 } },
+        where: {
+          customerId,
+          amount: { gt: 0 },
+          reason: {
+            in: [
+              CoinTransactionReason.LOYALTY_EARN,
+              CoinTransactionReason.REFERRAL_REFERRER_REWARD,
+              CoinTransactionReason.REFERRAL_REFEREE_REWARD,
+              CoinTransactionReason.MANUAL_ADJUSTMENT,
+            ],
+          },
+        },
         _sum: { amount: true },
       }),
       this.prisma.coinTransaction.aggregate({
@@ -513,17 +544,27 @@ export class LoyaltyService implements OnModuleInit, OnModuleDestroy {
         _sum: { remainingAmount: true },
         _min: { expiresAt: true },
       }),
+      this.prisma.referralSettings.findFirst({ orderBy: { createdAt: 'asc' }, select: { pointValueInr: true } }),
     ]);
+
+    // Each pool is valued at its own program's rate - referral coins are not
+    // necessarily worth the same as loyalty points.
+    const referralPointValueInr = referralSettings ? Number(referralSettings.pointValueInr) : 1;
 
     return {
       enabled: settings.isActive && rules.earnPercent > 0,
       balance: customer.coinBalance,
-      balanceValueInr: round2(customer.coinBalance * rules.pointValueInr),
+      loyaltyBalance: customer.loyaltyCoinBalance,
+      referralBalance: customer.referralCoinBalance,
+      balanceValueInr: round2(
+        customer.loyaltyCoinBalance * rules.pointValueInr + customer.referralCoinBalance * referralPointValueInr,
+      ),
       lifetimeEarned: lifetime._sum.amount ?? 0,
       program: {
         earnPercent: rules.earnPercent,
         pointValueInr: rules.pointValueInr,
         expiryMonths: settings.pointsExpiryMonths ?? null,
+        minEligibleItemAmount: rules.minEligibleItemAmount,
         minEligibleOrderAmount: rules.minEligibleOrderAmount,
         maxRewardPerOrderInr: rules.maxRewardPerOrderInr,
         appliesToDiscountedProducts: rules.appliesToDiscountedProducts,

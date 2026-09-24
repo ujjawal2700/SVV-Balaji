@@ -89,6 +89,8 @@ export class StorefrontOrdersService {
         couponCode: o.couponCode,
         loyaltyRedeemedPoints: o.loyaltyRedeemedPoints,
         loyaltyRedeemedInr: Number(o.loyaltyRedeemedInr),
+        referralRedeemedPoints: o.referralRedeemedPoints,
+        referralRedeemedInr: Number(o.referralRedeemedInr),
         tax: Number(o.taxTotal),
         deliveryFee: Number(o.deliveryFee),
         total: Number(o.total),
@@ -101,7 +103,25 @@ export class StorefrontOrdersService {
         : null,
       timeline: o.events
         .filter((e) => !['SCANNED', 'OTP_FAILED'].includes(e.type)) // internal, not for shoppers
-        .map((e) => ({ type: e.type, at: e.createdAt, note: ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED'].includes(e.type) ? e.note : null })),
+        .map((e) => ({
+          type: e.type,
+          at: e.createdAt,
+          note: ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED'].includes(e.type)
+            ? cleanShopperNote(e.type, e.note)
+            : null,
+        })),
     };
   }
+}
+
+function cleanShopperNote(type: string, note: string | null): string | null {
+  if (!note) return null;
+  if (type === 'PLACED') {
+    if (note.includes('SHIPROCKET') || note.includes('Main Store')) return 'Standard Courier Delivery';
+    if (note.includes('LOCAL')) return 'Express Local Delivery';
+  }
+  if (type === 'SHIPMENT_CREATED') {
+    return note.replace(/Shiprocket/gi, 'Courier Partner');
+  }
+  return note;
 }

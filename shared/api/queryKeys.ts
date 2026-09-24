@@ -268,6 +268,13 @@ export const queryKeys = {
     all: ['referral-settings'] as const,
   },
 
+  walletSettings: {
+    all: ['wallet-settings'] as const,
+  },
+  walletBalance: {
+    customer: (customerId: string) => ['wallet-balance', customerId] as const,
+  },
+
   supportSettings: {
     all: ['support-settings'] as const,
     storefront: (channel?: string) => ['support-settings', 'storefront', channel ?? 'all'] as const,

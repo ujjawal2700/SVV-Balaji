@@ -35,6 +35,8 @@ export function LoyaltyProvider({ children }: { children: ReactNode }) {
       isLoading: signedIn && query.isLoading,
       enabled: signedIn && Boolean(s?.enabled),
       points: signedIn ? (s?.balance ?? 0) : 0,
+      loyaltyPoints: signedIn ? (s?.loyaltyBalance ?? 0) : 0,
+      referralCoins: signedIn ? (s?.referralBalance ?? 0) : 0,
       pointsValueInr: signedIn ? (s?.balanceValueInr ?? 0) : 0,
       lifetimePoints: signedIn ? (s?.lifetimeEarned ?? 0) : 0,
       program: signedIn ? (s?.program ?? null) : null,

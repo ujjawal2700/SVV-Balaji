@@ -24,7 +24,16 @@ export class CheckoutDto {
   items!: CheckoutItemDto[];
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) couponCode?: string;
-  @ApiPropertyOptional({ description: 'Loyalty points to spend' }) @IsOptional() @IsInt() @Min(0) redeemPoints?: number;
+  @ApiPropertyOptional({
+    description:
+      'Loyalty points to spend. In wallet COMBINED mode this is the total wallet coins to spend ' +
+      '(the server decides the loyalty/referral split); redeemReferralPoints must be omitted or 0 then.',
+  })
+  @IsOptional() @IsInt() @Min(0) redeemPoints?: number;
+  @ApiPropertyOptional({
+    description: 'Referral coins to spend. Only meaningful in wallet SEPARATE mode - see redeemPoints.',
+  })
+  @IsOptional() @IsInt() @Min(0) redeemReferralPoints?: number;
   @ApiPropertyOptional({ enum: PaymentMode }) @IsOptional() @IsEnum(PaymentMode) paymentMode?: PaymentMode;
   @ApiPropertyOptional({ description: 'The total the customer was shown; used only to detect a price change' })
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) expectedTotal?: number;

@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SalesChannel } from '@prisma/client';
 import { StorefrontAuthService } from './storefront-auth.service';
 import {
+  ApplyReferralCodeDto,
   ListAccountsQueryDto,
   RegisterRetailerDto,
   RejectAccountDto,
@@ -54,6 +55,20 @@ export class StorefrontAuthController {
   })
   getMyReferralSummary(@CurrentCustomer() customer: CustomerJwtPayload) {
     return this.service.getMyReferralSummary(customer.sub);
+  }
+
+  @Post('referral/apply')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(CustomerJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Attach a referral code to the logged-in customer after signup',
+    description:
+      'Only allowed once and only before the customer\'s first order - use this for someone who ' +
+      'signed up without a code and got one afterwards.',
+  })
+  applyReferralCode(@CurrentCustomer() customer: CustomerJwtPayload, @Body() dto: ApplyReferralCodeDto) {
+    return this.service.applyReferralCode(customer.sub, dto.code);
   }
 
   @Post('otp/request')

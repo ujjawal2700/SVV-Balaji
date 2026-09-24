@@ -89,6 +89,7 @@ export function CheckoutPage() {
   const [couponInput, setCouponInput] = useState('');
   const [couponCode, setCouponCode] = useState<string>(() => sessionStorage.getItem(COUPON_KEY) ?? '');
   const [redeem, setRedeem] = useState(0);
+  const [redeemReferral, setRedeemReferral] = useState(0);
   const [mode, setMode] = useState<PaymentMode | undefined>();
   const [placing, setPlacing] = useState(false);
   const [mockSession, setMockSession] = useState<CheckoutSession | null>(null);
@@ -111,10 +112,11 @@ export function CheckoutPage() {
             items: cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
             couponCode: couponCode || undefined,
             redeemPoints: redeem || undefined,
+            redeemReferralPoints: redeemReferral || undefined,
             paymentMode: mode,
           }
         : null,
-    [addressId, cart.lines, couponCode, redeem, mode],
+    [addressId, cart.lines, couponCode, redeem, redeemReferral, mode],
   );
 
   const quoteQuery = useQuery({
@@ -266,7 +268,7 @@ export function CheckoutPage() {
   const f = quote?.fulfillment;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 110 }}>
+    <div className="checkout-page" style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 110 }}>
       {/* Sticky Header */}
       <header
         style={{
@@ -316,8 +318,8 @@ export function CheckoutPage() {
       </header>
 
       {/* Main Content Area */}
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
-        <AntRow gutter={[24, 24]}>
+      <main className="checkout-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
+        <AntRow gutter={[{ xs: 0, lg: 24 }, { xs: 8, lg: 24 }]}>
           {/* Left Column: Form Details (Address, Fulfillment, Coupons, Payment) */}
           <Col xs={24} lg={15} xl={16}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -331,7 +333,7 @@ export function CheckoutPage() {
                 extra={
                   (addresses.data ?? []).length > 0 ? (
                     <Button type="link" icon={<PlusOutlined />} onClick={() => setAddressModal(true)} style={{ color: '#f97316', padding: 0, fontWeight: 600 }}>
-                      + Add New
+                      Add New Address
                     </Button>
                   ) : null
                 }
@@ -395,50 +397,40 @@ export function CheckoutPage() {
                 )}
               </Card>
 
-              {/* 2. Delivery & Fulfillment Method */}
+              {/* 2. Delivery & Fulfillment Method (Compact Approx Date View) */}
               <Card
                 title={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, color: '#1e293b' }}>
-                    {f?.method === 'LOCAL' ? <ThunderboltOutlined style={{ color: '#16a34a' }} /> : <CarOutlined style={{ color: '#2563eb' }} />}
-                    Delivery &amp; Fulfillment
+                    <CarOutlined style={{ color: '#16a34a' }} /> Delivery &amp; Fulfillment
                   </div>
                 }
                 style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
               >
                 {quoteQuery.isLoading ? (
-                  <Skeleton active paragraph={{ rows: 2 }} />
+                  <Skeleton active paragraph={{ rows: 1 }} />
                 ) : quoteError ? (
                   <Alert type="error" showIcon message="Delivery Quote Error" description={quoteError} />
                 ) : f ? (
-                  <div style={{ background: f.method === 'LOCAL' ? '#f0fdf4' : '#eff6ff', borderRadius: 12, padding: 16, border: f.method === 'LOCAL' ? '1px solid #bbf7d0' : '1px solid #bfdbfe' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Tag color={f.method === 'LOCAL' ? 'green' : 'blue'} style={{ fontSize: 12, padding: '2px 8px', fontWeight: 700 }}>
-                          {f.method === 'LOCAL' ? '⚡ EXPRESS LOCAL DELIVERY' : '📦 COURIER SHIPMENT'}
-                        </Tag>
-                        <Typography.Text strong style={{ fontSize: 14, color: '#1e293b' }}>
-                          From: {f.nodeName}
+                  <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
+                        <CarOutlined style={{ fontSize: 20 }} />
+                      </div>
+                      <div>
+                        <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+                          Approximate Delivery
+                        </Typography.Text>
+                        <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                          Estimated Delivery: {f.etaLabel}
                         </Typography.Text>
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: f.method === 'LOCAL' ? '#166534' : '#1e40af' }}>
-                        ETA: {f.etaLabel}
-                      </div>
                     </div>
-                    <Typography.Text style={{ fontSize: 13, color: '#475569', display: 'block' }}>
-                      {f.reason}
-                    </Typography.Text>
-                    {f.method === 'SHIPROCKET' && address && !address.latitude ? (
-                      <Alert
-                        style={{ marginTop: 12, borderRadius: 8 }}
-                        type="info"
-                        showIcon
-                        message="Want faster doorstep delivery?"
-                        description="Click 'Add New' or edit your address to Pin your exact GPS location for local outlet fulfillment."
-                      />
-                    ) : null}
+                    <Tag color="green" style={{ borderRadius: 6, fontWeight: 600, margin: 0, padding: '2px 10px' }}>
+                      {quote?.totals?.deliveryFee === 0 ? 'FREE DELIVERY' : 'STANDARD'}
+                    </Tag>
                   </div>
                 ) : (
-                  <Typography.Text type="secondary">Select a delivery address to calculate shipping &amp; delivery window.</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 13 }}>Select a delivery address to view approximate delivery date.</Typography.Text>
                 )}
               </Card>
 
@@ -518,52 +510,142 @@ export function CheckoutPage() {
                   </div>
                 )}
 
-                {quote?.loyalty.enabled && quote.loyalty.balance > 0 ? (
+                {quote?.wallet.mode === 'COMBINED' && quote.wallet.combined?.enabled && quote.wallet.combined.balance > 0 ? (
                   <>
                     <Divider style={{ margin: '16px 0' }} />
-                    <div
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 12,
-                        padding: '14px 16px',
-                      }}
-                    >
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
-                            Redeem Loyalty Coins
+                            Redeem Wallet Coins
                           </Typography.Text>
                           <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                            Available: <strong>{quote.loyalty.balance} pts</strong> (Worth ₹{(quote.loyalty.balance * quote.loyalty.pointValueInr).toFixed(2)})
+                            Available: <strong>{quote.wallet.combined.balance} coins</strong> (referral + loyalty combined, worth ₹
+                            {(quote.wallet.combined.balance * quote.wallet.combined.pointValueInr).toFixed(2)})
                           </div>
                         </div>
                         <Switch
                           checked={redeem > 0}
-                          disabled={quote.loyalty.maxPoints === 0}
-                          onChange={(on) => setRedeem(on ? quote.loyalty.maxPoints : 0)}
+                          disabled={quote.wallet.combined.maxPoints === 0}
+                          onChange={(on) => setRedeem(on ? quote.wallet.combined!.maxPoints : 0)}
                         />
                       </div>
                       {redeem > 0 ? (
                         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <InputNumber
                             size="middle"
-                            min={quote.loyalty.minPoints || 1}
-                            max={quote.loyalty.maxPoints}
+                            min={quote.wallet.combined.minPoints || 1}
+                            max={quote.wallet.combined.maxPoints}
                             precision={0}
                             value={redeem}
                             onChange={(v) => setRedeem(v ?? 0)}
-                            addonAfter="pts"
+                            addonAfter="coins"
                             style={{ width: 160 }}
                           />
                           <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>
-                            − {formatInr(redeem * quote.loyalty.pointValueInr)} saved on this order
+                            − {formatInr(redeem * quote.wallet.combined.pointValueInr)} saved on this order
                           </Typography.Text>
                         </div>
                       ) : null}
                     </div>
                   </>
-                ) : null}
+                ) : (
+                  <>
+                    {quote?.loyalty.enabled && quote.loyalty.balance > 0 ? (
+                      <>
+                        <Divider style={{ margin: '16px 0' }} />
+                        <div
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 12,
+                            padding: '14px 16px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                                Redeem Loyalty Coins
+                              </Typography.Text>
+                              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                Available: <strong>{quote.loyalty.balance} pts</strong> (Worth ₹{(quote.loyalty.balance * quote.loyalty.pointValueInr).toFixed(2)})
+                              </div>
+                            </div>
+                            <Switch
+                              checked={redeem > 0}
+                              disabled={quote.loyalty.maxPoints === 0}
+                              onChange={(on) => setRedeem(on ? quote.loyalty.maxPoints : 0)}
+                            />
+                          </div>
+                          {redeem > 0 ? (
+                            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <InputNumber
+                                size="middle"
+                                min={quote.loyalty.minPoints || 1}
+                                max={quote.loyalty.maxPoints}
+                                precision={0}
+                                value={redeem}
+                                onChange={(v) => setRedeem(v ?? 0)}
+                                addonAfter="pts"
+                                style={{ width: 160 }}
+                              />
+                              <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>
+                                − {formatInr(redeem * quote.loyalty.pointValueInr)} saved on this order
+                              </Typography.Text>
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+
+                    {quote?.referral.enabled && quote.referral.balance > 0 ? (
+                      <>
+                        <Divider style={{ margin: '16px 0' }} />
+                        <div
+                          style={{
+                            background: '#fff7ed',
+                            border: '1px solid #fed7aa',
+                            borderRadius: 12,
+                            padding: '14px 16px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                                Redeem Referral Coins
+                              </Typography.Text>
+                              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                Available: <strong>{quote.referral.balance} coins</strong> (Worth ₹{(quote.referral.balance * quote.referral.pointValueInr).toFixed(2)})
+                              </div>
+                            </div>
+                            <Switch
+                              checked={redeemReferral > 0}
+                              disabled={quote.referral.maxPoints === 0}
+                              onChange={(on) => setRedeemReferral(on ? quote.referral.maxPoints : 0)}
+                            />
+                          </div>
+                          {redeemReferral > 0 ? (
+                            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              <InputNumber
+                                size="middle"
+                                min={quote.referral.minPoints || 1}
+                                max={quote.referral.maxPoints}
+                                precision={0}
+                                value={redeemReferral}
+                                onChange={(v) => setRedeemReferral(v ?? 0)}
+                                addonAfter="coins"
+                                style={{ width: 160 }}
+                              />
+                              <Typography.Text style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>
+                                − {formatInr(redeemReferral * quote.referral.pointValueInr)} saved on this order
+                              </Typography.Text>
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                )}
               </Card>
 
               {/* 4. Payment Options */}
@@ -645,28 +727,57 @@ export function CheckoutPage() {
                   }
                   style={{ borderRadius: 14, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
                 >
-                  <div style={{ maxHeight: 240, overflowY: 'auto', paddingRight: 4 }}>
+                  <div style={{ maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
                     {quote.lines.map((l) => (
                       <div
                         key={l.productId}
                         style={{
                           display: 'flex',
-                          justifyContent: 'space-between',
                           alignItems: 'center',
-                          padding: '8px 0',
+                          gap: 10,
+                          padding: '10px 0',
                           borderBottom: '1px solid #f1f5f9',
                           fontSize: 13,
                         }}
                       >
-                        <div style={{ flex: 1, paddingRight: 8 }}>
-                          <Typography.Text strong style={{ fontSize: 13, color: '#334155', display: 'block' }}>
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            background: '#f8fafc',
+                            border: '1px solid #f1f5f9',
+                            borderRadius: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            overflow: 'hidden',
+                            padding: 3,
+                          }}
+                        >
+                          {l.image ? (
+                            <img
+                              src={l.image}
+                              alt={l.name}
+                              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+                            />
+                          ) : (
+                            <ShoppingOutlined style={{ fontSize: 16, color: '#cbd5e1' }} />
+                          )}
+                        </div>
+                        <div style={{ flex: 1, paddingRight: 8, minWidth: 0 }}>
+                          <Typography.Text
+                            strong
+                            ellipsis
+                            style={{ fontSize: 13, color: '#334155', display: 'block' }}
+                          >
                             {l.name}
                           </Typography.Text>
                           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                             Qty: {l.quantity}
                           </Typography.Text>
                         </div>
-                        <Typography.Text strong style={{ fontSize: 13, color: '#0f172a' }}>
+                        <Typography.Text strong style={{ fontSize: 13, color: '#0f172a', flexShrink: 0 }}>
                           {formatInr(l.gross)}
                         </Typography.Text>
                       </div>
@@ -689,6 +800,13 @@ export function CheckoutPage() {
                       <PriceRow
                         label="Loyalty Coins Used"
                         value={`− ${formatInr(quote.totals.loyaltyDiscount)}`}
+                        green
+                      />
+                    ) : null}
+                    {quote.totals.referralDiscount > 0 ? (
+                      <PriceRow
+                        label="Referral Coins Used"
+                        value={`− ${formatInr(quote.totals.referralDiscount)}`}
                         green
                       />
                     ) : null}
@@ -786,7 +904,7 @@ export function CheckoutPage() {
           left: 0,
           right: 0,
           background: '#fff',
-          padding: '12px 16px',
+          padding: '12px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
           boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
           zIndex: 99,
           borderTop: '1px solid #e2e8f0',
@@ -866,6 +984,26 @@ export function CheckoutPage() {
           </Button>
         </Space>
       </Modal>
+
+      <style>{`
+        @media (max-width: 767px) {
+          .checkout-main {
+            padding: 12px 10px !important;
+          }
+          .checkout-page .ant-card-body {
+            padding: 14px !important;
+          }
+          .checkout-page .ant-card-head {
+            padding: 0 14px !important;
+            min-height: 44px !important;
+          }
+        }
+        @media (max-width: 991px) {
+          .checkout-page {
+            padding-bottom: 100px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

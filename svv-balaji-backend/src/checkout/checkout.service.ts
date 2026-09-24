@@ -23,7 +23,7 @@ import {
 } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { SequenceService } from '../common/sequence.service';
-import { LoyaltyService } from '../loyalty/loyalty.service';
+import { WalletService } from '../wallet/wallet.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEventsService } from '../realtime/order-events.service';
@@ -60,13 +60,25 @@ export interface StoredQuote {
     gross: number; discount: number; taxable: number; tax: number; total: number;
   }>;
   totals: {
-    subtotal: number; couponDiscount: number; loyaltyDiscount: number; discount: number;
+    subtotal: number; couponDiscount: number; loyaltyDiscount: number; referralDiscount: number; discount: number;
     taxable: number; tax: number; deliveryFee: number; totalPayable: number;
   };
   coupon: { code: string; discount: number } | null;
   loyalty: {
     enabled: boolean; balance: number; pointValueInr: number;
     redeemPoints: number; maxPoints: number; minPoints: number;
+  };
+  referral: {
+    enabled: boolean; balance: number; pointValueInr: number;
+    redeemPoints: number; maxPoints: number; minPoints: number;
+  };
+  /** Which redemption mode this quote was priced under, and the pooled figures when COMBINED. */
+  wallet: {
+    mode: 'SEPARATE' | 'COMBINED';
+    combined: {
+      enabled: boolean; balance: number; pointValueInr: number;
+      maxPoints: number; minPoints: number; redeemPoints: number;
+    } | null;
   };
   payment: {
     mode: PaymentMode;
@@ -102,7 +114,7 @@ export class CheckoutService {
     private readonly router: FulfillmentRouterService,
     private readonly addresses: AddressesService,
     private readonly coupons: CouponsService,
-    private readonly loyalty: LoyaltyService,
+    private readonly wallet: WalletService,
     private readonly reservations: StockReservationService,
     private readonly sales: SalesService,
     private readonly events: OrderEventsService,
@@ -169,22 +181,63 @@ export class CheckoutService {
     }
     const couponDiscount = coupon?.discount ?? 0;
 
-    // 6. Loyalty points spent (only if the program allows it, never more than the caps).
-    const offer = await this.loyalty.redemptionOffer(customer.id, grossSubtotal - couponDiscount);
-    const wanted = Math.max(0, Math.floor(dto.redeemPoints ?? 0));
-    if (wanted > 0) {
-      if (!offer.enabled) throw new BadRequestException('Loyalty points cannot be redeemed right now');
-      if (wanted > offer.balance) throw new BadRequestException('You do not have that many loyalty points');
-      if (wanted < offer.minPoints) throw new BadRequestException(`Redeem at least ${offer.minPoints} points`);
-      if (wanted > offer.maxPoints) throw new BadRequestException(`You can redeem at most ${offer.maxPoints} points on this order`);
+    // 6. Wallet coins spent - referral and loyalty, only if their program allows it, never more
+    // than their caps. Mode (SEPARATE vs COMBINED) comes from Super Admin's wallet settings.
+    const offer = await this.wallet.redemptionOffer(customer.id, grossSubtotal - couponDiscount);
+    const loyaltyPool = offer.pools.find((p) => p.source === 'LOYALTY')!;
+    const referralPool = offer.pools.find((p) => p.source === 'REFERRAL')!;
+    const wantedLoyalty = Math.max(0, Math.floor(dto.redeemPoints ?? 0));
+    const wantedReferral = Math.max(0, Math.floor(dto.redeemReferralPoints ?? 0));
+
+    let appliedLoyaltyPoints = 0;
+    let appliedReferralPoints = 0;
+    let loyaltyDiscount = 0;
+    let referralDiscount = 0;
+
+    if (offer.mode === 'SEPARATE') {
+      if (wantedLoyalty > 0) {
+        if (!loyaltyPool.enabled) throw new BadRequestException('Loyalty points cannot be redeemed right now');
+        if (wantedLoyalty > loyaltyPool.balance) throw new BadRequestException('You do not have that many loyalty points');
+        if (wantedLoyalty < loyaltyPool.minPoints) throw new BadRequestException(`Redeem at least ${loyaltyPool.minPoints} loyalty points`);
+        if (wantedLoyalty > loyaltyPool.maxPoints) throw new BadRequestException(`You can redeem at most ${loyaltyPool.maxPoints} loyalty points on this order`);
+        appliedLoyaltyPoints = wantedLoyalty;
+        loyaltyDiscount = round2(wantedLoyalty * loyaltyPool.pointValueInr);
+      }
+      if (wantedReferral > 0) {
+        if (!referralPool.enabled) throw new BadRequestException('Referral coins cannot be redeemed right now');
+        if (wantedReferral > referralPool.balance) throw new BadRequestException('You do not have that many referral coins');
+        if (wantedReferral < referralPool.minPoints) throw new BadRequestException(`Redeem at least ${referralPool.minPoints} referral coins`);
+        if (wantedReferral > referralPool.maxPoints) throw new BadRequestException(`You can redeem at most ${referralPool.maxPoints} referral coins on this order`);
+        appliedReferralPoints = wantedReferral;
+        referralDiscount = round2(wantedReferral * referralPool.pointValueInr);
+      }
+    } else {
+      // COMBINED: one pooled balance and cap - the customer spends a single
+      // number (redeemPoints), the server decides how much comes from each pool.
+      if (wantedReferral > 0) {
+        throw new BadRequestException('The wallet is in combined mode - send the total to spend as redeemPoints');
+      }
+      const combined = offer.combined!;
+      if (wantedLoyalty > 0) {
+        if (!combined.enabled) throw new BadRequestException('Wallet coins cannot be redeemed right now');
+        if (wantedLoyalty > combined.balance) throw new BadRequestException('You do not have that many wallet coins');
+        if (wantedLoyalty < combined.minPoints) throw new BadRequestException(`Redeem at least ${combined.minPoints} wallet coins`);
+        if (wantedLoyalty > combined.maxPoints) throw new BadRequestException(`You can redeem at most ${combined.maxPoints} wallet coins on this order`);
+        const split = await this.wallet.splitCombinedPoints(customer.id, wantedLoyalty);
+        appliedLoyaltyPoints = split.loyaltyPoints;
+        appliedReferralPoints = split.referralPoints;
+        const totalDiscount = round2(wantedLoyalty * combined.pointValueInr);
+        loyaltyDiscount = round2(appliedLoyaltyPoints * combined.pointValueInr);
+        referralDiscount = round2(totalDiscount - loyaltyDiscount);
+      }
     }
-    const loyaltyDiscount = round2(wanted * offer.pointValueInr);
+    const walletDiscount = round2(loyaltyDiscount + referralDiscount);
 
     // 7. Fee depends on the goods total AFTER discounts; then final figures.
     const lineInputs = priced.map((l) => ({ key: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, gstRatePercent: l.gstRatePercent }));
-    const goods = priceCart(lineInputs, couponDiscount + loyaltyDiscount, 0);
+    const goods = priceCart(lineInputs, couponDiscount + walletDiscount, 0);
     const fee = deliveryFeeFor(route.method, b2b, goods.goodsTotal, settings.fees);
-    const cart = priceCart(lineInputs, couponDiscount + loyaltyDiscount, fee);
+    const cart = priceCart(lineInputs, couponDiscount + walletDiscount, fee);
 
     // 8. Which payment modes may be used, and which is selected.
     const payment = await this.paymentOptions(customer, cart.totalPayable, settings);
@@ -221,11 +274,28 @@ export class CheckoutService {
         };
       }),
       totals: {
-        subtotal: cart.subtotal, couponDiscount, loyaltyDiscount, discount: cart.discount,
+        subtotal: cart.subtotal, couponDiscount, loyaltyDiscount, referralDiscount, discount: cart.discount,
         taxable: cart.taxable, tax: cart.tax, deliveryFee: cart.deliveryFee, totalPayable: cart.totalPayable,
       },
       coupon: coupon ? { code: coupon.code, discount: coupon.discount } : null,
-      loyalty: { enabled: offer.enabled, balance: offer.balance, pointValueInr: offer.pointValueInr, redeemPoints: wanted, maxPoints: offer.maxPoints, minPoints: offer.minPoints },
+      loyalty: {
+        enabled: loyaltyPool.enabled, balance: loyaltyPool.balance, pointValueInr: loyaltyPool.pointValueInr,
+        redeemPoints: appliedLoyaltyPoints, maxPoints: loyaltyPool.maxPoints, minPoints: loyaltyPool.minPoints,
+      },
+      referral: {
+        enabled: referralPool.enabled, balance: referralPool.balance, pointValueInr: referralPool.pointValueInr,
+        redeemPoints: appliedReferralPoints, maxPoints: referralPool.maxPoints, minPoints: referralPool.minPoints,
+      },
+      wallet: {
+        mode: offer.mode,
+        combined: offer.combined
+          ? {
+              enabled: offer.combined.enabled, balance: offer.combined.balance, pointValueInr: offer.combined.pointValueInr,
+              maxPoints: offer.combined.maxPoints, minPoints: offer.combined.minPoints,
+              redeemPoints: appliedLoyaltyPoints + appliedReferralPoints,
+            }
+          : null,
+      },
       payment: { mode, allowedModes: payment.allowedModes, codUnavailableReason: payment.codUnavailableReason, creditUnavailableReason: payment.creditUnavailableReason },
     };
   }
@@ -539,6 +609,8 @@ export class CheckoutService {
         couponCode: quote.coupon?.code,
         loyaltyRedeemedPoints: quote.loyalty.redeemPoints,
         loyaltyRedeemedInr: t.loyaltyDiscount,
+        referralRedeemedPoints: quote.referral.redeemPoints,
+        referralRedeemedInr: t.referralDiscount,
         paymentMode: mode,
         paymentStatus: online ? PaymentStatus.PAID : PaymentStatus.PENDING,
         paymentTerms: quote.channel === SalesChannel.B2C ? PaymentTerms.PREPAID : customer.paymentTerms,
@@ -578,8 +650,15 @@ export class CheckoutService {
       const row = await tx.coupon.findUniqueOrThrow({ where: { id: applied.id } });
       await this.coupons.redeem(tx, { coupon: { ...applied, discount: quote.coupon.discount }, customerId: customer.id, orderId: order.id, limit: row.usageLimit });
     }
-    if (quote.loyalty.redeemPoints > 0) {
-      await this.loyalty.redeemForOrder(tx, { customerId: customer.id, orderId: order.id, points: quote.loyalty.redeemPoints, valueInr: t.loyaltyDiscount });
+    if (quote.loyalty.redeemPoints > 0 || quote.referral.redeemPoints > 0) {
+      await this.wallet.redeemForOrder(tx, {
+        customerId: customer.id,
+        orderId: order.id,
+        loyaltyPoints: quote.loyalty.redeemPoints,
+        loyaltyValueInr: t.loyaltyDiscount,
+        referralPoints: quote.referral.redeemPoints,
+        referralValueInr: t.referralDiscount,
+      });
     }
 
     await tx.paymentTransaction.updateMany({
@@ -592,7 +671,11 @@ export class CheckoutService {
     });
     await tx.checkoutSession.update({ where: { id: session.id }, data: { status: CheckoutSessionStatus.COMPLETED, orderId: order.id } });
     await tx.orderEvent.create({
-      data: { orderId: order.id, type: 'PLACED', note: `${quote.fulfillment.method} from ${quote.fulfillment.nodeName}` },
+      data: {
+        orderId: order.id,
+        type: 'PLACED',
+        note: quote.fulfillment.method === 'LOCAL' ? 'Express Local Delivery' : 'Standard Courier Delivery',
+      },
     });
     return order;
   }

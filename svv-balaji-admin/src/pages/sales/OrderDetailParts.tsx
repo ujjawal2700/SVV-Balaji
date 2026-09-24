@@ -214,71 +214,177 @@ export function RecipientBlocks({ data, lateness }: { data: any; lateness: { lat
   const promised = data.etaMax ?? data.requiredByDate;
 
   return (
-    <>
-      <Card size="small" title={<Space><UserOutlined style={{ color: '#1677ff' }} /><span>Recipient Contact Details</span></Space>} style={{ borderRadius: 8 }}>
-        <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
-          <Descriptions.Item label="Customer Full Name"><Text strong style={{ fontSize: 13 }}>{data.customer?.name ?? DASH}</Text></Descriptions.Item>
-          <Descriptions.Item label="Primary Mobile Number">
-            <Space align="center">
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {/* Recipient Contact Details */}
+      <Card
+        size="small"
+        title={
+          <Space>
+            <UserOutlined style={{ color: '#1677ff' }} />
+            <span style={{ fontWeight: 600 }}>Recipient Contact Details</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[20, 16]}>
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Customer Full Name
+            </Text>
+            <Text strong style={{ fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap' }}>
+              {data.customer?.name ?? DASH}
+            </Text>
+          </Col>
+
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Primary Mobile Number
+            </Text>
+            <Space align="center" style={{ marginTop: 2, flexWrap: 'nowrap' }}>
               <PhoneOutlined style={{ color: '#1677ff' }} />
-              <Text strong style={{ fontSize: 13 }}>{phone ?? DASH}</Text>
+              <Text strong style={{ fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                {phone ?? DASH}
+              </Text>
               {phone ? (
-                <Button type="primary" size="small" style={{ backgroundColor: '#25D366', borderColor: '#25D366', borderRadius: 4, height: 24, fontSize: 11 }} icon={<WhatsAppOutlined />} onClick={() => openWhatsApp(phone)}>WhatsApp</Button>
+                <Button
+                  type="primary"
+                  size="small"
+                  style={{ backgroundColor: '#25D366', borderColor: '#25D366', borderRadius: 6, height: 26, fontSize: 11, padding: '0 10px', marginLeft: 4 }}
+                  icon={<WhatsAppOutlined />}
+                  onClick={() => openWhatsApp(phone)}
+                >
+                  WhatsApp
+                </Button>
               ) : null}
             </Space>
-          </Descriptions.Item>
-          <Descriptions.Item label="Delivery Contact">
-            <Text style={{ fontSize: 12 }}>{snap ? `${snap.fullName} · ${snap.phone}` : DASH}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="Account Type">
-            <Tag color="purple">{data.channel} · {data.source === 'STOREFRONT' ? 'Customer app order' : 'Staff-placed order'} · {data.customer?.customerCode ?? DASH}</Tag>
-          </Descriptions.Item>
-        </Descriptions>
+          </Col>
+
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Delivery Contact
+            </Text>
+            <Text style={{ fontSize: 13, color: '#334155' }}>
+              {snap ? `${snap.fullName} · ${snap.phone}` : DASH}
+            </Text>
+          </Col>
+
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+              Account Type
+            </Text>
+            <Tag color="purple" style={{ borderRadius: 6, padding: '2px 8px', fontSize: 12, margin: 0 }}>
+              {data.channel} · {data.source === 'STOREFRONT' ? 'Customer app order' : 'Staff-placed order'} · {data.customer?.customerCode ?? DASH}
+            </Tag>
+          </Col>
+        </Row>
       </Card>
 
-      <Card size="small" title={<Space><EnvironmentOutlined style={{ color: '#ff4d4f' }} /><span>Shipping Address & Location</span></Space>} style={{ borderRadius: 8 }}>
-        <Descriptions bordered size="small" column={1}>
-          <Descriptions.Item label="Full Delivery Address">
-            <Space align="start">
-              <EnvironmentOutlined style={{ color: '#1677ff', marginTop: 4 }} />
-              <Text strong style={{ fontSize: 12 }}>{formatAddress(data)}</Text>
+      {/* Shipping Address & Location */}
+      <Card
+        size="small"
+        title={
+          <Space>
+            <EnvironmentOutlined style={{ color: '#ef4444' }} />
+            <span style={{ fontWeight: 600 }}>Shipping Address & Location</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[20, 14]}>
+          <Col xs={24}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+              Full Delivery Address
+            </Text>
+            <Space align="start" size={8}>
+              <EnvironmentOutlined style={{ color: '#1677ff', marginTop: 3, fontSize: 15 }} />
+              <Text strong style={{ fontSize: 13, color: '#1e293b', lineHeight: '1.5' }}>
+                {formatAddress(data)}
+              </Text>
             </Space>
-          </Descriptions.Item>
-          <Descriptions.Item label="PIN Code & GPS Pin">
-            <Space align="center" wrap>
-              <Tag color="blue" style={{ fontWeight: 600 }}>PIN: {snap?.pincode ?? DASH}</Tag>
+          </Col>
+
+          <Col xs={24}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+              PIN Code & GPS Pin
+            </Text>
+            <Space align="center" wrap size={8}>
+              <Tag color="blue" style={{ fontWeight: 600, borderRadius: 6, padding: '2px 8px' }}>
+                PIN: {snap?.pincode ?? DASH}
+              </Tag>
               {lat != null && lng != null ? (
                 <>
-                  <Tag color="cyan" style={{ fontWeight: 600 }}>GPS: {Number(lat).toFixed(4)}°, {Number(lng).toFixed(4)}°</Tag>
-                  <Button type="link" size="small" icon={<LinkOutlined />} style={{ padding: 0 }} onClick={() => window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank')}>View on Google Maps</Button>
+                  <Tag color="cyan" style={{ fontWeight: 600, borderRadius: 6, padding: '2px 8px' }}>
+                    GPS: {Number(lat).toFixed(4)}°, {Number(lng).toFixed(4)}°
+                  </Tag>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<LinkOutlined />}
+                    style={{ padding: 0, fontWeight: 500 }}
+                    onClick={() => window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank')}
+                  >
+                    View on Google Maps
+                  </Button>
                 </>
-              ) : <Tag>Location not pinned by the customer</Tag>}
-              {data.distanceKm ? <Tag color="green">{Number(data.distanceKm).toFixed(1)} km from {data.warehouse?.name}</Tag> : null}
-            </Space>
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
-
-      <Card size="small" title={<Space><CalendarOutlined style={{ color: '#52c41a' }} /><span>Delivery SLA & Timestamps</span></Space>} style={{ borderRadius: 8 }}>
-        <Row gutter={[16, 16]}>
-          <Col span={8}>
-            <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{data.etaMax ? 'Promised Delivery Window (ends):' : 'Promised Delivery Date:'}</Text>
-            <Text strong style={{ fontSize: 13, color: '#1f1f1f' }}>{promised ? (data.etaMax ? formatDateTime(promised) : formatDate(promised)) : DASH}</Text>
-          </Col>
-          <Col span={8}>
-            <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Actual Dispatch Timestamp:</Text>
-            <Text style={{ fontSize: 12 }}>{data.dispatchedAt ? formatDateTime(data.dispatchedAt) : 'Not dispatched yet'}</Text>
-          </Col>
-          <Col span={8}>
-            <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Actual Delivery Timestamp:</Text>
-            <Space direction="vertical" size={0}>
-              <Text style={{ fontSize: 12 }}>{data.deliveredAt ? formatDateTime(data.deliveredAt) : 'Not delivered yet'}</Text>
-              {lateness ? <Tag color={lateness.late ? 'error' : 'success'} style={{ marginTop: 2, fontSize: 10 }}>{lateness.label}</Tag> : null}
+              ) : (
+                <Tag style={{ borderRadius: 6, padding: '2px 8px' }}>Location not pinned by the customer</Tag>
+              )}
+              {data.distanceKm ? (
+                <Tag color="green" style={{ fontWeight: 600, borderRadius: 6, padding: '2px 8px' }}>
+                  {Number(data.distanceKm).toFixed(1)} km from {data.warehouse?.name}
+                </Tag>
+              ) : null}
             </Space>
           </Col>
         </Row>
       </Card>
-    </>
+
+      {/* Delivery SLA & Timestamps */}
+      <Card
+        size="small"
+        title={
+          <Space>
+            <CalendarOutlined style={{ color: '#10b981' }} />
+            <span style={{ fontWeight: 600 }}>Delivery SLA & Timestamps</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={8}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              {data.etaMax ? 'Promised Delivery Window' : 'Promised Delivery Date'}
+            </Text>
+            <Text strong style={{ fontSize: 13, color: '#0f172a' }}>
+              {promised ? (data.etaMax ? formatDateTime(promised) : formatDate(promised)) : DASH}
+            </Text>
+          </Col>
+          <Col xs={24} sm={8}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Actual Dispatch Timestamp
+            </Text>
+            <Text style={{ fontSize: 13, color: '#334155' }}>
+              {data.dispatchedAt ? formatDateTime(data.dispatchedAt) : 'Not dispatched yet'}
+            </Text>
+          </Col>
+          <Col xs={24} sm={8}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Actual Delivery Timestamp
+            </Text>
+            <Space direction="vertical" size={2}>
+              <Text style={{ fontSize: 13, color: '#334155' }}>
+                {data.deliveredAt ? formatDateTime(data.deliveredAt) : 'Not delivered yet'}
+              </Text>
+              {lateness ? (
+                <Tag color={lateness.late ? 'error' : 'success'} style={{ borderRadius: 4, fontSize: 11, margin: 0 }}>
+                  {lateness.label}
+                </Tag>
+              ) : null}
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+    </Space>
   );
 }
 
@@ -300,63 +406,175 @@ export function LogisticsBlocks({ data }: { data: any }) {
   const ship = data.shipment;
 
   return (
-    <>
-      <Card size="small" title={<Space><InboxOutlined style={{ color: '#fa8c16' }} /><span>Packaging & Weight Breakdown</span></Space>} style={{ borderRadius: 8 }}>
-        <Descriptions bordered size="small" column={1}>
-          <Descriptions.Item label="Secondary Packaging"><Text type="secondary">Not recorded — cartons and crates are not tracked yet</Text></Descriptions.Item>
-          <Descriptions.Item label="Weight">
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Card
+        size="small"
+        title={
+          <Space>
+            <InboxOutlined style={{ color: '#fa8c16' }} />
+            <span style={{ fontWeight: 600 }}>Packaging & Weight Breakdown</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[20, 16]}>
+          <Col xs={24}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b' }}>
+              Secondary Packaging
+            </Text>
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              Not recorded — cartons and crates are not tracked yet
+            </Text>
+          </Col>
+          <Col xs={24}>
             <Row gutter={16} align="middle">
-              <Col span={8}><Statistic title={<Text type="secondary" style={{ fontSize: 11 }}>Net Weight (packs × pack weight)</Text>} value={live.length ? `${netKg.toFixed(2)} KG` : DASH} valueStyle={{ fontSize: 14, fontWeight: 700 }} /></Col>
-              <Col span={8}><Statistic title={<Text type="secondary" style={{ fontSize: 11 }}>Gross Weight</Text>} value="Not recorded" valueStyle={{ fontSize: 13, color: '#8c8c8c' }} /></Col>
-              <Col span={8}><Statistic title={<Text type="secondary" style={{ fontSize: 11 }}>Tare Weight</Text>} value="Not recorded" valueStyle={{ fontSize: 13, color: '#8c8c8c' }} /></Col>
+              <Col span={8}>
+                <Statistic
+                  title={<Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Net Weight (packs × weight)</Text>}
+                  value={live.length ? `${netKg.toFixed(2)} KG` : DASH}
+                  valueStyle={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title={<Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Gross Weight</Text>}
+                  value="Not recorded"
+                  valueStyle={{ fontSize: 13, color: '#94a3b8' }}
+                />
+              </Col>
+              <Col span={8}>
+                <Statistic
+                  title={<Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Tare Weight</Text>}
+                  value="Not recorded"
+                  valueStyle={{ fontSize: 13, color: '#94a3b8' }}
+                />
+              </Col>
             </Row>
-          </Descriptions.Item>
-        </Descriptions>
+          </Col>
+        </Row>
       </Card>
 
-      <Card size="small" title={<Space><CheckCircleOutlined style={{ color: '#52c41a' }} /><span>Dispatch Checkpoints & QA Sign-off</span></Space>} style={{ borderRadius: 8 }}>
-        <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
-          <Descriptions.Item label="Packed Date & Time">
-            {packedEvent ? <Space size={6}><CheckCircleOutlined style={{ color: '#52c41a' }} /><Text strong style={{ fontSize: 12 }}>{formatDateTime(packedEvent.createdAt)}</Text></Space> : <Text type="secondary">Not packed yet</Text>}
-          </Descriptions.Item>
-          <Descriptions.Item label="QA Sign-off (finished batch)">
+      <Card
+        size="small"
+        title={
+          <Space>
+            <CheckCircleOutlined style={{ color: '#10b981' }} />
+            <span style={{ fontWeight: 600 }}>Dispatch Checkpoints & QA Sign-off</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[20, 16]}>
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+              Packed Date & Time
+            </Text>
+            {packedEvent ? (
+              <Space size={6}>
+                <CheckCircleOutlined style={{ color: '#10b981' }} />
+                <Text strong style={{ fontSize: 13, color: '#0f172a' }}>
+                  {formatDateTime(packedEvent.createdAt)}
+                </Text>
+              </Space>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Not packed yet
+              </Text>
+            )}
+          </Col>
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+              QA Sign-off (finished batch)
+            </Text>
             {qa ? (
               <Space size={8} wrap>
-                <Tag color={qa.result === 'PASS' ? 'green' : 'red'} icon={<CheckCircleFilled />}>{qa.result}</Tag>
-                <Text strong style={{ fontSize: 12 }}>{qa.inspectedBy?.fullName ?? DASH} · {formatDate(qa.createdAt)}</Text>
+                <Tag color={qa.result === 'PASS' ? 'green' : 'red'} icon={<CheckCircleFilled />} style={{ borderRadius: 4 }}>
+                  {qa.result}
+                </Tag>
+                <Text strong style={{ fontSize: 13, color: '#0f172a' }}>
+                  {qa.inspectedBy?.fullName ?? DASH} · {formatDate(qa.createdAt)}
+                </Text>
               </Space>
-            ) : <Text type="secondary">No inspection on the allocated batch</Text>}
-          </Descriptions.Item>
-        </Descriptions>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                No inspection on the allocated batch
+              </Text>
+            )}
+          </Col>
+        </Row>
       </Card>
 
-      <Card size="small" title={<Space><CarOutlined style={{ color: '#722ed1' }} /><span>Carrier Information & Delivery Fleet</span></Space>} style={{ borderRadius: 8 }}>
-        <Descriptions bordered size="small" column={1}>
-          <Descriptions.Item label="Delivery Partner Name">
-            {ship ? <Tag color="blue" style={{ fontSize: 12, padding: '2px 8px' }}>{ship.courier ?? ship.provider} (courier)</Tag>
-              : rider ? <Tag color="green" style={{ fontSize: 12, padding: '2px 8px' }}>In-house rider</Tag>
-              : <Text type="secondary">Not assigned yet</Text>}
-          </Descriptions.Item>
+      <Card
+        size="small"
+        title={
+          <Space>
+            <CarOutlined style={{ color: '#8b5cf6' }} />
+            <span style={{ fontWeight: 600 }}>Carrier Information & Delivery Fleet</span>
+          </Space>
+        }
+        style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[20, 16]}>
+          <Col xs={24}>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>
+              Delivery Partner Name
+            </Text>
+            {ship ? (
+              <Tag color="blue" style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                {ship.courier ?? ship.provider} (courier)
+              </Tag>
+            ) : rider ? (
+              <Tag color="green" style={{ fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                In-house rider
+              </Tag>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Not assigned yet
+              </Text>
+            )}
+          </Col>
           {rider ? (
-            <Descriptions.Item label="Driver / Carrier Contact">
+            <Col xs={24}>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+                Driver / Carrier Contact
+              </Text>
               <Space align="center" wrap>
                 <PhoneOutlined style={{ color: '#1677ff' }} />
-                <Text strong style={{ fontSize: 13 }}>{rider}</Text>
-                <Button type="primary" size="small" style={{ backgroundColor: '#25D366', borderColor: '#25D366', borderRadius: 4, height: 24, fontSize: 11 }} icon={<WhatsAppOutlined />} onClick={() => openWhatsApp(data.riderPhone)}>WhatsApp Driver</Button>
+                <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                  {rider}
+                </Text>
+                <Button
+                  type="primary"
+                  size="small"
+                  style={{ backgroundColor: '#25D366', borderColor: '#25D366', borderRadius: 6, height: 26, fontSize: 11, padding: '0 10px' }}
+                  icon={<WhatsAppOutlined />}
+                  onClick={() => openWhatsApp(data.riderPhone)}
+                >
+                  WhatsApp Driver
+                </Button>
               </Space>
-            </Descriptions.Item>
+            </Col>
           ) : null}
           {ship?.awb ? (
-            <Descriptions.Item label="Courier AWB Tracking Number">
+            <Col xs={24}>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, color: '#64748b', marginBottom: 2 }}>
+                Courier AWB Tracking Number
+              </Text>
               <Space align="center">
-                <Text code copyable={{ text: ship.awb }} style={{ fontSize: 12, fontWeight: 700 }}>{ship.awb}</Text>
-                {ship.trackingUrl ? <Button type="link" size="small" icon={<LinkOutlined />} style={{ padding: 0 }} onClick={() => window.open(ship.trackingUrl, '_blank')}>Track Package</Button> : null}
+                <Text code copyable={{ text: ship.awb }} style={{ fontSize: 13, fontWeight: 700 }}>
+                  {ship.awb}
+                </Text>
+                {ship.trackingUrl ? (
+                  <Button type="link" size="small" icon={<LinkOutlined />} style={{ padding: 0 }} onClick={() => window.open(ship.trackingUrl, '_blank')}>
+                    Track Package
+                  </Button>
+                ) : null}
               </Space>
-            </Descriptions.Item>
+            </Col>
           ) : null}
-        </Descriptions>
+        </Row>
       </Card>
-    </>
+    </Space>
   );
 }
 

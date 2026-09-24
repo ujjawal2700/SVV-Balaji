@@ -261,6 +261,7 @@ model User {
   // Storefront back-relations
   customerAccountsReviewed  CustomerAccount[]  @relation("CustomerAccountsReviewed")
   referralSettingsUpdated   ReferralSettings[]
+  walletSettingsUpdated     WalletSettings[]
   coinTransactionsPerformed CoinTransaction[]  @relation("CoinTransactionsPerformed")
   supportTicketsResolved    SupportTicket[]    @relation("SupportTicketResolvedBy")
 
@@ -1749,9 +1750,19 @@ model Customer {
   /// Everyone this customer has successfully referred.
   referralsGiven Referral[] @relation("ReferralReferrer")
 
-  /// Denormalised running total - see CoinTransaction for the ledger that is
-  /// the actual source of truth.
-  coinBalance      Int               @default(0)
+  /// Denormalised running total across BOTH pools - see CoinTransaction for
+  /// the ledger that is the actual source of truth. Always equal to
+  /// referralCoinBalance + loyaltyCoinBalance; kept because most reads (order
+  /// totals, staff-facing "coin balance" columns) only ever want the sum.
+  coinBalance Int @default(0)
+
+  /// Denormalised per-pool running totals, updated in the same transaction as
+  /// coinBalance and the CoinTransaction row that explains the change - never
+  /// written to directly. Split out so WalletService can show/redeem each
+  /// pool independently without summing the ledger on every read.
+  referralCoinBalance Int @default(0)
+  loyaltyCoinBalance  Int @default(0)
+
   coinTransactions CoinTransaction[]
 
   addresses         CustomerAddress[]
@@ -1819,6 +1830,10 @@ enum ReferralRewardTrigger {
 enum CoinTransactionReason {
   REFERRAL_REFERRER_REWARD
   REFERRAL_REFEREE_REWARD
+  /// Negative. Referral coins spent to pay part of an order at checkout.
+  REFERRAL_REDEMPTION
+  /// Positive. Redeemed referral coins given back because the order was cancelled.
+  REFERRAL_REDEMPTION_REFUND
   /// Loyalty points earned on a DELIVERED order. `expiresAt`/`remainingAmount`
   /// are set on these rows only.
   LOYALTY_EARN
@@ -1835,6 +1850,15 @@ enum CoinTransactionReason {
   /// the API layer for this reason, because unlike the two above there is no
   /// automatic event to point back to.
   MANUAL_ADJUSTMENT
+}
+
+/// Which pool of the wallet a CoinTransaction belongs to. Deliberately a
+/// separate field from `reason` (rather than parsed out of the reason string)
+/// so wallet-wide queries - balance-by-source, redemption FIFO lot selection -
+/// never depend on string-matching an enum meant to describe the *event*.
+enum CoinSource {
+  REFERRAL
+  LOYALTY
 }
 
 /// Staff-configured, single row (see ReferralService.getSettings, which
@@ -1854,12 +1878,64 @@ model ReferralSettings {
   /// of when its Referral row was created.
   isActive Boolean @default(true)
 
+  // --- Redemption --------------------------------------------------------
+  // Mirrors LoyaltySettings' redemption fields exactly, so WalletService can
+  // treat both pools identically at checkout - the two schemes are meant to
+  // read as siblings, not as one canonical design and one bolted-on copy.
+
+  /// Whether referral coins can be spent at checkout at all. While false,
+  /// referral coins can still be earned and viewed but never redeemed.
+  redemptionEnabled Boolean @default(false)
+
+  /// What one referral coin is worth when redeemed.
+  pointValueInr Decimal @default(1) @db.Decimal(10, 4)
+
+  /// Ceiling on how much of an order's payable amount referral coins may
+  /// cover, as a percentage. Same semantics as LoyaltySettings.maxRedemptionPercent.
+  maxRedemptionPercent Int @default(50)
+
+  /// A redemption below this many coins is refused outright (avoids a
+  /// customer spending, say, 2 coins for a token discount).
+  minRedeemPoints Int @default(0)
+
+  /// Months until an earned referral coin lapses if unspent - null means
+  /// referral coins never expire (the historical behaviour, kept as default).
+  pointsExpiryMonths Int?
+
   updatedById String?
   updatedBy   User?    @relation(fields: [updatedById], references: [id])
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 
   @@map("referral_settings")
+}
+
+/// Wallet-wide configuration that belongs to neither the referral nor the
+/// loyalty program specifically - today, just whether the two coin pools are
+/// redeemed as one merged balance or kept independent at checkout. Singleton,
+/// same lazy-create-on-first-read pattern as ReferralSettings/LoyaltySettings.
+model WalletSettings {
+  id String @id @default(uuid())
+
+  /// SEPARATE: each pool has its own cap (its own maxRedemptionPercent) and
+  /// the customer applies them as two distinct amounts at checkout.
+  /// COMBINED: the two balances are pooled into one number and one cap - the
+  /// smaller of the two configured maxRedemptionPercent values is used as the
+  /// pooled cap, so combining coins never grants more spending power than
+  /// either program alone would allow.
+  redemptionMode WalletRedemptionMode @default(SEPARATE)
+
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("wallet_settings")
+}
+
+enum WalletRedemptionMode {
+  SEPARATE
+  COMBINED
 }
 
 /// The coin ledger. `Customer.coinBalance` is a denormalised running total for
@@ -1881,6 +1957,13 @@ model CoinTransaction {
   /// separate debit code path.
   amount Int
   reason CoinTransactionReason
+
+  /// Which wallet pool this row belongs to - see CoinSource. Every reason
+  /// maps to exactly one source (enforced in code at the two write sites:
+  /// ReferralService and LoyaltyService); MANUAL_ADJUSTMENT is the one
+  /// reason a staff member picks the source for explicitly, since it can
+  /// correct either pool.
+  source CoinSource
 
   /// Free text. Required at the API layer for MANUAL_ADJUSTMENT (the "why" -
   /// there is no automatic event to point back to); optional and usually
@@ -1914,6 +1997,7 @@ model CoinTransaction {
 
   @@index([customerId])
   @@index([reason, expiresAt])
+  @@index([customerId, source])
   @@map("coin_transactions")
 }
 
@@ -2091,6 +2175,8 @@ model Order {
   couponCode            String?
   loyaltyRedeemedPoints Int     @default(0)
   loyaltyRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
+  referralRedeemedPoints Int     @default(0)
+  referralRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
 
   riderName  String?
   riderPhone String?

@@ -48,6 +48,13 @@ export const storefrontAuthApi = {
       .then((r) => r.data);
   },
 
+  /** Attach a referral code post-signup — only once, and only before the first order. */
+  applyReferralCode(code: string) {
+    return api
+      .post<{ applied: true; referrerName: string; code: string }>('/storefront/auth/referral/apply', { code })
+      .then((r) => r.data);
+  },
+
   registerRetailer(payload: RegisterRetailerPayload) {
     return api
       .post<RegisterRetailerResponse>('/storefront/auth/register-retailer', payload)

@@ -846,11 +846,13 @@ export class StorefrontAuthService {
         pendingReferrals: 0,
         totalCoinsEarned: 0,
         referrals: [],
+        appliedReferral: null,
+        canApplyReferralCode: false,
       };
     }
 
     const customerId = account.customer.id;
-    const [referrals, coinTxns] = await Promise.all([
+    const [referrals, coinTxns, appliedReferral, ordersPlaced] = await Promise.all([
       this.prisma.referral.findMany({
         where: { referrerId: customerId },
         orderBy: { createdAt: 'desc' },
@@ -872,6 +874,11 @@ export class StorefrontAuthService {
           reason: 'REFERRAL_REFERRER_REWARD',
         },
       }),
+      this.prisma.referral.findUnique({
+        where: { refereeId: customerId },
+        include: { referrer: { select: { name: true, referralCode: true } } },
+      }),
+      this.prisma.order.count({ where: { customerId } }),
     ]);
 
     const totalCoinsEarned = coinTxns.reduce((sum, tx) => sum + tx.amount, 0);
@@ -885,6 +892,18 @@ export class StorefrontAuthService {
       successfulReferrals,
       pendingReferrals,
       totalCoinsEarned,
+      appliedReferral: appliedReferral
+        ? {
+            code: appliedReferral.code,
+            referrerName: appliedReferral.referrer.name,
+            status: appliedReferral.rewardedAt ? ('QUALIFIED' as const) : ('PENDING' as const),
+            rewardedAt: appliedReferral.rewardedAt,
+          }
+        : null,
+      // A referral code can only be attached before this customer has ever
+      // placed an order and only once - matches the `refereeId` unique
+      // constraint on Referral, checked again server-side in applyReferralCode.
+      canApplyReferralCode: !appliedReferral && ordersPlaced === 0,
       referrals: referrals.map((r) => {
         const refereeNameParts = (r.referee?.name || 'Friend').trim().split(/\s+/);
         const displayName = refereeNameParts.length > 1
@@ -906,6 +925,54 @@ export class StorefrontAuthService {
         };
       }),
     };
+  }
+
+  /**
+   * Authenticated: lets an existing customer attach a referral code after
+   * signup, for the one legitimate case the original OTP-verify flow doesn't
+   * cover - they didn't have a code handy at signup time but got one later.
+   * Only allowed once (refereeId is unique on Referral) and only before their
+   * first order, so it can't be used to retroactively "discount" a shopping
+   * history that already happened without one.
+   */
+  async applyReferralCode(accountId: string, rawCode: string) {
+    const account = await this.prisma.customerAccount.findUnique({
+      where: { id: accountId },
+      include: { customer: true },
+    });
+    if (!account?.customer) {
+      throw new BadRequestException('No customer profile found for this account');
+    }
+
+    const customer = account.customer;
+
+    const [existing, ordersPlaced] = await Promise.all([
+      this.prisma.referral.findUnique({ where: { refereeId: customer.id } }),
+      this.prisma.order.count({ where: { customerId: customer.id } }),
+    ]);
+    if (existing) {
+      throw new BadRequestException('A referral code is already applied to your account');
+    }
+    if (ordersPlaced > 0) {
+      throw new BadRequestException('Referral codes can only be applied before your first order');
+    }
+
+    const referrer = await this.prisma.$transaction(async (tx) => {
+      const ref = await this.referrals.validate(tx, rawCode, {
+        phone: customer.phone,
+        email: customer.email,
+      });
+      await this.referrals.createRelationship(tx, ref, customer.id, rawCode);
+      return ref;
+    });
+
+    try {
+      await this.referrals.onAccountVerified(this.prisma, customer.id);
+    } catch (err) {
+      this.logger.warn(`Referral reward crediting failed after apply for customer ${customer.id}: ${err}`);
+    }
+
+    return { applied: true as const, referrerName: referrer.name, code: rawCode.trim().toUpperCase() };
   }
 
   async rejectAccount(id: string, reviewerId: string, dto: RejectAccountDto) {

@@ -44,6 +44,7 @@ import { REFERRAL_REWARD_TRIGGERS, REFERRAL_REWARD_TRIGGER_LABELS } from '@share
 import { useCan } from '@shared/auth/useCan';
 import { PageHeader } from '@shared/components/PageHeader';
 import { useReferralSettings, useUpdateReferralSettings } from '@shared/hooks/useReferralSettings';
+import { useUpdateWalletSettings, useWalletSettings } from '@shared/hooks/useWallet';
 
 interface Draft {
   referrerRewardCoins: number;
@@ -52,6 +53,11 @@ interface Draft {
   isActive: boolean;
   customerFaqs: ReferralFaqItem[];
   retailerFaqs: ReferralFaqItem[];
+  redemptionEnabled: boolean;
+  pointValueInr: number;
+  maxRedemptionPercent: number;
+  minRedeemPoints: number;
+  pointsExpiryMonths: number | null;
 }
 
 const TRIGGER_DETAILS: Record<
@@ -98,6 +104,9 @@ export function ReferralSettingsPage() {
 
   const settings = useReferralSettings();
   const update = useUpdateReferralSettings();
+  const walletSettings = useWalletSettings();
+  const updateWallet = useUpdateWalletSettings();
+  const canManageWallet = useCan('WALLET_MANAGE');
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [activeTab, setActiveTab] = useState<'customer' | 'retailer'>('customer');
@@ -112,6 +121,11 @@ export function ReferralSettingsPage() {
       isActive: settings.data.isActive,
       customerFaqs: settings.data.customerFaqs || [],
       retailerFaqs: settings.data.retailerFaqs || [],
+      redemptionEnabled: settings.data.redemptionEnabled,
+      pointValueInr: settings.data.pointValueInr,
+      maxRedemptionPercent: settings.data.maxRedemptionPercent,
+      minRedeemPoints: settings.data.minRedeemPoints,
+      pointsExpiryMonths: settings.data.pointsExpiryMonths,
     });
   }, [settings.data]);
 
@@ -122,6 +136,11 @@ export function ReferralSettingsPage() {
       draft.refereeRewardCoins !== settings.data.refereeRewardCoins ||
       draft.rewardTrigger !== settings.data.rewardTrigger ||
       draft.isActive !== settings.data.isActive ||
+      draft.redemptionEnabled !== settings.data.redemptionEnabled ||
+      draft.pointValueInr !== settings.data.pointValueInr ||
+      draft.maxRedemptionPercent !== settings.data.maxRedemptionPercent ||
+      draft.minRedeemPoints !== settings.data.minRedeemPoints ||
+      draft.pointsExpiryMonths !== settings.data.pointsExpiryMonths ||
       JSON.stringify(draft.customerFaqs) !== JSON.stringify(settings.data.customerFaqs || []) ||
       JSON.stringify(draft.retailerFaqs) !== JSON.stringify(settings.data.retailerFaqs || []));
 
@@ -134,6 +153,11 @@ export function ReferralSettingsPage() {
       isActive: settings.data.isActive,
       customerFaqs: settings.data.customerFaqs || [],
       retailerFaqs: settings.data.retailerFaqs || [],
+      redemptionEnabled: settings.data.redemptionEnabled,
+      pointValueInr: settings.data.pointValueInr,
+      maxRedemptionPercent: settings.data.maxRedemptionPercent,
+      minRedeemPoints: settings.data.minRedeemPoints,
+      pointsExpiryMonths: settings.data.pointsExpiryMonths,
     });
   };
 
@@ -749,6 +773,137 @@ export function ReferralSettingsPage() {
                       );
                     })}
                   </div>
+                </Card>
+
+                {/* 2a. Wallet Redemption Mode (referral + loyalty together) */}
+                <Card
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <SafetyCertificateOutlined style={{ color: '#7c3aed', fontSize: 18 }} />
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>Wallet Redemption Mode</span>
+                    </div>
+                  }
+                  style={{ borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+                >
+                  <Typography.Text type="secondary" style={{ fontSize: 12.5, display: 'block', marginBottom: 12 }}>
+                    A customer's wallet holds both referral coins and loyalty coins. Choose whether the two are
+                    redeemed at checkout separately (each with its own cap) or as one combined balance (the
+                    stricter of the two caps applies).
+                  </Typography.Text>
+                  <Space size={12}>
+                    <Button
+                      type={walletSettings.data?.redemptionMode === 'SEPARATE' ? 'primary' : 'default'}
+                      disabled={!canManageWallet || updateWallet.isPending}
+                      onClick={() =>
+                        updateWallet.mutate(
+                          { redemptionMode: 'SEPARATE' },
+                          {
+                            onSuccess: () => message.success('Wallet set to separate redemption'),
+                            onError: (error) => message.error(apiErrorMessage(error, 'Could not update wallet mode')),
+                          },
+                        )
+                      }
+                    >
+                      Redeem Separately
+                    </Button>
+                    <Button
+                      type={walletSettings.data?.redemptionMode === 'COMBINED' ? 'primary' : 'default'}
+                      disabled={!canManageWallet || updateWallet.isPending}
+                      onClick={() =>
+                        updateWallet.mutate(
+                          { redemptionMode: 'COMBINED' },
+                          {
+                            onSuccess: () => message.success('Wallet set to combined redemption'),
+                            onError: (error) => message.error(apiErrorMessage(error, 'Could not update wallet mode')),
+                          },
+                        )
+                      }
+                    >
+                      Redeem Combined
+                    </Button>
+                  </Space>
+                </Card>
+
+                {/* 2b. Redemption Configuration */}
+                <Card
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ThunderboltOutlined style={{ color: '#f59e0b', fontSize: 18 }} />
+                      <span style={{ fontWeight: 600, fontSize: 16 }}>Redemption at Checkout</span>
+                    </div>
+                  }
+                  style={{ borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <div>
+                      <Typography.Text strong style={{ fontSize: 14, display: 'block', color: '#1e293b' }}>
+                        Allow referral coins to be redeemed
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        While off, coins can still be earned and viewed but never spent at checkout.
+                      </Typography.Text>
+                    </div>
+                    <Switch
+                      checked={draft.redemptionEnabled}
+                      disabled={!canManage}
+                      checkedChildren="ON"
+                      unCheckedChildren="OFF"
+                      onChange={(checked) => setDraft((d) => (d ? { ...d, redemptionEnabled: checked } : d))}
+                    />
+                  </div>
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} sm={12}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                        Coin value (INR per coin)
+                      </Typography.Text>
+                      <InputNumber
+                        min={0.01}
+                        step={0.1}
+                        style={{ width: '100%' }}
+                        disabled={!canManage}
+                        value={draft.pointValueInr}
+                        onChange={(value) => setDraft((d) => (d ? { ...d, pointValueInr: value ?? 1 } : d))}
+                      />
+                    </Col>
+                    <Col xs={24} sm={12}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                        Max % of order payable via referral coins
+                      </Typography.Text>
+                      <InputNumber
+                        min={0}
+                        max={100}
+                        style={{ width: '100%' }}
+                        disabled={!canManage}
+                        value={draft.maxRedemptionPercent}
+                        onChange={(value) => setDraft((d) => (d ? { ...d, maxRedemptionPercent: value ?? 0 } : d))}
+                      />
+                    </Col>
+                    <Col xs={24} sm={12}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                        Minimum coins to redeem
+                      </Typography.Text>
+                      <InputNumber
+                        min={0}
+                        style={{ width: '100%' }}
+                        disabled={!canManage}
+                        value={draft.minRedeemPoints}
+                        onChange={(value) => setDraft((d) => (d ? { ...d, minRedeemPoints: value ?? 0 } : d))}
+                      />
+                    </Col>
+                    <Col xs={24} sm={12}>
+                      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                        Coin expiry (months, blank = never)
+                      </Typography.Text>
+                      <InputNumber
+                        min={1}
+                        style={{ width: '100%' }}
+                        disabled={!canManage}
+                        value={draft.pointsExpiryMonths ?? undefined}
+                        onChange={(value) => setDraft((d) => (d ? { ...d, pointsExpiryMonths: value ?? null } : d))}
+                      />
+                    </Col>
+                  </Row>
                 </Card>
 
                 {/* 3. Program Status / Switch */}
