@@ -2576,3 +2576,24 @@ Packaging is printed once and cannot be reissued, so pointing at a URL means lin
 **Verified**: backend tsc + 23 new unit tests (report rules, plan lifecycle, visit↔plan completion/reopen); full suite 525 pass, 7 fail — all in `customers.service.spec.ts`, pre-existing (its tx mock has no `customerAccount`). Live API run on a second instance: 23/23 checks incl. existing visit/list/delete/training/search. Real headless-Chrome pass on the field app (desktop + phone): 15/15 incl. plan → start visit → record → report auto-opens → plan completed. All test data cleaned up. field/admin/customer tsc clean; field `vite build` OK.
 
 **Note:** Prisma generate hit EPERM because the running API held the query-engine DLL; the locked file was renamed to `node_modules/.prisma/client/query_engine-windows.dll.node.locked-*` — safe to delete once the API is restarted.
+
+## 2026-09-25 (later) — Raunak (agent session) — Field app gaps: family details, seed stock (FRD 10.2), harvest-inspection roles (FRD 5.3/5.6/13.4)
+
+**Contract changes — Ujjawal please read.**
+- **Migration `20260925090124_seed_stock`**: new tables `seed_stock`, `seed_stock_movements`, enum `SeedStockMovementType`; **one change to an existing table**: nullable `seed_distributions.seedStockId` (FK, SET NULL). Existing handouts stay NULL = "not from stock".
+- **Migration `20260925090500_harvest_inspection_roles_frd`** (data only): removes `harvestInspections.create/edit/delete` from AGRICULTURE_EXPERT and grants `harvestInspections.view` to BRANCH_MANAGER. Registry defaults changed to match (create/edit = PM, QA; view = PM, QA, BM, AE). Super Admin can still change it in Roles & Permissions.
+- **New permission group `seedStock`**: `seedStock.view` (BM, PM, AE, WM), `seedStock.manage` (BM, PM, WM). Backfilled to configured roles on boot (A-14 mechanism, verified).
+- **New routes** `GET/POST /seed-stock`, `GET/PATCH/DELETE /seed-stock/:id`, `POST /seed-stock/:id/receive`, `POST /seed-stock/:id/adjust` (signed qty, reason required). Branch-scoped.
+- `POST /seed-distribution` accepts optional **`seedStockId`**: deducts the lot in the same transaction (refuses overdraw, withdrawn/expired lots, lots at another branch than the farmer) and copies name/variety/batch/unit from the lot. PATCH moves only the difference / between lots; DELETE returns the seed. Without `seedStockId` behaviour is unchanged. List/detail now include `seedStock`.
+- Branch and user delete guards also count seed stock (lots / movements).
+
+**Why a new ledger and not WarehouseStock**: `warehouse_stock`/`stock_movements` hold farmer produce (raw-material and FG batches) and feed the traceability chain and stock reconciliation; seed is a company input going the other way. Same rules though: balance only changes with a movement row, conditional decrement so concurrent handouts can't go negative.
+
+**UI**
+- Field registration form now has **Family details** (FRD 7.1; backend/admin already supported it) — create and edit.
+- Seed handout form (field **and** admin, shared `SeedLotField`): "Issue from seed stock" picker showing availability; picking a lot locks name/variety/batch/unit and validates quantity. Field Seed tab shows the branch's stock and tags handouts "From stock".
+- New admin screen **Farm Sourcing → Seed Stock**: receive lot, receive more, adjust/write-off with reason, withdraw/restore, delete (only if nothing issued), per-lot ledger naming the farmer on each handout.
+- Field Inspect tab / Home for a view-only role: read-only notice, no inspect/edit actions (previously a past inspection opened the edit form without checking `harvestInspections.edit`).
+
+**Verified**: 9 new unit tests (deduct, overdraw, cross-branch/expired/withdrawn, edit difference, move lot, delete returns, stock-less unchanged); full suite 534 pass / 7 fail — the pre-existing `customers.service.spec.ts` ones. Live API on a second instance: 27/27, including a real temporary AGRICULTURE_EXPERT user (inspections view 200, create/edit 403; seed stock view 200, receive 403; can issue from stock). Headless Chrome: field 12/12, admin 6/6. All test data (lots, handouts, temp users) removed; test farmer's family details restored to NULL.
+- **Field app navigation (same day, later):** Inspect tab and its page removed from `/field` (`InspectionsTab.tsx`, `HarvestInspectionFormModal.tsx` deleted) — with FRD 13.4 roles it was read-only for the Agriculture Expert. Bottom bar is now Home · Farmers · Visits · **Seed & Inputs** (`/seed`, with a seed & agri-input summary: handouts, farmers reached, from-stock share, quantity per input) · More. `/more/seed` → `/seed` and `/inspections` → `/` redirects for old links. Home's harvest-due reminders stay ("Open farmer"). Inspections are still recorded in the admin panel, and a farmer's inspection history is still in the field farmer profile. No API change.

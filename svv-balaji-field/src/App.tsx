@@ -1,8 +1,8 @@
 import {
   AppstoreOutlined,
   EnvironmentOutlined,
+  ExperimentOutlined,
   HomeOutlined,
-  SafetyCertificateOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
 import { Spin } from 'antd';
@@ -21,9 +21,6 @@ const FarmersTab = lazy(() =>
 const VisitsTab = lazy(() =>
   import('./pages/VisitsTab').then((m) => ({ default: m.FieldVisitsTab })),
 );
-const InspectionsTab = lazy(() =>
-  import('./pages/InspectionsTab').then((m) => ({ default: m.FieldInspectionsTab })),
-);
 const MoreTab = lazy(() => import('./pages/MoreTab').then((m) => ({ default: m.FieldMoreTab })));
 const SeedTab = lazy(() => import('./pages/SeedTab').then((m) => ({ default: m.FieldSeedTab })));
 const TrainingTab = lazy(() =>
@@ -31,29 +28,24 @@ const TrainingTab = lazy(() =>
 );
 
 /**
- * Five tabs for six responsibilities.
+ * Five tabs.
  *
- *   Home     1. Dashboard & today's schedule
- *   Farmers  2. Onboarding & land profiling
- *   Visits   4. Field visits & crop advisory
- *   Inspect  6. Harvest inspection — the pre-procurement gate
- *   More     3. Seed & agri-inputs, 5. Training
+ *   Home      Dashboard & today's schedule
+ *   Farmers   Onboarding, land profiling & farmer profile
+ *   Visits    Field visits (logged and planned) & crop advisory
+ *   Seed      Seed & agri-input handouts, stock and summary
+ *   More      Training, profile
  *
- * A bottom bar stops working past five on a small handset, so the two lowest-
- * frequency areas sit behind More. Inspect keeps a permanent tab despite being
- * seasonal because it is the only one that blocks somebody else's work:
- * procurement cannot collect an uninspected harvest.
+ * Harvest inspection used to have a tab here. FRD 5.3/13.4 give inspections to
+ * the Procurement and QA Managers, who work in the admin panel, so for the
+ * Agriculture Expert it was a read-only page. Seed handouts are daily field
+ * work, so they took the slot. The expert still sees harvests coming due on Home.
  */
 const TABS: ShellTab[] = [
   { path: '/', label: 'Home', icon: <HomeOutlined /> },
   { path: '/farmers', label: 'Farmers / Suppliers', icon: <TeamOutlined />, permission: 'FARMER_VIEW' },
   { path: '/visits', label: 'Visits', icon: <EnvironmentOutlined />, permission: 'FIELD_VISIT_VIEW' },
-  {
-    path: '/inspections',
-    label: 'Inspect',
-    icon: <SafetyCertificateOutlined />,
-    permission: 'HARVEST_INSPECTION_VIEW',
-  },
+  { path: '/seed', label: 'Seed & Inputs', icon: <ExperimentOutlined />, permission: 'SEED_DISTRIBUTION_VIEW' },
   { path: '/more', label: 'More', icon: <AppstoreOutlined /> },
 ];
 
@@ -105,9 +97,11 @@ export function App() {
         <Route index element={<HomePage />} />
         <Route path="farmers" element={<FarmersTab />} />
         <Route path="visits" element={<VisitsTab />} />
-        <Route path="inspections" element={<InspectionsTab />} />
+        <Route path="seed" element={<SeedTab />} />
         <Route path="more" element={<MoreTab />} />
-        <Route path="more/seed" element={<SeedTab />} />
+        {/* Old addresses: seed moved to its own tab; inspections left the field app. */}
+        <Route path="more/seed" element={<Navigate to="/seed" replace />} />
+        <Route path="inspections" element={<Navigate to="/" replace />} />
         <Route path="more/training" element={<TrainingTab />} />
 
         {/* Anything else goes home. There is no 404 screen in an app with five

@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../../api/client';
 import { Sheet } from '../../components/Sheet';
 import type { SeedDistribution } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
+import { SeedLotField, useIssuableLots, withinLotRule } from '@shared/components/SeedLotField';
 import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
@@ -28,6 +29,8 @@ interface SeedForm {
   unit?: string;
   batchNumber?: string;
   distributionDate: Dayjs;
+  /** FRD 10.2 - the stock lot this is issued from. */
+  seedStockId?: string;
 }
 
 const UNITS = ['KG', 'GRAM', 'QUINTAL', 'PACKET', 'LITRE'];
@@ -63,6 +66,7 @@ export function SeedDistributionFormModal({
         unit: record.unit,
         batchNumber: record.batchNumber ?? undefined,
         distributionDate: dayjs(record.distributionDate),
+        seedStockId: record.seedStockId ?? undefined,
       });
     }
   }, [open, record, form]);
@@ -70,9 +74,16 @@ export function SeedDistributionFormModal({
   const selectedFarmerId = Form.useWatch('farmerId', form);
   const { data: farmer } = useFarmer(selectedFarmerId);
 
+  // FRD 10.2 - lots at the farmer's branch this handout can be issued from.
+  const editing = record ? { seedStockId: record.seedStockId, quantity: Number(record.quantity) } : null;
+  const { lots, loading: lotsLoading } = useIssuableLots(farmer?.branchId, editing);
+  const lotSelected = Boolean(Form.useWatch('seedStockId', form));
+
   useEffect(() => {
     if (isEdit || !farmer) return;
 
+    // Issued from a lot: the particulars come from the lot, not from history.
+    if (form.getFieldValue('seedStockId')) return;
     const seedNameTouched = form.isFieldTouched('seedName');
     const currentSeedName = form.getFieldValue('seedName');
 
@@ -114,6 +125,7 @@ export function SeedDistributionFormModal({
       unit: values.unit,
       batchNumber: values.batchNumber,
       distributionDate: toIsoDate(values.distributionDate) as string,
+      seedStockId: values.seedStockId,
     };
 
     try {
@@ -155,15 +167,17 @@ export function SeedDistributionFormModal({
           <FarmerSelect />
         </Form.Item>
 
+        <SeedLotField branchId={farmer?.branchId} lots={lots} loading={lotsLoading} editing={editing} />
+
         <Row gutter={16}>
           <Col xs={24} md={12}>
             <Form.Item name="seedName" label="Seed or input" rules={[required('Seed or input')]}>
-              <Input placeholder="Wheat seed" />
+              <Input disabled={lotSelected} placeholder="Wheat seed" />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="seedVariety" label="Variety">
-              <Input placeholder="Optional" />
+              <Input disabled={lotSelected} placeholder="Optional" />
             </Form.Item>
           </Col>
 
@@ -171,14 +185,14 @@ export function SeedDistributionFormModal({
             <Form.Item
               name="quantity"
               label="Quantity"
-              rules={[required('Quantity'), positiveNumber('Quantity')]}
+              rules={[required('Quantity'), positiveNumber('Quantity'), withinLotRule(lots, editing)]}
             >
               <InputNumber style={{ width: '100%' }} min={0} step={1} />
             </Form.Item>
           </Col>
           <Col xs={8} md={4}>
             <Form.Item name="unit" label="Unit">
-              <Select options={UNITS.map((unit) => ({ value: unit, label: unit }))} />
+              <Select disabled={lotSelected} options={UNITS.map((unit) => ({ value: unit, label: unit }))} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
@@ -197,7 +211,7 @@ export function SeedDistributionFormModal({
               label="Supplier Batch Number / Lot Remarks"
               extra="Printed on seed packaging or special notes (e.g. LOT-2026-WHT-0482 · Certified Grade-A seed). Helps trace distribution batches."
             >
-              <Input placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A seed" />
+              <Input disabled={lotSelected} placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A seed" />
             </Form.Item>
           </Col>
         </Row>

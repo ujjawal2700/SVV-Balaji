@@ -178,6 +178,16 @@ export const NAV_SECTIONS: NavSection[] = [
         zone: 'supply',
       },
       {
+        key: 'seed-stock',
+        path: '/seed-stock',
+        label: 'Seed Stock',
+        permission: 'SEED_STOCK_VIEW',
+        description: 'Seed and agri-input lots per branch; handouts deduct from them (FRD 10.2).',
+        endpoints: ['GET /seed-stock', 'POST /seed-stock', 'POST /seed-stock/:id/adjust'],
+        workstream: 'WS2.2',
+        zone: 'supply',
+      },
+      {
         key: 'training',
         path: '/training',
         label: 'Training',

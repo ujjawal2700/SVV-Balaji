@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@shared/auth/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCanFn } from '@shared/auth/useCan';
-import { useSeedDistribution } from '@shared/hooks/useSeedDistribution';
 import { useTrainingSessions } from '@shared/hooks/useTraining';
 
 export function FieldMoreTab() {
@@ -21,23 +20,9 @@ export function FieldMoreTab() {
   const { message, modal } = AntApp.useApp();
   const can = useCanFn();
 
-  const seed = useSeedDistribution();
   const training = useTrainingSessions();
 
   const areas = [
-    can('SEED_DISTRIBUTION_VIEW')
-      ? {
-          key: 'seed',
-          icon: <ExperimentOutlined />,
-          iconBg: '#ecfdf5',
-          iconColor: '#059669',
-          title: 'Seed & Agri-Inputs',
-          description: 'Record input distributions, recipient farmers, and supplier batch numbers.',
-          count: seed.data?.data?.length ?? 0,
-          countLabel: 'handouts logged',
-          path: '/more/seed',
-        }
-      : null,
     can('TRAINING_VIEW')
       ? {
           key: 'training',
@@ -287,7 +272,7 @@ export function FieldMoreTab() {
               Active Internet Connection Required
             </Typography.Text>
             <Typography.Text style={{ color: '#78350f', fontSize: 13, lineHeight: 1.5, display: 'block' }}>
-              All field inspections, seed handouts, and farmer onboarding logs are instantly synced to the central
+              All field visits, seed handouts, and farmer onboarding logs are instantly synced to the central
               cloud database. If you are operating in low-connectivity areas, keep written notes and submit the records once you are back in network range.
             </Typography.Text>
           </div>

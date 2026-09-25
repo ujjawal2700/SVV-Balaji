@@ -62,7 +62,7 @@ describe('UsersService - edit, deactivate and delete guards', () => {
         refreshTokenHash: null,
       },
     };
-    counts = new Array(19).fill(0);
+    counts = new Array(20).fill(0);
 
     const counter = { count: jest.fn(async () => countStub()) };
 
@@ -106,6 +106,7 @@ describe('UsersService - edit, deactivate and delete guards', () => {
       trainingSession: counter,
       fieldVisit: counter,
       fieldVisitPlan: counter,
+      seedStockMovement: counter,
       procurementPlan: counter,
       harvestInspection: counter,
       rawMaterialCollection: counter,

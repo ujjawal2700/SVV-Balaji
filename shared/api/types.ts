@@ -367,6 +367,8 @@ export interface CreateFarmerInput {
   mobile: string;
   aadhaarNumber?: string;
   panNumber?: string;
+  /** FRD 7.1 Family Details. Free text, advisory. */
+  familyDetails?: string;
   village: string;
   district: string;
   state: string;
@@ -484,6 +486,9 @@ export interface SeedDistribution {
   distributionDate: string;
   distributedById: string;
   distributedBy?: UserRef;
+  /** FRD 10.2 - the stock lot this was issued (and deducted) from. Null = not from stock. */
+  seedStockId?: string | null;
+  seedStock?: { id: string; seedName: string; batchNumber: string | null; unit: string } | null;
   createdAt: string;
 }
 
@@ -497,6 +502,83 @@ export interface CreateSeedDistributionInput {
   unit?: string;
   batchNumber?: string;
   distributionDate: string;
+  /**
+   * FRD 10.2 - issue from this seed stock lot. The server deducts the quantity and
+   * takes name, variety, batch and unit from the lot. Omit = not from company stock.
+   */
+  seedStockId?: string;
+}
+
+// --- Seed & input stock (FRD 10.2) -------------------------------------------
+
+export type SeedStockMovementType = 'RECEIPT' | 'DISTRIBUTION' | 'DISTRIBUTION_REVERSAL' | 'ADJUSTMENT';
+
+export interface SeedStockLot {
+  id: string;
+  branchId: string;
+  branch?: BranchRef;
+  seedName: string;
+  seedVariety: string | null;
+  batchNumber: string | null;
+  unit: string;
+  /** Decimal as string. */
+  quantityOnHand: string;
+  supplier: string | null;
+  receivedAt: string;
+  expiryDate: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdBy?: UserRef;
+  _count?: { distributions: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeedStockMovement {
+  id: string;
+  seedStockId: string;
+  type: SeedStockMovementType;
+  /** Signed. */
+  quantity: string;
+  balanceAfter: string;
+  reason: string | null;
+  seedDistributionId: string | null;
+  farmer?: FarmerRef | null;
+  performedBy?: UserRef;
+  createdAt: string;
+}
+
+export interface SeedStockLotDetail extends SeedStockLot {
+  movements: SeedStockMovement[];
+}
+
+export interface ReceiveSeedStockInput {
+  branchId?: string;
+  seedName: string;
+  seedVariety?: string;
+  batchNumber?: string;
+  unit?: string;
+  quantity: number;
+  supplier?: string;
+  /** YYYY-MM-DD */
+  receivedAt: string;
+  /** YYYY-MM-DD */
+  expiryDate?: string;
+  notes?: string;
+}
+
+export interface UpdateSeedStockInput {
+  supplier?: string;
+  expiryDate?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export interface SeedStockQuery {
+  branchId?: string;
+  includeInactive?: boolean;
+  /** Only lots with stock left - what a handout can be issued from. */
+  availableOnly?: boolean;
 }
 
 // --- Training (FRD Section 11) ----------------------------------------------

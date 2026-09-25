@@ -21,6 +21,7 @@ import { useEffect } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import type { SeedDistribution } from '@shared/api/types';
 import { FarmerSelect } from '@shared/components/pickers';
+import { SeedLotField, useIssuableLots, withinLotRule } from '@shared/components/SeedLotField';
 import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
@@ -45,6 +46,8 @@ interface SeedForm {
   unit?: string;
   batchNumber?: string;
   distributionDate: Dayjs;
+  /** FRD 10.2 - the stock lot this is issued from. */
+  seedStockId?: string;
 }
 
 const UNITS = ['KG', 'GRAM', 'QUINTAL', 'PACKET', 'LITRE'];
@@ -128,6 +131,7 @@ export function SeedDistributionFormModal({
         unit: record.unit,
         batchNumber: record.batchNumber ?? undefined,
         distributionDate: dayjs(record.distributionDate),
+        seedStockId: record.seedStockId ?? undefined,
       });
     }
   }, [open, record, form]);
@@ -135,9 +139,16 @@ export function SeedDistributionFormModal({
   const selectedFarmerId = Form.useWatch('farmerId', form);
   const { data: farmer } = useFarmer(selectedFarmerId);
 
+  // FRD 10.2 - lots at the farmer's branch this handout can be issued from.
+  const editing = record ? { seedStockId: record.seedStockId, quantity: Number(record.quantity) } : null;
+  const { lots, loading: lotsLoading } = useIssuableLots(farmer?.branchId, editing);
+  const lotSelected = Boolean(Form.useWatch('seedStockId', form));
+
   useEffect(() => {
     if (isEdit || !farmer) return;
 
+    // Issued from a lot: the particulars come from the lot, not from history.
+    if (form.getFieldValue('seedStockId')) return;
     const seedNameTouched = form.isFieldTouched('seedName');
     const currentSeedName = form.getFieldValue('seedName');
 
@@ -179,6 +190,7 @@ export function SeedDistributionFormModal({
       unit: values.unit,
       batchNumber: values.batchNumber,
       distributionDate: toIsoDate(values.distributionDate) as string,
+      seedStockId: values.seedStockId,
     };
 
     try {
@@ -226,15 +238,16 @@ export function SeedDistributionFormModal({
         title="Seed & Input Particulars"
         subtitle="Input name, variety, distributed quantity, and batch number"
       >
+        <SeedLotField branchId={farmer?.branchId} lots={lots} loading={lotsLoading} editing={editing} />
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
             <Form.Item name="seedName" label="Seed / Input Name" rules={[required('Seed or input')]}>
-              <Input placeholder="e.g. Certified Wheat HD-2967" style={{ borderRadius: 8 }} />
+              <Input disabled={lotSelected} placeholder="e.g. Certified Wheat HD-2967" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
             <Form.Item name="seedVariety" label="Variety / Strain">
-              <Input placeholder="e.g. Hybrid Sharbati" style={{ borderRadius: 8 }} />
+              <Input disabled={lotSelected} placeholder="e.g. Hybrid Sharbati" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
 
@@ -242,7 +255,7 @@ export function SeedDistributionFormModal({
             <Form.Item
               name="quantity"
               label="Quantity Handed Out"
-              rules={[required('Quantity'), positiveNumber('Quantity')]}
+              rules={[required('Quantity'), positiveNumber('Quantity'), withinLotRule(lots, editing)]}
             >
               <InputNumber style={{ width: '100%', borderRadius: 8 }} min={0} step={1} placeholder="e.g. 50" />
             </Form.Item>
@@ -250,6 +263,7 @@ export function SeedDistributionFormModal({
           <Col xs={8} md={4}>
             <Form.Item name="unit" label="Unit">
               <Select
+                disabled={lotSelected}
                 options={UNITS.map((unit) => ({ value: unit, label: unit }))}
                 style={{ borderRadius: 8 }}
               />
@@ -271,7 +285,7 @@ export function SeedDistributionFormModal({
               label="Supplier Batch Number / Lot Remarks"
               extra="Printed on seed packaging or special notes — essential for batch traceability"
             >
-              <Input placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A" style={{ borderRadius: 8 }} />
+              <Input disabled={lotSelected} placeholder="e.g. LOT-2026-WHT-0482 · Certified Grade-A" style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>

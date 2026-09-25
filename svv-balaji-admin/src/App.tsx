@@ -61,6 +61,9 @@ const FarmersPage = lazy(() =>
 const AgreementsPage = lazy(() =>
   import('./pages/agreements/AgreementsPage').then((m) => ({ default: m.AgreementsPage })),
 );
+const SeedStockPage = lazy(() =>
+  import('./pages/seed-stock/SeedStockPage').then((m) => ({ default: m.SeedStockPage })),
+);
 const SeedDistributionPage = lazy(() =>
   import('./pages/seed-distribution/SeedDistributionPage').then((m) => ({
     default: m.SeedDistributionPage,
@@ -290,6 +293,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/farmers': <FarmersPage />,
   '/agreements': <AgreementsPage />,
   '/seed-distribution': <SeedDistributionPage />,
+  '/seed-stock': <SeedStockPage />,
   '/training': <TrainingPage />,
   '/field-visits': <FieldVisitsPage />,
   // Supplier Sourcing

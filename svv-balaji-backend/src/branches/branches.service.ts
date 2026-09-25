@@ -74,7 +74,7 @@ export class BranchesService {
   async remove(id: string) {
     const branch = await this.findOne(id);
 
-    const [users, farmers, warehouses, trainingSessions, fieldVisits, plans, collections, batches, productionBatches, customers, orders, visitPlans] =
+    const [users, farmers, warehouses, trainingSessions, fieldVisits, plans, collections, batches, productionBatches, customers, orders, visitPlans, seedLots] =
       await this.prisma.$transaction([
         this.prisma.user.count({ where: { branchId: id } }),
         this.prisma.farmer.count({ where: { branchId: id } }),
@@ -88,6 +88,7 @@ export class BranchesService {
         this.prisma.customer.count({ where: { branchId: id } }),
         this.prisma.order.count({ where: { branchId: id } }),
         this.prisma.fieldVisitPlan.count({ where: { branchId: id } }),
+        this.prisma.seedStock.count({ where: { branchId: id } }),
       ]);
 
     assertDeletable('Branch', branch.name, {
@@ -97,6 +98,7 @@ export class BranchesService {
       'training sessions': trainingSessions,
       'field visits': fieldVisits,
       'planned visits': visitPlans ?? 0,
+      'seed stock lots': seedLots ?? 0,
       'procurement plans': plans,
       collections,
       batches: batches + productionBatches,

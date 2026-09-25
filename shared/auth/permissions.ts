@@ -85,6 +85,8 @@ export const PERMISSIONS = {
   SEED_DISTRIBUTION_CREATE: 'seed.create',
   SEED_DISTRIBUTION_EDIT: 'seed.edit',
   SEED_DISTRIBUTION_DELETE: 'seed.delete',
+  SEED_STOCK_VIEW: 'seedStock.view',
+  SEED_STOCK_MANAGE: 'seedStock.manage',
   TRAINING_VIEW: 'training.view',
   TRAINING_CREATE: 'training.create',
   TRAINING_EDIT: 'training.edit',

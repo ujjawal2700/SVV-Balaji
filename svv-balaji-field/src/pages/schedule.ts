@@ -156,8 +156,10 @@ export function buildSchedule({
           : diff === 0
             ? 'Harvest due today. An approved inspection is what lets procurement collect.'
             : `Harvest due in ${diff} day${diff === 1 ? '' : 's'}.`,
-      actionLabel: 'Inspect',
-      actionPath: '/inspections',
+      // Inspections are procurement's (FRD 13.4); the expert's part is to make
+      // sure procurement knows the crop is ready.
+      actionLabel: 'Open farmer',
+      actionPath: '/farmers',
       urgency: diff < 0 ? 'overdue' : diff === 0 ? 'today' : 'soon',
       when: agreement.harvestDate,
       farmerId: agreement.farmerId,

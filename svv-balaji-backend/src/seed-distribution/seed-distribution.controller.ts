@@ -53,13 +53,17 @@ export class SeedDistributionController {
 
   @Patch(':id')
   @RequirePermission('seed.edit')
-  update(@Param('id') id: string, @Body() dto: UpdateSeedDistributionDto) {
-    return this.seedDistributionService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateSeedDistributionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.seedDistributionService.update(id, dto, user.sub);
   }
 
   @Delete(':id')
   @RequirePermission('seed.delete')
-  remove(@Param('id') id: string) {
-    return this.seedDistributionService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.seedDistributionService.remove(id, user.sub);
   }
 }

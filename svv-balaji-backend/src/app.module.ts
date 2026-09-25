@@ -11,6 +11,7 @@ import { BranchesModule } from './branches/branches.module';
 import { FarmersModule } from './farmers/farmers.module';
 import { AgreementsModule } from './agreements/agreements.module';
 import { SeedDistributionModule } from './seed-distribution/seed-distribution.module';
+import { SeedStockModule } from './seed-stock/seed-stock.module';
 import { TrainingModule } from './training/training.module';
 import { FieldMonitoringModule } from './field-monitoring/field-monitoring.module';
 import { ProcurementModule } from './procurement/procurement.module';
@@ -60,6 +61,7 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
     FarmersModule,
     AgreementsModule,
     SeedDistributionModule,
+    SeedStockModule,
     TrainingModule,
     FieldMonitoringModule,
     // Supplier Sourcing

@@ -16,13 +16,19 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**25 Sep (latest) — Field app (WS3.1) gaps closed: FRD 12.7 field report, 7.3 farmer profile, 12.1 planned
+**25 Sep (latest) — Seed stock (FRD 10.2), family details, harvest-inspection roles.** Seed handouts now
+deduct from a per-branch seed stock ledger (new admin **Seed Stock** screen; lot picker in both seed forms).
+Harvest inspections corrected to FRD 5.3/5.6/13.4: create/edit = Procurement + QA Manager only; Agriculture Expert
+view-only; Branch Manager view — applied to existing databases by a data migration. **Needs `prisma migrate deploy`
++ generate + API restart.** See `DEV_LOG.md` (2026-09-25, later).
+
+**25 Sep — Field app (WS3.1) gaps closed: FRD 12.7 field report, 7.3 farmer profile, 12.1 planned
 visits, 7.4 search filters.** A field report (harvest outlook vs contract, risk flags, next steps for procurement
 and production) is generated from every visit and opens automatically when one is saved; also in the admin
 field-visit drawer. Farmers get a full profile (crop history, visits, seed, training, agreements, procurement &
 payments, land, rating). Visits can be planned ahead; recording the visit completes the plan. **Needs
 `prisma migrate deploy` (new `field_visit_plans` table) + generate + API restart.** Still open for the field
-app: offline capture (client decision) and seed-stock linkage (FRD 10.2 wording). See `DEV_LOG.md` (2026-09-25).
+app: offline capture only (client decision). See `DEV_LOG.md` (2026-09-25).
 
 **21 Sep — Storefront checkout & fulfilment lifecycle is real end to end.** Address -> server-side
 LOCAL (franchise outlet + rider + doorstep OTP) vs SHIPROCKET (central depot + AWB + webhook) routing -> server-computed

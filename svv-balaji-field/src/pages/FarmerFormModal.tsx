@@ -109,6 +109,7 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
         mobile: farmer.mobile,
         aadhaarNumber: farmer.aadhaarNumber ?? undefined,
         panNumber: farmer.panNumber ?? undefined,
+        familyDetails: farmer.familyDetails ?? undefined,
         village: farmer.village,
         district: farmer.district,
         state: farmer.state,
@@ -197,6 +198,16 @@ export function FarmerFormModal({ open, farmer, onClose }: FarmerFormModalProps)
           <Col xs={24} md={12}>
             <Form.Item name="panNumber" label="PAN number" rules={fieldRules.pan}>
               <Input placeholder="ABCDE1234F (Optional)" style={{ textTransform: 'uppercase', borderRadius: 8 }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <Form.Item
+              name="familyDetails"
+              label="Family details"
+              extra="FRD 7.1 — e.g. 4 dependants, two sons farm with him. Advisory: it does not block approval."
+              rules={[{ max: 2000, message: 'Keep family details under 2000 characters' }]}
+            >
+              <Input.TextArea rows={2} placeholder="Optional" maxLength={2000} style={{ borderRadius: 8 }} />
             </Form.Item>
           </Col>
         </Row>

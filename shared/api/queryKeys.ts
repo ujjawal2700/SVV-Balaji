@@ -58,6 +58,17 @@ export const queryKeys = {
       [...queryKeys.seedDistribution.all, 'list', filters] as const,
   },
 
+  /**
+   * Nested under seed-distribution: logging, editing or deleting a handout moves
+   * stock, and the handout mutations already invalidate `seedDistribution.all`.
+   */
+  seedStock: {
+    all: ['seed-distribution', 'stock'] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      [...queryKeys.seedStock.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.seedStock.all, 'detail', id] as const,
+  },
+
   training: {
     all: ['training-sessions'] as const,
     list: (filters: Record<string, unknown> = {}) =>

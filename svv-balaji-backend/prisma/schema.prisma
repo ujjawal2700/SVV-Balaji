@@ -216,6 +216,8 @@ model User {
   // Phase 1 back-relations
   farmerVerificationLogs    FarmerVerificationLog[]
   seedDistributionsGiven    SeedDistribution[]
+  seedStockCreated          SeedStock[]         @relation("SeedStockCreatedBy")
+  seedStockMovements        SeedStockMovement[] @relation("SeedStockMovementBy")
   trainingSessionsConducted TrainingSession[]
   fieldVisitsAsExpert       FieldVisit[]
   fieldVisitPlansAssigned   FieldVisitPlan[] @relation("FieldVisitPlanExpert")
@@ -308,6 +310,7 @@ model Branch {
   trainingSessions TrainingSession[]
   fieldVisits      FieldVisit[]
   fieldVisitPlans  FieldVisitPlan[]
+  seedStock        SeedStock[]
 
   // Phase 2
   procurementPlans       ProcurementPlan[]
@@ -503,10 +506,99 @@ model SeedDistribution {
   distributedById String
   distributedBy   User   @relation(fields: [distributedById], references: [id])
 
+  /// FRD 10.2 - the seed lot this handout was issued from, and deducted from.
+  /// Null for handouts recorded before seed stock existed, or for inputs that
+  /// never passed through company stock; those are recorded but not deducted.
+  seedStockId String?
+  seedStock   SeedStock? @relation(fields: [seedStockId], references: [id])
+
   createdAt DateTime @default(now())
 
   @@index([farmerId])
+  @@index([seedStockId])
   @@map("seed_distributions")
+}
+
+/// FRD 10.2 "maintain inventory". One lot of certified seed or agri-input held
+/// at a branch for distribution to that branch's farmers.
+///
+/// Separate from WarehouseStock on purpose: that table holds farmer produce and
+/// is part of the farmer -> batch -> product traceability chain. Seed is a
+/// company input going the other way, and mixing the two would put packets of
+/// seed into the raw-material ledger and stock reconciliation.
+///
+/// `quantityOnHand` is only ever changed together with a SeedStockMovement row,
+/// the same rule the warehouse ledger follows.
+model SeedStock {
+  id String @id @default(uuid())
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  seedName    String
+  seedVariety String?
+  /// Supplier lot / certification number printed on the packaging.
+  batchNumber String?
+  unit        String  @default("KG")
+
+  quantityOnHand Decimal @db.Decimal(12, 2)
+
+  supplier   String?
+  receivedAt DateTime
+  expiryDate DateTime?
+  notes      String?
+
+  isActive Boolean @default(true)
+
+  createdById String
+  createdBy   User   @relation("SeedStockCreatedBy", fields: [createdById], references: [id])
+
+  movements     SeedStockMovement[]
+  distributions SeedDistribution[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, isActive])
+  @@map("seed_stock")
+}
+
+enum SeedStockMovementType {
+  /// Seed received into the lot.
+  RECEIPT
+  /// Handed to a farmer (negative).
+  DISTRIBUTION
+  /// A handout was reduced, moved to another lot, or deleted - stock returned (positive).
+  DISTRIBUTION_REVERSAL
+  /// Physical count correction, damage, expiry write-off. Always carries a reason.
+  ADJUSTMENT
+}
+
+/// Append-only ledger for SeedStock. `quantity` is signed; `balanceAfter` is the
+/// lot's on-hand quantity once this movement applied.
+model SeedStockMovement {
+  id String @id @default(uuid())
+
+  seedStockId String
+  seedStock   SeedStock @relation(fields: [seedStockId], references: [id])
+
+  type         SeedStockMovementType
+  quantity     Decimal               @db.Decimal(12, 2)
+  balanceAfter Decimal               @db.Decimal(12, 2)
+  reason       String?
+
+  /// The handout this movement belongs to. A plain id, not a relation, so the
+  /// ledger keeps its history after a handout is deleted.
+  seedDistributionId String?
+
+  performedById String
+  performedBy   User   @relation("SeedStockMovementBy", fields: [performedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([seedStockId, createdAt])
+  @@index([seedDistributionId])
+  @@map("seed_stock_movements")
 }
 
 // ---------------------------------------------------------------------------

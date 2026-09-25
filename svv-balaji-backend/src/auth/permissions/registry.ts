@@ -467,6 +467,31 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    // FRD 10.2 - seed & input inventory that handouts are deducted from.
+    key: 'seedStock',
+    label: 'Seed Stock',
+    path: '/seed-stock',
+    viewKey: 'seedStock.view',
+    permissions: [
+      {
+        key: 'seedStock.view',
+        label: 'View seed stock',
+        description:
+          'Lots of certified seed and inputs held at the branch, with their movement ledger. ' +
+          'The Agriculture Expert needs it to issue a handout from stock.',
+        defaultRoles: [BM, PM, AE, WM],
+      },
+      {
+        key: 'seedStock.manage',
+        label: 'Receive and adjust seed stock',
+        description:
+          'Receive new lots, top up a lot, and correct counts (damage, expiry, recount) with a reason. ' +
+          'Handouts deduct stock on their own and need only the seed distribution permissions.',
+        defaultRoles: [BM, PM, WM],
+      },
+    ],
+  },
+  {
     key: 'training',
     label: 'Training',
     path: '/training',
@@ -576,8 +601,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       {
         key: 'harvestInspections.view',
         label: 'View harvest inspections',
-        description: 'The pre-harvest quality checklist and its result.',
-        defaultRoles: [PM, QA, AE],
+        description:
+          'The pre-harvest quality checklist and its result. Branch Manager for procurement and ' +
+          'quality monitoring (FRD 5.2); Agriculture Expert read-only, to follow their farmers ' +
+          'harvest gate from the field app.',
+        defaultRoles: [PM, QA, BM, AE],
       },
       {
         key: 'harvestInspections.create',
@@ -585,15 +613,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         description:
           'Only against an approved farmer holding a traceability code. This is the gate: only ' +
           'an APPROVED inspection can be collected from, so whoever holds this decides what ' +
-          'enters the supply chain. The Agriculture Expert holds it because they are the one ' +
-          'standing in the field.',
-        defaultRoles: [PM, QA, AE],
+          'enters the supply chain. FRD 5.3/13.4 give it to the Procurement Manager and 5.6 to ' +
+          'the QA Manager. Deliberately not the Agriculture Expert (FRD 5.4): the person who ' +
+          'advises a farmer should not also grade the same farmer\'s crop (audit M19).',
+        defaultRoles: [PM, QA],
       },
       {
         key: 'harvestInspections.edit',
         label: 'Edit an inspection and its documents',
         description: 'The server refuses once a collection has been recorded against it.',
-        defaultRoles: [PM, QA, AE],
+        defaultRoles: [PM, QA],
       },
       {
         key: 'harvestInspections.delete',

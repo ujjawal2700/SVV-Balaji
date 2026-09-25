@@ -121,19 +121,6 @@ export function FieldHomePage() {
           path: '/visits',
         }
       : null,
-    can('HARVEST_INSPECTION_VIEW')
-      ? {
-          key: 'inspections',
-          icon: <SafetyCertificateOutlined />,
-          colour: '#d97706',
-          bgTint: '#fffbeb',
-          label: 'Harvest Gate',
-          description: 'Pre-procurement inspections',
-          count: inspections.data?.data?.length ?? 0,
-          suffix: 'inspections',
-          path: '/inspections',
-        }
-      : null,
     can('SEED_DISTRIBUTION_VIEW')
       ? {
           key: 'seed',
@@ -144,7 +131,7 @@ export function FieldHomePage() {
           description: 'Batch handouts & agri-inputs',
           count: seed.data?.data?.length ?? 0,
           suffix: 'handouts',
-          path: '/more/seed',
+          path: '/seed',
         }
       : null,
     can('TRAINING_VIEW')
@@ -422,7 +409,8 @@ export function FieldHomePage() {
                             }}
                             onClick={() => navigate(item.actionPath)}
                           >
-                            {item.actionLabel} <ArrowRightOutlined style={{ fontSize: 12 }} />
+                            {item.actionLabel}{' '}
+                            <ArrowRightOutlined style={{ fontSize: 12 }} />
                           </Button>
                         </Col>
                       </Row>
@@ -538,15 +526,6 @@ export function FieldHomePage() {
               </Space>
             </Card>
 
-            {!can('HARVEST_INSPECTION_CREATE') ? (
-              <Alert
-                type="info"
-                showIcon
-                message="You cannot record harvest inspections"
-                description="A Super Admin grants that under Administration → Roles & Permissions. Until then the harvest gate is read-only for you."
-                style={{ borderRadius: 10 }}
-              />
-            ) : null}
           </Space>
         </Col>
       </Row>

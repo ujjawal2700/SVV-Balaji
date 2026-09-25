@@ -45,7 +45,7 @@ export function FieldShell({ tabs, title }: { tabs: ShellTab[]; title: string })
   );
 
   /**
-   * A child route keeps its parent tab lit — /more/seed lights More.
+   * A child route keeps its parent tab lit — /more/training lights More.
    * `.at(-1)` takes the most specific match, so the root path (a prefix of
    * everything) never wins over a real one.
    */
