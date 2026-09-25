@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -87,11 +88,20 @@ export class TopUpSeedStockDto {
 }
 
 /**
- * A count correction, damage or expiry write-off. `quantity` is signed: -5
- * removes five. The reason is mandatory because an adjustment is the one stock
- * change nobody else can explain later.
+ * A count correction or a write-off. `quantity` is signed: -5 removes five. The
+ * reason is mandatory because an adjustment is the one stock change nobody else
+ * can explain later.
+ *
+ * `kind` separates the two in the ledger: ADJUSTMENT is a recount (either
+ * direction), WRITE_OFF is stock destroyed - damaged, spoilt, expired - and can
+ * only remove.
  */
 export class AdjustSeedStockDto {
+  @ApiPropertyOptional({ enum: ['ADJUSTMENT', 'WRITE_OFF'], default: 'ADJUSTMENT' })
+  @IsOptional()
+  @IsIn(['ADJUSTMENT', 'WRITE_OFF'])
+  kind?: 'ADJUSTMENT' | 'WRITE_OFF';
+
   @ApiProperty({ description: 'Signed change, e.g. -5 to write off five units.' })
   @Type(() => Number)
   @IsNumber()
@@ -131,6 +141,26 @@ export class UpdateSeedStockDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+/** Move stock to another branch. The receiving branch gets its own lot with the same particulars. */
+export class TransferSeedStockDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  toBranchId: string;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  quantity: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
 
 export class QuerySeedStockDto {

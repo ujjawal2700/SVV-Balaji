@@ -23,7 +23,7 @@ export async function moveSeedStock(
   delta: Prisma.Decimal | number,
   type: SeedStockMovementType,
   performedById: string,
-  opts: { reason?: string; seedDistributionId?: string } = {},
+  opts: { reason?: string; seedDistributionId?: string; relatedSeedStockId?: string } = {},
 ) {
   const change = new Prisma.Decimal(delta);
   if (change.isZero()) return null;
@@ -58,6 +58,26 @@ export async function moveSeedStock(
       balanceAfter: lot.quantityOnHand,
       reason: opts.reason,
       seedDistributionId: opts.seedDistributionId,
+      relatedSeedStockId: opts.relatedSeedStockId,
+      performedById,
+    },
+  });
+}
+
+/**
+ * A change to a lot that is not a quantity change - withdrawn, restored, expiry
+ * moved. Written to the same ledger with quantity 0 so the lot's history shows
+ * why it stopped (or started) being issuable.
+ */
+export async function logLotEvent(tx: Tx, seedStockId: string, performedById: string, reason: string) {
+  const lot = await tx.seedStock.findUniqueOrThrow({ where: { id: seedStockId } });
+  return tx.seedStockMovement.create({
+    data: {
+      seedStockId,
+      type: 'LOT_UPDATE',
+      quantity: 0,
+      balanceAfter: lot.quantityOnHand,
+      reason,
       performedById,
     },
   });
@@ -76,6 +96,9 @@ export async function assertIssuable(tx: Tx, seedStockId: string, farmerId: stri
   if (!farmer) throw new NotFoundException('Farmer not found');
   if (!lot.isActive) {
     throw new BadRequestException(`That lot of ${lot.seedName} has been withdrawn and cannot be issued.`);
+  }
+  if (lot.quantityOnHand.lte(0)) {
+    throw new BadRequestException(`That lot of ${lot.seedName} is empty - nothing left to issue.`);
   }
   if (lot.expiryDate && lot.expiryDate.toISOString().slice(0, 10) < istToday()) {
     throw new BadRequestException(

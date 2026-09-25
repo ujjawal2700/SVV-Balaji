@@ -1,4 +1,4 @@
-import { HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import {
   App as AntApp,
   Button,
@@ -37,6 +37,7 @@ import {
   useSeedStock,
   useSeedStockLot,
   useTopUpSeedStock,
+  useTransferSeedStock,
   useUpdateSeedStock,
 } from '@shared/hooks/useSeedStock';
 import { EM_DASH, formatDate, formatDateTime } from '@shared/utils/format';
@@ -48,7 +49,11 @@ const MOVEMENT: Record<SeedStockMovementType, { label: string; color: string }> 
   RECEIPT: { label: 'Received', color: 'green' },
   DISTRIBUTION: { label: 'Issued to farmer', color: 'blue' },
   DISTRIBUTION_REVERSAL: { label: 'Returned from handout', color: 'cyan' },
-  ADJUSTMENT: { label: 'Adjustment', color: 'orange' },
+  ADJUSTMENT: { label: 'Recount adjustment', color: 'orange' },
+  WRITE_OFF: { label: 'Written off', color: 'red' },
+  TRANSFER_OUT: { label: 'Transferred out', color: 'purple' },
+  TRANSFER_IN: { label: 'Transferred in', color: 'geekblue' },
+  LOT_UPDATE: { label: 'Lot updated', color: 'default' },
 };
 
 const qty = (value: string | number, unit: string) => `${Number(value).toLocaleString('en-IN')} ${unit}`;
@@ -71,6 +76,7 @@ export function SeedStockPage() {
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [change, setChange] = useState<{ lot: SeedStockLot; mode: 'receive' | 'adjust' } | null>(null);
   const [ledgerFor, setLedgerFor] = useState<string | null>(null);
+  const [transferFor, setTransferFor] = useState<SeedStockLot | null>(null);
 
   const stock = useSeedStock({ branchId, includeInactive: showWithdrawn });
   const update = useUpdateSeedStock();
@@ -163,13 +169,15 @@ export function SeedStockPage() {
               menu={{
                 items: [
                   { key: 'receive', icon: <PlusCircleOutlined />, label: 'Receive more', disabled: !lot.isActive },
-                  { key: 'adjust', icon: <MinusCircleOutlined />, label: 'Adjust / write off' },
+                  { key: 'adjust', icon: <MinusCircleOutlined />, label: 'Recount / write off' },
+                  { key: 'transfer', icon: <SwapOutlined />, label: 'Transfer to branch', disabled: !lot.isActive || Number(lot.quantityOnHand) <= 0 },
                   { type: 'divider' },
                   lot.isActive ? { key: 'withdraw', label: 'Withdraw lot' } : { key: 'restore', label: 'Restore lot' },
                   { key: 'delete', danger: true, label: 'Delete (received in error)', disabled: (lot._count?.distributions ?? 0) > 0 },
                 ],
                 onClick: ({ key }) => {
                   if (key === 'receive' || key === 'adjust') setChange({ lot, mode: key });
+                  if (key === 'transfer') setTransferFor(lot);
                   if (key === 'withdraw') void setActive(lot, false);
                   if (key === 'restore') void setActive(lot, true);
                   if (key === 'delete') {
@@ -250,6 +258,7 @@ export function SeedStockPage() {
       <ReceiveLotSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} askBranch={isSuperAdmin} />
       <ChangeQuantitySheet change={change} onClose={() => setChange(null)} />
       <LedgerDrawer lotId={ledgerFor} onClose={() => setLedgerFor(null)} />
+      <TransferSheet lot={transferFor} onClose={() => setTransferFor(null)} />
     </Space>
   );
 }
@@ -359,7 +368,7 @@ function ReceiveLotSheet({ open, onClose, askBranch }: { open: boolean; onClose:
 // --- Receive more / adjust ------------------------------------------------------
 
 function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot; mode: 'receive' | 'adjust' } | null; onClose: () => void }) {
-  const [form] = Form.useForm<{ direction: 'add' | 'remove'; quantity: number; reason?: string }>();
+  const [form] = Form.useForm<{ direction: 'add' | 'remove' | 'writeoff'; quantity: number; reason?: string }>();
   const { message } = AntApp.useApp();
   const topUp = useTopUpSeedStock();
   const adjust = useAdjustSeedStock();
@@ -371,9 +380,10 @@ function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot;
     const v = await form.validateFields();
     try {
       if (isAdjust) {
-        const signed = v.direction === 'remove' ? -v.quantity : v.quantity;
-        await adjust.mutateAsync({ id: lot.id, quantity: signed, reason: v.reason as string });
-        message.success('Stock adjusted');
+        const signed = v.direction === 'add' ? v.quantity : -v.quantity;
+        const kind = v.direction === 'writeoff' ? 'WRITE_OFF' : 'ADJUSTMENT';
+        await adjust.mutateAsync({ id: lot.id, quantity: signed, reason: v.reason as string, kind });
+        message.success(kind === 'WRITE_OFF' ? 'Stock written off' : 'Stock adjusted');
       } else {
         await topUp.mutateAsync({ id: lot.id, quantity: v.quantity, reason: v.reason });
         message.success(`${v.quantity} ${lot.unit} added`);
@@ -387,23 +397,24 @@ function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot;
   return (
     <Sheet
       open={Boolean(change)}
-      title={lot ? `${isAdjust ? 'Adjust' : 'Receive more'} — ${lot.seedName}${lot.batchNumber ? ` (${lot.batchNumber})` : ''}` : ''}
-      okText={isAdjust ? 'Adjust' : 'Receive'}
+      title={lot ? `${isAdjust ? 'Recount / write off' : 'Receive more'} — ${lot.seedName}${lot.batchNumber ? ` (${lot.batchNumber})` : ''}` : ''}
+      okText={isAdjust ? 'Save' : 'Receive'}
       onOk={submit}
       onCancel={onClose}
       confirmLoading={topUp.isPending || adjust.isPending}
       width={480}
     >
       {lot ? (
-        <Form form={form} layout="vertical" preserve={false} initialValues={{ direction: 'remove' }}>
+        <Form form={form} layout="vertical" preserve={false} initialValues={{ direction: 'writeoff' }}>
           <Typography.Paragraph type="secondary">On hand now: {qty(lot.quantityOnHand, lot.unit)}</Typography.Paragraph>
           {isAdjust ? (
             <Form.Item name="direction" label="Change">
               <Radio.Group
                 optionType="button"
                 options={[
-                  { value: 'remove', label: 'Remove (damage, expiry, recount short)' },
-                  { value: 'add', label: 'Add (recount over)' },
+                  { value: 'writeoff', label: 'Write off (damaged / expired)' },
+                  { value: 'remove', label: 'Recount: short' },
+                  { value: 'add', label: 'Recount: over' },
                 ]}
               />
             </Form.Item>
@@ -418,6 +429,69 @@ function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot;
             extra={isAdjust ? 'Required — an adjustment is the one change nobody else can explain later.' : undefined}
           >
             <Input.TextArea rows={2} maxLength={500} placeholder={isAdjust ? 'e.g. 3 packets damaged by rain' : 'e.g. Second delivery, invoice 1142'} />
+          </Form.Item>
+        </Form>
+      ) : null}
+    </Sheet>
+  );
+}
+
+// --- Transfer ---------------------------------------------------------------
+
+function TransferSheet({ lot, onClose }: { lot: SeedStockLot | null; onClose: () => void }) {
+  const [form] = Form.useForm<{ toBranchId: string; quantity: number; reason?: string }>();
+  const { message } = AntApp.useApp();
+  const transfer = useTransferSeedStock();
+
+  const submit = async () => {
+    if (!lot) return;
+    const v = await form.validateFields();
+    try {
+      const r = await transfer.mutateAsync({ id: lot.id, ...v });
+      message.success(`${v.quantity} ${lot.unit} transferred to ${r.to.branch?.name ?? 'the branch'}`);
+      onClose();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Could not transfer the stock'));
+    }
+  };
+
+  return (
+    <Sheet
+      open={Boolean(lot)}
+      title={lot ? `Transfer — ${lot.seedName}${lot.batchNumber ? ` (${lot.batchNumber})` : ''}` : ''}
+      okText="Transfer"
+      onOk={submit}
+      onCancel={onClose}
+      confirmLoading={transfer.isPending}
+      width={480}
+    >
+      {lot ? (
+        <Form form={form} layout="vertical" preserve={false}>
+          <Typography.Paragraph type="secondary">
+            From {lot.branch?.name ?? 'this branch'} · on hand {qty(lot.quantityOnHand, lot.unit)}. The receiving branch gets
+            its own lot with the same seed, batch and expiry; both sides appear in the ledger.
+          </Typography.Paragraph>
+          <Form.Item name="toBranchId" label="To branch" rules={[required('Branch')]}>
+            <BranchSelect />
+          </Form.Item>
+          <Form.Item
+            name="quantity"
+            label={`Quantity (${lot.unit})`}
+            rules={[
+              required('Quantity'),
+              positiveNumber('Quantity'),
+              {
+                validator: (_, v) =>
+                  v !== undefined && v !== null && Number(v) > Number(lot.quantityOnHand)
+                    ? Promise.reject(new Error(`Only ${lot.quantityOnHand} ${lot.unit} on hand`))
+                    : Promise.resolve(),
+              },
+            ]}
+          >
+            <InputNumber style={{ width: '100%' }} min={0} />
+          </Form.Item>
+          <Form.Item name="reason" label="Reason">
+            <Input.TextArea rows={2} maxLength={500} placeholder="e.g. Kharif sowing demand at Wardha" />
           </Form.Item>
         </Form>
       ) : null}
@@ -451,7 +525,7 @@ function LedgerDrawer({ lotId, onClose }: { lotId: string | null; onClose: () =>
                 title: 'Change',
                 dataIndex: 'quantity',
                 align: 'right',
-                render: (v: string) => (
+                render: (v: string) => Number(v) === 0 ? '—' : (
                   <Typography.Text type={Number(v) < 0 ? 'danger' : 'success'}>
                     {Number(v) > 0 ? '+' : ''}
                     {Number(v).toLocaleString('en-IN')}

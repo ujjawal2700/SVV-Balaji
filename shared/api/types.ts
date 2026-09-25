@@ -331,6 +331,8 @@ export interface FarmerSeedDistributionSummary {
   unit: string;
   distributionDate: string;
   batchNumber?: string | null;
+  seedSource?: SeedSource | null;
+  seedStockId?: string | null;
 }
 
 export interface FarmerFieldVisitSummary {
@@ -486,7 +488,13 @@ export interface SeedDistribution {
   distributionDate: string;
   distributedById: string;
   distributedBy?: UserRef;
-  /** FRD 10.2 - the stock lot this was issued (and deducted) from. Null = not from stock. */
+  /**
+   * COMPANY_STOCK - issued from `seedStockId` and deducted from it. EXTERNAL -
+   * farmer-provided / bought outside, nothing deducted. Null - an older handout
+   * recorded before the source was captured.
+   */
+  seedSource?: SeedSource | null;
+  /** FRD 10.2 - the stock lot this was issued (and deducted) from. */
   seedStockId?: string | null;
   seedStock?: { id: string; seedName: string; batchNumber: string | null; unit: string } | null;
   createdAt: string;
@@ -502,16 +510,34 @@ export interface CreateSeedDistributionInput {
   unit?: string;
   batchNumber?: string;
   distributionDate: string;
+  /** Required for a new handout. COMPANY_STOCK needs `seedStockId`; EXTERNAL must not send one. */
+  seedSource?: SeedSource;
   /**
-   * FRD 10.2 - issue from this seed stock lot. The server deducts the quantity and
-   * takes name, variety, batch and unit from the lot. Omit = not from company stock.
+   * FRD 10.2 - issue from this seed stock lot (COMPANY_STOCK). The server deducts the
+   * quantity and takes name, variety, batch and unit from the lot.
    */
   seedStockId?: string;
 }
 
+export type SeedSource = 'COMPANY_STOCK' | 'EXTERNAL';
+
+export const SEED_SOURCE_LABELS: Record<SeedSource, string> = {
+  COMPANY_STOCK: 'Company stock',
+  EXTERNAL: 'External / farmer provided',
+};
+
 // --- Seed & input stock (FRD 10.2) -------------------------------------------
 
-export type SeedStockMovementType = 'RECEIPT' | 'DISTRIBUTION' | 'DISTRIBUTION_REVERSAL' | 'ADJUSTMENT';
+export type SeedStockMovementType =
+  | 'RECEIPT'
+  | 'DISTRIBUTION'
+  | 'DISTRIBUTION_REVERSAL'
+  | 'ADJUSTMENT'
+  | 'WRITE_OFF'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  /** Withdrawn / restored / expiry changed - quantity 0. */
+  | 'LOT_UPDATE';
 
 export interface SeedStockLot {
   id: string;
@@ -543,6 +569,8 @@ export interface SeedStockMovement {
   balanceAfter: string;
   reason: string | null;
   seedDistributionId: string | null;
+  /** For a transfer, the lot on the other side. */
+  relatedSeedStockId?: string | null;
   farmer?: FarmerRef | null;
   performedBy?: UserRef;
   createdAt: string;

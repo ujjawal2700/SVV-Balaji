@@ -44,6 +44,7 @@ import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useTrainingSessions } from '@shared/hooks/useTraining';
 import { EM_DASH, formatCurrency, formatDate, formatQuantity } from '@shared/utils/format';
 import { FarmerStatusTag } from './farmerStatus';
+import { SeedSourceTag } from '@shared/components/SeedLotField';
 import { FieldReportDrawer } from './FieldReportDrawer';
 import { FieldVisitFormModal } from './FieldVisitFormModal';
 import { PlannedVisitsPanel } from './PlannedVisits';
@@ -519,6 +520,7 @@ function SeedTabContent({ farmer }: { farmer: FarmerDetail }) {
         { title: 'Seed', dataIndex: 'seedName', render: (v, r) => `${v}${r.seedVariety ? ` (${r.seedVariety})` : ''}` },
         { title: 'Quantity', render: (_, r) => `${formatQuantity(r.quantity)} ${r.unit}` },
         { title: 'Batch', dataIndex: 'batchNumber', render: (v) => v ?? EM_DASH },
+        { title: 'Source', key: 'source', render: (_, r) => <SeedSourceTag seedSource={r.seedSource} seedStockId={r.seedStockId} /> },
       ]}
     />
   );

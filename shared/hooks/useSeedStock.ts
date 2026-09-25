@@ -46,8 +46,26 @@ export function useTopUpSeedStock() {
 export function useAdjustSeedStock() {
   const invalidate = useInvalidateSeed();
   return useMutation({
-    mutationFn: ({ id, quantity, reason }: { id: string; quantity: number; reason: string }) =>
-      seedStockApi.adjust(id, quantity, reason),
+    mutationFn: ({
+      id,
+      quantity,
+      reason,
+      kind,
+    }: {
+      id: string;
+      quantity: number;
+      reason: string;
+      kind?: 'ADJUSTMENT' | 'WRITE_OFF';
+    }) => seedStockApi.adjust(id, quantity, reason, kind),
+    onSuccess: invalidate,
+  });
+}
+
+export function useTransferSeedStock() {
+  const invalidate = useInvalidateSeed();
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string; toBranchId: string; quantity: number; reason?: string }) =>
+      seedStockApi.transfer(id, input),
     onSuccess: invalidate,
   });
 }

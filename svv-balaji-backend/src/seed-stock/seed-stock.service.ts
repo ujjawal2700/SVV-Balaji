@@ -3,12 +3,13 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { branchScopeFor, scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
-import { moveSeedStock } from './seed-stock.ledger';
+import { logLotEvent, moveSeedStock } from './seed-stock.ledger';
 import {
   AdjustSeedStockDto,
   QuerySeedStockDto,
   ReceiveSeedStockDto,
   TopUpSeedStockDto,
+  TransferSeedStockDto,
   UpdateSeedStockDto,
 } from './dto/seed-stock.dto';
 
@@ -109,30 +110,103 @@ export class SeedStockService {
 
   async adjust(id: string, dto: AdjustSeedStockDto, user: JwtPayload) {
     await this.findScoped(id, user);
+    const kind = dto.kind ?? 'ADJUSTMENT';
+    if (kind === 'WRITE_OFF' && dto.quantity > 0) {
+      throw new BadRequestException('A write-off removes stock - use a negative quantity, or an adjustment to add.');
+    }
     return this.prisma.$transaction(async (tx) => {
-      await moveSeedStock(tx, id, dto.quantity, 'ADJUSTMENT', user.sub, { reason: dto.reason.trim() });
+      await moveSeedStock(tx, id, dto.quantity, kind, user.sub, { reason: dto.reason.trim() });
       return tx.seedStock.findUniqueOrThrow({ where: { id }, include: LOT_INCLUDE });
     });
   }
 
+  /**
+   * Move stock to another branch: out of this lot, into a new lot at the
+   * receiving branch carrying the same particulars. Both halves are in the
+   * ledger and point at each other.
+   */
+  async transfer(id: string, dto: TransferSeedStockDto, user: JwtPayload) {
+    const lot = await this.findScoped(id, user);
+    if (!lot.isActive) throw new BadRequestException('A withdrawn lot cannot be transferred.');
+    if (dto.toBranchId === lot.branchId) throw new BadRequestException('Choose a different branch to transfer to.');
+    const [from, to] = await Promise.all([
+      this.prisma.branch.findUnique({ where: { id: lot.branchId }, select: { name: true } }),
+      this.prisma.branch.findUnique({ where: { id: dto.toBranchId }, select: { id: true, name: true } }),
+    ]);
+    if (!to) throw new NotFoundException('Receiving branch not found');
+    const reason = dto.reason?.trim();
+
+    return this.prisma.$transaction(async (tx) => {
+      const dest = await tx.seedStock.create({
+        data: {
+          branchId: to.id,
+          seedName: lot.seedName,
+          seedVariety: lot.seedVariety,
+          batchNumber: lot.batchNumber,
+          unit: lot.unit,
+          quantityOnHand: 0,
+          supplier: lot.supplier,
+          receivedAt: new Date(),
+          expiryDate: lot.expiryDate,
+          notes: `Transferred from ${from?.name ?? 'another branch'}`,
+          createdById: user.sub,
+        },
+      });
+      // Out first: it refuses if the source does not hold enough, and the
+      // whole transfer (including the new lot) rolls back.
+      await moveSeedStock(tx, lot.id, -dto.quantity, 'TRANSFER_OUT', user.sub, {
+        relatedSeedStockId: dest.id,
+        reason: `To ${to.name}${reason ? ` - ${reason}` : ''}`,
+      });
+      await moveSeedStock(tx, dest.id, dto.quantity, 'TRANSFER_IN', user.sub, {
+        relatedSeedStockId: lot.id,
+        reason: `From ${from?.name ?? 'another branch'}${reason ? ` - ${reason}` : ''}`,
+      });
+      return {
+        from: await tx.seedStock.findUniqueOrThrow({ where: { id: lot.id }, include: LOT_INCLUDE }),
+        to: await tx.seedStock.findUniqueOrThrow({ where: { id: dest.id }, include: LOT_INCLUDE }),
+      };
+    });
+  }
+
   async update(id: string, dto: UpdateSeedStockDto, user: JwtPayload) {
-    await this.findScoped(id, user);
-    return this.prisma.seedStock.update({
-      where: { id },
-      data: {
-        supplier: dto.supplier,
-        notes: dto.notes,
-        isActive: dto.isActive,
-        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
-      },
-      include: LOT_INCLUDE,
+    const lot = await this.findScoped(id, user);
+    const newExpiry = dto.expiryDate ? new Date(dto.expiryDate) : undefined;
+
+    // Changes that decide whether the lot can be issued go into its ledger.
+    const events: string[] = [];
+    if (dto.isActive !== undefined && dto.isActive !== lot.isActive) {
+      events.push(dto.isActive ? 'Lot restored - can be issued again' : 'Lot withdrawn - can no longer be issued');
+    }
+    if (newExpiry && newExpiry.getTime() !== lot.expiryDate?.getTime()) {
+      events.push(
+        `Expiry changed from ${lot.expiryDate ? lot.expiryDate.toISOString().slice(0, 10) : 'none'} to ${newExpiry.toISOString().slice(0, 10)}`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.seedStock.update({
+        where: { id },
+        data: { supplier: dto.supplier, notes: dto.notes, isActive: dto.isActive, expiryDate: newExpiry },
+        include: LOT_INCLUDE,
+      });
+      for (const e of events) await logLotEvent(tx, id, user.sub, e);
+      return updated;
     });
   }
 
   /** Only a lot received in error - nothing issued from it. Otherwise withdraw it. */
   async remove(id: string, user: JwtPayload) {
     const lot = await this.findScoped(id, user);
-    const issued = await this.prisma.seedDistribution.count({ where: { seedStockId: id } });
+    const [issued, transfers] = await Promise.all([
+      this.prisma.seedDistribution.count({ where: { seedStockId: id } }),
+      this.prisma.seedStockMovement.count({ where: { seedStockId: id, type: { in: ['TRANSFER_OUT', 'TRANSFER_IN'] } } }),
+    ]);
+    if (transfers > 0) {
+      throw new BadRequestException(
+        'This lot is part of a transfer between branches, so it stays on record. Withdraw it instead.',
+      );
+    }
     if (issued > 0) {
       throw new BadRequestException(
         `${issued} handout${issued === 1 ? ' was' : 's were'} issued from this lot, so it stays on record. ` +

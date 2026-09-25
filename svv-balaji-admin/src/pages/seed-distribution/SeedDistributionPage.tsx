@@ -12,6 +12,7 @@ import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
 import { RowActions } from '../../components/RowActions';
 import { useDeleteSeedDistribution } from '../../hooks/useSeedDistribution';
 import { SeedDistributionFormModal } from './SeedDistributionFormModal';
+import { SeedSourceTag } from '@shared/components/SeedLotField';
 
 export function SeedDistributionPage() {
   const [farmerId, setFarmerId] = useState<string | undefined>();
@@ -70,6 +71,12 @@ export function SeedDistributionPage() {
       key: 'quantity',
       align: 'right',
       render: (_, row) => formatQuantity(row.quantity, row.unit),
+    },
+    {
+      title: 'Source',
+      key: 'source',
+      width: 170,
+      render: (_, row) => <SeedSourceTag seedSource={row.seedSource} seedStockId={row.seedStockId} />,
     },
     {
       title: 'Supplier Batch / Remarks',

@@ -16,7 +16,12 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**25 Sep (latest) — Seed stock (FRD 10.2), family details, harvest-inspection roles.** Seed handouts now
+**25 Sep (latest) — Seed Source on every handout.** Company stock (lot required, deducted) or External /
+farmer provided (nothing deducted); older handouts without a lot are kept as "source not recorded". Seed stock
+ledger now also records write-offs, branch transfers and lot withdraw/restore/expiry changes. **Needs
+`prisma migrate deploy` + generate + API restart.** See `DEV_LOG.md` (2026-09-25, latest).
+
+**25 Sep — Seed stock (FRD 10.2), family details, harvest-inspection roles.** Seed handouts now
 deduct from a per-branch seed stock ledger (new admin **Seed Stock** screen; lot picker in both seed forms).
 Harvest inspections corrected to FRD 5.3/5.6/13.4: create/edit = Procurement + QA Manager only; Agriculture Expert
 view-only; Branch Manager view — applied to existing databases by a data migration. **Needs `prisma migrate deploy`

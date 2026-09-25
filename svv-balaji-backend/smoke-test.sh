@@ -271,7 +271,7 @@ fi
 step "8. Seed Distribution (Phase 1, FRD Section 10 - Agri Expert only)"
 # ---------------------------------------------------------------------------
 api_call POST /seed-distribution "$EXPERT_TOKEN" \
-  "{\"farmerId\":\"$FARMER_ID\",\"seedName\":\"Certified Wheat Seed\",\"seedVariety\":\"HD-2967\",\"quantity\":50,\"unit\":\"KG\",\"batchNumber\":\"SEED-$STAMP\",\"distributionDate\":\"$TODAY\"}"
+  "{\"farmerId\":\"$FARMER_ID\",\"seedName\":\"Certified Wheat Seed\",\"seedVariety\":\"HD-2967\",\"quantity\":50,\"unit\":\"KG\",\"batchNumber\":\"SEED-$STAMP\",\"distributionDate\":\"$TODAY\",\"seedSource\":\"EXTERNAL\"}"
 SEED_ID=$(printf '%s' "$RESP_BODY" | json_field id)
 
 [ -n "$SEED_ID" ] && pass "Seed distribution logged by Agriculture Expert" \

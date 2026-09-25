@@ -3,9 +3,9 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '../../api/client';
 import { Sheet } from '../../components/Sheet';
-import type { SeedDistribution } from '../../api/types';
+import type { SeedDistribution, SeedSource } from '../../api/types';
 import { FarmerSelect } from '../../components/pickers';
-import { SeedLotField, useIssuableLots, withinLotRule } from '@shared/components/SeedLotField';
+import { SeedSourceField, initialSeedSource, useIssuableLots, withinLotRule } from '@shared/components/SeedLotField';
 import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
@@ -29,7 +29,9 @@ interface SeedForm {
   unit?: string;
   batchNumber?: string;
   distributionDate: Dayjs;
-  /** FRD 10.2 - the stock lot this is issued from. */
+  /** Company stock (lot required, deducted) or external (nothing deducted). */
+  seedSource?: SeedSource;
+  /** FRD 10.2 - the stock lot this is issued from (company stock only). */
   seedStockId?: string;
 }
 
@@ -66,6 +68,7 @@ export function SeedDistributionFormModal({
         unit: record.unit,
         batchNumber: record.batchNumber ?? undefined,
         distributionDate: dayjs(record.distributionDate),
+        seedSource: initialSeedSource(record),
         seedStockId: record.seedStockId ?? undefined,
       });
     }
@@ -75,9 +78,15 @@ export function SeedDistributionFormModal({
   const { data: farmer } = useFarmer(selectedFarmerId);
 
   // FRD 10.2 - lots at the farmer's branch this handout can be issued from.
-  const editing = record ? { seedStockId: record.seedStockId, quantity: Number(record.quantity) } : null;
+  const editing = record
+    ? { seedStockId: record.seedStockId, seedSource: record.seedSource, quantity: Number(record.quantity) }
+    : null;
   const { lots, loading: lotsLoading } = useIssuableLots(farmer?.branchId, editing);
-  const lotSelected = Boolean(Form.useWatch('seedStockId', form));
+  // Company stock with a lot chosen: the particulars come from the lot.
+  const seedSource = Form.useWatch('seedSource', form) as SeedSource | undefined;
+  // Both watches run on every render - a hook behind `&&` would change the hook order.
+  const seedStockId = Form.useWatch('seedStockId', form) as string | undefined;
+  const lotSelected = seedSource === 'COMPANY_STOCK' && Boolean(seedStockId);
 
   useEffect(() => {
     if (isEdit || !farmer) return;
@@ -125,7 +134,9 @@ export function SeedDistributionFormModal({
       unit: values.unit,
       batchNumber: values.batchNumber,
       distributionDate: toIsoDate(values.distributionDate) as string,
-      seedStockId: values.seedStockId,
+      seedSource: values.seedSource,
+      // Only company stock names a lot; the server refuses a lot on an external handout.
+      seedStockId: values.seedSource === 'COMPANY_STOCK' ? values.seedStockId : undefined,
     };
 
     try {
@@ -167,7 +178,7 @@ export function SeedDistributionFormModal({
           <FarmerSelect />
         </Form.Item>
 
-        <SeedLotField branchId={farmer?.branchId} lots={lots} loading={lotsLoading} editing={editing} />
+        <SeedSourceField branchId={farmer?.branchId} lots={lots} loading={lotsLoading} editing={editing} />
 
         <Row gutter={16}>
           <Col xs={24} md={12}>

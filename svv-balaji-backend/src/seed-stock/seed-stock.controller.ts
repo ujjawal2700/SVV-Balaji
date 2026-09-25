@@ -11,6 +11,7 @@ import {
   QuerySeedStockDto,
   ReceiveSeedStockDto,
   TopUpSeedStockDto,
+  TransferSeedStockDto,
   UpdateSeedStockDto,
 } from './dto/seed-stock.dto';
 
@@ -51,9 +52,16 @@ export class SeedStockController {
 
   @Post(':id/adjust')
   @RequirePermission('seedStock.manage')
-  @ApiOperation({ summary: 'Correct a count, or write off damaged/expired stock (reason required)' })
+  @ApiOperation({ summary: 'Recount (ADJUSTMENT, either direction) or WRITE_OFF damaged/expired stock. Reason required.' })
   adjust(@Param('id') id: string, @Body() dto: AdjustSeedStockDto, @CurrentUser() user: JwtPayload) {
     return this.seedStock.adjust(id, dto, user);
+  }
+
+  @Post(':id/transfer')
+  @RequirePermission('seedStock.manage')
+  @ApiOperation({ summary: 'Transfer stock to another branch (creates a lot there; both sides in the ledger)' })
+  transfer(@Param('id') id: string, @Body() dto: TransferSeedStockDto, @CurrentUser() user: JwtPayload) {
+    return this.seedStock.transfer(id, dto, user);
   }
 
   @Patch(':id')

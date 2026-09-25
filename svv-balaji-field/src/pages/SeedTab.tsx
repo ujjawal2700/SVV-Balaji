@@ -5,6 +5,7 @@ import type { SeedDistribution } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCan } from '@shared/auth/useCan';
 import { useSeedStock } from '@shared/hooks/useSeedStock';
+import { SeedSourceTag } from '@shared/components/SeedLotField';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useSeedDistribution } from '@shared/hooks/useSeedDistribution';
 import { formatDate, formatQuantity } from '@shared/utils/format';
@@ -122,7 +123,7 @@ export function FieldSeedTab() {
             }
             tags={
               <>
-                {row.seedStockId ? <Tag color="green">From stock</Tag> : null}
+                <SeedSourceTag seedSource={row.seedSource} seedStockId={row.seedStockId} />
                 {row.seedVariety ? <Tag>{row.seedVariety}</Tag> : null}
                 {row.batchNumber ? <Tag color="purple">{row.batchNumber}</Tag> : null}
               </>
@@ -224,7 +225,8 @@ function SeedSummary({ rows, loading, mineOnly }: { rows: SeedDistribution[]; lo
       handouts: rows.length,
       thisMonth: rows.filter((r) => new Date(r.distributionDate) >= monthStart).length,
       farmers: new Set(rows.map((r) => r.farmerId)).size,
-      fromStock: rows.filter((r) => r.seedStockId).length,
+      company: rows.filter((r) => (r.seedSource ?? (r.seedStockId ? 'COMPANY_STOCK' : null)) === 'COMPANY_STOCK').length,
+      external: rows.filter((r) => r.seedSource === 'EXTERNAL').length,
       seeds: Array.from(bySeed.values()).sort((a, b) => b.qty - a.qty),
     };
   }, [rows]);
@@ -247,7 +249,11 @@ function SeedSummary({ rows, loading, mineOnly }: { rows: SeedDistribution[]; lo
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {tile('Handouts', summary.handouts, `${summary.thisMonth} this month`)}
         {tile('Farmers reached', summary.farmers)}
-        {tile('From stock', summary.fromStock, `${summary.handouts - summary.fromStock} recorded without stock`)}
+        {tile('Company stock', summary.company, 'deducted from stock')}
+        {tile('External', summary.external, 'farmer provided / outside')}
+        {summary.handouts - summary.company - summary.external > 0
+          ? tile('Source not recorded', summary.handouts - summary.company - summary.external, 'older handouts')
+          : null}
       </div>
       <div style={{ marginTop: 12 }}>
         {summary.seeds.slice(0, 6).map((s) => {

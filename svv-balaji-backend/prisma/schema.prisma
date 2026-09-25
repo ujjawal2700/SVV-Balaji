@@ -506,9 +506,13 @@ model SeedDistribution {
   distributedById String
   distributedBy   User   @relation(fields: [distributedById], references: [id])
 
+  /// Where the seed came from. COMPANY_STOCK always carries `seedStockId` and was
+  /// deducted from that lot; EXTERNAL (farmer-provided or bought outside) never
+  /// does. Null only on handouts recorded before the source was captured - they
+  /// are left as they were rather than guessed at.
+  seedSource SeedSource?
+
   /// FRD 10.2 - the seed lot this handout was issued from, and deducted from.
-  /// Null for handouts recorded before seed stock existed, or for inputs that
-  /// never passed through company stock; those are recorded but not deducted.
   seedStockId String?
   seedStock   SeedStock? @relation(fields: [seedStockId], references: [id])
 
@@ -563,15 +567,31 @@ model SeedStock {
   @@map("seed_stock")
 }
 
+enum SeedSource {
+  /// Issued from a company seed stock lot and deducted from it.
+  COMPANY_STOCK
+  /// Farmer-provided or sourced outside company stock. Nothing deducted.
+  EXTERNAL
+}
+
 enum SeedStockMovementType {
   /// Seed received into the lot.
   RECEIPT
   /// Handed to a farmer (negative).
   DISTRIBUTION
-  /// A handout was reduced, moved to another lot, or deleted - stock returned (positive).
+  /// A handout was reduced, moved to another lot, re-sourced or deleted - stock returned (positive).
   DISTRIBUTION_REVERSAL
-  /// Physical count correction, damage, expiry write-off. Always carries a reason.
+  /// Physical count correction, either direction. Always carries a reason.
   ADJUSTMENT
+  /// Stock removed as unusable - damaged, spoilt, expired. Negative, always with a reason.
+  WRITE_OFF
+  /// Sent to a lot at another branch (negative). `relatedSeedStockId` is the receiving lot.
+  TRANSFER_OUT
+  /// Received from a lot at another branch (positive). `relatedSeedStockId` is the sending lot.
+  TRANSFER_IN
+  /// Not a quantity change: the lot was withdrawn, restored or its expiry changed.
+  /// Recorded with quantity 0 so the lot's history is complete.
+  LOT_UPDATE
 }
 
 /// Append-only ledger for SeedStock. `quantity` is signed; `balanceAfter` is the
@@ -590,6 +610,9 @@ model SeedStockMovement {
   /// The handout this movement belongs to. A plain id, not a relation, so the
   /// ledger keeps its history after a handout is deleted.
   seedDistributionId String?
+
+  /// For a transfer, the lot on the other side. Plain id for the same reason.
+  relatedSeedStockId String?
 
   performedById String
   performedBy   User   @relation("SeedStockMovementBy", fields: [performedById], references: [id])

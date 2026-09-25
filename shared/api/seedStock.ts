@@ -36,10 +36,30 @@ export const seedStockApi = {
     return unwrap<SeedStockLot>(response.data);
   },
 
-  /** Signed quantity; reason required. */
-  async adjust(id: string, quantity: number, reason: string): Promise<SeedStockLot> {
-    const response = await api.post<SeedStockLot>(`/seed-stock/${id}/adjust`, { quantity, reason });
+  /**
+   * Signed quantity; reason required. `kind` WRITE_OFF records destroyed stock
+   * (negative only); ADJUSTMENT is a recount either way.
+   */
+  async adjust(
+    id: string,
+    quantity: number,
+    reason: string,
+    kind: 'ADJUSTMENT' | 'WRITE_OFF' = 'ADJUSTMENT',
+  ): Promise<SeedStockLot> {
+    const response = await api.post<SeedStockLot>(`/seed-stock/${id}/adjust`, { quantity, reason, kind });
     return unwrap<SeedStockLot>(response.data);
+  },
+
+  /** Move stock to another branch; a lot is created there. Both sides are in the ledger. */
+  async transfer(
+    id: string,
+    input: { toBranchId: string; quantity: number; reason?: string },
+  ): Promise<{ from: SeedStockLot; to: SeedStockLot }> {
+    const response = await api.post<{ from: SeedStockLot; to: SeedStockLot }>(
+      `/seed-stock/${id}/transfer`,
+      pruneEmpty(input),
+    );
+    return unwrap<{ from: SeedStockLot; to: SeedStockLot }>(response.data);
   },
 
   async update(id: string, input: UpdateSeedStockInput): Promise<SeedStockLot> {
