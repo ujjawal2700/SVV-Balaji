@@ -6,6 +6,7 @@ import type {
   FieldVisit,
   FieldVisitDetail,
   FieldVisitDocument,
+  FieldReport,
   UpdateFieldVisitInput,
 } from './types';
 
@@ -23,6 +24,12 @@ export const fieldVisitsApi = {
       params: pruneEmpty(filters),
     });
     return unwrapList<FieldVisit>(response.data);
+  },
+
+  /** FRD 12.7 - the field report, generated from the visit on every read. */
+  async report(id: string): Promise<FieldReport> {
+    const response = await api.get<FieldReport>(`/field-visits/${id}/report`);
+    return unwrap<FieldReport>(response.data);
   },
 
   async get(id: string): Promise<FieldVisitDetail> {

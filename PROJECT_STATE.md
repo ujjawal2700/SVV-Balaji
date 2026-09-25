@@ -1,7 +1,7 @@
 # SVV Balaji — Project State
 
-**Last updated:** 18 September 2026 · **Updated by:** Raunak
-**Programme week:** 7 of 18 (Week 1 commenced 4 Aug 2026)
+**Last updated:** 25 September 2026 · **Updated by:** Raunak
+**Programme week:** 8 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
 > first. Keep it current; a stale state file is worse than none.
@@ -16,7 +16,15 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**21 Sep (latest) — Storefront checkout & fulfilment lifecycle is real end to end.** Address -> server-side
+**25 Sep (latest) — Field app (WS3.1) gaps closed: FRD 12.7 field report, 7.3 farmer profile, 12.1 planned
+visits, 7.4 search filters.** A field report (harvest outlook vs contract, risk flags, next steps for procurement
+and production) is generated from every visit and opens automatically when one is saved; also in the admin
+field-visit drawer. Farmers get a full profile (crop history, visits, seed, training, agreements, procurement &
+payments, land, rating). Visits can be planned ahead; recording the visit completes the plan. **Needs
+`prisma migrate deploy` (new `field_visit_plans` table) + generate + API restart.** Still open for the field
+app: offline capture (client decision) and seed-stock linkage (FRD 10.2 wording). See `DEV_LOG.md` (2026-09-25).
+
+**21 Sep — Storefront checkout & fulfilment lifecycle is real end to end.** Address -> server-side
 LOCAL (franchise outlet + rider + doorstep OTP) vs SHIPROCKET (central depot + AWB + webhook) routing -> server-computed
 totals -> row-locked stock holds (15-min TTL, ON_HOLD/RECALLED excluded) -> atomic order -> live Socket.io feed + web push +
 reconciliation -> FIFO packing with barcode scan -> DELIVERED -> loyalty. B2B on credit terms too. Verified live incl. a

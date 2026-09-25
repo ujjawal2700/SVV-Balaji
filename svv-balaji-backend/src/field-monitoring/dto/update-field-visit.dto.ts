@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/swagger';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreateFieldVisitDto } from './create-field-visit.dto';
 
 /**
@@ -7,4 +7,7 @@ import { CreateFieldVisitDto } from './create-field-visit.dto';
  * of them, so all of it stays correctable - including the farmer, since a visit
  * logged against the wrong neighbour is a common slip.
  */
-export class UpdateFieldVisitDto extends PartialType(CreateFieldVisitDto) {}
+export class UpdateFieldVisitDto extends PartialType(
+  // A plan is completed once, when the visit is recorded - not re-pointed later.
+  OmitType(CreateFieldVisitDto, ['planId'] as const),
+) {}

@@ -1,0 +1,200 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e15]:
+    - complementary [ref=f2e16]:
+      - generic [ref=f2e17]:
+        - generic [ref=f2e18]:
+          - img "SVV Balaji Logo" [ref=f2e19]
+          - generic [ref=f2e20]:
+            - strong [ref=f2e22]: SVV Balaji
+            - generic [ref=f2e23]: Enterprise Portal
+        - generic [ref=f2e25]:
+          - img "search" [ref=f2e27]
+          - textbox "Search menus..." [ref=f2e30]
+        - menu [ref=f2e33]:
+          - menuitem "dashboard Overview" [ref=f2e34] [cursor=pointer]:
+            - img "dashboard" [ref=f2e35]
+            - generic [ref=f2e38]: Overview
+          - menuitem "team Farm Sourcing" [ref=f2e39] [cursor=pointer]:
+            - img "team" [ref=f2e40]
+            - generic [ref=f2e43]: Farm Sourcing
+          - menuitem "team Supplier Sourcing" [ref=f2e44] [cursor=pointer]:
+            - img "team" [ref=f2e45]
+            - generic [ref=f2e48]: Supplier Sourcing
+          - menuitem "inbox Procurement" [ref=f2e49] [cursor=pointer]:
+            - img "inbox" [ref=f2e50]
+            - generic [ref=f2e53]: Procurement
+          - menuitem "gold Warehouse" [ref=f2e54] [cursor=pointer]:
+            - img "gold" [ref=f2e55]
+            - generic [ref=f2e58]: Warehouse
+          - menuitem "experiment Processing & QA" [ref=f2e59] [cursor=pointer]:
+            - img "experiment" [ref=f2e60]
+            - generic [ref=f2e63]: Processing & QA
+          - menuitem "setting Administration" [ref=f2e64] [cursor=pointer]:
+            - img "setting" [ref=f2e65]
+            - generic [ref=f2e68]: Administration
+    - generic [ref=f2e69]:
+      - banner [ref=f2e70]:
+        - button "Collapse navigation" [ref=f2e71] [cursor=pointer]:
+          - img "menu-fold" [ref=f2e73]
+        - radiogroup "segmented control" [ref=f2e77]:
+          - generic [ref=f2e78]:
+            - generic [ref=f2e79] [cursor=pointer]:
+              - radio "gold Supply Chain" [checked]
+              - generic [ref=f2e81]:
+                - img "gold" [ref=f2e82]
+                - generic [ref=f2e85]: Supply Chain
+            - generic [ref=f2e86] [cursor=pointer]:
+              - radio "shop Customer & Retail"
+              - generic [ref=f2e88]:
+                - img "shop" [ref=f2e89]
+                - generic [ref=f2e92]: Customer & Retail
+        - generic [ref=f2e93]:
+          - generic "Live order feed" [ref=f2e94]: ● Live
+          - button "bell Enable order alerts" [ref=f2e95] [cursor=pointer]:
+            - img "bell" [ref=f2e97]
+            - generic [ref=f2e100]: Enable order alerts
+          - generic [ref=f2e101]: Super Admin
+          - generic [ref=f2e102] [cursor=pointer]:
+            - generic [ref=f2e103]: S
+            - generic [ref=f2e105]: Super Admin
+      - main [ref=f2e106]:
+        - generic [ref=f2e107]:
+          - generic [ref=f2e108]:
+            - generic [ref=f2e109]:
+              - heading "Support Tickets" [level=4] [ref=f2e110]
+              - generic [ref=f2e111]: Real-time help-desk for Customer & Retailer requests. Live two-way chat with instant delivery.
+            - generic [ref=f2e112]: Live Socket
+          - generic [ref=f2e119]:
+            - generic [ref=f2e120]:
+              - generic [ref=f2e121]:
+                - generic [ref=f2e122]:
+                  - img "search" [ref=f2e124]
+                  - textbox "Search tickets, products, orders, customers" [ref=f2e127]
+                - generic [ref=f2e129]:
+                  - generic [ref=f2e132] [cursor=pointer]:
+                    - combobox [ref=f2e134]
+                    - generic "All customers" [ref=f2e135]
+                  - button "Needs reply" [ref=f2e136] [cursor=pointer]
+                - generic [ref=f2e138]:
+                  - button "All 2" [ref=f2e139] [cursor=pointer]
+                  - button "Open 0" [ref=f2e140] [cursor=pointer]
+                  - button "In progress 2" [ref=f2e141] [cursor=pointer]
+                  - button "Resolved 0" [ref=f2e142] [cursor=pointer]
+                  - button "Closed 0" [ref=f2e143] [cursor=pointer]
+              - generic [ref=f2e144]:
+                - 'button "Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves Rose B2C a few seconds Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves You: We have reviewed your request. A replacement pack for your spices combo is being dispatched right away! In progress · SO-20260924-001" [ref=f2e145] [cursor=pointer]':
+                  - img "Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves" [ref=f2e147]
+                  - generic [ref=f2e148]:
+                    - generic [ref=f2e149]:
+                      - generic [ref=f2e150]:
+                        - generic [ref=f2e151]: Rose
+                        - generic [ref=f2e152]: B2C
+                      - generic [ref=f2e153]: a few seconds
+                    - generic [ref=f2e154]: Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves
+                    - generic [ref=f2e155]: "You: We have reviewed your request. A replacement pack for your spices combo is being dispatched right away!"
+                    - generic [ref=f2e157]:
+                      - generic [ref=f2e159]: In progress
+                      - generic [ref=f2e160]: ·
+                      - generic [ref=f2e161]: SO-20260924-001
+                - 'button "Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves Rose B2C 20 minutes Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves You: ok In progress · SO-20260924-001" [ref=f2e162] [cursor=pointer]':
+                  - img "Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves" [ref=f2e164]
+                  - generic [ref=f2e165]:
+                    - generic [ref=f2e166]:
+                      - generic [ref=f2e167]:
+                        - generic [ref=f2e168]: Rose
+                        - generic [ref=f2e169]: B2C
+                      - generic [ref=f2e170]: 20 minutes
+                    - generic [ref=f2e171]: Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves
+                    - generic [ref=f2e172]: "You: ok"
+                    - generic [ref=f2e174]:
+                      - generic [ref=f2e176]: In progress
+                      - generic [ref=f2e177]: ·
+                      - generic [ref=f2e178]: SO-20260924-001
+            - generic [ref=f2e179]:
+              - generic [ref=f2e180]:
+                - generic [ref=f2e181]: R
+                - generic [ref=f2e183]:
+                  - generic [ref=f2e184]:
+                    - strong [ref=f2e186]: Rose
+                    - generic [ref=f2e187]: B2C
+                  - generic [ref=f2e188]: CUST-B2C-000143 · 9999999999
+                - generic [ref=f2e189]:
+                  - link [ref=f2e190] [cursor=pointer]:
+                    - /url: tel:9999999999
+                    - img "phone" [ref=f2e192]
+                  - link [ref=f2e195] [cursor=pointer]:
+                    - /url: https://wa.me/919999999999
+                    - img "whats-app" [ref=f2e197]
+                  - link [ref=f2e201] [cursor=pointer]:
+                    - /url: /b2c-customers/16934a49-d23d-4692-9bcb-63224f2a6277
+                    - button [ref=f2e202]:
+                      - img "user" [ref=f2e204]
+              - generic [ref=f2e208]:
+                - generic [ref=f2e209]:
+                  - button [ref=f2e210] [cursor=pointer]:
+                    - img "Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves" [ref=f2e211]
+                    - img "export" [ref=f2e213]
+                  - generic [ref=f2e216]:
+                    - generic [ref=f2e217]:
+                      - generic [ref=f2e218]: hyy
+                      - generic [ref=f2e219]: General Support
+                    - generic [ref=f2e221]:
+                      - link "Premium Whole Spices Combo – Dalchini, Black …" [ref=f2e222] [cursor=pointer]
+                      - button [ref=f2e223] [cursor=pointer]:
+                        - text: Show more
+                        - img "down" [ref=f2e224]
+                    - generic [ref=f2e227]:
+                      - button [ref=f2e228] [cursor=pointer]:
+                        - text: TKT-20260925-001
+                        - img "copy" [ref=f2e229]
+                      - generic [ref=f2e232]: ·
+                      - generic [ref=f2e233] [cursor=pointer]:
+                        - img "shopping" [ref=f2e234]
+                        - generic [ref=f2e237]: SO-20260924-001 ↗
+                      - generic [ref=f2e238]: ·
+                      - generic [ref=f2e239]:
+                        - img "clock-circle" [ref=f2e240]
+                        - text: Raised 25 Sep, 12:20 PM
+                - generic [ref=f2e244]:
+                  - generic [ref=f2e247] [cursor=pointer]:
+                    - combobox [ref=f2e249]
+                    - generic [ref=f2e250]: Medium Priority
+                  - generic [ref=f2e255] [cursor=pointer]:
+                    - combobox [ref=f2e257]
+                    - generic [ref=f2e258]: In progress
+              - generic [ref=f2e261]:
+                - generic [ref=f2e262]: Today
+                - generic [ref=f2e263]:
+                  - generic [ref=f2e264]: R
+                  - generic [ref=f2e266]:
+                    - generic [ref=f2e267]:
+                      - text: Rose
+                      - generic [ref=f2e268]: Initial Request
+                    - generic [ref=f2e269]: "Customer selected resolution: Custom Query. Order Number: SO-20260924-001."
+                    - generic [ref=f2e270]: 12:20 PM
+                - generic [ref=f2e271]:
+                  - generic [ref=f2e272]:
+                    - generic [ref=f2e273]: Super Admin
+                    - generic [ref=f2e274]: We have reviewed your request. A replacement pack for your spices combo is being dispatched right away!
+                    - generic [ref=f2e275]: 12:24 PM
+                  - img "customer-service" [ref=f2e278]
+              - generic [ref=f2e282]:
+                - textbox "Type your reply to Rose (sent instantly to their mobile app)…" [ref=f2e283]
+                - generic [ref=f2e284]:
+                  - generic [ref=f2e285]:
+                    - button "thunderbolt Quick Templates down" [ref=f2e286] [cursor=pointer]:
+                      - img "thunderbolt" [ref=f2e288]
+                      - generic [ref=f2e291]: Quick Templates
+                      - img "down" [ref=f2e292]
+                    - button "check-circle Mark Resolved" [ref=f2e295] [cursor=pointer]:
+                      - img "check-circle" [ref=f2e297]
+                      - generic [ref=f2e301]: Mark Resolved
+                  - generic [ref=f2e302]:
+                    - generic [ref=f2e303]: Press Ctrl+Enter to send
+                    - button "send Send Reply" [disabled] [ref=f2e304]:
+                      - generic:
+                        - img "send"
+                      - generic: Send Reply
+  - generic [ref=f2e306]:
+    - img "check-circle" [ref=f2e307]
+    - generic [ref=f2e310]: Reply delivered instantly to customer app

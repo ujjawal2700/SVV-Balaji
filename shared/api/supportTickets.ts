@@ -12,6 +12,15 @@ export interface SupportTicketCustomer {
   email?: string | null;
 }
 
+export interface SupportTicketProduct {
+  id: string;
+  name: string;
+  sku?: string | null;
+  imageUrl?: string | null;
+  price?: number | null;
+  quantity?: number | null;
+}
+
 export interface SupportInboxRow {
   id: string;
   ticketNumber: string;
@@ -27,6 +36,7 @@ export interface SupportInboxRow {
   lastMessage: { author: SupportMessageAuthor; preview: string; at: string };
   /** The customer spoke last on an open ticket - staff owe a reply. */
   awaitingReply: boolean;
+  product?: SupportTicketProduct | null;
 }
 
 export interface SupportInbox {
@@ -49,6 +59,7 @@ export interface SupportTicketThread {
   resolvedAt: string | null;
   resolvedBy: { id: string; fullName: string } | null;
   messages: Array<{ id: string; author: SupportMessageAuthor; body: string; createdAt: string; staffName: string | null }>;
+  product?: SupportTicketProduct | null;
 }
 
 export interface SupportInboxQuery {

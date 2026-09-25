@@ -18,6 +18,7 @@ import { useCanFn } from '@shared/auth/useCan';
 import { useAgreements } from '@shared/hooks/useAgreements';
 import { useFarmers } from '@shared/hooks/useFarmers';
 import { useFieldVisits } from '@shared/hooks/useFieldVisits';
+import { useFieldVisitPlans } from '@shared/hooks/useFieldVisitPlans';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useHarvestInspections } from '@shared/hooks/useProcurement';
 import { useSeedDistribution } from '@shared/hooks/useSeedDistribution';
@@ -57,6 +58,10 @@ export function FieldHomePage() {
   const training = useTrainingSessions();
   const seed = useSeedDistribution();
   const inspections = useHarvestInspections({});
+  const plans = useFieldVisitPlans(
+    { status: 'PLANNED', expertId: user?.id },
+    { enabled: Boolean(user?.id) && can('FIELD_VISIT_VIEW') },
+  );
 
   const loading =
     farmers.isLoading || agreements.isLoading || visits.isLoading || inspections.isLoading;
@@ -73,8 +78,9 @@ export function FieldHomePage() {
         inspectedFarmerIds: new Set(
           (inspections.data?.data ?? []).map((inspection) => inspection.farmerId),
         ),
+        plans: plans.data?.data ?? [],
       }),
-    [user?.id, farmers.data, agreements.data, visits.data, training.data, seed.data, inspections.data],
+    [user?.id, farmers.data, agreements.data, visits.data, training.data, seed.data, inspections.data, plans.data],
   );
 
   const overdue = schedule.filter((item) => item.urgency === 'overdue');
@@ -182,6 +188,10 @@ export function FieldHomePage() {
           : { color: '#047857', bg: '#d1fae5', border: '#a7f3d0', label: 'Harvest Due' };
       case 'training':
         return { color: '#6d28d9', bg: '#ede9fe', border: '#ddd6fe', label: 'Training Due' };
+      case 'planned-visit':
+        return item.urgency === 'overdue'
+          ? { color: '#b91c1c', bg: '#fee2e2', border: '#fecaca', label: 'Visit Overdue' }
+          : { color: '#0f766e', bg: '#ccfbf1', border: '#99f6e4', label: 'Planned Visit' };
       default:
         return { color: '#475569', bg: '#f1f5f9', border: '#e2e8f0', label: KIND_LABEL[item.kind as keyof typeof KIND_LABEL] || 'Task' };
     }

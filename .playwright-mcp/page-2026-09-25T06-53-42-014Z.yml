@@ -1,0 +1,266 @@
+- generic [ref=f1e44]:
+  - complementary [ref=f1e45]:
+    - generic [ref=f1e46]:
+      - generic [ref=f1e47]:
+        - img "SVV Balaji Logo" [ref=f1e48]
+        - generic [ref=f1e49]:
+          - strong [ref=f1e51]: SVV Balaji
+          - generic [ref=f1e52]: Enterprise Portal
+      - generic [ref=f1e54]:
+        - img "search" [ref=f1e56]
+        - textbox "Search menus..." [ref=f1e59]
+      - menu [ref=f1e62]:
+        - menuitem "dashboard Overview" [ref=f1e63] [cursor=pointer]:
+          - img "dashboard" [ref=f1e64]
+          - generic [ref=f1e67]: Overview
+        - menuitem "team Farm Sourcing" [ref=f1e68] [cursor=pointer]:
+          - img "team" [ref=f1e69]
+          - generic [ref=f1e72]: Farm Sourcing
+        - menuitem "team Supplier Sourcing" [ref=f1e73] [cursor=pointer]:
+          - img "team" [ref=f1e74]
+          - generic [ref=f1e77]: Supplier Sourcing
+        - menuitem "inbox Procurement" [ref=f1e78] [cursor=pointer]:
+          - img "inbox" [ref=f1e79]
+          - generic [ref=f1e82]: Procurement
+        - menuitem "gold Warehouse" [ref=f1e83] [cursor=pointer]:
+          - img "gold" [ref=f1e84]
+          - generic [ref=f1e87]: Warehouse
+        - menuitem "experiment Processing & QA" [ref=f1e88] [cursor=pointer]:
+          - img "experiment" [ref=f1e89]
+          - generic [ref=f1e92]: Processing & QA
+        - menuitem "setting Administration" [ref=f1e93] [cursor=pointer]:
+          - img "setting" [ref=f1e94]
+          - generic [ref=f1e97]: Administration
+  - generic [ref=f1e98]:
+    - banner [ref=f1e99]:
+      - button "Collapse navigation" [ref=f1e100] [cursor=pointer]:
+        - img "menu-fold" [ref=f1e102]
+      - radiogroup "segmented control" [ref=f1e106]:
+        - generic [ref=f1e107]:
+          - generic [ref=f1e108] [cursor=pointer]:
+            - radio "gold Supply Chain" [checked]
+            - generic [ref=f1e110]:
+              - img "gold" [ref=f1e111]
+              - generic [ref=f1e114]: Supply Chain
+          - generic [ref=f1e115] [cursor=pointer]:
+            - radio "shop Customer & Retail"
+            - generic [ref=f1e117]:
+              - img "shop" [ref=f1e118]
+              - generic [ref=f1e121]: Customer & Retail
+      - generic [ref=f1e122]:
+        - generic "Live order feed" [ref=f1e123]: ● Live
+        - button "bell Enable order alerts" [ref=f1e124] [cursor=pointer]:
+          - img "bell" [ref=f1e126]
+          - generic [ref=f1e129]: Enable order alerts
+        - generic [ref=f1e130]: Super Admin
+        - generic [ref=f1e131] [cursor=pointer]:
+          - generic [ref=f1e132]: S
+          - generic [ref=f1e134]: Super Admin
+    - main [ref=f1e135]:
+      - generic [ref=f1e348]:
+        - navigation [ref=f1e350]:
+          - list [ref=f1e351]:
+            - listitem [ref=f1e352]:
+              - generic [ref=f1e354] [cursor=pointer]:
+                - img "arrow-left" [ref=f1e355]
+                - text: Product Catalog
+            - listitem [aria-hidden] [ref=f1e358]: /
+            - listitem [ref=f1e359]: "Edit: Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves"
+        - generic [ref=f1e361]:
+          - generic [ref=f1e362]:
+            - 'heading "Edit product: Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves" [level=4] [ref=f1e363]'
+            - generic [ref=f1e364]: Every section here maps to a section of the storefront product page. Anything left blank is simply hidden from shoppers.
+          - generic [ref=f1e367]:
+            - button "eye Storefront preview" [ref=f1e369] [cursor=pointer]:
+              - img "eye" [ref=f1e371]
+              - generic [ref=f1e374]: Storefront preview
+            - button "Cancel" [ref=f1e376] [cursor=pointer]
+            - button "save Save changes" [ref=f1e379] [cursor=pointer]:
+              - img "save" [ref=f1e381]
+              - generic [ref=f1e384]: Save changes
+        - generic [ref=f1e389]:
+          - tablist [ref=f1e390]:
+            - generic [ref=f1e392]:
+              - tab [selected] [ref=f1e394] [cursor=pointer]:
+                - generic [ref=f1e395]:
+                  - img "appstore" [ref=f1e396]
+                  - text: 1. Basic info
+              - tab [ref=f1e400] [cursor=pointer]:
+                - generic [ref=f1e401]:
+                  - img "tag" [ref=f1e402]
+                  - text: 2. Pricing & orders
+              - tab [ref=f1e406] [cursor=pointer]:
+                - generic [ref=f1e407]:
+                  - img "picture" [ref=f1e408]
+                  - text: 3. Media & SEO
+              - tab [ref=f1e412] [cursor=pointer]:
+                - generic [ref=f1e413]:
+                  - img "info-circle" [ref=f1e414]
+                  - text: 4. Product information
+              - tab [ref=f1e419] [cursor=pointer]:
+                - generic [ref=f1e420]:
+                  - img "tags" [ref=f1e421]
+                  - text: 5. Offers & FAQs
+              - tab [ref=f1e425] [cursor=pointer]:
+                - generic [ref=f1e426]:
+                  - img "shopping" [ref=f1e427]
+                  - text: 6. Inventory
+              - tab [ref=f1e431] [cursor=pointer]:
+                - generic [ref=f1e432]:
+                  - img "barcode" [ref=f1e433]
+                  - text: 7. Pack sizes
+            - button [ref=f1e437]:
+              - img "ellipsis" [ref=f1e438]
+          - generic [ref=f1e442]:
+            - tabpanel "appstore 1. Basic info" [ref=f1e443]:
+              - generic [ref=f1e444]:
+                - alert [ref=f1e445]:
+                  - img "check-circle" [ref=f1e446]
+                  - generic [ref=f1e449]:
+                    - generic [ref=f1e450]: Published — shoppers can find this product
+                    - generic [ref=f1e451]:
+                      - generic [ref=f1e452]: Listed under Spices › Whole Spices › All Products.
+                      - generic [ref=f1e453]: "Also shown in: Best of the Basics (home)."
+                      - generic [ref=f1e454]:
+                        - text: "Direct link:"
+                        - code [ref=f1e456]: /product-detail/premium-whole-spices-combo-dalchini-black-cardamom-green-cardamom-black-pepper-cloves
+                - generic [ref=f1e457]:
+                  - generic [ref=f1e458]: Identity
+                  - generic [ref=f1e462]:
+                    - generic [ref=f1e465]:
+                      - generic "Product name" [ref=f1e467]: "* Product name"
+                      - textbox "* Product name" [ref=f1e471]:
+                        - /placeholder: e.g. Premium Chakki Atta
+                        - text: Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves
+                    - generic [ref=f1e474]:
+                      - generic "Brand" [ref=f1e476]
+                      - textbox "Brand" [ref=f1e480]:
+                        - /placeholder: e.g. Desi Tokri
+                        - text: Desi Tokri
+                    - generic [ref=f1e483]:
+                      - generic "SKU" [ref=f1e485]: "* SKU"
+                      - generic [ref=f1e486]:
+                        - generic [ref=f1e490]:
+                          - textbox "* SKU" [ref=f1e491]:
+                            - /placeholder: e.g. DT-ATTA-10KG
+                            - text: DES-PREM
+                          - generic [ref=f1e492]: Generate
+                        - generic [ref=f1e493]: Unique across products and pack sizes. Upper-cased on save.
+                    - generic [ref=f1e497]:
+                      - generic "Base unit" [ref=f1e499]: "* Base unit"
+                      - combobox "* Base unit" [ref=f1e507]: BOX
+                    - generic [ref=f1e510]:
+                      - generic "Pack label" [ref=f1e512]
+                      - generic [ref=f1e513]:
+                        - textbox "Pack label" [ref=f1e516]:
+                          - /placeholder: 10kg Bag
+                          - text: 50g Each
+                        - generic [ref=f1e517]: Shown under the name — “10kg Bag”, “100g x 20”.
+                - generic [ref=f1e519]:
+                  - generic [ref=f1e521]:
+                    - generic [ref=f1e522]: Category
+                    - generic [ref=f1e523]: Decides which storefront category page lists this product
+                  - generic [ref=f1e525]:
+                    - generic [ref=f1e528]:
+                      - generic "Main category" [ref=f1e530]
+                      - generic [ref=f1e536]:
+                        - combobox "Main category" [ref=f1e538]
+                        - generic "Spices" [ref=f1e539]
+                    - generic [ref=f1e546]:
+                      - generic "Subcategory" [ref=f1e548]
+                      - generic [ref=f1e554]:
+                        - combobox [ref=f1e556]
+                        - generic "Whole Spices" [ref=f1e557]
+                - generic [ref=f1e562]:
+                  - generic [ref=f1e563]: Copy
+                  - generic [ref=f1e566]:
+                    - generic [ref=f1e568]:
+                      - generic "Badge" [ref=f1e570]
+                      - generic [ref=f1e571]:
+                        - textbox "Badge" [ref=f1e574]:
+                          - /placeholder: Optional
+                        - generic [ref=f1e575]: A small ribbon on the product card — “Buy 10 Get 1”, “100% Sharbati”.
+                    - generic [ref=f1e578]:
+                      - generic "Description" [ref=f1e580]
+                      - generic [ref=f1e584]:
+                        - textbox "Description" [ref=f1e585]:
+                          - /placeholder: Customer-facing description.
+                          - text: Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves – 50g Each | Authentic Indian Aromatic Spice (Total 250gm)
+                        - generic: 143 / 2000
+                    - generic [ref=f1e587]:
+                      - generic "Highlights" [ref=f1e589]
+                      - generic [ref=f1e590]:
+                        - generic [ref=f1e593]:
+                          - generic [ref=f1e595]:
+                            - textbox "e.g. Ground using traditional stone chakki" [ref=f1e597]: Item Form Whole
+                            - generic [ref=f1e598]:
+                              - button "arrow-up" [disabled] [ref=f1e600]:
+                                - generic:
+                                  - img "arrow-up"
+                              - button [ref=f1e602] [cursor=pointer]:
+                                - img "arrow-down" [ref=f1e604]
+                              - button [ref=f1e608] [cursor=pointer]:
+                                - img "delete" [ref=f1e610]
+                          - generic [ref=f1e614]:
+                            - textbox "e.g. Ground using traditional stone chakki" [ref=f1e616]: Diet Type Vegetarian
+                            - generic [ref=f1e617]:
+                              - button [ref=f1e619] [cursor=pointer]:
+                                - img "arrow-up" [ref=f1e621]
+                              - button [ref=f1e625] [cursor=pointer]:
+                                - img "arrow-down" [ref=f1e627]
+                              - button [ref=f1e631] [cursor=pointer]:
+                                - img "delete" [ref=f1e633]
+                          - generic [ref=f1e637]:
+                            - textbox "e.g. Ground using traditional stone chakki" [ref=f1e639]: Specialty No Artificial Flavors
+                            - generic [ref=f1e640]:
+                              - button [ref=f1e642] [cursor=pointer]:
+                                - img "arrow-up" [ref=f1e644]
+                              - button [ref=f1e648] [cursor=pointer]:
+                                - img "arrow-down" [ref=f1e650]
+                              - button [ref=f1e654] [cursor=pointer]:
+                                - img "delete" [ref=f1e656]
+                          - generic [ref=f1e660]:
+                            - textbox "e.g. Ground using traditional stone chakki" [ref=f1e662]: Part Number 5 SPICE COMBO-50g
+                            - generic [ref=f1e663]:
+                              - button [ref=f1e665] [cursor=pointer]:
+                                - img "arrow-up" [ref=f1e667]
+                              - button "arrow-down" [disabled] [ref=f1e671]:
+                                - generic:
+                                  - img "arrow-down"
+                              - button [ref=f1e673] [cursor=pointer]:
+                                - img "delete" [ref=f1e675]
+                          - button "plus Add highlight" [ref=f1e679] [cursor=pointer]:
+                            - img "plus" [ref=f1e681]
+                            - generic [ref=f1e685]: Add highlight
+                        - generic [ref=f1e686]: Bullet points above the fold. The storefront shows the first three, with “Show more”.
+                - generic [ref=f1e688]:
+                  - generic [ref=f1e690]:
+                    - generic [ref=f1e691]: Loyalty rewards
+                    - generic [ref=f1e692]: Configured centrally by Super Admin under Loyalty Rewards
+                  - generic [ref=f1e693]:
+                    - generic [ref=f1e695]:
+                      - generic "Earns loyalty points" [ref=f1e697]
+                      - generic [ref=f1e698]:
+                        - generic [ref=f1e703] [cursor=pointer]:
+                          - combobox "Earns loyalty points" [ref=f1e705]
+                          - generic "Loyalty eligible" [ref=f1e706]
+                        - generic [ref=f1e707]: Inherit follows the category's rule, then the program default. Choose an option here to override both for this product.
+                    - alert [ref=f1e709]:
+                      - img "check-circle" [ref=f1e710]
+                      - generic [ref=f1e713]: Eligible — from this product's own setting
+                - generic [ref=f1e715]:
+                  - generic [ref=f1e716]: Publishing & shelves
+                  - generic [ref=f1e720]:
+                    - generic [ref=f1e722]:
+                      - switch "Published Draft" [checked] [ref=f1e724] [cursor=pointer]:
+                        - generic [ref=f1e726]:
+                          - generic: Published
+                          - generic: Draft
+                      - generic [ref=f1e727]: Controls whether shoppers and retailers can see this product at all.
+                    - generic [ref=f1e729]:
+                      - switch [ref=f1e731] [cursor=pointer]
+                      - generic [ref=f1e734]: Popular Products & category Top Picks
+                    - generic [ref=f1e736]:
+                      - switch [checked] [ref=f1e738] [cursor=pointer]
+                      - generic [ref=f1e741]: Best of the Basics (home page)
+            - text: "*"

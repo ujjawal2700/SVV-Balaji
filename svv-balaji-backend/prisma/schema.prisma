@@ -218,6 +218,8 @@ model User {
   seedDistributionsGiven    SeedDistribution[]
   trainingSessionsConducted TrainingSession[]
   fieldVisitsAsExpert       FieldVisit[]
+  fieldVisitPlansAssigned   FieldVisitPlan[] @relation("FieldVisitPlanExpert")
+  fieldVisitPlansCreated    FieldVisitPlan[] @relation("FieldVisitPlanCreatedBy")
 
   // Phase 2 back-relations
   procurementPlansCreated ProcurementPlan[]       @relation("ProcurementPlansCreated")
@@ -305,6 +307,7 @@ model Branch {
   warehouses       Warehouse[]
   trainingSessions TrainingSession[]
   fieldVisits      FieldVisit[]
+  fieldVisitPlans  FieldVisitPlan[]
 
   // Phase 2
   procurementPlans       ProcurementPlan[]
@@ -400,6 +403,7 @@ model Farmer {
   seedDistributions   SeedDistribution[]
   trainingAttendances TrainingAttendance[]
   fieldVisits         FieldVisit[]
+  fieldVisitPlans     FieldVisitPlan[]
   plots               FarmPlot[]
 
   // Phase 2 - the traceability chain from this farmer forward
@@ -594,11 +598,69 @@ model FieldVisit {
 
   documents FieldVisitDocument[]
 
+  /// The plan this visit fulfilled, if it was scheduled in advance (FRD 12.1).
+  plan FieldVisitPlan?
+
   createdAt DateTime @default(now())
 
   @@index([farmerId])
   @@index([expertId])
   @@map("field_visits")
+}
+
+/// FRD 12.1 "schedule ... farm visits". A visit planned ahead of time.
+///
+/// Kept separate from FieldVisit on purpose: a FieldVisit is an observation
+/// record - everything on it was seen or advised at the farm. A plan is an
+/// intention with a date. Recording the visit completes the plan and links the
+/// two (`completedVisitId`), so a planned visit that never happened stays
+/// visible as overdue rather than silently turning into an empty observation.
+model FieldVisitPlan {
+  id String @id @default(uuid())
+
+  farmerId String
+  farmer   Farmer @relation(fields: [farmerId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// The executive expected to make the visit. Defaults to whoever planned it.
+  expertId String
+  expert   User   @relation("FieldVisitPlanExpert", fields: [expertId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("FieldVisitPlanCreatedBy", fields: [createdById], references: [id])
+
+  plannedDate DateTime
+  /// Why the visit is needed - crop monitoring, pest follow-up, pre-harvest check...
+  purpose     String?
+  cropName    String?
+  notes       String?
+
+  status FieldVisitPlanStatus @default(PLANNED)
+
+  /// Set when the visit is recorded against this plan. SetNull so deleting the
+  /// visit can never be blocked by its plan; the service also reopens the plan.
+  completedVisitId String?     @unique
+  completedVisit   FieldVisit? @relation(fields: [completedVisitId], references: [id], onDelete: SetNull)
+  completedAt      DateTime?
+
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([farmerId])
+  @@index([expertId, status])
+  @@index([plannedDate])
+  @@map("field_visit_plans")
+}
+
+enum FieldVisitPlanStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
 }
 
 model FieldVisitDocument {

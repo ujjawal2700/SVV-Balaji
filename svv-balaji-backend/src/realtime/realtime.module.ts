@@ -11,6 +11,6 @@ import { RealtimeController } from './realtime.controller';
   imports: [JwtModule.register({})],
   controllers: [RealtimeController],
   providers: [OrderEventsService, PushService, AdminOrdersGateway],
-  exports: [OrderEventsService, PushService],
+  exports: [OrderEventsService, PushService, AdminOrdersGateway],
 })
 export class RealtimeModule {}

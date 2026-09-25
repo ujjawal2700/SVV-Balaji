@@ -1,11 +1,14 @@
 import {
   EnvironmentOutlined,
+  FilterOutlined,
+  IdcardOutlined,
   PlusOutlined,
   QrcodeOutlined,
   SearchOutlined,
+  StarFilled,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Button, Input, Segmented, Space } from 'antd';
+import { Badge, Button, Input, Segmented, Space, Tag } from 'antd';
 import { useState } from 'react';
 import type { Farmer, FarmerStatus } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
@@ -17,6 +20,15 @@ import { FARMER_STATUS_LABELS, FarmerStatusTag } from './farmerStatus';
 import { farmerGaps } from './readiness';
 import { FieldCard, FieldFab, FieldList } from './pieces';
 import { LandProfileSheet } from './LandProfileSheet';
+import { FarmerProfileSheet } from './FarmerProfileSheet';
+import {
+  EMPTY_FILTERS,
+  FarmerFilterDrawer,
+  FarmerFilterFields,
+  activeFilterChips,
+  countActiveFilters,
+  type FarmerFilters,
+} from './FarmerFilters';
 
 type Filter = 'all' | 'pending' | 'active' | 'unmapped';
 
@@ -30,11 +42,39 @@ export function FieldFarmersTab() {
   const [editing, setEditing] = useState<Farmer | null>(null);
   const [landFor, setLandFor] = useState<Farmer | null>(null);
   const [showingCodes, setShowingCodes] = useState<Farmer | null>(null);
+  const [profileFor, setProfileFor] = useState<Farmer | null>(null);
+
+  // FRD 7.4 - crop, district, state, status and quality rating, on top of the
+  // name search and the quick filters. All applied server-side.
+  const [filters, setFilters] = useState<FarmerFilters>(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeCount = countActiveFilters(filters);
 
   const statusForQuery: FarmerStatus | undefined =
-    filter === 'pending' ? 'PENDING_VERIFICATION' : filter === 'active' ? 'ACTIVE' : undefined;
+    filter === 'pending' ? 'PENDING_VERIFICATION' : filter === 'active' ? 'ACTIVE' : filters.status;
 
-  const farmers = useFarmers({ fullName: search || undefined, status: statusForQuery });
+  const farmers = useFarmers({
+    fullName: search || undefined,
+    status: statusForQuery,
+    crop: filters.crop || undefined,
+    district: filters.district || undefined,
+    state: filters.state || undefined,
+    minRating: filters.minRating,
+  });
+  // Unfiltered list, for the district / state / crop suggestions. Same query key
+  // the Home screen uses, so it is normally already cached.
+  const allFarmers = useFarmers({});
+
+  // The quick filter and the Status filter both set status; whichever was
+  // touched last wins, and the other steps aside.
+  const changeQuickFilter = (next: Filter) => {
+    setFilter(next);
+    if (next === 'pending' || next === 'active') setFilters((f) => ({ ...f, status: undefined }));
+  };
+  const changeFilters = (next: FarmerFilters) => {
+    setFilters(next);
+    if (next.status && (filter === 'pending' || filter === 'active')) setFilter('all');
+  };
 
   const rows = (farmers.data?.data ?? []).filter((farmer) =>
     filter === 'unmapped' ? !farmer.gpsLocation : true,
@@ -95,7 +135,7 @@ export function FieldFarmersTab() {
           <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
             <Segmented<Filter>
               value={filter}
-              onChange={setFilter}
+              onChange={changeQuickFilter}
               style={{
                 background: '#f1f5f9',
                 padding: 3,
@@ -111,6 +151,14 @@ export function FieldFarmersTab() {
               ]}
             />
           </div>
+
+          {isMobile ? (
+            <Badge count={activeCount} size="small">
+              <Button icon={<FilterOutlined />} onClick={() => setFiltersOpen(true)} style={{ height: 36, borderRadius: 10 }}>
+                Filters
+              </Button>
+            </Badge>
+          ) : null}
 
           {!isMobile && canRegister ? (
             <Button
@@ -134,6 +182,33 @@ export function FieldFarmersTab() {
         </div>
       </div>
 
+      {!isMobile ? (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 16px' }}>
+          <FarmerFilterFields value={filters} onChange={changeFilters} farmers={allFarmers.data?.data ?? []} inline />
+        </div>
+      ) : null}
+
+      {activeCount > 0 ? (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {activeFilterChips(filters).map((chip) => (
+            <Tag
+              key={chip.key}
+              closable
+              onClose={() => changeFilters({ ...filters, [chip.key]: undefined })}
+              style={{ margin: 0, padding: '2px 8px' }}
+            >
+              {chip.label}
+            </Tag>
+          ))}
+          <Button type="link" size="small" onClick={() => setFilters(EMPTY_FILTERS)}>
+            Clear filters
+          </Button>
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            {rows.length} {rows.length === 1 ? 'match' : 'matches'}
+          </span>
+        </div>
+      ) : null}
+
       {/* --- Farmer Cards Grid --- */}
       <FieldList<Farmer>
         rows={rows}
@@ -142,9 +217,11 @@ export function FieldFarmersTab() {
         onRetry={() => void farmers.refetch()}
         keyOf={(farmer) => farmer.id}
         emptyText={
-          filter === 'unmapped'
+          filter === 'unmapped' && activeCount === 0
             ? 'Every farmer / supplier has a location recorded'
-            : search
+            : activeCount > 0
+              ? 'No farmer / supplier matches these filters'
+              : search
               ? `No farmer / supplier matching "${search}"`
               : 'No farmers / suppliers yet — register the first one from the button below'
         }
@@ -193,6 +270,26 @@ export function FieldFarmersTab() {
               tags={
                 <>
                   <FarmerStatusTag status={farmer.status} />
+
+                  {farmer.qualityRating !== null ? (
+                    <span
+                      title="Quality rating (FRD 7.6)"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        background: '#fefce8',
+                        color: '#a16207',
+                        border: '1px solid #fef08a',
+                      }}
+                    >
+                      <StarFilled style={{ fontSize: 11 }} /> {Number(farmer.qualityRating).toFixed(0)}
+                    </span>
+                  ) : null}
 
                   {farmer.farmSizeAcres ? (
                     <span
@@ -283,7 +380,20 @@ export function FieldFarmersTab() {
                 </div>
               }
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 4 }}>
+                <Button
+                  block
+                  type="primary"
+                  ghost
+                  style={{ fontWeight: 600, borderRadius: 8, height: 38 }}
+                  icon={<IdcardOutlined />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setProfileFor(farmer);
+                  }}
+                >
+                  Profile
+                </Button>
                 <Button
                   block
                   style={{
@@ -337,6 +447,24 @@ export function FieldFarmersTab() {
         onClose={() => setLandFor(null)}
       />
       <FarmerCodesModal farmer={showingCodes} onClose={() => setShowingCodes(null)} />
+      <FarmerProfileSheet
+        farmer={profileFor}
+        open={Boolean(profileFor)}
+        onClose={() => setProfileFor(null)}
+        onEdit={(f) => {
+          setEditing(f);
+          setFormOpen(true);
+        }}
+        onMapLand={(f) => setLandFor(f)}
+        onShowCodes={(f) => setShowingCodes(f)}
+      />
+      <FarmerFilterDrawer
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        value={filters}
+        onChange={changeFilters}
+        farmers={allFarmers.data?.data ?? []}
+      />
     </Space>
   );
 }

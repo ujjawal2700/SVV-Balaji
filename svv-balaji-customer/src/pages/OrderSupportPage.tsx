@@ -1,27 +1,22 @@
 import {
   ArrowLeftOutlined,
-  CheckCircleFilled,
+  ClockCircleOutlined,
   CustomerServiceOutlined,
-  ExclamationCircleOutlined,
-  FileTextOutlined,
   MessageOutlined,
-  RedoOutlined,
   RightOutlined,
   SendOutlined,
   ShoppingOutlined,
-  SmileOutlined,
-  SyncOutlined,
-  UserOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Input, Skeleton, Typography, message } from 'antd';
+import { Button, Input, Skeleton, Tag, message } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { checkoutApi, type OrderDetail, type OrderSummaryRow } from '../api/checkout';
 import type { SupportTicketCategory } from '../api/supportTickets';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCreateSupportTicket } from '../hooks/useSupportTickets';
 import { formatInr } from '../utils/money';
+import { statusColor, statusLabel } from './orderStatus';
 
 interface ChatMessage {
   id: string;
@@ -74,15 +69,15 @@ export function OrderSupportPage() {
   // Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [botTyping, setBotTyping] = useState(false);
+  const streamRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Scroll the chat pane itself, not the window — on desktop the chat is a card
+  // inside the page and scrollIntoView would drag the whole page along.
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const el = streamRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages, botTyping]);
 
   // Helper to format date
   const formatOrderDate = (isoString?: string) => {
@@ -172,7 +167,9 @@ export function OrderSupportPage() {
   };
 
   const addBotMessage = (text: string, options?: ChatMessage['options']) => {
+    setBotTyping(true);
     setTimeout(() => {
+      setBotTyping(false);
       const botMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
         sender: 'bot',
@@ -405,229 +402,284 @@ export function OrderSupportPage() {
     }
   };
 
+  // Only the newest set of choices is live; older ones stay visible as history.
+  const lastOptionsId = [...messages].reverse().find((m) => m.options?.length)?.id;
+  const loadingOrder = Boolean(activeOrderNumber) && orderDetailsQuery.isLoading;
+  const orderLink = activeOrderNumber ? `/orders/${activeOrderNumber}` : '/orders';
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-      {/* Header Bar - Matching Blinkit Support Header */}
-      <header
-        style={{
-          background: '#ffffff',
-          borderBottom: '1px solid #e2e8f0',
-          padding: '12px 16px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate(-1)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              color: '#0f172a',
-            }}
-          >
-            <ArrowLeftOutlined style={{ fontSize: 18 }} />
-          </button>
-          <div>
-            <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', display: 'block', lineHeight: 1.2 }}>
-              Desi Tokri Support
-            </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12.5, color: '#64748b' }}>
-              Your personal virtual assistant
-            </Typography.Text>
-          </div>
-        </div>
+    <div className="osp">
+      <div className="osp-wrap">
+        {/* Desktop sidebar: the order this chat is about, plus help info */}
+        <aside className="osp-side">
+          {loadingOrder ? (
+            <div className="osp-card">
+              <Skeleton active paragraph={{ rows: 5 }} />
+            </div>
+          ) : activeOrder ? (
+            <OrderSummaryCard order={activeOrder} onView={() => navigate(orderLink)} />
+          ) : (
+            <RecentOrdersCard
+              orders={recentOrders}
+              loading={ordersQuery.isLoading}
+              onPick={(no) => navigate(`/orders/${no}/support`)}
+            />
+          )}
 
-        <button
-          onClick={handleEndChat}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#16a34a',
-            fontSize: 14.5,
-            fontWeight: 600,
-            cursor: 'pointer',
-            padding: '4px 8px',
-          }}
-        >
-          End chat
-        </button>
-      </header>
-
-      {/* Main Chat Stream Container */}
-      <div
-        style={{
-          flex: 1,
-          maxWidth: 580,
-          width: '100%',
-          margin: '0 auto',
-          padding: '16px 12px 100px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        {/* Date Divider */}
-        <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>
-          <span
-            style={{
-              fontSize: 12.5,
-              color: '#64748b',
-              fontWeight: 500,
-              background: '#e2e8f0',
-              padding: '3px 12px',
-              borderRadius: 12,
-            }}
-          >
-            Today
-          </span>
-        </div>
-
-        {/* Message List */}
-        {messages.map((msg) => (
-          <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
-            {/* Sender Name if Bot */}
-            {msg.sender === 'bot' ? (
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', marginBottom: 4, marginLeft: 2 }}>
-                {msg.senderName || 'DesiTokri Buddy'}
-              </span>
-            ) : null}
-
-            {/* Bubble Card */}
-            <div
-              style={{
-                maxWidth: '86%',
-                background: msg.sender === 'user' ? '#16a34a' : '#eff6ff',
-                color: msg.sender === 'user' ? '#ffffff' : '#1e293b',
-                borderRadius: msg.sender === 'user' ? '18px 18px 2px 18px' : '18px 18px 18px 2px',
-                padding: '12px 16px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                fontSize: 14.5,
-                lineHeight: 1.5,
-                border: msg.sender === 'user' ? 'none' : '1px solid #dbeafe',
-                position: 'relative',
-              }}
-            >
-              <div>{msg.text}</div>
-
-              {/* Order Contents detail box if provided */}
-              {msg.orderInfo ? (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #cbd5e1', fontSize: 13.5, color: '#334155' }}>
-                  <span style={{ fontWeight: 700, color: '#0f172a' }}>Order Contents: </span>
-                  {msg.orderInfo.itemsText}
+          <div className="osp-card">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div className="osp-avatar" style={{ background: '#fef3c7', color: '#b45309' }}>
+                <ClockCircleOutlined />
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 14 }}>We usually reply within 15 minutes</div>
+                <div style={{ color: '#64748b', fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>
+                  Updates on your request are sent by SMS and WhatsApp.
                 </div>
-              ) : null}
-
-              {/* Message Timestamp */}
-              <div
-                style={{
-                  textAlign: 'right',
-                  fontSize: 11,
-                  color: msg.sender === 'user' ? 'rgba(255,255,255,0.85)' : '#64748b',
-                  marginTop: 6,
-                }}
-              >
-                {msg.timestamp}
               </div>
             </div>
+            <Link
+              to="/support"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9', color: '#15803d', fontWeight: 600, fontSize: 13.5 }}
+            >
+              <span>
+                <MessageOutlined style={{ marginRight: 8 }} />
+                View my support requests
+              </span>
+              <RightOutlined style={{ fontSize: 11 }} />
+            </Link>
+          </div>
+        </aside>
 
-            {/* Interactive Options list card attached to Bot message */}
-            {msg.options && msg.options.length > 0 ? (
-              <div
-                style={{
-                  maxWidth: '86%',
-                  width: '100%',
-                  marginTop: 8,
-                  background: '#ffffff',
-                  borderRadius: 16,
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                  overflow: 'hidden',
-                }}
-              >
-                {msg.options.map((opt, idx) => (
-                  <button
-                    key={opt.id}
-                    onClick={opt.action}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: idx < msg.options!.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      padding: '13px 16px',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      color: '#2563eb',
-                      fontWeight: 500,
-                      lineHeight: 1.45,
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseDown={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                    onMouseUp={(e) => (e.currentTarget.style.background = 'none')}
-                  >
-                    {renderOptionText(opt.text, opt.boldWords)}
-                  </button>
-                ))}
+        {/* Chat: full screen on phones, a card on tablet/desktop */}
+        <section className="osp-chat" aria-label="Support chat">
+          <header className="osp-head">
+            <button type="button" className="osp-icon-btn" onClick={() => navigate(-1)} aria-label="Go back">
+              <ArrowLeftOutlined style={{ fontSize: 17 }} />
+            </button>
+            <div className="osp-avatar" style={{ width: 38, height: 38, fontSize: 18 }}>
+              <CustomerServiceOutlined />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 700, color: '#0f172a', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Desi Tokri Support
+              </div>
+              <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+                {botTyping ? 'typing…' : 'Online · virtual assistant'}
+              </div>
+            </div>
+            <button type="button" className="osp-end-btn" onClick={handleEndChat}>
+              End chat
+            </button>
+          </header>
+
+          {/* Compact order strip for phone/tablet, where the sidebar is hidden */}
+          {activeOrder ? (
+            <button type="button" className="osp-strip" onClick={() => navigate(orderLink)}>
+              <div className="osp-avatar" style={{ borderRadius: 10, background: '#f1f5f9', color: '#475569' }}>
+                <ShoppingOutlined />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a' }}>Order #{activeOrder.orderNumber}</div>
+                <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {activeOrder.items.length} item{activeOrder.items.length === 1 ? '' : 's'} · {formatInr(activeOrder.totals.total)}
+                </div>
+              </div>
+              <Tag color={statusColor(activeOrder.status)} style={{ margin: 0 }}>
+                {statusLabel(activeOrder.status, activeOrder.fulfillment.method)}
+              </Tag>
+              <RightOutlined style={{ fontSize: 11, color: '#94a3b8' }} />
+            </button>
+          ) : null}
+
+          <div className="osp-stream" ref={streamRef}>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500, background: '#e2e8f0', padding: '3px 12px', borderRadius: 12 }}>
+                Today
+              </span>
+            </div>
+
+            {loadingOrder ? (
+              <div style={{ maxWidth: 360 }}>
+                <Skeleton active avatar paragraph={{ rows: 3 }} />
+              </div>
+            ) : null}
+
+            {messages.map((msg) => {
+              const isUser = msg.sender === 'user';
+              const optionsLive = msg.id === lastOptionsId && !botTyping;
+              return (
+                <div key={msg.id} className={`osp-row${isUser ? ' osp-row--user' : ''}`}>
+                  {!isUser ? (
+                    <div className="osp-avatar">
+                      <CustomerServiceOutlined />
+                    </div>
+                  ) : null}
+                  <div style={{ minWidth: 0, flex: isUser ? undefined : 1 }}>
+                    {!isUser ? (
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#475569', margin: '0 0 4px 2px' }}>
+                        {msg.senderName || 'DesiTokri Buddy'}
+                      </div>
+                    ) : null}
+                    <div className={`osp-bubble osp-bubble--${isUser ? 'user' : 'bot'}`}>
+                      <div>{msg.text}</div>
+                      {msg.orderInfo ? (
+                        <div style={{ marginTop: 10, padding: '8px 10px', background: '#f8fafc', borderRadius: 10, fontSize: 13, color: '#334155' }}>
+                          <span style={{ fontWeight: 600, color: '#0f172a' }}>Order contents: </span>
+                          {msg.orderInfo.itemsText}
+                        </div>
+                      ) : null}
+                      <div style={{ textAlign: 'right', fontSize: 11, color: isUser ? 'rgba(255,255,255,0.8)' : '#94a3b8', marginTop: 4 }}>
+                        {msg.timestamp}
+                      </div>
+                    </div>
+
+                    {msg.options && msg.options.length > 0 ? (
+                      <div className="osp-options">
+                        {msg.options.map((opt) => (
+                          <button key={opt.id} type="button" className="osp-opt" onClick={opt.action} disabled={!optionsLive}>
+                            <span>{renderOptionText(opt.text, opt.boldWords)}</span>
+                            <RightOutlined style={{ fontSize: 11, flexShrink: 0 }} />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+
+            {botTyping ? (
+              <div className="osp-row">
+                <div className="osp-avatar">
+                  <CustomerServiceOutlined />
+                </div>
+                <div className="osp-bubble--bot osp-typing" aria-label="Support is typing">
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             ) : null}
           </div>
-        ))}
-        <div ref={chatEndRef} />
+
+          <div className="osp-composer">
+            <Input.TextArea
+              placeholder="Type your message here…"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onPressEnter={(e) => {
+                if (e.shiftKey) return;
+                e.preventDefault();
+                handleSendCustomText();
+              }}
+              autoSize={{ minRows: 1, maxRows: 4 }}
+              maxLength={2000}
+              style={{ borderRadius: 20, padding: '8px 14px', borderColor: '#cbd5e1', resize: 'none' }}
+            />
+            <Button
+              type="primary"
+              shape="circle"
+              icon={<SendOutlined />}
+              onClick={handleSendCustomText}
+              disabled={!inputText.trim()}
+              loading={createTicket.isPending}
+              aria-label="Send message"
+              style={{
+                background: inputText.trim() ? '#16a34a' : '#cbd5e1',
+                borderColor: inputText.trim() ? '#16a34a' : '#cbd5e1',
+                color: '#ffffff',
+                flexShrink: 0,
+                width: 40,
+                height: 40,
+              }}
+            />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function OrderSummaryCard({ order, onView }: { order: OrderDetail; onView: () => void }) {
+  const placed = new Date(order.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return (
+    <div className="osp-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Getting help with</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>#{order.orderNumber}</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>Placed on {placed}</div>
+        </div>
+        <Tag color={statusColor(order.status)} style={{ margin: 0 }}>
+          {statusLabel(order.status, order.fulfillment.method)}
+        </Tag>
       </div>
 
-      {/* Bottom Sticky Typing Bar */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: '#ffffff',
-          borderTop: '1px solid #e2e8f0',
-          padding: '10px 14px',
-          zIndex: 100,
-          boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
-        }}
-      >
-        <div style={{ maxWidth: 580, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Input
-            placeholder="Type your message here..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onPressEnter={handleSendCustomText}
-            style={{
-              borderRadius: 24,
-              padding: '8px 16px',
-              fontSize: 14.5,
-              borderColor: '#cbd5e1',
-            }}
-          />
-          <Button
-            type="primary"
-            shape="circle"
-            icon={<SendOutlined />}
-            onClick={handleSendCustomText}
-            disabled={!inputText.trim()}
-            style={{
-              background: inputText.trim() ? '#16a34a' : '#cbd5e1',
-              borderColor: inputText.trim() ? '#16a34a' : '#cbd5e1',
-              flexShrink: 0,
-              width: 40,
-              height: 40,
-            }}
-          />
-        </div>
+      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {order.items.map((item) => (
+          <div key={item.productId} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f1f5f9', overflow: 'hidden', flexShrink: 0, display: 'grid', placeItems: 'center', color: '#94a3b8' }}>
+              {item.imageUrl ? (
+                <img src={item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <ShoppingOutlined />
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, color: '#0f172a', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.name || 'Item'}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Qty {item.quantity}</div>
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a' }}>{formatInr(item.total)}</div>
+          </div>
+        ))}
       </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTop: '1px dashed #e2e8f0', fontSize: 14 }}>
+        <span style={{ color: '#475569' }}>Order total</span>
+        <strong style={{ color: '#0f172a' }}>{formatInr(order.totals.total)}</strong>
+      </div>
+
+      <Button block onClick={onView} style={{ marginTop: 14, borderRadius: 10 }}>
+        View order details
+      </Button>
+    </div>
+  );
+}
+
+function RecentOrdersCard({ orders, loading, onPick }: { orders: OrderSummaryRow[]; loading: boolean; onPick: (orderNumber: string) => void }) {
+  return (
+    <div className="osp-card">
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Need help with an order?</div>
+      <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, marginBottom: 10 }}>Pick one so we can look at it with you.</div>
+      {loading ? (
+        <Skeleton active paragraph={{ rows: 3 }} title={false} />
+      ) : orders.length === 0 ? (
+        <div style={{ fontSize: 13, color: '#94a3b8' }}>No recent orders.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {orders.slice(0, 5).map((o) => (
+            <button
+              key={o.orderNumber}
+              type="button"
+              className="osp-opt"
+              style={{ padding: '10px 4px', color: '#0f172a' }}
+              onClick={() => onPick(o.orderNumber)}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 600, fontSize: 13.5 }}>#{o.orderNumber}</span>
+                <span style={{ display: 'block', fontSize: 12, color: '#64748b', fontWeight: 400 }}>
+                  {o.itemCount} item{o.itemCount === 1 ? '' : 's'} · {formatInr(o.total)}
+                </span>
+              </span>
+              <RightOutlined style={{ fontSize: 11, color: '#94a3b8' }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -635,28 +687,24 @@ export function OrderSupportPage() {
 // Helper to bold specific keywords in option text
 function renderOptionText(text: string, boldWords?: string[]) {
   if (!boldWords || boldWords.length === 0) return text;
-  let result = text;
-  // Simple check for key words like issue, ordered item(s), etc.
   if (text.includes('issue') && text.includes('ordered item(s)')) {
     return (
       <span>
-        I have an <strong style={{ fontWeight: 700 }}>issue</strong> with the{' '}
-        <strong style={{ fontWeight: 700 }}>ordered item(s)</strong>
+        I have an <strong>issue</strong> with the <strong>ordered item(s)</strong>
       </span>
     );
   }
   if (text.includes('another issue')) {
     return (
       <span>
-        I have <strong style={{ fontWeight: 700 }}>another issue</strong> with my order
+        I have <strong>another issue</strong> with my order
       </span>
     );
   }
   if (text.includes('Instant Refund') || text.includes('Desi Tokri Wallet')) {
     return (
       <span>
-        <strong style={{ fontWeight: 700 }}>Instant Refund</strong> to{' '}
-        <strong style={{ fontWeight: 700 }}>Desi Tokri Wallet</strong>
+        <strong>Instant Refund</strong> to <strong>Desi Tokri Wallet</strong>
       </span>
     );
   }

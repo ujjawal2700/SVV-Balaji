@@ -1,4 +1,4 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { FileTextOutlined, PlusOutlined } from '@ant-design/icons';
 import { Alert, App as AntApp, Button, Descriptions, Drawer, Empty, Form, List, Select, Space, Spin, Typography } from 'antd';
 import { apiErrorMessage } from '@shared/api/client';
 import type { FieldVisitDocument } from '@shared/api/types';
@@ -7,6 +7,8 @@ import { FileUploadField } from '@shared/components/FileUploadField';
 import { AttachmentPreview } from '@shared/components/AttachmentPreview';
 import { useAddFieldVisitDocument, useFieldVisit } from '@shared/hooks/useFieldVisits';
 import { EM_DASH, formatDate, formatQuantity } from '@shared/utils/format';
+import { useState } from 'react';
+import { FieldReportDrawer } from './FieldReportDrawer';
 
 interface FieldVisitDetailDrawerProps {
   visitId: string | null;
@@ -21,6 +23,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
   const addDocument = useAddFieldVisitDocument();
   const canEdit = useCan('FIELD_VISIT_CREATE');
   const [documentForm] = Form.useForm<{ fileUrl: string; fileType: string }>();
+  const [reportOpen, setReportOpen] = useState(false);
 
   const handleAddDocument = async () => {
     if (!visitId) return;
@@ -37,10 +40,18 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
   const data = visit.data;
 
   return (
+    <>
     <Drawer
       open={Boolean(visitId)}
       onClose={onClose}
       width={680}
+      extra={
+        visitId ? (
+          <Button type="primary" icon={<FileTextOutlined />} onClick={() => setReportOpen(true)}>
+            Field report
+          </Button>
+        ) : null
+      }
       title={
         data ? `${data.farmer?.fullName ?? 'Field visit'} — ${formatDate(data.visitDate)}` : 'Field visit'
       }
@@ -147,5 +158,7 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
         </Space>
       ) : null}
     </Drawer>
+    <FieldReportDrawer visitId={reportOpen ? visitId : null} onClose={() => setReportOpen(false)} />
+    </>
   );
 }

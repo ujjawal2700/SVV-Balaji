@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Prisma, SalesChannel, SupportMessageAuthor, SupportTicketPriority, SupportTicketStatus } from '@prisma/client';
@@ -8,6 +8,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { AdminOrdersGateway } from '../realtime/admin-orders.gateway';
 
 export class StaffReplyDto {
   @IsString()
@@ -30,6 +31,119 @@ export class UpdateTicketDto {
 
 const CUSTOMER_SELECT = { id: true, name: true, phone: true, customerCode: true, channel: true } as const;
 
+export interface SupportTicketProductInfo {
+  id: string;
+  name: string;
+  sku: string | null;
+  imageUrl: string | null;
+  price: number | null;
+  quantity: number | null;
+}
+
+async function resolveTicketProduct(
+  prisma: PrismaService,
+  subject: string,
+  orderNumber: string | null,
+  cachedOrder?: any,
+): Promise<SupportTicketProductInfo | null> {
+  let product: SupportTicketProductInfo | null = null;
+
+  if (orderNumber) {
+    try {
+      const order =
+        cachedOrder !== undefined
+          ? cachedOrder
+          : await prisma.order.findUnique({
+              where: { orderNumber },
+              include: {
+                items: {
+                  include: {
+                    product: { select: { id: true, name: true, sku: true, images: true } },
+                  },
+                },
+              },
+            });
+
+      if (order && order.items && order.items.length > 0) {
+        const subLower = subject.toLowerCase();
+        const matched =
+          order.items.find((it: any) => it.product && subLower.includes(it.product.name.toLowerCase().slice(0, 15))) ??
+          order.items[0];
+        if (matched?.product) {
+          product = {
+            id: matched.product.id,
+            name: matched.product.name,
+            sku: matched.product.sku ?? null,
+            imageUrl: matched.product.images?.[0] ?? '/images/cat_spices.jpg',
+            price: Number(matched.unitPrice ?? 0),
+            quantity: matched.quantity ?? 1,
+          };
+        }
+      }
+    } catch {
+      /* proceed to subject extraction */
+    }
+  }
+
+  if (!product) {
+    // Extract candidate product name from subject
+    // Example: "[DesiTokri Support] Refund request for Premium Whole Spices Combo – Dalchini, Black Cardamom, Green Cardamom, Black Pepper & Cloves (Damaged / Spoiled)"
+    const match = subject.match(/(?:request for|issue with|regarding|for)\s+(.*?)(?:\s*\([^)]*\))?$/i);
+    let extracted = match && match[1] ? match[1].trim() : null;
+    if (extracted && /^for\s+/i.test(extracted)) {
+      extracted = extracted.replace(/^for\s+/i, '').trim();
+    }
+    if (extracted) {
+      try {
+        const firstWord = extracted.split(/[\s–-]/)[0];
+        const prod = await prisma.product.findFirst({
+          where: {
+            OR: [
+              { name: { contains: extracted.slice(0, 25), mode: 'insensitive' } },
+              { name: { contains: firstWord, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, name: true, sku: true, images: true },
+        });
+        if (prod) {
+          product = {
+            id: prod.id,
+            name: extracted.length > prod.name.length ? extracted : prod.name,
+            sku: prod.sku ?? null,
+            imageUrl: prod.images?.[0] ?? '/images/cat_spices.jpg',
+            price: null,
+            quantity: null,
+          };
+        }
+      } catch {
+        /* fallback to synthesized product below */
+      }
+      if (!product) {
+        const lower = extracted.toLowerCase();
+        const fallbackImage = lower.includes('spice')
+          ? '/images/cat_spices.jpg'
+          : lower.includes('atta') || lower.includes('flour')
+          ? '/images/premium_atta.jpg'
+          : lower.includes('namkeen') || lower.includes('bhujia')
+          ? '/images/aloo_bhujia.jpg'
+          : lower.includes('chip') || lower.includes('wafer')
+          ? '/images/cat_wafers.jpg'
+          : '/images/cat_spices.jpg';
+        product = {
+          id: '',
+          name: extracted,
+          sku: null,
+          imageUrl: fallbackImage,
+          price: null,
+          quantity: null,
+        };
+      }
+    }
+  }
+
+  return product;
+}
+
 /**
  * The staff help desk over tickets raised from the storefront apps. Replies land
  * in the same thread the customer reads in their app; a customer follow-up
@@ -37,7 +151,10 @@ const CUSTOMER_SELECT = { id: true, name: true, phone: true, customerCode: true,
  */
 @Injectable()
 export class SupportTicketsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly gateway?: AdminOrdersGateway,
+  ) {}
 
   async list(filters: { status?: SupportTicketStatus; channel?: SalesChannel; search?: string }) {
     const search = filters.search?.trim();
@@ -71,10 +188,29 @@ export class SupportTicketsService {
       this.prisma.supportTicket.groupBy({ by: ['status'], _count: { _all: true } }),
     ]);
 
-    return {
-      counts: Object.fromEntries(counts.map((c) => [c.status, c._count._all])) as Partial<Record<SupportTicketStatus, number>>,
-      tickets: rows.map((t) => {
+    // Batch query orders to resolve product details quickly
+    const orderNumbers = [...new Set(rows.map((r) => r.orderNumber).filter(Boolean))] as string[];
+    const orders =
+      orderNumbers.length > 0
+        ? await this.prisma.order.findMany({
+            where: { orderNumber: { in: orderNumbers } },
+            include: {
+              items: {
+                include: {
+                  product: { select: { id: true, name: true, sku: true, images: true } },
+                },
+              },
+            },
+          })
+        : [];
+    const orderMap = new Map(orders.map((o) => [o.orderNumber, o]));
+
+    const tickets = await Promise.all(
+      rows.map(async (t) => {
         const last = t.messages[0];
+        const cachedOrder = t.orderNumber ? orderMap.get(t.orderNumber) : null;
+        const product = await resolveTicketProduct(this.prisma, t.subject, t.orderNumber, cachedOrder);
+
         return {
           id: t.id,
           ticketNumber: t.ticketNumber,
@@ -87,6 +223,7 @@ export class SupportTicketsService {
           createdAt: t.createdAt,
           lastActivityAt: t.lastActivityAt,
           messageCount: t._count.messages + 1, // + the opening description
+          product,
           lastMessage: last
             ? { author: last.author, preview: last.body.slice(0, 140), at: last.createdAt }
             : { author: SupportMessageAuthor.CUSTOMER, preview: t.description.slice(0, 140), at: t.createdAt },
@@ -96,6 +233,11 @@ export class SupportTicketsService {
             (!last || last.author === SupportMessageAuthor.CUSTOMER),
         };
       }),
+    );
+
+    return {
+      counts: Object.fromEntries(counts.map((c) => [c.status, c._count._all])) as Partial<Record<SupportTicketStatus, number>>,
+      tickets,
     };
   }
 
@@ -112,6 +254,9 @@ export class SupportTicketsService {
       },
     });
     if (!t) throw new NotFoundException('Ticket not found');
+
+    const product = await resolveTicketProduct(this.prisma, t.subject, t.orderNumber);
+
     return {
       id: t.id,
       ticketNumber: t.ticketNumber,
@@ -125,6 +270,7 @@ export class SupportTicketsService {
       createdAt: t.createdAt,
       resolvedAt: t.resolvedAt,
       resolvedBy: t.resolvedBy,
+      product,
       messages: t.messages.map((m) => ({
         id: m.id,
         author: m.author,
@@ -154,7 +300,18 @@ export class SupportTicketsService {
         data: { lastActivityAt: now, ...(t.status === SupportTicketStatus.OPEN ? { status: SupportTicketStatus.IN_PROGRESS } : {}) },
       }),
     ]);
-    return this.get(id);
+
+    const thread = await this.get(id);
+    const lastMsg = thread.messages[thread.messages.length - 1];
+    this.gateway?.broadcastTicket('tickets:message', {
+      ticketId: id,
+      message: lastMsg,
+      status: thread.status,
+      lastActivityAt: now.toISOString(),
+      awaitingReply: false,
+    });
+
+    return thread;
   }
 
   async update(id: string, staffUserId: string, dto: UpdateTicketDto) {
@@ -172,7 +329,17 @@ export class SupportTicketsService {
         ...(dto.status ? { lastActivityAt: new Date() } : {}),
       },
     });
-    return this.get(id);
+
+    const thread = await this.get(id);
+    this.gateway?.broadcastTicket('tickets:updated', {
+      ticketId: id,
+      status: thread.status,
+      priority: thread.priority,
+      resolvedAt: thread.resolvedAt,
+      resolvedBy: thread.resolvedBy,
+    });
+
+    return thread;
   }
 }
 

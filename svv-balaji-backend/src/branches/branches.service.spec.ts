@@ -17,7 +17,7 @@ describe('BranchesService - edit, deactivate and delete', () => {
     branches = {
       [BRANCH_ID]: { id: BRANCH_ID, name: 'Nagpur', location: 'MH', isActive: true },
     };
-    counts = new Array(11).fill(0);
+    counts = new Array(12).fill(0);
     activeUserCount = 0;
 
     prisma = {
@@ -41,6 +41,7 @@ describe('BranchesService - edit, deactivate and delete', () => {
       warehouse: counter,
       trainingSession: counter,
       fieldVisit: counter,
+      fieldVisitPlan: counter,
       procurementPlan: counter,
       rawMaterialCollection: counter,
       rawMaterialBatch: counter,

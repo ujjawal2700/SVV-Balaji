@@ -99,4 +99,13 @@ export class AdminOrdersGateway implements OnGatewayConnection, OnModuleInit {
     if (offline.length === 0) return;
     await this.push.sendNewOrder(await this.push.subscriptionsFor(offline), order);
   }
+
+  /** Broadcast support ticket events to all connected admin dashboards in realtime. */
+  broadcastTicket(event: 'tickets:new' | 'tickets:message' | 'tickets:updated', payload: unknown): void {
+    try {
+      this.server?.emit(event, payload);
+    } catch (error) {
+      this.logger.warn(`Ticket broadcast failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }

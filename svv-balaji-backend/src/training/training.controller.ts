@@ -38,12 +38,18 @@ export class TrainingController {
   @RequirePermission('training.view')
   @ApiQuery({ name: 'branchId', required: false })
   @ApiQuery({ name: 'conductedById', required: false, description: 'Sessions run by one executive.' })
+  @ApiQuery({
+    name: 'farmerId',
+    required: false,
+    description: 'FRD 11.4 - sessions this farmer attended. Used by the farmer profile.',
+  })
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string,
     @Query('conductedById') conductedById?: string,
+    @Query('farmerId') farmerId?: string,
   ) {
-    return this.trainingService.findAll(user, branchId, conductedById);
+    return this.trainingService.findAll(user, branchId, conductedById, farmerId);
   }
 
   @Get(':id')

@@ -33,7 +33,7 @@ describe('FarmersService - update and delete', () => {
         branchId: 'b1',
       },
     };
-    counts = new Array(7).fill(0);
+    counts = new Array(8).fill(0);
     deletedLogsFor = [];
 
     prisma = {
@@ -59,14 +59,15 @@ describe('FarmersService - update and delete', () => {
       seedDistribution: counter,
       trainingAttendance: counter,
       fieldVisit: counter,
+      fieldVisitPlan: counter,
       harvestInspection: counter,
       rawMaterialCollection: counter,
       rawMaterialBatch: counter,
       // remove() calls $transaction twice: once for the counts, once for the
-      // delete pair. The counts call passes seven promises; the delete call
+      // delete pair. The counts call passes eight promises; the delete call
       // passes two, and its members have already run by the time it is awaited.
       $transaction: jest.fn(async (operations: unknown[]) =>
-        operations.length === 7 ? counts : Promise.all(operations as Promise<unknown>[]),
+        operations.length === 8 ? counts : Promise.all(operations as Promise<unknown>[]),
       ),
     };
 

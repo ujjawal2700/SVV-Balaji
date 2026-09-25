@@ -7,7 +7,9 @@ import type {
   UpdateTrainingSessionInput,
 } from '../api/types';
 
-export function useTrainingSessions(filters: { branchId?: string; conductedById?: string } = {}) {
+export function useTrainingSessions(
+  filters: { branchId?: string; conductedById?: string; farmerId?: string } = {},
+) {
   return useQuery({
     queryKey: queryKeys.training.list(filters),
     queryFn: () => trainingApi.list(filters),

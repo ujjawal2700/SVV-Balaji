@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import type { Agreement, Farmer, FieldVisit, SeedDistribution, TrainingSession } from '@shared/api/types';
+import type { Agreement, Farmer, FieldVisit, FieldVisitPlan, SeedDistribution, TrainingSession } from '@shared/api/types';
 
 /**
  * The Agriculture Expert's day, derived rather than scheduled.
@@ -12,11 +12,9 @@ import type { Agreement, Farmer, FieldVisit, SeedDistribution, TrainingSession }
  * farmer left half-registered. That is honest — each item is a real obligation
  * with a record behind it — and it needs nobody to maintain a calendar.
  *
- * What it cannot do is show an appointment the executive made in their head.
- * If the client wants "visit Ramesh at 10am", that is a `FieldVisitPlan` table
- * with a date, a farmer and a done flag, and it needs someone to fill it in
- * every evening. Worth asking for before building; a planner nobody populates
- * is worse than no planner, because it looks authoritative and is empty.
+ * Planned visits (FRD 12.1, `FieldVisitPlan`) are the one exception: an
+ * appointment the executive made deliberately. They appear here on the day,
+ * and stay as overdue until the visit is recorded or the plan is cancelled.
  * -----------------------------------------------------------------------------
  */
 
@@ -25,7 +23,8 @@ export type ScheduleKind =
   | 'harvest-due'
   | 'incomplete-farmer'
   | 'unapproved-farmer'
-  | 'follow-up';
+  | 'follow-up'
+  | 'planned-visit';
 
 export type Urgency = 'overdue' | 'today' | 'soon';
 
@@ -58,6 +57,8 @@ interface BuildInput {
   seed: SeedDistribution[];
   /** Farmer ids that already have an inspection raised, so harvest is handled. */
   inspectedFarmerIds: Set<string>;
+  /** Open (PLANNED) visit plans. Optional so older callers keep working. */
+  plans?: FieldVisitPlan[];
 }
 
 /**
@@ -74,9 +75,38 @@ export function buildSchedule({
   visits,
   training,
   inspectedFarmerIds,
+  plans = [],
 }: BuildInput): ScheduleItem[] {
   const today = dayjs().startOf('day');
   const items: ScheduleItem[] = [];
+
+  // --- Planned visits: appointments the executive (or their manager) made ----
+  const plannedFarmerIds = new Set<string>();
+  for (const plan of plans) {
+    if (plan.status !== 'PLANNED') continue;
+    if (userId && plan.expertId !== userId) continue;
+    plannedFarmerIds.add(plan.farmerId);
+
+    const diff = dayjs(plan.plannedDate).startOf('day').diff(today, 'day');
+    if (diff > HARVEST_HORIZON_DAYS) continue;
+
+    items.push({
+      key: `plan-${plan.id}`,
+      kind: 'planned-visit',
+      title: `${plan.farmer?.fullName ?? 'Farmer'}${plan.cropName ? ` — ${plan.cropName}` : ''}`,
+      detail:
+        (diff < 0
+          ? `Planned visit ${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} ago, not yet recorded.`
+          : diff === 0
+            ? 'Planned visit today.'
+            : `Planned visit in ${diff} day${diff === 1 ? '' : 's'}.`) + (plan.purpose ? ` ${plan.purpose}.` : ''),
+      actionLabel: 'Start visit',
+      actionPath: '/visits?view=planned',
+      urgency: diff < 0 ? 'overdue' : diff === 0 ? 'today' : 'soon',
+      when: plan.plannedDate,
+      farmerId: plan.farmerId,
+    });
+  }
 
   // --- Training sessions: the only genuinely scheduled thing here -----------
   for (const session of training) {
@@ -185,6 +215,8 @@ export function buildSchedule({
 
   for (const farmer of farmers) {
     if (farmer.status !== 'ACTIVE') continue;
+    // Already has a visit planned - that item says it better than a nag.
+    if (plannedFarmerIds.has(farmer.id)) continue;
     const last = lastVisitByFarmer.get(farmer.id);
     const since = last ? today.diff(dayjs(last).startOf('day'), 'day') : null;
     if (since !== null && since < FOLLOW_UP_DAYS) continue;
@@ -223,4 +255,5 @@ export const KIND_LABEL: Record<ScheduleKind, string> = {
   'incomplete-farmer': 'Incomplete',
   'unapproved-farmer': 'Awaiting approval',
   'follow-up': 'Follow-up',
+  'planned-visit': 'Planned visit',
 };

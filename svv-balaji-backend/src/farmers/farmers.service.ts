@@ -242,7 +242,7 @@ export class FarmersService {
       );
     }
 
-    const [agreements, seedDistributions, trainingAttendances, fieldVisits, inspections, collections, batches] =
+    const [agreements, seedDistributions, trainingAttendances, fieldVisits, inspections, collections, batches, visitPlans] =
       await this.prisma.$transaction([
         this.prisma.agreement.count({ where: { farmerId: id } }),
         this.prisma.seedDistribution.count({ where: { farmerId: id } }),
@@ -251,6 +251,7 @@ export class FarmersService {
         this.prisma.harvestInspection.count({ where: { farmerId: id } }),
         this.prisma.rawMaterialCollection.count({ where: { farmerId: id } }),
         this.prisma.rawMaterialBatch.count({ where: { farmerId: id } }),
+        this.prisma.fieldVisitPlan.count({ where: { farmerId: id } }),
       ]);
 
     assertDeletable('Farmer', farmer.fullName, {
@@ -258,6 +259,7 @@ export class FarmersService {
       'seed distributions': seedDistributions,
       'training attendances': trainingAttendances,
       'field visits': fieldVisits,
+      'planned visits': visitPlans ?? 0,
       inspections,
       collections,
       batches,

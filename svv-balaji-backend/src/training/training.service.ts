@@ -25,10 +25,15 @@ export class TrainingService {
   }
 
   /** `conductedById` answers "sessions I ran" without pulling the branch's. */
-  findAll(user: JwtPayload, branchId?: string, conductedById?: string) {
+  findAll(user: JwtPayload, branchId?: string, conductedById?: string, farmerId?: string) {
     return this.prisma.trainingSession.findMany({
       // FRD 5.2 - the caller's branch wins over whatever was asked for.
-      where: { branchId: scopedBranchId(user, branchId), conductedById },
+      where: {
+        branchId: scopedBranchId(user, branchId),
+        conductedById,
+        // FRD 11.4 training history: sessions the farmer is marked present at.
+        attendances: farmerId ? { some: { farmerId, attended: true } } : undefined,
+      },
       orderBy: { scheduledDate: 'desc' },
       include: {
         branch: { select: { id: true, name: true } },

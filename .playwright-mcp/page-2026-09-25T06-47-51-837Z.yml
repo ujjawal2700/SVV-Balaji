@@ -1,0 +1,19 @@
+- generic [ref=f1e6]:
+  - generic [ref=f1e7]:
+    - img "SVV Balaji" [ref=f1e8]
+    - heading "SVV Balaji" [level=3] [ref=f1e9]
+    - text: Enterprise Admin Portal
+  - generic [ref=f1e10]:
+    - generic [ref=f1e12]:
+      - generic "Email" [ref=f1e14]
+      - generic [ref=f1e18]:
+        - img "mail" [ref=f1e20]
+        - textbox "Email" [ref=f1e23]:
+          - /placeholder: you@svvbalaji.com
+    - generic [ref=f1e25]:
+      - generic "Password" [ref=f1e27]
+      - generic [ref=f1e31]:
+        - img "lock" [ref=f1e33]
+        - textbox "Password" [ref=f1e36]
+        - img "eye-invisible" [ref=f1e38] [cursor=pointer]
+    - button "Sign in" [ref=f1e42] [cursor=pointer]

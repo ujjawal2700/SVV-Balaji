@@ -2549,3 +2549,30 @@ Packaging is printed once and cannot be reissued, so pointing at a URL means lin
 - **Fix**: `d372136` removes all of it and restores `settings.json` / `shared/package.json` to their pre-`eacc146` state (`allowAutomaticTasks: "off"`). Pushed to `origin/main`. No git hooks or other install hooks found.
 - **Ujjawal — action needed**: do NOT pull/merge or push from any clone/branch older than `d372136`; it will bring the loader back. Before any merge, check it doesn't stage `.vscode/tasks.json`, anything under `public/fonts/`, or a `pre/postinstall` script. The payload is still in git history (a `filter-repo` purge + force-push, as on 2026-09-07, is your call).
 - **Machines**: any machine that opened this folder in VS Code since 2026-09-18 should be treated as compromised — rotate GitHub/npm/cloud tokens, `.env` secrets and saved browser logins from a clean device.
+
+## 2026-09-25 — Raunak (agent session) — Customer order-support chat: responsive layout
+- `svv-balaji-customer/src/pages/OrderSupportPage.tsx` (`/orders/:orderId/support`) re-laid out; chat flow/ticket logic unchanged. Styles are `.osp-*` classes at the end of `src/styles.css`.
+- Phone (<768): full-screen chat (header, order strip, scrolling messages, composer with safe-area padding). Tablet: centred chat card fitted to the viewport. Desktop (>=992): order summary / recent-orders sidebar + chat card.
+- UI: typing indicator, only the latest option set is clickable, multi-line composer (Enter sends, Shift+Enter newline). No API/DTO changes.
+- Admin `svv-balaji-admin/src/pages/support-tickets/SupportTicketsPage.tsx` redesigned as a single inbox workspace (list | conversation, fitted to viewport). Removed the 4 stat cards (duplicated the status counts); status filters are now pills in the list header, plus a client-side "Needs reply" filter. Quick replies moved into a dropdown; message day dividers; master/detail with a back button below the `lg` breakpoint. Same hooks/API, no contract change.
+
+## 2026-09-25 — Raunak (agent session) — Field app: field report (FRD 12.7), farmer profile (7.3), planned visits (12.1), farmer search filters (7.4)
+
+**Contract changes — Ujjawal please read.** All additive; nothing existing changed shape.
+- **Migration `20260925073453_field_visit_plans`** — new table `field_visit_plans` + enum `FieldVisitPlanStatus` (PLANNED/COMPLETED/CANCELLED). No existing table altered. Run `npx prisma migrate deploy && npx prisma generate`, then restart the API. (Applied to Raunak's local DB already.)
+- **New routes** `POST/GET /field-visit-plans`, `GET/PATCH/DELETE /field-visit-plans/:id`, `POST /field-visit-plans/:id/cancel`. Guarded by the existing `fieldVisits.view/create/edit/delete` keys — no new permission keys, so no A-14-style grant needed. Branch-scoped like field visits.
+- **New route** `GET /field-visits/:id/report` (`fieldVisits.view`) — FRD 12.7 report: harvest outlook (yield vs contract, days to harvest, stage NOT_READY/APPROACHING/READY/OVERDUE), risk level + flags, next steps for procurement and production, trend vs previous visit, land, agreement, evidence. Derived on read from existing records (not stored), so it always matches the visit. Logic is a pure function in `field-monitoring/field-report.ts`; calendar days are IST.
+- `POST /field-visits` accepts optional **`planId`**: completes that plan (PLANNED, same farmer) in the same transaction. Not accepted on PATCH. `DELETE /field-visits/:id` now reopens a plan the visit had completed.
+- `GET /training-sessions` accepts optional **`farmerId`** (sessions the farmer attended).
+- Farmer/user/branch delete guards now also count planned visits (clear 409 instead of a raw FK error).
+
+**Field app (`svv-balaji-field`)**
+- **Farmer profile** (Farmers tab → new *Profile* button): overview (personal, address+GPS, farm, bank — Aadhaar/PAN/account masked), FRD 7.6 performance breakdown, verification history; tabs for crop history (merged across registration/agreements/seed/visits/plots/inspections/collections), visits (planned + logged with per-visit report), seed, training, agreements, procurement & payments, land. Each tab only loads if the user holds that module's view permission. Card tap still opens land mapping, as before.
+- **Search filters**: crop, district, state, status, min quality rating (server-side, the API already supported them) — inline row on desktop, "Filters" bottom sheet on phones, removable chips. Existing name search and All/Waiting/Approved/No-location quick filters unchanged. Cards show the ★ rating.
+- **Planned visits**: Visits tab has Logged (default, unchanged) / Planned; plan, reschedule, cancel (with reason), *Start visit* opens the visit form prefilled and completes the plan. Plans appear on Home's "What needs doing" (a farmer with a plan no longer also gets a follow-up nag).
+- **Field report** opens automatically after any new visit is saved, and from the visit drawer / profile. Print / Save PDF. Admin panel's field-visit drawer also has a *Field report* button (shared `FieldReportView`) for procurement/production.
+- Fixed on the way: prefill values for a new visit were being dropped (modal mounts lazily) — now passed as `initialValues`.
+
+**Verified**: backend tsc + 23 new unit tests (report rules, plan lifecycle, visit↔plan completion/reopen); full suite 525 pass, 7 fail — all in `customers.service.spec.ts`, pre-existing (its tx mock has no `customerAccount`). Live API run on a second instance: 23/23 checks incl. existing visit/list/delete/training/search. Real headless-Chrome pass on the field app (desktop + phone): 15/15 incl. plan → start visit → record → report auto-opens → plan completed. All test data cleaned up. field/admin/customer tsc clean; field `vite build` OK.
+
+**Note:** Prisma generate hit EPERM because the running API held the query-engine DLL; the locked file was renamed to `node_modules/.prisma/client/query_engine-windows.dll.node.locked-*` — safe to delete once the API is restarted.

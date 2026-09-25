@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Optional, Param, Post, UseGuards } from '@nestjs/common';
 import { SupportMessageAuthor, SupportTicketStatus } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
@@ -7,6 +7,7 @@ import { SequenceService } from '../common/sequence.service';
 import { CustomerJwtAuthGuard } from './guards/customer-jwt-auth.guard';
 import { CurrentCustomer } from './decorators/current-customer.decorator';
 import type { CustomerJwtPayload } from './strategies/customer-jwt.strategy';
+import { AdminOrdersGateway } from '../realtime/admin-orders.gateway';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT_REFUND', 'DELIVERY_DELAY', 'ACCOUNT_GST', 'OTHER'] as const;
 
@@ -43,6 +44,7 @@ export class StorefrontSupportTicketsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequence: SequenceService,
+    @Optional() private readonly gateway?: AdminOrdersGateway,
   ) {}
 
   private customerIdOf(c: CustomerJwtPayload): string {
@@ -117,7 +119,7 @@ export class StorefrontSupportTicketsService {
       throw new BadRequestException('This ticket is closed. Please raise a new request if you still need help.');
     }
     const now = new Date();
-    await this.prisma.$transaction([
+    const [msg] = await this.prisma.$transaction([
       this.prisma.supportTicketMessage.create({
         data: { ticketId: id, author: SupportMessageAuthor.CUSTOMER, body: text, createdAt: now },
       }),
@@ -131,6 +133,21 @@ export class StorefrontSupportTicketsService {
         },
       }),
     ]);
+
+    // Broadcast customer message to staff in real time
+    this.gateway?.broadcastTicket('tickets:message', {
+      ticketId: id,
+      message: {
+        id: msg.id,
+        author: SupportMessageAuthor.CUSTOMER,
+        body: text,
+        createdAt: now.toISOString(),
+        staffName: null,
+      },
+      lastActivityAt: now.toISOString(),
+      awaitingReply: true,
+    });
+
     return this.get(c, id);
   }
 
@@ -138,7 +155,7 @@ export class StorefrontSupportTicketsService {
     const customerId = this.customerIdOf(c);
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const ticketNumber = await this.sequence.next(tx, 'TKT', now, 3);
       return tx.supportTicket.create({
         data: {
@@ -152,6 +169,18 @@ export class StorefrontSupportTicketsService {
         },
       });
     });
+
+    // Broadcast new ticket to staff in real time
+    this.gateway?.broadcastTicket('tickets:new', {
+      ticketId: created.id,
+      ticketNumber: created.ticketNumber,
+      subject: created.subject,
+      orderNumber: created.orderNumber,
+      category: created.category,
+      createdAt: created.createdAt.toISOString(),
+    });
+
+    return created;
   }
 }
 

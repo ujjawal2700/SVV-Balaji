@@ -1,15 +1,20 @@
-import { CalendarOutlined, EnvironmentOutlined } from '@ant-design/icons';
-import { Button, Space, Tag, Typography } from 'antd';
+import { CalendarOutlined, EnvironmentOutlined, ScheduleOutlined } from '@ant-design/icons';
+import { Button, Segmented, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { FieldVisit } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useFieldVisits } from '@shared/hooks/useFieldVisits';
+import { useFieldVisitPlans } from '@shared/hooks/useFieldVisitPlans';
+import { useCan } from '@shared/auth/useCan';
 import { formatDate, formatQuantity } from '@shared/utils/format';
 import { FieldVisitDetailDrawer } from './FieldVisitDetailDrawer';
 import { FieldVisitFormModal } from './FieldVisitFormModal';
 import { FieldCard, FieldFab, FieldList } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
+import { PlannedVisitsPanel } from './PlannedVisits';
+import { PlanVisitModal } from './PlanVisitModal';
 
 /** Green through red, matching how an agronomist would read the word. */
 const HEALTH_COLOURS: Record<string, string> = {
@@ -32,6 +37,15 @@ export function FieldVisitsTab() {
   const { user } = useAuth();
   const [formOpen, setFormOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const canPlan = useCan('FIELD_VISIT_CREATE');
+
+  // FRD 12.1 - logged visits (the original list, still the default) or planned ones.
+  // Kept in the URL so Home can link straight to ?view=planned.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: 'logged' | 'planned' = searchParams.get('view') === 'planned' ? 'planned' : 'logged';
+  const setView = (next: 'logged' | 'planned') =>
+    setSearchParams(next === 'planned' ? { view: 'planned' } : {}, { replace: true });
 
   const { mineOnly, setMineOnly } = useMineFilter();
 
@@ -51,6 +65,11 @@ export function FieldVisitsTab() {
 
   const rows = visits.data?.data ?? [];
 
+  const plansQuery = mineOnly && user ? { expertId: user.id } : {};
+  const openPlans = useFieldVisitPlans({ status: 'PLANNED', ...plansQuery });
+  const allOpenPlans = useFieldVisitPlans({ status: 'PLANNED' });
+  const planCount = openPlans.data?.data?.length ?? 0;
+
   const closeForm = () => setFormOpen(false);
 
   return (
@@ -68,19 +87,46 @@ export function FieldVisitsTab() {
           gap: 12,
         }}
       >
-        <MineToggle
-          mineOnly={mineOnly}
-          onChange={setMineOnly}
-          total={everyone.data?.data?.length ?? 0}
-          shown={rows.length}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Segmented<'logged' | 'planned'>
+            value={view}
+            onChange={setView}
+            options={[
+              { label: 'Logged', value: 'logged' },
+              { label: `Planned${planCount ? ` (${planCount})` : ''}`, value: 'planned' },
+            ]}
+          />
+          <MineToggle
+            mineOnly={mineOnly}
+            onChange={setMineOnly}
+            total={view === 'planned' ? allOpenPlans.data?.data?.length ?? 0 : everyone.data?.data?.length ?? 0}
+            shown={view === 'planned' ? planCount : rows.length}
+          />
+        </div>
         {!isMobile ? (
-          <Button type="primary" icon={<EnvironmentOutlined />} onClick={() => setFormOpen(true)}>
-            Log a visit
-          </Button>
+          <Space>
+            {canPlan ? (
+              <Button icon={<ScheduleOutlined />} onClick={() => setPlanOpen(true)}>
+                Plan a visit
+              </Button>
+            ) : null}
+            <Button type="primary" icon={<EnvironmentOutlined />} onClick={() => setFormOpen(true)}>
+              Log a visit
+            </Button>
+          </Space>
         ) : null}
       </div>
 
+      {view === 'planned' ? (
+        <PlannedVisitsPanel
+          query={plansQuery}
+          emptyText={
+            mineOnly
+              ? 'You have no visits planned — tap "Plan a visit" to schedule one'
+              : 'No visits planned'
+          }
+        />
+      ) : (
       <FieldList<FieldVisit>
         rows={rows}
         isLoading={visits.isLoading}
@@ -128,8 +174,14 @@ export function FieldVisitsTab() {
           </FieldCard>
         )}
       />
+      )}
 
-      <FieldFab label="Log a visit" onClick={() => setFormOpen(true)} />
+      {view === 'planned' && canPlan ? (
+        <FieldFab label="Plan a visit" onClick={() => setPlanOpen(true)} />
+      ) : (
+        <FieldFab label="Log a visit" onClick={() => setFormOpen(true)} />
+      )}
+      <PlanVisitModal open={planOpen} onClose={() => setPlanOpen(false)} />
 
       <FieldVisitFormModal open={formOpen} onClose={closeForm} />
       <FieldVisitDetailDrawer visitId={detailId} onClose={() => setDetailId(null)} />

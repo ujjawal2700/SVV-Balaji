@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { FieldMonitoringService } from './field-monitoring.service';
 import { CreateFieldVisitDto } from './dto/create-field-visit.dto';
 import { AddFieldVisitDocumentDto } from './dto/add-field-visit-document.dto';
@@ -53,6 +53,19 @@ export class FieldMonitoringController {
   @RequirePermission('fieldVisits.view')
   findOne(@Param('id') id: string) {
     return this.fieldMonitoringService.findOne(id);
+  }
+
+  @Get(':id/report')
+  @RequirePermission('fieldVisits.view')
+  @ApiOperation({
+    summary: 'FRD 12.7 - field report for one visit',
+    description:
+      'Generated from the visit, the farmer, their land, their agreement for the crop and the ' +
+      'previous visit: harvest outlook, risk flags and next steps for procurement and production. ' +
+      'Derived on every read, so it always matches the visit it describes.',
+  })
+  report(@Param('id') id: string) {
+    return this.fieldMonitoringService.report(id);
   }
 
   @Post(':id/documents')

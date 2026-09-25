@@ -118,6 +118,9 @@ export function useLiveOrders(enabled: boolean, onOpenOrders: () => void): LiveS
         refresh();
       });
       socket.on('orders:updated', () => refresh());
+      socket.on('tickets:new', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
+      socket.on('tickets:message', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
+      socket.on('tickets:updated', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
     };
 
     connect();

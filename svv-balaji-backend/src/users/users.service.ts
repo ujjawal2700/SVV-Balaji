@@ -275,6 +275,7 @@ export class UsersService {
       priceLists,
       orders,
       allocations,
+      visitPlans,
     ] = await this.prisma.$transaction([
       this.prisma.farmerVerificationLog.count({ where: { verifiedById: id } }),
       this.prisma.seedDistribution.count({ where: { distributedById: id } }),
@@ -294,6 +295,7 @@ export class UsersService {
       this.prisma.priceList.count({ where: { createdById: id } }),
       this.prisma.order.count({ where: { placedById: id } }),
       this.prisma.orderAllocation.count({ where: { allocatedById: id } }),
+      this.prisma.fieldVisitPlan.count({ where: { OR: [{ expertId: id }, { createdById: id }] } }),
     ]);
 
     assertDeletable('User', user.fullName, {
@@ -301,6 +303,7 @@ export class UsersService {
       'seed distributions': seedDistributions,
       'training sessions': trainingSessions,
       'field visits': fieldVisits,
+      'planned visits': visitPlans ?? 0,
       'procurement plans': plans,
       inspections: inspections + qualityInspections,
       collections,

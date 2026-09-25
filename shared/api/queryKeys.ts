@@ -70,6 +70,18 @@ export const queryKeys = {
     list: (filters: Record<string, unknown> = {}) =>
       [...queryKeys.fieldVisits.all, 'list', filters] as const,
     detail: (id: string) => [...queryKeys.fieldVisits.all, 'detail', id] as const,
+    report: (id: string) => [...queryKeys.fieldVisits.all, 'report', id] as const,
+  },
+
+  /**
+   * Nested under field-visits so recording or deleting a visit - which completes
+   * or reopens a plan - refreshes plans through the existing invalidation.
+   */
+  fieldVisitPlans: {
+    all: ['field-visits', 'plans'] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      [...queryKeys.fieldVisitPlans.all, 'list', filters] as const,
+    detail: (id: string) => [...queryKeys.fieldVisitPlans.all, 'detail', id] as const,
   },
 
   // --- Zone 2 ---------------------------------------------------------------

@@ -593,7 +593,7 @@ export interface FieldVisitDetail extends FieldVisit {
   documents: FieldVisitDocument[];
 }
 
-export type UpdateFieldVisitInput = Partial<CreateFieldVisitInput>;
+export type UpdateFieldVisitInput = Partial<Omit<CreateFieldVisitInput, 'planId'>>;
 
 export interface CreateFieldVisitInput {
   farmerId: string;
@@ -609,11 +609,167 @@ export interface CreateFieldVisitInput {
   pestControlSuggestions?: string;
   harvestPreparation?: string;
   yieldPredictionQty?: number;
+  /**
+   * FRD 12.1 - the planned visit this fulfils. Create only: the server marks the
+   * plan COMPLETED and links it. Refused on update.
+   */
+  planId?: string;
 }
 
 export interface AddFieldVisitDocumentInput {
   fileUrl: string;
   fileType: string;
+}
+
+// --- Planned field visits (FRD 12.1) ---------------------------------------
+
+export const FIELD_VISIT_PLAN_STATUSES = ['PLANNED', 'COMPLETED', 'CANCELLED'] as const;
+export type FieldVisitPlanStatus = (typeof FIELD_VISIT_PLAN_STATUSES)[number];
+
+export interface FieldVisitPlan {
+  id: string;
+  farmerId: string;
+  farmer?: FarmerRef & { village?: string; district?: string; mobile?: string };
+  branchId: string;
+  branch?: BranchRef;
+  /** The executive expected to make the visit. */
+  expertId: string;
+  expert?: UserRef;
+  createdById: string;
+  createdBy?: UserRef;
+  plannedDate: string;
+  purpose: string | null;
+  cropName: string | null;
+  notes: string | null;
+  status: FieldVisitPlanStatus;
+  completedVisitId: string | null;
+  completedVisit?: { id: string; visitDate: string } | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFieldVisitPlanInput {
+  farmerId: string;
+  /** YYYY-MM-DD. */
+  plannedDate: string;
+  branchId?: string;
+  /** Defaults server-side to whoever is planning. */
+  expertId?: string;
+  purpose?: string;
+  cropName?: string;
+  notes?: string;
+}
+
+/** The farmer is fixed; cancel and re-plan to move a visit to someone else. */
+export type UpdateFieldVisitPlanInput = Partial<Omit<CreateFieldVisitPlanInput, 'farmerId'>>;
+
+export interface FieldVisitPlanQuery {
+  farmerId?: string;
+  expertId?: string;
+  status?: FieldVisitPlanStatus;
+  /** YYYY-MM-DD, inclusive. */
+  from?: string;
+  /** YYYY-MM-DD, inclusive. */
+  to?: string;
+}
+
+// --- Field report (FRD 12.7) ----------------------------------------------
+
+export type FieldReportSeverity = 'HIGH' | 'MEDIUM' | 'INFO';
+export type FieldReportRisk = 'LOW' | 'MEDIUM' | 'HIGH';
+export type HarvestStage = 'NOT_READY' | 'APPROACHING' | 'READY' | 'OVERDUE' | 'UNKNOWN';
+
+/**
+ * GET /field-visits/:id/report. Generated on every read from the visit and the
+ * records around it, so it always matches the visit it describes.
+ */
+export interface FieldReport {
+  reportNumber: string;
+  generatedAt: string;
+  visit: {
+    id: string;
+    visitDate: string;
+    recordedAt: string;
+    expert: UserRef | null;
+    branch: BranchRef | null;
+    cropName: string | null;
+    cropGrowthStage: string | null;
+    cropHealth: string | null;
+    pestStatus: string | null;
+    diseaseObservation: string | null;
+    yieldPredictionQty: number | null;
+    documents: FieldVisitDocument[];
+  };
+  farmer: {
+    id: string;
+    fullName: string;
+    farmerCode: string | null;
+    mobile: string;
+    village: string;
+    district: string;
+    state: string;
+    gpsLocation: string | null;
+    landType: string | null;
+    irrigationType: string | null;
+    qualityRating: number | null;
+    status: FarmerStatus;
+  };
+  land: {
+    registeredAcres: number | null;
+    mappedAcres: number;
+    plotCount: number;
+    plots: Array<{
+      id: string;
+      name: string;
+      surveyNumber: string | null;
+      areaAcres: number | null;
+      currentCrop: string | null;
+      expectedHarvest: string | null;
+    }>;
+  };
+  agreement: {
+    id: string;
+    cropName: string;
+    variety: string | null;
+    expectedQuantity: number | null;
+    purchaseRate: number | null;
+    harvestDate: string | null;
+    status: AgreementStatus;
+  } | null;
+  recommendations: {
+    fertilizer: string | null;
+    irrigation: string | null;
+    pestControl: string | null;
+    harvestPreparation: string | null;
+  };
+  harvestOutlook: {
+    predictedYieldKg: number | null;
+    contractedKg: number | null;
+    percentOfContract: number | null;
+    expectedHarvestDate: string | null;
+    daysToHarvest: number | null;
+    stage: HarvestStage;
+    hasHarvestInspection: boolean;
+    summary: string;
+  };
+  riskLevel: FieldReportRisk;
+  flags: Array<{ severity: FieldReportSeverity; message: string }>;
+  nextSteps: { procurement: string[]; production: string[] };
+  previousVisit: {
+    id: string;
+    visitDate: string;
+    daysBefore: number;
+    cropHealth: string | null;
+    cropGrowthStage: string | null;
+    pestStatus: string | null;
+    yieldPredictionQty: number | null;
+  } | null;
+  plan: { id: string; plannedDate: string; purpose: string | null } | null;
+  /** This is visit N to this farmer. */
+  visitNumber: number;
 }
 
 // ===========================================================================

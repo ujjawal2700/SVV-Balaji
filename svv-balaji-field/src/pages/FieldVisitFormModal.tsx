@@ -21,9 +21,9 @@ import {
   Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
-import type { FieldVisit } from '@shared/api/types';
+import type { FieldVisit, FieldVisitPlan } from '@shared/api/types';
 import { BranchSelect, FarmerSelect } from '@shared/components/pickers';
 import {
   useAddFieldVisitDocument,
@@ -35,6 +35,7 @@ import { FileUploadField } from '@shared/components/FileUploadField';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { toIsoDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
+import { FieldReportDrawer } from './FieldReportDrawer';
 
 const GROWTH_STAGE_OPTIONS = [
   { value: 'Germination' },
@@ -73,6 +74,13 @@ interface FieldVisitFormModalProps {
   /** Present means edit; absent means create. */
   visit?: FieldVisit | null;
   onClose: () => void;
+  /**
+   * FRD 12.1 - the planned visit being carried out. Prefills farmer, branch and
+   * crop, and completes the plan when the visit is saved. Create only.
+   */
+  plan?: FieldVisitPlan | null;
+  /** Preselects the farmer, e.g. when logging a visit from their profile. */
+  initialFarmerId?: string;
 }
 
 interface FieldVisitForm {
@@ -147,7 +155,7 @@ function FormSectionCard({ icon, iconBg, iconColor, title, subtitle, children }:
   );
 }
 
-export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModalProps) {
+export function FieldVisitFormModal({ open, visit, onClose, plan, initialFarmerId }: FieldVisitFormModalProps) {
   const [form] = Form.useForm<FieldVisitForm>();
   const { message } = AntApp.useApp();
   const createVisit = useCreateFieldVisit();
@@ -156,10 +164,23 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
   const isMobile = useIsMobile();
 
   const isEdit = Boolean(visit);
+  // FRD 12.7 - after a new visit is recorded its field report opens by itself.
+  // Held here, not in the callers, so every place that logs a visit gets it.
+  const [reportFor, setReportFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     form.resetFields();
+    if (!visit && plan) {
+      form.setFieldsValue({
+        farmerId: plan.farmerId,
+        branchId: plan.branchId,
+        visitDate: dayjs(),
+        cropName: plan.cropName ?? undefined,
+      });
+    } else if (!visit && initialFarmerId) {
+      form.setFieldsValue({ farmerId: initialFarmerId, visitDate: dayjs() });
+    }
     if (visit) {
       form.setFieldsValue({
         farmerId: visit.farmerId,
@@ -178,7 +199,26 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
           visit.yieldPredictionQty === null ? undefined : Number(visit.yieldPredictionQty),
       });
     }
-  }, [open, visit, form]);
+  }, [open, visit, form, plan, initialFarmerId]);
+
+  // Prefill for a new visit started from a plan or a farmer's profile. Passed as
+  // the Form's initialValues because the modal mounts its body lazily: values set
+  // from an effect on open can land before the fields exist and be dropped.
+  const createDefaults = useMemo<Partial<FieldVisitForm> | undefined>(() => {
+    if (visit) return undefined;
+    if (plan) {
+      return {
+        farmerId: plan.farmerId,
+        branchId: plan.branchId,
+        visitDate: dayjs(),
+        cropName: plan.cropName ?? undefined,
+      };
+    }
+    if (initialFarmerId) return { farmerId: initialFarmerId, visitDate: dayjs() };
+    return undefined;
+    // Recomputed per open so the date is today's, not the day the page loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, visit, plan, initialFarmerId]);
 
   const selectedFarmerId = Form.useWatch('farmerId', form);
   const { data: farmer } = useFarmer(selectedFarmerId);
@@ -218,8 +258,8 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
       }
     }
 
-    // 2. Auto-fill cropName
-    if (!form.isFieldTouched('cropName') || !form.getFieldValue('cropName')) {
+    // 2. Auto-fill cropName - unless the plan being carried out already names it.
+    if (!plan?.cropName && (!form.isFieldTouched('cropName') || !form.getFieldValue('cropName'))) {
       const pastAgreements = farmer.agreements;
       const pastSeedDists = farmer.seedDistributions;
       const pastVisits = farmer.fieldVisits;
@@ -250,7 +290,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
         }
       }
     }
-  }, [farmer, form, isEdit]);
+  }, [farmer, form, isEdit, plan]);
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
@@ -260,11 +300,14 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
       ...rest,
       visitDate: toIsoDate(values.visitDate) as string,
     };
+    // Only a new visit can complete a plan, and only for the plan's own farmer -
+    // if the farmer was changed in the form, this is simply an unplanned visit.
+    const planId = !visit && plan && plan.farmerId === values.farmerId ? plan.id : undefined;
 
     try {
       const saved = visit
         ? await updateVisit.mutateAsync({ id: visit.id, input: payload })
-        : await createVisit.mutateAsync(payload);
+        : await createVisit.mutateAsync(planId ? { ...payload, planId } : payload);
 
       if (attachmentUrl) {
         try {
@@ -281,19 +324,23 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
             10,
           );
           onClose();
+          if (!visit) setReportFor(saved.id);
           return;
         }
       }
 
-      message.success(visit ? 'Field visit updated' : 'Field visit recorded');
+      message.success(
+        visit ? 'Field visit updated' : planId ? 'Planned visit completed — field report generated' : 'Field visit recorded — field report generated',
+      );
       onClose();
+      if (!visit) setReportFor(saved.id);
     } catch (error) {
       message.error(apiErrorMessage(error, 'Could not record the visit'));
     }
   };
 
   const formContent = (
-    <Form form={form} layout="vertical" requiredMark preserve={false}>
+    <Form form={form} layout="vertical" requiredMark preserve={false} initialValues={createDefaults}>
       {/* Section 1: Visit & Farmer / Supplier Info */}
       <FormSectionCard
         icon={<CompassOutlined />}
@@ -513,7 +560,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
         </div>
         <div>
           <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700, letterSpacing: '-0.01em' }}>
-            {isEdit ? `Edit Field Visit — ${visit?.farmer?.fullName ?? ''}` : 'Record Field Visit'}
+            {isEdit ? `Edit Field Visit — ${visit?.farmer?.fullName ?? ''}` : plan ? `Planned Visit — ${plan.farmer?.fullName ?? ''}` : 'Record Field Visit'}
           </Typography.Title>
           <Typography.Text style={{ color: '#475569', fontSize: 13, display: 'block', marginTop: 2 }}>
             Capture crop health, pest diagnosis, actionable agronomy advice and yield estimates
@@ -525,8 +572,11 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
 
   const isPending = createVisit.isPending || updateVisit.isPending;
 
+  const report = <FieldReportDrawer visitId={reportFor} onClose={() => setReportFor(null)} />;
+
   if (isMobile) {
     return (
+      <>
       <Drawer
         open={open}
         onClose={onClose}
@@ -565,10 +615,13 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
       >
         {formContent}
       </Drawer>
+      {report}
+      </>
     );
   }
 
   return (
+    <>
     <Modal
       open={open}
       title={headerContent}
@@ -622,5 +675,7 @@ export function FieldVisitFormModal({ open, visit, onClose }: FieldVisitFormModa
     >
       {formContent}
     </Modal>
+    {report}
+    </>
   );
 }

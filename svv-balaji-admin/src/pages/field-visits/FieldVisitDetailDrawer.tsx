@@ -1,4 +1,6 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { FileTextOutlined, PlusOutlined } from '@ant-design/icons';
+import { useState } from 'react';
+import { FieldReportView } from '@shared/components/FieldReportView';
 import { Alert, App as AntApp, Button, Descriptions, Drawer, Empty, Form, List, Select, Space, Spin, Typography } from 'antd';
 import { apiErrorMessage } from '../../api/client';
 import type { FieldVisitDocument } from '../../api/types';
@@ -21,6 +23,8 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
   const addDocument = useAddFieldVisitDocument();
   const canEdit = useCan('FIELD_VISIT_CREATE');
   const [documentForm] = Form.useForm<{ fileUrl: string; fileType: string }>();
+  // FRD 12.7 - the report procurement and production plan from.
+  const [reportOpen, setReportOpen] = useState(false);
 
   const handleAddDocument = async () => {
     if (!visitId) return;
@@ -37,10 +41,18 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
   const data = visit.data;
 
   return (
+    <>
     <Drawer
       open={Boolean(visitId)}
       onClose={onClose}
       width={680}
+      extra={
+        visitId ? (
+          <Button type="primary" icon={<FileTextOutlined />} onClick={() => setReportOpen(true)}>
+            Field report
+          </Button>
+        ) : null
+      }
       title={
         data ? `${data.farmer?.fullName ?? 'Field visit'} — ${formatDate(data.visitDate)}` : 'Field visit'
       }
@@ -147,5 +159,16 @@ export function FieldVisitDetailDrawer({ visitId, onClose }: FieldVisitDetailDra
         </Space>
       ) : null}
     </Drawer>
+    <Drawer
+      open={reportOpen && Boolean(visitId)}
+      onClose={() => setReportOpen(false)}
+      width={880}
+      title="Field report"
+      destroyOnClose
+      styles={{ body: { background: '#f8fafc' } }}
+    >
+      {visitId ? <FieldReportView visitId={visitId} /> : null}
+    </Drawer>
+    </>
   );
 }

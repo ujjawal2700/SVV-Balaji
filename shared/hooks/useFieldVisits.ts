@@ -23,6 +23,15 @@ export function useFieldVisit(id: string | undefined) {
   });
 }
 
+/** FRD 12.7. Refetched whenever the visit changes, since it is derived from it. */
+export function useFieldVisitReport(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.fieldVisits.report(id ?? ''),
+    queryFn: () => fieldVisitsApi.report(id as string),
+    enabled: Boolean(id),
+  });
+}
+
 export function useCreateFieldVisit() {
   const queryClient = useQueryClient();
 

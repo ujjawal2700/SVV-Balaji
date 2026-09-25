@@ -12,7 +12,8 @@ import type {
 export const trainingApi = {
   /** `conductedById` filters server-side - see the note on fieldVisitsApi.list. */
   async list(
-    filters: { branchId?: string; conductedById?: string } = {},
+    /** `farmerId` - sessions that farmer attended (FRD 11.4 training history). */
+    filters: { branchId?: string; conductedById?: string; farmerId?: string } = {},
   ): Promise<Paginated<TrainingSession>> {
     const response = await api.get<TrainingSession[]>('/training-sessions', {
       params: pruneEmpty(filters),

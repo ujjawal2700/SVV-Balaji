@@ -63,4 +63,13 @@ export class CreateFieldVisitDto {
   @IsOptional()
   @IsNumber()
   yieldPredictionQty?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'FRD 12.1 - the planned visit this fulfils. Marks the plan COMPLETED and links it to ' +
+      'the new visit. Must be a PLANNED plan for the same farmer.',
+  })
+  @IsOptional()
+  @IsString()
+  planId?: string;
 }

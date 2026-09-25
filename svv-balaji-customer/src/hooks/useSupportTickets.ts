@@ -23,13 +23,13 @@ export function useCreateSupportTicket() {
   });
 }
 
-/** One of my tickets with the full conversation, refreshed every 15s while open so staff replies appear. */
+/** One of my tickets with the full conversation, refreshed every 2.5s while open so staff replies appear instantly. */
 export function useSupportTicketThread(id: string | null) {
   return useQuery({
     queryKey: [...SUPPORT_TICKETS_KEY, 'thread', id],
     queryFn: () => supportTicketsApi.get(id as string),
     enabled: Boolean(id),
-    refetchInterval: 15_000,
+    refetchInterval: 2_500,
   });
 }
 
@@ -37,6 +37,30 @@ export function useReplyToSupportTicket() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: string }) => supportTicketsApi.reply(id, body),
+    onMutate: async ({ id, body }) => {
+      await qc.cancelQueries({ queryKey: [...SUPPORT_TICKETS_KEY, 'thread', id] });
+      const previous = qc.getQueryData<any>([...SUPPORT_TICKETS_KEY, 'thread', id]);
+      if (previous) {
+        qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', id], {
+          ...previous,
+          messages: [
+            ...previous.messages,
+            {
+              id: `temp-${Date.now()}`,
+              author: 'CUSTOMER',
+              body,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, { id }, context) => {
+      if (context?.previous) {
+        qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', id], context.previous);
+      }
+    },
     onSuccess: (thread) => {
       qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', thread.id], thread);
       void qc.invalidateQueries({ queryKey: SUPPORT_TICKETS_KEY, exact: true });
