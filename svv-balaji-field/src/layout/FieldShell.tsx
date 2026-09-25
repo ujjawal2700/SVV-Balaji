@@ -8,6 +8,7 @@ import { ROLE_LABELS } from '@shared/auth/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCanFn } from '@shared/auth/useCan';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
+import { OfflineBar, useSafeLogout } from '../offline/OfflineBar';
 
 const { Header, Sider, Content } = Layout;
 
@@ -36,7 +37,8 @@ export function FieldShell({ tabs, title }: { tabs: ShellTab[]; title: string })
   const location = useLocation();
   const can = useCanFn();
   const isMobile = useIsMobile();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const safeLogout = useSafeLogout();
   const [collapsed, setCollapsed] = useState(false);
 
   const visible = useMemo(
@@ -61,7 +63,7 @@ export function FieldShell({ tabs, title }: { tabs: ShellTab[]; title: string })
   const activeTab = visible.find((tab) => tab.path === activePath);
 
   const handleLogout = async () => {
-    await logout();
+    await safeLogout();
     navigate('/login', { replace: true });
   };
 
@@ -212,6 +214,7 @@ export function FieldShell({ tabs, title }: { tabs: ShellTab[]; title: string })
 
           <Content style={{ margin: '20px auto', width: '100%', maxWidth: 1280, padding: '0 20px' }}>
             <Suspense fallback={fallback}>
+              <OfflineBar />
               <Outlet />
             </Suspense>
           </Content>
@@ -263,7 +266,8 @@ export function FieldShell({ tabs, title }: { tabs: ShellTab[]; title: string })
         }}
       >
         <Suspense fallback={fallback}>
-          <Outlet />
+          <OfflineBar />
+              <Outlet />
         </Suspense>
       </main>
 

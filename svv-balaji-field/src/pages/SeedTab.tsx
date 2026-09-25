@@ -12,6 +12,8 @@ import { formatDate, formatQuantity } from '@shared/utils/format';
 import { SeedDistributionFormModal } from './SeedDistributionFormModal';
 import { FieldCard, FieldFab, FieldList } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
+import { PendingTag } from '../offline/OfflineBar';
+import { isPendingRecord } from '../offline/adapter';
 
 export function FieldSeedTab() {
   const isMobile = useIsMobile();
@@ -123,6 +125,7 @@ export function FieldSeedTab() {
             }
             tags={
               <>
+                {isPendingRecord(row) ? <PendingTag /> : null}
                 <SeedSourceTag seedSource={row.seedSource} seedStockId={row.seedStockId} />
                 {row.seedVariety ? <Tag>{row.seedVariety}</Tag> : null}
                 {row.batchNumber ? <Tag color="purple">{row.batchNumber}</Tag> : null}

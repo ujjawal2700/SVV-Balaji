@@ -15,6 +15,8 @@ import { FieldCard, FieldFab, FieldList } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
 import { PlannedVisitsPanel } from './PlannedVisits';
 import { PlanVisitModal } from './PlanVisitModal';
+import { PendingTag } from '../offline/OfflineBar';
+import { isPendingRecord } from '../offline/adapter';
 
 /** Green through red, matching how an agronomist would read the word. */
 const HEALTH_COLOURS: Record<string, string> = {
@@ -144,6 +146,7 @@ export function FieldVisitsTab() {
             onOpen={() => setDetailId(visit.id)}
             tags={
               <>
+                {isPendingRecord(visit) ? <PendingTag /> : null}
                 {visit.cropName ? <Tag>{visit.cropName}</Tag> : null}
                 {visit.cropHealth ? (
                   <Tag color={healthColour(visit.cropHealth)}>{visit.cropHealth}</Tag>

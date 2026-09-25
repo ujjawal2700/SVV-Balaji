@@ -1,13 +1,17 @@
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { App as AntApp, ConfigProvider, message as staticMessage } from 'antd';
 import enGB from 'antd/locale/en_GB';
 import axios from 'axios';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { apiErrorMessage } from '@shared/api/client';
+import { api, apiErrorMessage } from '@shared/api/client';
 import { AuthProvider } from '@shared/auth/AuthProvider';
 import { App } from './App';
+import { installOfflineAdapter, isUnreachable } from './offline/adapter';
+import { persistQueryCache, restoreQueryCache } from './offline/persist';
+import { offlineProfile } from './offline/session';
+import { startSync } from './offline/sync';
 import { registerServiceWorker } from './pwa';
 import { theme } from './theme';
 import './styles.css';
@@ -38,11 +42,21 @@ const queryClient = new QueryClient({
        */
       refetchOnReconnect: true,
     },
+    mutations: {
+      /**
+       * Offline capture (src/offline). The default would PAUSE a save while the
+       * phone is offline and leave the form spinning; 'always' runs it, and the
+       * offline adapter stores it on the device and answers straight away.
+       */
+      networkMode: 'always',
+    },
   },
 
   queryCache: new QueryCache({
     onError: (error, query) => {
       if (isHandledElsewhere(error)) return;
+      // No signal: the screen keeps what it has; the offline bar says why.
+      if (isUnreachable(error)) return;
       if (query.state.data === undefined) return;
       staticMessage.error(apiErrorMessage(error, 'Could not refresh this data'));
     },
@@ -59,6 +73,24 @@ const queryClient = new QueryClient({
 
 registerServiceWorker();
 
+// --- Offline: capture, sync, and the data the app last saw ---------------------------
+// TanStack Query only learns the network state from online/offline EVENTS, so an
+// app opened with no signal would think it is online and try (and fail) every
+// fetch. Tell it the truth up front; the events keep it current after that.
+onlineManager.setOnline(navigator.onLine);
+installOfflineAdapter(api, queryClient);
+const savedProfile = offlineProfile.load();
+persistQueryCache(queryClient, () => offlineProfile.current()?.id);
+startSync(queryClient);
+
+async function boot() {
+  // Put the last-seen data back before the first render, so an offline start
+  // shows farmers and visits instead of empty lists.
+  if (savedProfile) await restoreQueryCache(queryClient, savedProfile.id);
+  render();
+}
+
+function render() {
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ConfigProvider theme={theme} locale={enGB}>
@@ -93,7 +125,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 : import.meta.env.BASE_URL.replace(/\/$/, ''))
             }
           >
-            <AuthProvider>
+            <AuthProvider offlineSession={offlineProfile}>
               <App />
             </AuthProvider>
           </BrowserRouter>
@@ -102,3 +134,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </ConfigProvider>
   </React.StrictMode>,
 );
+}
+
+void boot();

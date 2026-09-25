@@ -2,30 +2,25 @@
  * Service worker for the SVV Balaji field app.
  *
  * -----------------------------------------------------------------------------
- * What this DOES do: make the app shell load instantly and survive a dead
- * signal, so opening the icon on a patchy connection shows the app rather than
- * the browser's dinosaur.
+ * Its job in offline mode is the app itself: the page, its code and its icons,
+ * so the app opens on a phone with no signal.
  *
- * What this does NOT do: work offline. API requests are never cached and never
- * queued - a form submitted with no signal fails, visibly, and the user is told
- * to try again. That is deliberate. A queue that silently holds a harvest
- * inspection for six hours and then replays it against stale data is worse than
- * a form that refuses, because the executive walks away believing it saved.
+ * Data is NOT cached here. The app keeps its own copy of what it has loaded
+ * (src/offline/persist.ts, per user, wiped on sign-out) and queues changes made
+ * offline (src/offline/outbox.ts) to sync when the connection returns. Keeping
+ * API responses out of this cache means a stale response can never be served
+ * as if it were live, and nobody's data outlives their sign-out in a shared
+ * cache.
  *
- * Real offline capture is a background sync queue plus IndexedDB plus conflict
- * rules for every endpoint. It is a project, not a flag. See DEV_LOG.
+ * The base path comes from this worker's own scope, so the same file works when
+ * the app is served at "/" (per-app host) or "/field/" (one origin behind nginx).
  * -----------------------------------------------------------------------------
  */
-
-const VERSION = 'svv-field-v1';
+const VERSION = 'svv-field-v2';
 const SHELL = `${VERSION}-shell`;
+const BASE = new URL(self.registration.scope).pathname; // "/" or "/field/"
 
-/*
- * Only the entry point is precached. Hashed assets are cached as they are
- * requested, because their names change on every deploy and listing them here
- * would mean regenerating this file at build time.
- */
-const SHELL_URLS = ['/field/', '/field/index.html', '/field/manifest.webmanifest'];
+const SHELL_URLS = [BASE, `${BASE}index.html`, `${BASE}manifest.webmanifest`];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -48,6 +43,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+const cachePut = (request, response) => {
+  if (!response || !response.ok || response.type === 'opaque') return;
+  const copy = response.clone();
+  caches.open(SHELL).then((cache) => cache.put(request, copy));
+};
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
@@ -55,38 +56,37 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never touch the API. A cached farmer list shown as if it were live is how
-  // somebody inspects a harvest against a record that changed this morning.
+  // Never the API - see the note at the top.
   if (url.pathname.startsWith('/api/')) return;
 
-  // Navigations: network first, falling back to the cached shell. This is what
-  // makes the icon open something usable in a dead spot.
+  // Navigations: network first, falling back to the cached app. This is what
+  // makes the icon open the app in a dead spot.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL).then((cache) => cache.put('/field/index.html', copy));
+          cachePut(`${BASE}index.html`, response);
           return response;
         })
-        .catch(() => caches.match('/field/index.html').then((hit) => hit || Response.error())),
+        .catch(() => caches.match(`${BASE}index.html`).then((hit) => hit || caches.match(BASE)).then((hit) => hit || Response.error())),
     );
     return;
   }
 
-  // Hashed build assets are immutable, so cache-first is safe and is what makes
-  // a second launch feel instant.
-  if (url.pathname.startsWith('/field/assets/')) {
+  // Hashed build assets are immutable: cache-first.
+  if (url.pathname.startsWith(`${BASE}assets/`)) {
     event.respondWith(
-      caches.match(request).then(
-        (hit) =>
-          hit ||
-          fetch(request).then((response) => {
-            const copy = response.clone();
-            caches.open(SHELL).then((cache) => cache.put(request, copy));
-            return response;
-          }),
-      ),
+      caches.match(request).then((hit) => hit || fetch(request).then((response) => (cachePut(request, response), response))),
+    );
+    return;
+  }
+
+  // Everything else under the app (icons, manifest): network first, cache as fallback.
+  if (url.pathname.startsWith(BASE)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => (cachePut(request, response), response))
+        .catch(() => caches.match(request).then((hit) => hit || Response.error())),
     );
   }
 });

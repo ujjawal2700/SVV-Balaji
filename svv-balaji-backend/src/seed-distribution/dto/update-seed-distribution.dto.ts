@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/swagger';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreateSeedDistributionDto } from './create-seed-distribution.dto';
 
 /**
@@ -6,4 +6,4 @@ import { CreateSeedDistributionDto } from './create-seed-distribution.dto';
  * against the wrong farmer is a common and harmless data-entry slip, and
  * nothing downstream has been derived from it.
  */
-export class UpdateSeedDistributionDto extends PartialType(CreateSeedDistributionDto) {}
+export class UpdateSeedDistributionDto extends PartialType(OmitType(CreateSeedDistributionDto, ['id'] as const)) {}

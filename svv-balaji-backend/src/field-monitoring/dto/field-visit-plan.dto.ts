@@ -1,6 +1,7 @@
+import { CLIENT_ID_DESCRIPTION } from '../../common/client-id';
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { FieldVisitPlanStatus } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 /**
  * FRD 12.1 - "schedule and record farm visits". This is the schedule half.
@@ -10,6 +11,11 @@ import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-val
  * own week. A Branch Manager assigning a visit to someone else passes both.
  */
 export class CreateFieldVisitPlanDto {
+  @ApiPropertyOptional({ description: CLIENT_ID_DESCRIPTION, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty()
   @IsString()
   farmerId: string;
@@ -52,7 +58,7 @@ export class CreateFieldVisitPlanDto {
  * farmer is a different plan, and should be cancelled and raised again.
  */
 export class UpdateFieldVisitPlanDto extends PartialType(
-  OmitType(CreateFieldVisitPlanDto, ['farmerId'] as const),
+  OmitType(CreateFieldVisitPlanDto, ['farmerId', 'id'] as const),
 ) {}
 
 export class CancelFieldVisitPlanDto {

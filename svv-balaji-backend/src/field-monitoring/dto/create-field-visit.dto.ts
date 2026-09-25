@@ -1,7 +1,13 @@
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { CLIENT_ID_DESCRIPTION } from '../../common/client-id';
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateFieldVisitDto {
+  @ApiPropertyOptional({ description: CLIENT_ID_DESCRIPTION, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty()
   @IsString()
   farmerId: string;

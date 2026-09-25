@@ -68,7 +68,8 @@ export function FieldList<T>({
   renderCard,
   keyOf,
 }: FieldListProps<T>) {
-  if (error) {
+  // A failed refresh (typically no signal) must not hide rows already on screen.
+  if (error && (!rows || rows.length === 0)) {
     return (
       <Card>
         <Space direction="vertical" size={12} style={{ width: '100%' }}>

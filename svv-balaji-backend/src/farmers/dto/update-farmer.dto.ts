@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/swagger';
+import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreateFarmerDto } from './create-farmer.dto';
 
 /**
@@ -8,4 +8,4 @@ import { CreateFarmerDto } from './create-farmer.dto';
  * into batches and finished packs. Editing it would silently break every trace
  * already recorded against it, so the only way to change one is not to.
  */
-export class UpdateFarmerDto extends PartialType(CreateFarmerDto) {}
+export class UpdateFarmerDto extends PartialType(OmitType(CreateFarmerDto, ['id'] as const)) {}

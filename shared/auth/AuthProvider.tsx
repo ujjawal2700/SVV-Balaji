@@ -3,7 +3,24 @@ import type { ReactNode } from 'react';
 import { authApi } from '../api/auth';
 import { refreshOnce } from '../api/client';
 import { tokenStore } from '../api/tokenStore';
+import axios from 'axios';
 import type { AuthUser } from './types';
+
+/**
+ * Lets an app keep working with no network (the field app). Omit it and nothing
+ * changes: a failed session restore signs the user out, as it always has.
+ */
+export interface OfflineSession {
+  /** The last profile this device saw for the signed-in user. */
+  load: () => AuthUser | null;
+  /** Called with every fresh profile, and with null on sign-out. */
+  save: (user: AuthUser | null) => void;
+}
+
+/** "Could not reach the server" rather than "the server said no". */
+function isUnreachable(error: unknown) {
+  return axios.isAxiosError(error) && (!error.response || [502, 503, 504].includes(error.response.status));
+}
 
 export interface AuthContextValue {
   user: AuthUser | null;
@@ -16,7 +33,7 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children, offlineSession }: { children: ReactNode; offlineSession?: OfflineSession }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [initialising, setInitialising] = useState(true);
   const mounted = useRef(true);
@@ -48,11 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await refreshOnce();
         const profile = await authApi.me();
+        offlineSession?.save(profile);
         if (!cancelled) setUser(profile);
-      } catch {
+      } catch (error) {
+        // No signal is not a signed-out user. With an offline session and a
+        // saved profile, carry on as that user; the tokens stay put and the
+        // first request once back online refreshes them (or, if the session
+        // was revoked meanwhile, signs the user out then).
+        const saved = offlineSession && isUnreachable(error) ? offlineSession.load() : null;
+        if (saved) {
+          if (!cancelled) setUser(saved);
+          return;
+        }
         // Expired, revoked, or rotated away. Not an error worth surfacing -
         // the user simply has to sign in.
         tokenStore.clear();
+        offlineSession?.save(null);
         if (!cancelled) setUser(null);
       } finally {
         if (!cancelled) setInitialising(false);
@@ -72,9 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     tokenStore.onSessionLost(() => {
+      offlineSession?.save(null);
       if (mounted.current) setUser(null);
     });
-  }, []);
+  }, [offlineSession]);
 
   /**
    * The one-step sign-in.
@@ -106,8 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // /auth/me rather than the login payload: it carries branch and status,
     // which the navigation needs and login does not return.
     const profile = await authApi.me();
+    offlineSession?.save(profile);
     setUser(profile);
-  }, []);
+  }, [offlineSession]);
 
   const logout = useCallback(async () => {
     try {
@@ -117,14 +147,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clearing locally is the part that matters to them.
     } finally {
       tokenStore.clear();
+      offlineSession?.save(null);
       setUser(null);
     }
-  }, []);
+  }, [offlineSession]);
 
   const reload = useCallback(async () => {
     const profile = await authApi.me();
+    offlineSession?.save(profile);
     setUser(profile);
-  }, []);
+  }, [offlineSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ user, initialising, login, logout, reload }),

@@ -1,7 +1,13 @@
-import { IsOptional, IsString } from 'class-validator';
+import { CLIENT_ID_DESCRIPTION } from '../../common/client-id';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateFarmerDto {
+  @ApiPropertyOptional({ description: CLIENT_ID_DESCRIPTION, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty()
   @IsString()
   fullName: string;

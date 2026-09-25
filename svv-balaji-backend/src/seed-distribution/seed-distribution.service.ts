@@ -30,6 +30,12 @@ export class SeedDistributionService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateSeedDistributionDto, distributedById: string) {
+    // Offline re-send: already recorded - and, for company stock, already
+    // deducted. Returning it here is what stops the lot being deducted twice.
+    if (dto.id) {
+      const existing = await this.prisma.seedDistribution.findUnique({ where: { id: dto.id } });
+      if (existing) return existing;
+    }
     // `seedStockId` alone still means company stock, so an older client that
     // only knew about lots keeps working.
     const source = dto.seedSource ?? (dto.seedStockId ? SeedSource.COMPANY_STOCK : undefined);
@@ -51,6 +57,7 @@ export class SeedDistributionService {
     }
     return this.prisma.seedDistribution.create({
       data: {
+        id: dto.id,
         farmerId: dto.farmerId,
         seedSource: SeedSource.EXTERNAL,
         seedName: dto.seedName,
@@ -74,6 +81,7 @@ export class SeedDistributionService {
       const lot = await assertIssuable(tx, lotId, dto.farmerId);
       const handout = await tx.seedDistribution.create({
         data: {
+          id: dto.id,
           farmerId: dto.farmerId,
           seedSource: SeedSource.COMPANY_STOCK,
           seedStockId: lot.id,

@@ -1,7 +1,13 @@
-import { IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { CLIENT_ID_DESCRIPTION } from '../../common/client-id';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AddTrainingMaterialDto {
+  @ApiPropertyOptional({ description: CLIENT_ID_DESCRIPTION, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty({ description: 'URL of the uploaded file (from your object storage)' })
   @IsString()
   fileUrl: string;

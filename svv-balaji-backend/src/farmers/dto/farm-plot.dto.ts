@@ -1,15 +1,6 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsDateString,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Matches,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { CLIENT_ID_DESCRIPTION } from '../../common/client-id';
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
+import { IsBoolean, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 /**
  * "lat,lng" with optional sign and decimals - the same shape already stored in
@@ -20,6 +11,11 @@ import {
 export const GPS_PATTERN = /^-?\d{1,3}(\.\d+)?,\s*-?\d{1,3}(\.\d+)?$/;
 
 export class CreateFarmPlotDto {
+  @ApiPropertyOptional({ description: CLIENT_ID_DESCRIPTION, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @ApiProperty({ example: 'North field', description: 'What the farmer calls it' })
   @IsString()
   @MaxLength(120)
@@ -85,7 +81,7 @@ export class CreateFarmPlotDto {
   notes?: string;
 }
 
-export class UpdateFarmPlotDto extends PartialType(CreateFarmPlotDto) {
+export class UpdateFarmPlotDto extends PartialType(OmitType(CreateFarmPlotDto, ['id'] as const)) {
   @ApiPropertyOptional({ description: 'Set false when the farmer stops working this plot' })
   @IsOptional()
   @IsBoolean()

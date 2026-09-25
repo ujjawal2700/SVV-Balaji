@@ -27,7 +27,7 @@ describe('Field visit plans', () => {
       },
       user: { findUnique: jest.fn(async ({ where }) => (where.id === 'u-other' ? { id: 'u-other', status: 'ACTIVE' } : null)) },
       fieldVisitPlan: {
-        create: jest.fn(async ({ data }) => (plans.p1 = { id: 'p1', status: 'PLANNED', ...data })),
+        create: jest.fn(async ({ data }) => (plans.p1 = { status: 'PLANNED', ...data, id: data.id ?? 'p1' })),
         findUnique: jest.fn(async ({ where }) => plans[where.id] ?? null),
         findMany: jest.fn(async () => Object.values(plans)),
         update: jest.fn(async ({ where, data }) => (plans[where.id] = { ...plans[where.id], ...data })),
@@ -42,7 +42,7 @@ describe('Field visit plans', () => {
         delete: jest.fn(async ({ where }) => { delete plans[where.id]; }),
       },
       fieldVisit: {
-        create: jest.fn(async ({ data }) => ({ id: 'v1', ...data })),
+        create: jest.fn(async ({ data }) => ({ ...data, id: data.id ?? 'v1' })),
         findUnique: jest.fn(async () => ({ id: 'v1' })),
         delete: jest.fn(async () => ({ id: 'v1' })),
       },
@@ -76,12 +76,22 @@ describe('Field visit plans', () => {
       await expect(service().create({ farmerId: 'f1', plannedDate: today, expertId: 'nobody' }, superAdmin)).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('can cancel a planned visit once, and then not edit it', async () => {
+    it('cancels a planned visit, then refuses edits; cancelling again is a no-op (offline re-send)', async () => {
       await service().create({ farmerId: 'f1', plannedDate: today }, superAdmin);
       const cancelled = await service().cancel('p1', { reason: 'Rain' });
       expect(cancelled.status).toBe('CANCELLED');
       await expect(service().update('p1', { notes: 'x' })).rejects.toBeInstanceOf(BadRequestException);
-      await expect(service().cancel('p1', {})).rejects.toBeInstanceOf(BadRequestException);
+      const again = await service().cancel('p1', {});
+      expect(again.status).toBe('CANCELLED');
+      expect(prisma.fieldVisitPlan.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('a re-sent plan (same client id) returns the existing plan instead of a duplicate', async () => {
+      const id = '22222222-2222-4222-8222-222222222222';
+      await service().create({ id, farmerId: 'f1', plannedDate: today } as any, superAdmin);
+      plans[id] = plans.p1;
+      await service().create({ id, farmerId: 'f1', plannedDate: today } as any, superAdmin);
+      expect(prisma.fieldVisitPlan.create).toHaveBeenCalledTimes(1);
     });
 
     it('will not delete a completed plan', async () => {

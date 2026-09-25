@@ -16,7 +16,13 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**25 Sep (latest) — Seed Source on every handout.** Company stock (lot required, deducted) or External /
+**25 Sep (latest) — Field app works offline.** Work recorded with no signal (farmers, plots, visits with photos,
+planned visits, seed handouts, training) is stored on the phone and synced automatically, in order and exactly once,
+when the connection returns; the app opens offline with the last data it saw. Refused changes wait on More → Offline
+& sync. **Deploy the backend with the field app** (client-generated ids on creates; no migration). The last open field-
+app item (offline capture) is closed. See `DEV_LOG.md` (2026-09-25, offline).
+
+**25 Sep — Seed Source on every handout.** Company stock (lot required, deducted) or External /
 farmer provided (nothing deducted); older handouts without a lot are kept as "source not recorded". Seed stock
 ledger now also records write-offs, branch transfers and lot withdraw/restore/expiry changes. **Needs
 `prisma migrate deploy` + generate + API restart.** See `DEV_LOG.md` (2026-09-25, latest).
@@ -33,7 +39,7 @@ and production) is generated from every visit and opens automatically when one i
 field-visit drawer. Farmers get a full profile (crop history, visits, seed, training, agreements, procurement &
 payments, land, rating). Visits can be planned ahead; recording the visit completes the plan. **Needs
 `prisma migrate deploy` (new `field_visit_plans` table) + generate + API restart.** Still open for the field
-app: offline capture only (client decision). See `DEV_LOG.md` (2026-09-25).
+app: none (offline capture delivered later the same day). See `DEV_LOG.md` (2026-09-25).
 
 **21 Sep — Storefront checkout & fulfilment lifecycle is real end to end.** Address -> server-side
 LOCAL (franchise outlet + rider + doorstep OTP) vs SHIPROCKET (central depot + AWB + webhook) routing -> server-computed

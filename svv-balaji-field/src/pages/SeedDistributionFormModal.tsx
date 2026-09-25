@@ -26,7 +26,7 @@ import {
   useCreateSeedDistribution,
   useUpdateSeedDistribution,
 } from '@shared/hooks/useSeedDistribution';
-import { useFarmer } from '@shared/hooks/useFarmers';
+import { useFarmer, useFarmers } from '@shared/hooks/useFarmers';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { toIsoDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
@@ -146,7 +146,10 @@ export function SeedDistributionFormModal({
   const editing = record
     ? { seedStockId: record.seedStockId, seedSource: record.seedSource, quantity: Number(record.quantity) }
     : null;
-  const { lots, loading: lotsLoading } = useIssuableLots(farmer?.branchId, editing);
+  // Offline, the farmer's own record may not be on the device; the list still has their branch.
+  const farmerRow = useFarmers({}).data?.data?.find((f) => f.id === selectedFarmerId);
+  const farmerBranchId = farmer?.branchId ?? farmerRow?.branchId;
+  const { lots, loading: lotsLoading } = useIssuableLots(farmerBranchId, editing);
   // Company stock with a lot chosen: the particulars come from the lot.
   const seedSource = Form.useWatch('seedSource', form) as SeedSource | undefined;
   // Both watches run on every render - a hook behind `&&` would change the hook order.
@@ -249,7 +252,7 @@ export function SeedDistributionFormModal({
         title="Seed & Input Particulars"
         subtitle="Input name, variety, distributed quantity, and batch number"
       >
-        <SeedSourceField branchId={farmer?.branchId} lots={lots} loading={lotsLoading} editing={editing} />
+        <SeedSourceField branchId={farmerBranchId} lots={lots} loading={lotsLoading} editing={editing} />
         <Row gutter={[14, 0]}>
           <Col xs={24} md={12}>
             <Form.Item name="seedName" label="Seed / Input Name" rules={[required('Seed or input')]}>

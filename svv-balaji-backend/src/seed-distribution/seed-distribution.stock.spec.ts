@@ -50,7 +50,8 @@ describe('SeedDistributionService - seed stock', () => {
       seedStockMovement: { create: jest.fn(async ({ data }) => (movements.push(data), data)) },
       farmer: { findUnique: jest.fn(async ({ where }) => farmers[where.id] ?? null) },
       seedDistribution: {
-        create: jest.fn(async ({ data }) => (handouts[`h${++n}`] = { id: `h${n}`, ...data, quantity: D(data.quantity) })),
+        // Like Prisma: an undefined id means "generate one".
+        create: jest.fn(async ({ data }) => { const id = data.id ?? `h${++n}`; return (handouts[id] = { ...data, id, quantity: D(data.quantity) }); }),
         findUnique: jest.fn(async ({ where }) => handouts[where.id] ?? null),
         // Like Prisma: undefined means "leave as is".
         update: jest.fn(async ({ where, data }) => (handouts[where.id] = { ...handouts[where.id], ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) })),
@@ -73,6 +74,18 @@ describe('SeedDistributionService - seed stock', () => {
     expect(movements).toEqual([expect.objectContaining({ type: 'DISTRIBUTION', seedDistributionId: h.id })]);
     expect(movements[0].quantity.toNumber()).toBe(-30);
     expect(movements[0].balanceAfter.toNumber()).toBe(70);
+  });
+
+  it('an offline re-send of the same handout (same client id) records it once and deducts once', async () => {
+    const body = { id: '11111111-1111-4111-8111-111111111111', farmerId: 'f1', seedName: 'x', quantity: 10, distributionDate: '2026-09-25', seedSource: 'COMPANY_STOCK', seedStockId: 'L1' } as any;
+    prisma.seedDistribution.findUnique = jest.fn(async ({ where }) => handouts[where.id] ?? Object.values(handouts).find((h: any) => h.id === where.id) ?? null);
+    prisma.seedDistribution.create = jest.fn(async ({ data }) => (handouts[data.id] = { ...data, quantity: D(data.quantity) }));
+    const first = await service.create(body, 'u1');
+    const again = await service.create(body, 'u1');
+    expect(again.id).toBe(first.id);
+    expect(prisma.seedDistribution.create).toHaveBeenCalledTimes(1);
+    expect(lots.L1.quantityOnHand.toNumber()).toBe(90);
+    expect(movements.filter((m) => m.type === 'DISTRIBUTION')).toHaveLength(1);
   });
 
   it('refuses to overdraw and leaves the lot untouched', async () => {

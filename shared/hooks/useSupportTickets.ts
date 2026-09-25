@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supportTicketsApi, type SupportInboxQuery, type SupportTicketThread } from '../api/supportTickets';
+import { supportTicketsApi, type ResolveTicketInput, type SupportInboxQuery, type SupportTicketThread } from '../api/supportTickets';
 import type { SupportTicketPriority, SupportTicketStatus } from '../api/types';
 
 export const SUPPORT_TICKETS_KEY = ['support-tickets'] as const;
@@ -64,6 +64,19 @@ export function useUpdateTicket() {
   return useMutation({
     mutationFn: ({ id, ...input }: { id: string; status?: SupportTicketStatus; priority?: SupportTicketPriority }) =>
       supportTicketsApi.update(id, input),
+    onSuccess: (thread) => {
+      qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', thread.id], thread);
+      void qc.invalidateQueries({ queryKey: [...SUPPORT_TICKETS_KEY, 'inbox'] });
+    },
+  });
+}
+
+/** Process a formal resolution action: refund, replacement, reverse pickup, or reject. */
+export function useResolveTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string } & ResolveTicketInput) =>
+      supportTicketsApi.resolve(id, input),
     onSuccess: (thread) => {
       qc.setQueryData([...SUPPORT_TICKETS_KEY, 'thread', thread.id], thread);
       void qc.invalidateQueries({ queryKey: [...SUPPORT_TICKETS_KEY, 'inbox'] });

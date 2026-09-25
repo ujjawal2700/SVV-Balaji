@@ -39,6 +39,12 @@ const MAX_MB = 10;
 const MAX_VIDEO_MB = 20;
 
 const isVideo = (file: File) => file.type.startsWith('video/');
+/**
+ * The field app's offline marker (see svv-balaji-field/src/offline): the file is
+ * stored on the device and uploaded when the change that uses it syncs.
+ */
+const OFFLINE_FILE = 'offline-file:';
+
 const isImage = (file: File) => file.type.startsWith('image/');
 
 export interface FileUploadFieldProps {
@@ -88,6 +94,8 @@ export function FileUploadField({
   const { message } = AntApp.useApp();
   const isMobile = useIsMobile();
 
+  // Preview for a file the field app kept on the device because it was offline.
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
@@ -139,6 +147,13 @@ export function FileUploadField({
       }
 
       const stored = await uploadsApi.upload(folder, result.file, setProgress);
+      if (stored.url.startsWith(OFFLINE_FILE)) {
+        // The field app kept it on the device (no connection); show it from there.
+        setLocalPreview(isImage(file) ? URL.createObjectURL(result.file) : null);
+        onChange?.(stored.url);
+        message.info('Saved on this device — it uploads when you are back online');
+        return;
+      }
       onChange?.(stored.url);
       message.success(isVideo(file) ? 'Video attached' : isImage(file) ? 'Photo attached' : 'File attached');
     } catch (error) {
@@ -159,7 +174,10 @@ export function FileUploadField({
   };
 
   if (value) {
-    const isImg = /\.(jpg|jpeg|png|webp|gif|svg)($|\?)/i.test(value) || value.startsWith('data:image/') || value.startsWith('/images/') || value.includes('cloudinary') || value.includes('http');
+    const offline = value.startsWith(OFFLINE_FILE);
+    const isImg = offline
+      ? Boolean(localPreview)
+      : /\.(jpg|jpeg|png|webp|gif|svg)($|\?)/i.test(value) || value.startsWith('data:image/') || value.startsWith('/images/') || value.includes('cloudinary') || value.includes('http');
     return (
       <div
         style={{
@@ -176,7 +194,7 @@ export function FileUploadField({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
           {isImg ? (
             <img
-              src={value}
+              src={offline ? (localPreview as string) : value}
               alt="Preview"
               style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }}
             />
@@ -187,7 +205,11 @@ export function FileUploadField({
             <Typography.Text strong style={{ fontSize: 13, display: 'block' }} ellipsis>
               {fileName ?? 'Attached Photo'}
             </Typography.Text>
-            {savedNote ? (
+            {offline ? (
+              <Typography.Text style={{ fontSize: 11, color: '#92400e', display: 'block' }}>
+                Saved on this device — uploads when back online
+              </Typography.Text>
+            ) : savedNote ? (
               <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                 {savedNote}
               </Typography.Text>
@@ -195,9 +217,11 @@ export function FileUploadField({
           </div>
         </div>
         <Space size={8}>
-          <Typography.Link href={value} target="_blank" rel="noreferrer noopener" style={{ fontSize: 13 }}>
-            View
-          </Typography.Link>
+          {offline ? null : (
+            <Typography.Link href={value} target="_blank" rel="noreferrer noopener" style={{ fontSize: 13 }}>
+              View
+            </Typography.Link>
+          )}
           <Button
             type="link"
             danger
@@ -206,6 +230,7 @@ export function FileUploadField({
             onClick={() => {
               setFileName(null);
               setSavedNote(null);
+              setLocalPreview(null);
               onChange?.(undefined);
             }}
           >

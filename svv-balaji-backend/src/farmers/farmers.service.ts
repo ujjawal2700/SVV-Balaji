@@ -18,7 +18,18 @@ export class FarmersService {
     private readonly performance: FarmerPerformanceService,
   ) {}
 
-  create(dto: CreateFarmerDto, createdById?: string) {
+  async create(dto: CreateFarmerDto, createdById?: string) {
+    // Offline re-send (see common/client-id.ts): the farmer already exists.
+    if (dto.id) {
+      const existing = await this.prisma.farmer.findUnique({
+        where: { id: dto.id },
+        include: {
+          branch: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, fullName: true, role: true, email: true } },
+        },
+      });
+      if (existing) return existing;
+    }
     // farmerCode is intentionally NOT set here - per FRD 8.1 it's generated
     // only on approval. Farmer enters as PENDING_VERIFICATION (schema default).
     return this.prisma.farmer.create({

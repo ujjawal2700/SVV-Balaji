@@ -12,6 +12,8 @@ import { TrainingDetailDrawer } from './TrainingDetailDrawer';
 import { TrainingFormModal } from './TrainingFormModal';
 import { FieldCard, FieldFab, FieldList } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
+import { PendingTag } from '../offline/OfflineBar';
+import { isPendingRecord } from '../offline/adapter';
 
 export function FieldTrainingTab() {
   const navigate = useNavigate();
@@ -128,6 +130,7 @@ export function FieldTrainingTab() {
               }
               tags={
                 <>
+                  {isPendingRecord(session) ? <PendingTag /> : null}
                   {upcoming ? <Tag color="blue">Upcoming</Tag> : <Tag>Done</Tag>}
                   {session.branch?.name ? <Tag>{session.branch.name}</Tag> : null}
                   {attended === 0 && !upcoming ? (

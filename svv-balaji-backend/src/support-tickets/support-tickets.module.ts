@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { Prisma, SalesChannel, SupportMessageAuthor, SupportTicketPriority, SupportTicketStatus } from '@prisma/client';
+import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Prisma, SalesChannel, SupportMessageAuthor, SupportResolutionAction, SupportTicketPriority, SupportTicketStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -27,6 +27,25 @@ export class UpdateTicketDto {
   @IsOptional()
   @IsIn(Object.values(SupportTicketPriority))
   priority?: SupportTicketPriority;
+}
+
+export class ResolveTicketDto {
+  @IsIn(Object.values(SupportResolutionAction))
+  action!: SupportResolutionAction;
+
+  @IsOptional()
+  @IsNumber()
+  refundAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  replacementOrderNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  internalAuditNote?: string;
 }
 
 const CUSTOMER_SELECT = { id: true, name: true, phone: true, customerCode: true, channel: true } as const;
@@ -231,6 +250,7 @@ export class SupportTicketsService {
           awaitingReply:
             (t.status === SupportTicketStatus.OPEN || t.status === SupportTicketStatus.IN_PROGRESS) &&
             (!last || last.author === SupportMessageAuthor.CUSTOMER),
+          resolutionAction: t.resolutionAction ?? null,
         };
       }),
     );
@@ -257,6 +277,40 @@ export class SupportTicketsService {
 
     const product = await resolveTicketProduct(this.prisma, t.subject, t.orderNumber);
 
+    // Enrich with order details for the resolution drawer
+    let orderDetails: { amount: number; date: string; items: Array<{ productName: string; quantity: number; unitPrice: number; sku: string | null; imageUrl: string | null }> } | null = null;
+    if (t.orderNumber) {
+      try {
+        const order = await this.prisma.order.findUnique({
+          where: { orderNumber: t.orderNumber },
+          select: {
+            total: true,
+            createdAt: true,
+            items: {
+              select: {
+                quantity: true,
+                unitPrice: true,
+                product: { select: { name: true, sku: true, images: true } },
+              },
+            },
+          },
+        });
+        if (order) {
+          orderDetails = {
+            amount: Number(order.total ?? 0),
+            date: order.createdAt?.toISOString() ?? '',
+            items: order.items.map((it: any) => ({
+              productName: it.product?.name ?? 'Unknown Product',
+              quantity: it.quantity ?? 1,
+              unitPrice: Number(it.unitPrice ?? 0),
+              sku: it.product?.sku ?? null,
+              imageUrl: it.product?.images?.[0] ?? null,
+            })),
+          };
+        }
+      } catch { /* order not found or query error - skip enrichment */ }
+    }
+
     return {
       id: t.id,
       ticketNumber: t.ticketNumber,
@@ -278,6 +332,14 @@ export class SupportTicketsService {
         createdAt: m.createdAt,
         staffName: m.staffUser?.fullName ?? null,
       })),
+      // Resolution / complaint fields
+      evidenceImages: t.evidenceImages ?? [],
+      resolutionAction: t.resolutionAction ?? null,
+      refundAmount: t.refundAmount ? Number(t.refundAmount) : null,
+      replacementOrderNumber: t.replacementOrderNumber ?? null,
+      resolutionNote: t.resolutionNote ?? null,
+      internalAuditNote: t.internalAuditNote ?? null,
+      orderDetails,
     };
   }
 
@@ -341,6 +403,48 @@ export class SupportTicketsService {
 
     return thread;
   }
+
+  /** Process a formal resolution action: refund, replacement, reverse pickup, or reject. */
+  async resolve(id: string, staffUserId: string, dto: ResolveTicketDto) {
+    const t = await this.prisma.supportTicket.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!t) throw new NotFoundException('Ticket not found');
+    if (t.status === SupportTicketStatus.CLOSED) {
+      throw new BadRequestException('Cannot resolve a closed ticket. Reopen it first.');
+    }
+
+    // Map action to appropriate final status
+    const resolvedStatus =
+      dto.action === SupportResolutionAction.REJECTED
+        ? SupportTicketStatus.CLOSED
+        : SupportTicketStatus.RESOLVED;
+
+    const now = new Date();
+    await this.prisma.supportTicket.update({
+      where: { id },
+      data: {
+        resolutionAction: dto.action,
+        refundAmount: dto.refundAmount != null ? new Prisma.Decimal(dto.refundAmount) : undefined,
+        replacementOrderNumber: dto.replacementOrderNumber ?? undefined,
+        internalAuditNote: dto.internalAuditNote ?? undefined,
+        resolutionNote: dto.internalAuditNote ?? undefined,
+        status: resolvedStatus,
+        resolvedAt: now,
+        resolvedById: staffUserId,
+        lastActivityAt: now,
+      },
+    });
+
+    const thread = await this.get(id);
+    this.gateway?.broadcastTicket('tickets:resolved', {
+      ticketId: id,
+      status: thread.status,
+      resolutionAction: thread.resolutionAction,
+      resolvedAt: thread.resolvedAt,
+      resolvedBy: thread.resolvedBy,
+    });
+
+    return thread;
+  }
 }
 
 @ApiTags('support-tickets')
@@ -383,6 +487,13 @@ export class SupportTicketsController {
   @ApiOperation({ summary: 'Change status (open / in progress / resolved / closed) or priority' })
   update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: JwtPayload) {
     return this.service.update(id, user.sub, dto);
+  }
+
+  @Post(':id/resolve')
+  @RequirePermission('supportTickets.reply')
+  @ApiOperation({ summary: 'Process formal resolution action: approve refund, dispatch replacement, assign reverse pickup, or reject' })
+  resolve(@Param('id') id: string, @Body() dto: ResolveTicketDto, @CurrentUser() user: JwtPayload) {
+    return this.service.resolve(id, user.sub, dto);
   }
 }
 

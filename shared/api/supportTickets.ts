@@ -3,6 +3,8 @@ import type { SupportTicketCategory, SupportTicketPriority, SupportTicketStatus 
 
 export type SupportMessageAuthor = 'CUSTOMER' | 'STAFF';
 
+export type SupportResolutionAction = 'REFUND_APPROVED' | 'REPLACEMENT_DISPATCHED' | 'REVERSE_PICKUP' | 'REJECTED';
+
 export interface SupportTicketCustomer {
   id: string;
   name: string;
@@ -37,6 +39,8 @@ export interface SupportInboxRow {
   /** The customer spoke last on an open ticket - staff owe a reply. */
   awaitingReply: boolean;
   product?: SupportTicketProduct | null;
+  /** Resolution action already taken, if any (for inbox badge). */
+  resolutionAction?: SupportResolutionAction | null;
 }
 
 export interface SupportInbox {
@@ -60,12 +64,34 @@ export interface SupportTicketThread {
   resolvedBy: { id: string; fullName: string } | null;
   messages: Array<{ id: string; author: SupportMessageAuthor; body: string; createdAt: string; staffName: string | null }>;
   product?: SupportTicketProduct | null;
+
+  // ---- Resolution / Complaint fields ----
+  evidenceImages: string[];
+  resolutionAction: SupportResolutionAction | null;
+  refundAmount: number | null;
+  replacementOrderNumber: string | null;
+  resolutionNote: string | null;
+  internalAuditNote: string | null;
+
+  /** Enriched order data for the resolution drawer. */
+  orderDetails?: {
+    amount: number;
+    date: string;
+    items: Array<{ productName: string; quantity: number; unitPrice: number; sku: string | null; imageUrl: string | null }>;
+  } | null;
 }
 
 export interface SupportInboxQuery {
   status?: SupportTicketStatus;
   channel?: 'B2B' | 'B2C';
   search?: string;
+}
+
+export interface ResolveTicketInput {
+  action: SupportResolutionAction;
+  refundAmount?: number;
+  replacementOrderNumber?: string;
+  internalAuditNote?: string;
 }
 
 /** Staff help desk over storefront tickets. See svv-balaji-backend/src/support-tickets. */
@@ -85,5 +111,8 @@ export const supportTicketsApi = {
   },
   async update(id: string, input: { status?: SupportTicketStatus; priority?: SupportTicketPriority }): Promise<SupportTicketThread> {
     return (await api.patch<SupportTicketThread>(`/support-tickets/${id}`, input)).data;
+  },
+  async resolve(id: string, input: ResolveTicketInput): Promise<SupportTicketThread> {
+    return (await api.post<SupportTicketThread>(`/support-tickets/${id}/resolve`, input)).data;
   },
 };

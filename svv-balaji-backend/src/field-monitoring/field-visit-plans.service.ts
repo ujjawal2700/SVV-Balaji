@@ -40,6 +40,10 @@ export class FieldVisitPlansService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateFieldVisitPlanDto, user: JwtPayload) {
+    if (dto.id) {
+      const existing = await this.prisma.fieldVisitPlan.findUnique({ where: { id: dto.id }, include: PLAN_INCLUDE });
+      if (existing) return existing;
+    }
     const farmer = await this.prisma.farmer.findUnique({
       where: { id: dto.farmerId },
       select: { id: true, fullName: true, branchId: true, status: true },
@@ -63,6 +67,7 @@ export class FieldVisitPlansService {
 
     return this.prisma.fieldVisitPlan.create({
       data: {
+        id: dto.id,
         farmerId: farmer.id,
         branchId: scope ?? dto.branchId ?? farmer.branchId,
         expertId,
@@ -127,6 +132,8 @@ export class FieldVisitPlansService {
 
   async cancel(id: string, dto: CancelFieldVisitPlanDto) {
     const plan = await this.findOne(id);
+    // Idempotent: cancelling twice (an offline re-send) is the same outcome.
+    if (plan.status === 'CANCELLED') return plan;
     this.assertStillPlanned(plan.status, 'cancelled');
 
     return this.prisma.fieldVisitPlan.update({

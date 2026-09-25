@@ -21,6 +21,8 @@ import { farmerGaps } from './readiness';
 import { FieldCard, FieldFab, FieldList } from './pieces';
 import { LandProfileSheet } from './LandProfileSheet';
 import { FarmerProfileSheet } from './FarmerProfileSheet';
+import { PendingTag } from '../offline/OfflineBar';
+import { isPendingRecord } from '../offline/adapter';
 import {
   EMPTY_FILTERS,
   FarmerFilterDrawer,
@@ -269,6 +271,7 @@ export function FieldFarmersTab() {
               }
               tags={
                 <>
+                  {isPendingRecord(farmer) ? <PendingTag /> : null}
                   <FarmerStatusTag status={farmer.status} />
 
                   {farmer.qualityRating !== null ? (

@@ -12,9 +12,14 @@ import { assertDeletable } from '../common/dependants';
 export class TrainingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  createSession(dto: CreateTrainingSessionDto, conductedById: string) {
+  async createSession(dto: CreateTrainingSessionDto, conductedById: string) {
+    if (dto.id) {
+      const existing = await this.prisma.trainingSession.findUnique({ where: { id: dto.id } });
+      if (existing) return existing;
+    }
     return this.prisma.trainingSession.create({
       data: {
+        id: dto.id,
         title: dto.title,
         description: dto.description,
         scheduledDate: new Date(dto.scheduledDate),
@@ -94,8 +99,12 @@ export class TrainingService {
     const session = await this.prisma.trainingSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Training session not found');
 
+    if (dto.id) {
+      const existing = await this.prisma.trainingMaterial.findUnique({ where: { id: dto.id } });
+      if (existing) return existing;
+    }
     return this.prisma.trainingMaterial.create({
-      data: { sessionId, fileUrl: dto.fileUrl, fileType: dto.fileType },
+      data: { id: dto.id, sessionId, fileUrl: dto.fileUrl, fileType: dto.fileType },
     });
   }
 

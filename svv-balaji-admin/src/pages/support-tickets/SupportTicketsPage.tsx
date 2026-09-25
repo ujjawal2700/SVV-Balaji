@@ -1,32 +1,49 @@
 import {
   ArrowLeftOutlined,
+  BarcodeOutlined,
   CheckCircleOutlined,
   CheckOutlined,
   ClockCircleOutlined,
+  CloseCircleOutlined,
   CopyOutlined,
   CustomerServiceOutlined,
+  DollarOutlined,
   DownOutlined,
   ExportOutlined,
+  EyeOutlined,
+  FileProtectOutlined,
   PhoneOutlined,
   ReloadOutlined,
+  RocketOutlined,
   SearchOutlined,
   SendOutlined,
   ShoppingOutlined,
+  SyncOutlined,
   ThunderboltOutlined,
   UpOutlined,
   UserOutlined,
   WhatsAppOutlined,
 } from '@ant-design/icons';
 import {
+  Alert,
   App as AntApp,
   Avatar,
   Button,
   Card,
+  Col,
+  Descriptions,
+  Divider,
+  Drawer,
   Dropdown,
   Empty,
   Grid,
+  Image,
   Input,
+  InputNumber,
+  Modal,
+  Row,
   Select,
+  Space,
   Spin,
   Tag,
   Tooltip,
@@ -38,12 +55,13 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@shared/api/client';
-import type { SupportInboxRow, SupportTicketProduct, SupportTicketThread } from '@shared/api/supportTickets';
+import type { SupportInboxRow, SupportResolutionAction, SupportTicketProduct, SupportTicketThread } from '@shared/api/supportTickets';
 import type { SupportTicketCategory, SupportTicketPriority, SupportTicketStatus } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
 import {
   SUPPORT_TICKETS_KEY,
   useReplyToTicket,
+  useResolveTicket,
   useSupportInbox,
   useSupportThread,
   useUpdateTicket,
@@ -145,6 +163,397 @@ export function parseTicketDetails(subject: string, ticketProduct?: SupportTicke
     imageUrl,
     cleanSubject,
   };
+}
+
+const RESOLUTION_ACTION_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  REFUND_APPROVED: { label: 'Refund Approved', color: 'green', icon: <DollarOutlined /> },
+  REPLACEMENT_DISPATCHED: { label: 'Replacement Dispatched', color: 'blue', icon: <RocketOutlined /> },
+  REVERSE_PICKUP: { label: 'Reverse Pickup', color: 'orange', icon: <SyncOutlined /> },
+  REJECTED: { label: 'Rejected', color: 'red', icon: <CloseCircleOutlined /> },
+};
+
+const formatCurrency = (v: number) => `₹${v.toLocaleString('en-IN')}`;
+
+/** Slide-out Resolution & Inspection Drawer — ported from ComplaintsPage, now uses real data */
+function ResolutionDrawer({
+  open,
+  thread,
+  canReply,
+  onClose,
+}: {
+  open: boolean;
+  thread: SupportTicketThread | null;
+  canReply: boolean;
+  onClose: () => void;
+}) {
+  const { message: msg } = AntApp.useApp();
+  const resolve = useResolveTicket();
+  const [actionType, setActionType] = useState<SupportResolutionAction | null>(null);
+  const [auditNote, setAuditNote] = useState('');
+  const [creditAmount, setCreditAmount] = useState(0);
+  const [replacementOrderNum, setReplacementOrderNum] = useState('');
+
+  if (!thread) return null;
+
+  const { productName, issueType, reason, imageUrl } = parseTicketDetails(thread.subject, thread.product);
+  const orderAmt = thread.orderDetails?.amount ?? thread.product?.price ?? 0;
+  const slaHours = Math.max(0, 24 - dayjs().diff(dayjs(thread.createdAt), 'hour', true));
+  const slaCritical = slaHours <= 4;
+  const alreadyResolved = Boolean(thread.resolutionAction);
+  const actionMeta = thread.resolutionAction ? RESOLUTION_ACTION_META[thread.resolutionAction] : null;
+
+  const handleConfirmAction = () => {
+    if (!actionType) return;
+    resolve.mutate(
+      {
+        id: thread.id,
+        action: actionType,
+        refundAmount: actionType === 'REFUND_APPROVED' ? creditAmount : undefined,
+        replacementOrderNumber: actionType === 'REPLACEMENT_DISPATCHED' ? replacementOrderNum || undefined : undefined,
+        internalAuditNote: auditNote || undefined,
+      },
+      {
+        onSuccess: () => {
+          const label = RESOLUTION_ACTION_META[actionType]?.label ?? actionType;
+          msg.success(`${thread.ticketNumber} — ${label}`);
+          setActionType(null);
+          setAuditNote('');
+          setReplacementOrderNum('');
+          onClose();
+        },
+        onError: (e) => msg.error(apiErrorMessage(e, 'Could not process resolution')),
+      },
+    );
+  };
+
+  return (
+    <>
+      <Drawer
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FileProtectOutlined style={{ color: '#1677ff', fontSize: 17 }} />
+            <span style={{ fontWeight: 700, fontSize: 15 }}>Inspection & Resolution</span>
+            <Tag color={thread.customer.channel === 'B2B' ? 'purple' : 'blue'} style={{ margin: 0, fontSize: 10.5 }}>
+              {thread.customer.channel === 'B2B' ? 'B2B Dispute' : 'B2C Complaint'}
+            </Tag>
+            <Tag style={{ margin: 0, fontSize: 10.5, color: '#64748b' }}>{thread.ticketNumber}</Tag>
+          </div>
+        }
+        width={720}
+        open={open}
+        onClose={onClose}
+        extra={<Button onClick={onClose}>Close</Button>}
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          {/* 1. Priority & SLA Banner */}
+          <Card
+            size="small"
+            style={{
+              borderRadius: 12,
+              background: thread.priority === 'HIGH' ? '#fff7ed' : '#f0fdf4',
+              borderColor: thread.priority === 'HIGH' ? '#ffd591' : '#b7eb8f',
+            }}
+          >
+            <Row justify="space-between" align="middle">
+              <Col>
+                <Space size={8}>
+                  <Tag color={thread.priority === 'HIGH' ? 'red' : thread.priority === 'MEDIUM' ? 'orange' : 'blue'}>
+                    {PRIORITY_META[thread.priority].label}
+                  </Tag>
+                  <Tag color="volcano">{issueType}</Tag>
+                  {reason ? <Tag color="orange">{reason}</Tag> : null}
+                </Space>
+              </Col>
+              <Col>
+                <Space size={6}>
+                  <ClockCircleOutlined style={{ color: slaCritical ? '#ff4d4f' : '#fa8c16' }} />
+                  <Text strong style={{ color: slaCritical ? '#ff4d4f' : '#fa8c16', fontSize: 13 }}>
+                    {slaHours <= 0 ? 'SLA Breached' : `SLA: ${slaHours.toFixed(1)}h remaining`}
+                  </Text>
+                </Space>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* 2. Customer Profile & Order Summary */}
+          <Card size="small" title="1. Customer Profile & Linked Order" style={{ borderRadius: 10 }}>
+            <Descriptions size="small" column={2} bordered>
+              <Descriptions.Item label="Name">{thread.customer.name}</Descriptions.Item>
+              <Descriptions.Item label="Phone">{thread.customer.phone}</Descriptions.Item>
+              <Descriptions.Item label="Email">{thread.customer.email ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="Channel">
+                <Tag color={thread.customer.channel === 'B2B' ? 'purple' : 'cyan'} style={{ margin: 0 }}>
+                  {thread.customer.channel}
+                </Tag>
+              </Descriptions.Item>
+              {thread.orderNumber ? (
+                <Descriptions.Item label="Order">
+                  <Tag color="geekblue" style={{ margin: 0 }}>
+                    {thread.orderNumber} ({formatCurrency(orderAmt)})
+                  </Tag>
+                </Descriptions.Item>
+              ) : null}
+              {thread.orderDetails?.date ? (
+                <Descriptions.Item label="Order Date">
+                  {dayjs(thread.orderDetails.date).format('D MMM YYYY')}
+                </Descriptions.Item>
+              ) : null}
+              <Descriptions.Item label="Ticket Created">
+                {dayjs(thread.createdAt).format('D MMM YYYY, h:mm A')}
+              </Descriptions.Item>
+              <Descriptions.Item label="Category">
+                <Tag style={{ margin: 0 }}>{CATEGORY_LABEL[thread.category]}</Tag>
+              </Descriptions.Item>
+            </Descriptions>
+
+            {/* Order Items */}
+            {thread.orderDetails?.items && thread.orderDetails.items.length > 0 ? (
+              <div style={{ marginTop: 12 }}>
+                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 6, color: '#475569' }}>
+                  Order Items:
+                </Text>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {thread.orderDetails.items.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 10px',
+                        background: '#f8fafc',
+                        borderRadius: 8,
+                        border: '1px solid #f1f5f9',
+                        fontSize: 12,
+                      }}
+                    >
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/images/cat_spices.jpg'; }}
+                        />
+                      ) : null}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text ellipsis style={{ fontWeight: 600, fontSize: 12 }}>{item.productName}</Text>
+                        {item.sku ? <Text type="secondary" style={{ fontSize: 10.5, marginLeft: 4 }}>SKU: {item.sku}</Text> : null}
+                      </div>
+                      <Text style={{ fontSize: 12, color: '#475569' }}>
+                        {item.quantity} × {formatCurrency(item.unitPrice)}
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </Card>
+
+          {/* 3. Evidence Vault */}
+          <Card size="small" title="2. Evidence & Customer Statement" style={{ borderRadius: 10 }}>
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <div>
+                <Text strong style={{ fontSize: 12.5, display: 'block', marginBottom: 4 }}>
+                  Customer's Initial Statement:
+                </Text>
+                <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, lineHeight: 1.6 }}>
+                  "{thread.description}"
+                </div>
+              </div>
+
+              {/* Product Thumbnail */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img
+                  src={imageUrl}
+                  alt={productName}
+                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/images/cat_spices.jpg'; }}
+                  style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                />
+                <div>
+                  <Text strong style={{ fontSize: 13 }}>{productName}</Text>
+                  {thread.product?.sku ? (
+                    <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>SKU: {thread.product.sku}</Text>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Evidence Photos */}
+              {thread.evidenceImages.length > 0 ? (
+                <div>
+                  <Text strong style={{ fontSize: 12.5, display: 'block', marginBottom: 8 }}>
+                    Uploaded Photo Evidence ({thread.evidenceImages.length}):
+                  </Text>
+                  <Image.PreviewGroup>
+                    <Space size={12} wrap>
+                      {thread.evidenceImages.map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            width: 120,
+                            height: 100,
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            border: '1px solid #d9d9d9',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                          }}
+                        >
+                          <Image src={imgUrl} width="100%" height="100%" style={{ objectFit: 'cover' }} />
+                        </div>
+                      ))}
+                    </Space>
+                  </Image.PreviewGroup>
+                </div>
+              ) : (
+                <Text type="secondary" style={{ fontSize: 12 }}>No photo evidence uploaded yet.</Text>
+              )}
+            </Space>
+          </Card>
+
+          {/* 4. Previous Resolution (if already resolved) */}
+          {alreadyResolved && actionMeta ? (
+            <Alert
+              type={thread.resolutionAction === 'REJECTED' ? 'error' : 'success'}
+              showIcon
+              icon={actionMeta.icon}
+              message={`Resolution: ${actionMeta.label}`}
+              description={
+                <Space direction="vertical" size={4}>
+                  {thread.refundAmount ? <Text>Refund Amount: {formatCurrency(thread.refundAmount)}</Text> : null}
+                  {thread.replacementOrderNumber ? <Text>Replacement: {thread.replacementOrderNumber}</Text> : null}
+                  {thread.internalAuditNote ? <Text>Note: {thread.internalAuditNote}</Text> : null}
+                  {thread.resolvedBy ? (
+                    <Text type="secondary" style={{ fontSize: 11.5 }}>
+                      Resolved by {thread.resolvedBy.fullName} · {thread.resolvedAt ? dayjs(thread.resolvedAt).format('D MMM, h:mm A') : ''}
+                    </Text>
+                  ) : null}
+                </Space>
+              }
+            />
+          ) : null}
+
+          {/* 5. Resolution Action Buttons (only if not yet resolved and staff has permission) */}
+          {!alreadyResolved && canReply ? (
+            <>
+              <Divider orientation="left" plain style={{ margin: '4px 0' }}>
+                Resolution Actions
+              </Divider>
+
+              <Row gutter={[12, 12]}>
+                <Col span={12}>
+                  <Button
+                    type="primary"
+                    block
+                    style={{ background: '#52c41a', borderColor: '#52c41a', borderRadius: 8, height: 42, fontWeight: 700 }}
+                    icon={<DollarOutlined />}
+                    onClick={() => {
+                      setActionType('REFUND_APPROVED');
+                      setCreditAmount(orderAmt);
+                    }}
+                  >
+                    Approve Refund
+                  </Button>
+                </Col>
+                <Col span={12}>
+                  <Button
+                    type="primary"
+                    block
+                    style={{ background: '#1677ff', borderColor: '#1677ff', borderRadius: 8, height: 42, fontWeight: 700 }}
+                    icon={<RocketOutlined />}
+                    onClick={() => setActionType('REPLACEMENT_DISPATCHED')}
+                  >
+                    Send Replacement
+                  </Button>
+                </Col>
+                <Col span={12}>
+                  <Button
+                    block
+                    style={{ background: '#fa8c16', borderColor: '#fa8c16', color: '#fff', borderRadius: 8, height: 42, fontWeight: 700 }}
+                    icon={<SyncOutlined />}
+                    onClick={() => setActionType('REVERSE_PICKUP')}
+                  >
+                    Reverse Pickup
+                  </Button>
+                </Col>
+                <Col span={12}>
+                  <Button
+                    danger
+                    block
+                    style={{ borderRadius: 8, height: 42, fontWeight: 700 }}
+                    icon={<CloseCircleOutlined />}
+                    onClick={() => setActionType('REJECTED')}
+                  >
+                    Reject Grievance
+                  </Button>
+                </Col>
+              </Row>
+            </>
+          ) : null}
+        </Space>
+      </Drawer>
+
+      {/* Confirmation Modal */}
+      <Modal
+        title={
+          actionType === 'REFUND_APPROVED'
+            ? '💳 Approve Refund / Credit Note'
+            : actionType === 'REPLACEMENT_DISPATCHED'
+            ? '🚚 Dispatch Replacement Order'
+            : actionType === 'REVERSE_PICKUP'
+            ? '🔄 Assign Reverse Pickup'
+            : '❌ Reject Complaint'
+        }
+        open={Boolean(actionType)}
+        onOk={handleConfirmAction}
+        confirmLoading={resolve.isPending}
+        onCancel={() => setActionType(null)}
+        okText="Confirm Action"
+        okButtonProps={{ danger: actionType === 'REJECTED' }}
+      >
+        <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={16}>
+          <Alert
+            type={actionType === 'REJECTED' ? 'error' : 'info'}
+            message={`${thread.ticketNumber} — ${thread.customer.name}`}
+            description={thread.orderNumber ? `Order: ${thread.orderNumber} · Amount: ${formatCurrency(orderAmt)}` : 'No linked order'}
+          />
+
+          {actionType === 'REFUND_APPROVED' ? (
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 4 }}>Refund Amount (₹):</Text>
+              <InputNumber
+                style={{ width: '100%' }}
+                min={1}
+                max={orderAmt || 99999}
+                value={creditAmount}
+                onChange={(val) => setCreditAmount(val || 0)}
+                prefix="₹"
+              />
+            </div>
+          ) : null}
+
+          {actionType === 'REPLACEMENT_DISPATCHED' ? (
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 4 }}>Replacement Order Number (optional):</Text>
+              <Input
+                placeholder="e.g. #B2C-REP-9022"
+                value={replacementOrderNum}
+                onChange={(e) => setReplacementOrderNum(e.target.value)}
+              />
+            </div>
+          ) : null}
+
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 4 }}>Internal Audit Note / Justification:</Text>
+            <Input.TextArea
+              rows={3}
+              placeholder="Provide reason for compliance logs (e.g. Damage verified from photo proof, Credit Note #CN-9041 issued)..."
+              value={auditNote}
+              onChange={(e) => setAuditNote(e.target.value)}
+            />
+          </div>
+        </Space>
+      </Modal>
+    </>
+  );
 }
 
 /** Compact expandable product name with Show more / Show less toggle */
@@ -309,8 +718,8 @@ export function SupportTicketsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <PageHeader
-        title="Support Tickets"
-        subtitle="Real-time help-desk for Customer & Retailer requests. Live two-way chat with instant delivery."
+        title="Support & Complaints Hub"
+        subtitle="Unified Helpdesk & Dispute Resolution Center — Real-time customer messaging, evidence inspection vault, batch traceability, and instant refund/replacement actions."
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span
@@ -365,24 +774,24 @@ export function SupportTicketsPage() {
         }}
         styles={{ body: { padding: 0 } }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: wide ? '330px minmax(0, 1fr)' : '1fr', height: PANE_HEIGHT }}>
+        <div style={{ display: 'grid', gridTemplateColumns: wide ? '410px minmax(0, 1fr)' : '1fr', height: PANE_HEIGHT }}>
           {/* ---- Inbox / List Column ---- */}
           {showList ? (
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: wide ? BORDER : undefined, background: '#fff' }}>
-              <div style={{ padding: '12px 14px', borderBottom: BORDER, display: 'flex', flexDirection: 'column', gap: 8, background: '#fafbfc' }}>
+              <div style={{ padding: '14px 16px', borderBottom: BORDER, display: 'flex', flexDirection: 'column', gap: 10, background: '#fafbfc' }}>
                 <Input
                   allowClear
-                  size="small"
+                  size="middle"
                   prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
                   placeholder="Search tickets, products, customers"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ borderRadius: 6 }}
+                  style={{ borderRadius: 8 }}
                 />
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Select
-                    size="small"
-                    style={{ flex: 1 }}
+                    size="middle"
+                    style={{ flex: 1, height: 36 }}
                     value={channel}
                     onChange={setChannel}
                     options={[
@@ -392,16 +801,26 @@ export function SupportTicketsPage() {
                     ]}
                   />
                   <Button
-                    size="small"
+                    size="middle"
                     type={awaitingOnly ? 'primary' : 'default'}
                     danger={awaitingOnly}
                     onClick={() => setAwaitingOnly((v) => !v)}
-                    style={{ borderRadius: 6, fontSize: 11.5 }}
+                    style={{ borderRadius: 8, fontSize: 13, height: 36, padding: '0 14px', fontWeight: 500 }}
                   >
                     Needs reply{awaiting ? ` · ${awaiting}` : ''}
                   </Button>
                 </div>
-                <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    overflowX: 'auto',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    paddingBottom: 2,
+                    alignItems: 'center',
+                  }}
+                >
                   {tabs.map((tab) => {
                     const on = statusTab === tab.value;
                     return (
@@ -411,19 +830,24 @@ export function SupportTicketsPage() {
                         onClick={() => setStatusTab(tab.value)}
                         style={{
                           flexShrink: 0,
-                          border: `1px solid ${on ? '#2563eb' : '#e2e8f0'}`,
+                          height: 32,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: `1px solid ${on ? '#2563eb' : '#cbd5e1'}`,
                           background: on ? '#eff6ff' : '#fff',
-                          color: on ? '#1d4ed8' : '#475569',
+                          color: on ? '#1d4ed8' : '#334155',
                           borderRadius: 999,
-                          padding: '2px 9px',
-                          fontSize: 11.5,
+                          padding: '0 12px',
+                          fontSize: 12.5,
                           fontWeight: on ? 600 : 500,
                           cursor: 'pointer',
                           whiteSpace: 'nowrap',
                           transition: 'all 0.15s ease',
+                          boxShadow: on ? '0 1px 2px rgba(37, 99, 235, 0.1)' : '0 1px 2px rgba(0,0,0,0.02)',
                         }}
                       >
-                        {tab.label} <span style={{ opacity: 0.75, fontWeight: on ? 700 : 500 }}>{tab.count}</span>
+                        {tab.label} <span style={{ marginLeft: 4, opacity: on ? 1 : 0.8, fontWeight: on ? 700 : 600 }}>{tab.count}</span>
                       </button>
                     );
                   })}
@@ -614,6 +1038,15 @@ function InboxItem({
               <span style={{ color: '#0284c7' }}>{t.orderNumber}</span>
             </>
           ) : null}
+          {t.resolutionAction ? (
+            <Tag color={t.resolutionAction === 'REJECTED' ? 'red' : 'green'} style={{ fontSize: 9.5, margin: 0, padding: '0 4px', lineHeight: '15px', borderRadius: 4 }}>
+              {RESOLUTION_ACTION_META[t.resolutionAction]?.label ?? 'Resolved'}
+            </Tag>
+          ) : (t.category === 'ORDER_ISSUE' || t.category === 'PAYMENT_REFUND') && t.status !== 'RESOLVED' && t.status !== 'CLOSED' ? (
+            <Tag color="volcano" style={{ fontSize: 9.5, margin: 0, padding: '0 4px', lineHeight: '15px', borderRadius: 4 }}>
+              🔴 Needs Action
+            </Tag>
+          ) : null}
         </div>
       </div>
     </div>
@@ -636,6 +1069,7 @@ function Conversation({
   const update = useUpdateTicket();
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
+  const [resolveDrawerOpen, setResolveDrawerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = thread.data;
 
@@ -863,6 +1297,27 @@ function Conversation({
                 ),
               }))}
             />
+
+            <Tooltip title={t.resolutionAction ? 'View resolution details' : 'Open inspection & resolution drawer'}>
+              <Button
+                size="small"
+                type={t.resolutionAction ? 'default' : 'primary'}
+                icon={t.resolutionAction ? <CheckCircleOutlined style={{ color: '#16a34a' }} /> : <EyeOutlined />}
+                onClick={() => setResolveDrawerOpen(true)}
+                style={{
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: t.resolutionAction ? '#f0fdf4' : undefined,
+                  borderColor: t.resolutionAction ? '#bbf7d0' : undefined,
+                  color: t.resolutionAction ? '#16a34a' : undefined,
+                }}
+              >
+                {t.resolutionAction
+                  ? (RESOLUTION_ACTION_META[t.resolutionAction]?.label ?? 'Resolved')
+                  : 'Inspect & Resolve'}
+              </Button>
+            </Tooltip>
           </div>
         </div>
 
@@ -1214,6 +1669,13 @@ function Conversation({
           )}
         </div>
       </div>
+
+      <ResolutionDrawer
+        open={resolveDrawerOpen}
+        onClose={() => setResolveDrawerOpen(false)}
+        thread={t}
+        canReply={canReply}
+      />
     </div>
   );
 }

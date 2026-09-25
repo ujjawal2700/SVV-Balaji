@@ -101,7 +101,7 @@ export class AdminOrdersGateway implements OnGatewayConnection, OnModuleInit {
   }
 
   /** Broadcast support ticket events to all connected admin dashboards in realtime. */
-  broadcastTicket(event: 'tickets:new' | 'tickets:message' | 'tickets:updated', payload: unknown): void {
+  broadcastTicket(event: 'tickets:new' | 'tickets:message' | 'tickets:updated' | 'tickets:resolved', payload: unknown): void {
     try {
       this.server?.emit(event, payload);
     } catch (error) {

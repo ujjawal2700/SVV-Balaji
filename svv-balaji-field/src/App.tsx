@@ -23,6 +23,7 @@ const VisitsTab = lazy(() =>
 );
 const MoreTab = lazy(() => import('./pages/MoreTab').then((m) => ({ default: m.FieldMoreTab })));
 const SeedTab = lazy(() => import('./pages/SeedTab').then((m) => ({ default: m.FieldSeedTab })));
+const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.FieldSyncPage })));
 const TrainingTab = lazy(() =>
   import('./pages/TrainingTab').then((m) => ({ default: m.FieldTrainingTab })),
 );
@@ -99,6 +100,7 @@ export function App() {
         <Route path="visits" element={<VisitsTab />} />
         <Route path="seed" element={<SeedTab />} />
         <Route path="more" element={<MoreTab />} />
+        <Route path="more/sync" element={<SyncPage />} />
         {/* Old addresses: seed moved to its own tab; inspections left the field app. */}
         <Route path="more/seed" element={<Navigate to="/seed" replace />} />
         <Route path="inspections" element={<Navigate to="/" replace />} />

@@ -11,7 +11,13 @@ export class FieldMonitoringService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createVisit(dto: CreateFieldVisitDto, expertId: string) {
+    // Offline re-send: the visit (and any plan it completed) is already recorded.
+    if (dto.id) {
+      const existing = await this.prisma.fieldVisit.findUnique({ where: { id: dto.id } });
+      if (existing) return existing;
+    }
     const data = {
+      id: dto.id,
       farmerId: dto.farmerId,
       branchId: dto.branchId,
       expertId,
@@ -164,8 +170,12 @@ export class FieldMonitoringService {
     const visit = await this.prisma.fieldVisit.findUnique({ where: { id: fieldVisitId } });
     if (!visit) throw new NotFoundException('Field visit not found');
 
+    if (dto.id) {
+      const existing = await this.prisma.fieldVisitDocument.findUnique({ where: { id: dto.id } });
+      if (existing) return existing;
+    }
     return this.prisma.fieldVisitDocument.create({
-      data: { fieldVisitId, fileUrl: dto.fileUrl, fileType: dto.fileType },
+      data: { id: dto.id, fieldVisitId, fileUrl: dto.fileUrl, fileType: dto.fileType },
     });
   }
 

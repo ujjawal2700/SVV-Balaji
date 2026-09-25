@@ -16,6 +16,8 @@ import { formatDate } from '@shared/utils/format';
 import { FieldVisitFormModal } from './FieldVisitFormModal';
 import { FieldCard, FieldList } from './pieces';
 import { PlanVisitModal } from './PlanVisitModal';
+import { PendingTag } from '../offline/OfflineBar';
+import { isPendingRecord } from '../offline/adapter';
 
 export type PlanTiming = 'overdue' | 'today' | 'upcoming';
 
@@ -100,6 +102,7 @@ export function PlannedVisitsPanel({
               title={showFarmer ? plan.farmer?.fullName ?? 'Farmer' : plan.purpose ?? 'Planned visit'}
               tags={
                 <>
+                  {isPendingRecord(plan) ? <PendingTag /> : null}
                   <Tag color={tag.color} style={{ margin: 0 }}>{tag.label(plan.plannedDate)}</Tag>
                   {plan.cropName ? <Tag style={{ margin: 0 }}>{plan.cropName}</Tag> : null}
                   {showFarmer && plan.purpose ? <Tag color="cyan" style={{ margin: 0 }}>{plan.purpose}</Tag> : null}

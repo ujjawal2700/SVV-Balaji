@@ -28,6 +28,13 @@ export class FarmPlotsService {
 
   async create(farmerId: string, dto: CreateFarmPlotDto, createdById: string) {
     await this.assertFarmerExists(farmerId);
+    if (dto.id) {
+      const existing = await this.prisma.farmPlot.findUnique({
+        where: { id: dto.id },
+        include: { createdBy: { select: { id: true, fullName: true } } },
+      });
+      if (existing) return existing;
+    }
 
     return this.prisma.farmPlot.create({
       data: {
@@ -35,6 +42,7 @@ export class FarmPlotsService {
         // Named explicitly because they are required on create. Spreading a
         // shared mapper would type them as possibly-undefined, since the same
         // mapper serves update where every field is optional.
+        id: dto.id,
         name: dto.name,
         areaAcres: dto.areaAcres,
         farmerId,

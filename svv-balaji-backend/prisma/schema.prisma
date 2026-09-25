@@ -3580,6 +3580,23 @@ model SupportTicket {
   resolvedById   String?
   resolvedBy     User?     @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id])
 
+  /// ---- Complaint / Dispute Resolution Fields ----
+
+  /// Evidence photos uploaded by the customer (URLs stored as a Postgres text array).
+  evidenceImages String[] @default([])
+
+  /// The formal resolution action taken by staff (refund, replacement, etc.).
+  resolutionAction SupportResolutionAction?
+
+  /// Refund amount approved (if applicable).
+  refundAmount Decimal? @db.Decimal(10, 2)
+
+  /// Replacement order number dispatched (if applicable).
+  replacementOrderNumber String?
+
+  /// Internal staff audit note for compliance / investigation logs.
+  internalAuditNote String?
+
   /// The conversation after the opening `description`: customer follow-ups
   /// and staff replies, oldest first.
   messages SupportTicketMessage[]
@@ -3643,6 +3660,14 @@ enum SupportTicketPriority {
   LOW
   MEDIUM
   HIGH
+}
+
+/// The formal action a staff member takes to resolve a complaint or dispute.
+enum SupportResolutionAction {
+  REFUND_APPROVED
+  REPLACEMENT_DISPATCHED
+  REVERSE_PICKUP
+  REJECTED
 }
 
 /// A rating + comment a storefront customer or retailer leaves on a product

@@ -9,5 +9,5 @@ import { CreateFieldVisitDto } from './create-field-visit.dto';
  */
 export class UpdateFieldVisitDto extends PartialType(
   // A plan is completed once, when the visit is recorded - not re-pointed later.
-  OmitType(CreateFieldVisitDto, ['planId'] as const),
+  OmitType(CreateFieldVisitDto, ['planId', 'id'] as const),
 ) {}

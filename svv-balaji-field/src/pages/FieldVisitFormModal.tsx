@@ -36,6 +36,8 @@ import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { toIsoDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
 import { FieldReportDrawer } from './FieldReportDrawer';
+import { isPendingRecord } from '../offline/adapter';
+import { useFarmers } from '@shared/hooks/useFarmers';
 
 const GROWTH_STAGE_OPTIONS = [
   { value: 'Germination' },
@@ -222,6 +224,9 @@ export function FieldVisitFormModal({ open, visit, onClose, plan, initialFarmerI
 
   const selectedFarmerId = Form.useWatch('farmerId', form);
   const { data: farmer } = useFarmer(selectedFarmerId);
+  // Offline, the farmer's own record may not be on the device; the farmer list
+  // (always kept) still knows their branch.
+  const farmerRow = useFarmers({}).data?.data?.find((f) => f.id === selectedFarmerId);
 
   // Extract all unique crops associated with this farmer
   const farmerCropOptions = useMemo(() => {
@@ -247,6 +252,11 @@ export function FieldVisitFormModal({ open, visit, onClose, plan, initialFarmerI
 
     return Array.from(crops).map((crop) => ({ value: crop, label: crop }));
   }, [farmer]);
+
+  useEffect(() => {
+    if (isEdit || farmer || !farmerRow) return;
+    if (!form.getFieldValue('branchId')) form.setFieldValue('branchId', farmerRow.branchId);
+  }, [farmer, farmerRow, form, isEdit]);
 
   useEffect(() => {
     if (isEdit || !farmer) return;
@@ -324,16 +334,24 @@ export function FieldVisitFormModal({ open, visit, onClose, plan, initialFarmerI
             10,
           );
           onClose();
-          if (!visit) setReportFor(saved.id);
+          if (!visit && !isPendingRecord(saved)) setReportFor(saved.id);
           return;
         }
       }
 
+      const savedOffline = isPendingRecord(saved);
       message.success(
-        visit ? 'Field visit updated' : planId ? 'Planned visit completed — field report generated' : 'Field visit recorded — field report generated',
+        visit
+          ? 'Field visit updated'
+          : savedOffline
+            ? 'Field visit saved on this device — the field report is generated once it syncs'
+            : planId
+              ? 'Planned visit completed — field report generated'
+              : 'Field visit recorded — field report generated',
       );
       onClose();
-      if (!visit) setReportFor(saved.id);
+      // The report is built by the server from the stored visit; offline there is none yet.
+      if (!visit && !savedOffline) setReportFor(saved.id);
     } catch (error) {
       message.error(apiErrorMessage(error, 'Could not record the visit'));
     }

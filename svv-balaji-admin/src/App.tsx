@@ -1,6 +1,6 @@
 import { lazy, useEffect, useMemo, type ReactElement } from 'react';
 import { Button, Result, Spin, Typography } from 'antd';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
 import { PERMISSIONS } from './auth/permissions';
 import { RequirePermission } from './auth/RequirePermission';
@@ -334,7 +334,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/franchise-orders': <FranchiseOrdersPage />,
   '/franchises': <FranchiseOrdersPage />,
   '/support-tickets': <SupportTicketsPage />,
-  '/complaints': <ComplaintsPage />,
+  '/complaints': <Navigate to="/support-tickets" replace />,
   '/b2b-accounts': <CustomerAccountsPage />,
   '/earnings': <EarningsFinancePage />,
   '/finance': <EarningsFinancePage />,

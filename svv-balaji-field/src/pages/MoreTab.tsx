@@ -1,4 +1,5 @@
 import {
+  CloudSyncOutlined,
   ExperimentOutlined,
   InfoCircleOutlined,
   LogoutOutlined,
@@ -13,16 +14,32 @@ import { ROLE_LABELS } from '@shared/auth/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCanFn } from '@shared/auth/useCan';
 import { useTrainingSessions } from '@shared/hooks/useTraining';
+import { useSafeLogout } from '../offline/OfflineBar';
+import { useOutbox } from '../offline/outbox';
 
 export function FieldMoreTab() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const safeLogout = useSafeLogout();
+  const outbox = useOutbox();
+  const waiting = outbox.items.filter((i) => i.userId === user?.id).length;
   const { message, modal } = AntApp.useApp();
   const can = useCanFn();
 
   const training = useTrainingSessions();
 
   const areas = [
+    {
+      key: 'sync',
+      icon: <CloudSyncOutlined />,
+      iconBg: '#fffbeb',
+      iconColor: '#b45309',
+      title: 'Offline & sync',
+      description: 'Work saved on this device without a connection, and its sync status.',
+      count: waiting,
+      countLabel: 'waiting to sync',
+      path: '/more/sync',
+    },
     can('TRAINING_VIEW')
       ? {
           key: 'training',
@@ -52,11 +69,13 @@ export function FieldMoreTab() {
     modal.confirm({
       title: 'Sign out of Field Operations?',
       content:
-        'You will need your email and password to log in again. All recorded data is securely synced to the server.',
+        waiting
+          ? `${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to sync on this device.`
+          : 'You will need your email and password to log in again. Everything you recorded has synced to the server.',
       okText: 'Sign out',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await logout();
+        await safeLogout({ confirmed: true });
         message.success('Signed out successfully');
       },
     });
