@@ -64,6 +64,9 @@ const AgreementsPage = lazy(() =>
 const SeedStockPage = lazy(() =>
   import('./pages/seed-stock/SeedStockPage').then((m) => ({ default: m.SeedStockPage })),
 );
+const SeedStockLedgerPage = lazy(() =>
+  import('./pages/seed-stock/SeedStockLedgerPage').then((m) => ({ default: m.SeedStockLedgerPage })),
+);
 const SeedDistributionPage = lazy(() =>
   import('./pages/seed-distribution/SeedDistributionPage').then((m) => ({
     default: m.SeedDistributionPage,
@@ -398,6 +401,9 @@ export function App() {
           <Route path="/b2b-customers/:id" element={<RetailerDetailPage />} />
           <Route path="/b2b-accounts/:id" element={<RetailerApprovalPage />} />
           <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
+          <Route element={<RequirePermission permission={PERMISSIONS.SEED_STOCK_VIEW} />}>
+            <Route path="/seed-stock/:id" element={<SeedStockLedgerPage />} />
+          </Route>
           <Route element={<RequirePermission permission={PERMISSIONS.ORDER_VIEW} />}>
             <Route path="/b2c-orders/:id" element={<OrderDetailPage />} />
             <Route path="/b2b-orders/:id" element={<OrderDetailPage />} />

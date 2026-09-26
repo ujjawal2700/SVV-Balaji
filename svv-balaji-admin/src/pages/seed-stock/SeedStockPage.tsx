@@ -5,7 +5,6 @@ import {
   Card,
   Col,
   DatePicker,
-  Drawer,
   Dropdown,
   Form,
   Input,
@@ -15,15 +14,15 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tag,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
-import type { SeedStockLot, SeedStockMovement, SeedStockMovementType } from '@shared/api/types';
+import type { SeedStockLot, SeedStockMovementType } from '@shared/api/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCan } from '@shared/auth/useCan';
 import { DataTable } from '@shared/components/DataTable';
@@ -35,17 +34,16 @@ import {
   useDeleteSeedStock,
   useReceiveSeedStock,
   useSeedStock,
-  useSeedStockLot,
   useTopUpSeedStock,
   useTransferSeedStock,
   useUpdateSeedStock,
 } from '@shared/hooks/useSeedStock';
-import { EM_DASH, formatDate, formatDateTime } from '@shared/utils/format';
+import { EM_DASH, formatDate } from '@shared/utils/format';
 import { positiveNumber, required } from '@shared/validation/rules';
 
 const UNITS = ['KG', 'GRAM', 'QUINTAL', 'PACKET', 'LITRE'];
 
-const MOVEMENT: Record<SeedStockMovementType, { label: string; color: string }> = {
+export const MOVEMENT: Record<SeedStockMovementType, { label: string; color: string }> = {
   RECEIPT: { label: 'Received', color: 'green' },
   DISTRIBUTION: { label: 'Issued to farmer', color: 'blue' },
   DISTRIBUTION_REVERSAL: { label: 'Returned from handout', color: 'cyan' },
@@ -56,8 +54,8 @@ const MOVEMENT: Record<SeedStockMovementType, { label: string; color: string }> 
   LOT_UPDATE: { label: 'Lot updated', color: 'default' },
 };
 
-const qty = (value: string | number, unit: string) => `${Number(value).toLocaleString('en-IN')} ${unit}`;
-const isExpired = (lot: SeedStockLot) => Boolean(lot.expiryDate) && dayjs(lot.expiryDate).isBefore(dayjs(), 'day');
+export const qty = (value: string | number, unit: string) => `${Number(value).toLocaleString('en-IN')} ${unit}`;
+export const isExpired = (lot: SeedStockLot) => Boolean(lot.expiryDate) && dayjs(lot.expiryDate).isBefore(dayjs(), 'day');
 
 /**
  * FRD 10.2 - seed & input stock.
@@ -67,6 +65,7 @@ const isExpired = (lot: SeedStockLot) => Boolean(lot.expiryDate) && dayjs(lot.ex
  */
 export function SeedStockPage() {
   const { message, modal } = AntApp.useApp();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canManage = useCan('SEED_STOCK_MANAGE');
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
@@ -75,7 +74,6 @@ export function SeedStockPage() {
   const [showWithdrawn, setShowWithdrawn] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [change, setChange] = useState<{ lot: SeedStockLot; mode: 'receive' | 'adjust' } | null>(null);
-  const [ledgerFor, setLedgerFor] = useState<string | null>(null);
   const [transferFor, setTransferFor] = useState<SeedStockLot | null>(null);
 
   const stock = useSeedStock({ branchId, includeInactive: showWithdrawn });
@@ -112,7 +110,9 @@ export function SeedStockPage() {
       key: 'seed',
       render: (_, lot) => (
         <div>
-          <div style={{ fontWeight: 600 }}>{lot.seedName}</div>
+          <Link to={`/seed-stock/${lot.id}`} style={{ fontWeight: 600 }}>
+            {lot.seedName}
+          </Link>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {[lot.seedVariety, lot.batchNumber].filter(Boolean).join(' · ') || EM_DASH}
           </Typography.Text>
@@ -160,7 +160,7 @@ export function SeedStockPage() {
       width: 190,
       render: (_, lot) => (
         <Space size={4}>
-          <Button size="small" icon={<HistoryOutlined />} onClick={() => setLedgerFor(lot.id)}>
+          <Button size="small" icon={<HistoryOutlined />} onClick={() => navigate(`/seed-stock/${lot.id}`)}>
             Ledger
           </Button>
           {canManage ? (
@@ -257,7 +257,6 @@ export function SeedStockPage() {
 
       <ReceiveLotSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} askBranch={isSuperAdmin} />
       <ChangeQuantitySheet change={change} onClose={() => setChange(null)} />
-      <LedgerDrawer lotId={ledgerFor} onClose={() => setLedgerFor(null)} />
       <TransferSheet lot={transferFor} onClose={() => setTransferFor(null)} />
     </Space>
   );
@@ -367,7 +366,7 @@ function ReceiveLotSheet({ open, onClose, askBranch }: { open: boolean; onClose:
 
 // --- Receive more / adjust ------------------------------------------------------
 
-function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot; mode: 'receive' | 'adjust' } | null; onClose: () => void }) {
+export function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot; mode: 'receive' | 'adjust' } | null; onClose: () => void }) {
   const [form] = Form.useForm<{ direction: 'add' | 'remove' | 'writeoff'; quantity: number; reason?: string }>();
   const { message } = AntApp.useApp();
   const topUp = useTopUpSeedStock();
@@ -438,7 +437,7 @@ function ChangeQuantitySheet({ change, onClose }: { change: { lot: SeedStockLot;
 
 // --- Transfer ---------------------------------------------------------------
 
-function TransferSheet({ lot, onClose }: { lot: SeedStockLot | null; onClose: () => void }) {
+export function TransferSheet({ lot, onClose }: { lot: SeedStockLot | null; onClose: () => void }) {
   const [form] = Form.useForm<{ toBranchId: string; quantity: number; reason?: string }>();
   const { message } = AntApp.useApp();
   const transfer = useTransferSeedStock();
@@ -496,51 +495,5 @@ function TransferSheet({ lot, onClose }: { lot: SeedStockLot | null; onClose: ()
         </Form>
       ) : null}
     </Sheet>
-  );
-}
-
-// --- Ledger -----------------------------------------------------------------
-
-function LedgerDrawer({ lotId, onClose }: { lotId: string | null; onClose: () => void }) {
-  const lot = useSeedStockLot(lotId ?? undefined);
-  const d = lot.data;
-  return (
-    <Drawer open={Boolean(lotId)} onClose={onClose} width={760} title={d ? `${d.seedName} — stock ledger` : 'Stock ledger'} destroyOnClose>
-      {d ? (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Typography.Text>
-            {[d.seedVariety, d.batchNumber, d.branch?.name].filter(Boolean).join(' · ')} · on hand{' '}
-            <strong>{qty(d.quantityOnHand, d.unit)}</strong>
-          </Typography.Text>
-          <Table<SeedStockMovement>
-            size="small"
-            rowKey="id"
-            pagination={{ pageSize: 20 }}
-            dataSource={d.movements}
-            scroll={{ x: 640 }}
-            columns={[
-              { title: 'When', dataIndex: 'createdAt', render: (v: string) => formatDateTime(v) },
-              { title: 'Movement', dataIndex: 'type', render: (t: SeedStockMovementType) => <Tag color={MOVEMENT[t].color}>{MOVEMENT[t].label}</Tag> },
-              {
-                title: 'Change',
-                dataIndex: 'quantity',
-                align: 'right',
-                render: (v: string) => Number(v) === 0 ? '—' : (
-                  <Typography.Text type={Number(v) < 0 ? 'danger' : 'success'}>
-                    {Number(v) > 0 ? '+' : ''}
-                    {Number(v).toLocaleString('en-IN')}
-                  </Typography.Text>
-                ),
-              },
-              { title: 'Balance', dataIndex: 'balanceAfter', align: 'right', render: (v: string) => Number(v).toLocaleString('en-IN') },
-              { title: 'Farmer / reason', key: 'why', render: (_, m) => m.farmer ? `${m.farmer.fullName}${m.reason ? ` — ${m.reason}` : ''}` : m.reason ?? EM_DASH },
-              { title: 'By', key: 'by', render: (_, m) => m.performedBy?.fullName ?? EM_DASH },
-            ]}
-          />
-        </Space>
-      ) : (
-        <Typography.Text type="secondary">Loading…</Typography.Text>
-      )}
-    </Drawer>
   );
 }

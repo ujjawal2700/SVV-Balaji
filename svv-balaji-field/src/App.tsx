@@ -1,16 +1,20 @@
 import {
   AppstoreOutlined,
+  CloudSyncOutlined,
   EnvironmentOutlined,
   ExperimentOutlined,
   HomeOutlined,
+  ReadOutlined,
   TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { Spin } from 'antd';
 import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCan } from '@shared/auth/useCan';
-import { FieldShell, type ShellTab } from './layout/FieldShell';
+import { FieldShell, type ShellSubPage, type ShellTab } from './layout/FieldShell';
+import { useOutbox } from './offline/outbox';
 import { LoginPage } from './pages/LoginPage';
 import { NotAuthorisedPage } from './pages/NotAuthorisedPage';
 
@@ -24,6 +28,9 @@ const VisitsTab = lazy(() =>
 const MoreTab = lazy(() => import('./pages/MoreTab').then((m) => ({ default: m.FieldMoreTab })));
 const SeedTab = lazy(() => import('./pages/SeedTab').then((m) => ({ default: m.FieldSeedTab })));
 const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.FieldSyncPage })));
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.FieldProfilePage })),
+);
 const TrainingTab = lazy(() =>
   import('./pages/TrainingTab').then((m) => ({ default: m.FieldTrainingTab })),
 );
@@ -35,7 +42,12 @@ const TrainingTab = lazy(() =>
  *   Farmers   Onboarding, land profiling & farmer profile
  *   Visits    Field visits (logged and planned) & crop advisory
  *   Seed      Seed & agri-input handouts, stock and summary
- *   More      Training, profile
+ *   More      Training, sync, profile (phone only)
+ *
+ * On a tablet or desktop the sidebar has the room a phone's bottom bar does
+ * not, so More is replaced by Training, Offline & sync and Profile as entries
+ * of their own. They keep their /more/... addresses so bookmarks and links
+ * from Home still work in both layouts.
  *
  * Harvest inspection used to have a tab here. FRD 5.3/13.4 give inspections to
  * the Procurement and QA Managers, who work in the admin panel, so for the
@@ -44,10 +56,20 @@ const TrainingTab = lazy(() =>
  */
 const TABS: ShellTab[] = [
   { path: '/', label: 'Home', icon: <HomeOutlined /> },
-  { path: '/farmers', label: 'Farmers / Suppliers', icon: <TeamOutlined />, permission: 'FARMER_VIEW' },
+  { path: '/farmers', label: 'Farmers / Suppliers', shortLabel: 'Farmers', icon: <TeamOutlined />, permission: 'FARMER_VIEW' },
   { path: '/visits', label: 'Visits', icon: <EnvironmentOutlined />, permission: 'FIELD_VISIT_VIEW' },
-  { path: '/seed', label: 'Seed & Inputs', icon: <ExperimentOutlined />, permission: 'SEED_DISTRIBUTION_VIEW' },
-  { path: '/more', label: 'More', icon: <AppstoreOutlined /> },
+  { path: '/seed', label: 'Seed & Inputs', shortLabel: 'Seed', icon: <ExperimentOutlined />, permission: 'SEED_DISTRIBUTION_VIEW' },
+  { path: '/more/training', label: 'Training Sessions', icon: <ReadOutlined />, permission: 'TRAINING_VIEW', only: 'desktop' },
+  { path: '/more/sync', label: 'Offline & sync', icon: <CloudSyncOutlined />, only: 'desktop' },
+  { path: '/profile', label: 'Profile', icon: <UserOutlined />, only: 'desktop' },
+  { path: '/more', label: 'More', icon: <AppstoreOutlined />, only: 'mobile' },
+];
+
+/** Phone screens under More: back arrow and their own title in the app bar. */
+const SUB_PAGES: ShellSubPage[] = [
+  { path: '/more/training', title: 'Training Sessions', parent: '/more' },
+  { path: '/more/sync', title: 'Offline & sync', parent: '/more' },
+  { path: '/profile', title: 'My Profile', parent: '/more' },
 ];
 
 /**
@@ -62,6 +84,10 @@ const TABS: ShellTab[] = [
 export function App() {
   const { user, initialising } = useAuth();
   const canOpenField = useCan('FIELD_PANEL');
+  const outbox = useOutbox();
+  const waiting = outbox.items.filter((i) => i.userId === user?.id).length;
+  // Work waiting to sync shows on the sidebar entry that deals with it.
+  const tabs = TABS.map((tab) => (tab.path === '/more/sync' ? { ...tab, badge: waiting } : tab));
 
   if (initialising) {
     return (
@@ -94,7 +120,7 @@ export function App() {
           form that would end their own session by rotating the refresh token. */}
       <Route path="/login" element={<Navigate to="/" replace />} />
 
-      <Route element={<FieldShell tabs={TABS} title="SVV Balaji Field" />}>
+      <Route element={<FieldShell tabs={tabs} subPages={SUB_PAGES} title="SVV Balaji Field" />}>
         <Route index element={<HomePage />} />
         <Route path="farmers" element={<FarmersTab />} />
         <Route path="visits" element={<VisitsTab />} />
@@ -105,6 +131,7 @@ export function App() {
         <Route path="more/seed" element={<Navigate to="/seed" replace />} />
         <Route path="inspections" element={<Navigate to="/" replace />} />
         <Route path="more/training" element={<TrainingTab />} />
+        <Route path="profile" element={<ProfilePage />} />
 
         {/* Anything else goes home. There is no 404 screen in an app with five
             destinations — a wrong URL here is a stale bookmark, not a mistake

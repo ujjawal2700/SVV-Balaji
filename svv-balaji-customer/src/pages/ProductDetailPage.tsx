@@ -454,46 +454,7 @@ export function ProductDetailPage() {
         </div>
       </header>
 
-      {/* Interactive Role Switcher Banner */}
-      <div
-        style={{
-          background: isRetailer ? '#ecfdf5' : '#fff7ed',
-          borderBottom: isRetailer ? '1px solid #a7f3d0' : '1px solid #fed7aa',
-          padding: '10px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {isRetailer ? (
-            <>
-              <ShopFilled style={{ color: '#059669', fontSize: 16 }} />
-              <div>
-                <Typography.Text strong style={{ color: '#065f46', fontSize: 12, display: 'block' }}>
-                  RETAILER WHOLESALE PRICING ACTIVE
-                </Typography.Text>
-                <Typography.Text style={{ color: '#047857', fontSize: 11 }}>
-                  Tier-based Wholesale Rates • MOQ: {moq} pcs • GST Breakdown
-                </Typography.Text>
-              </div>
-            </>
-          ) : (
-            <>
-              <TagFilled style={{ color: '#ea580c', fontSize: 16 }} />
-              <div>
-                <Typography.Text strong style={{ color: '#9a3412', fontSize: 12, display: 'block' }}>
-                  CUSTOMER RETAIL PRICING ACTIVE
-                </Typography.Text>
-                <Typography.Text style={{ color: '#c2410c', fontSize: 11 }}>
-                  1 Unit MOQ • Inclusive of All Taxes • Fast Delivery
-                </Typography.Text>
-              </div>
-            </>
-          )}
-        </div>
 
-      </div>
 
       {/* Breadcrumbs (Desktop Enhanced) */}
       <div style={{ padding: '12px 20px', background: '#fff', fontSize: 13, color: '#878787', borderBottom: '1px solid #e2e8f0' }}>
@@ -1069,37 +1030,7 @@ export function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Promotional Banner for Wholesale Upgrade */}
-            <div
-              style={{
-                background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
-                border: '1px solid #fed7aa',
-                borderRadius: 10,
-                padding: 12,
-                marginBottom: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <div>
-                <Typography.Text strong style={{ color: '#9a3412', fontSize: 13, display: 'block' }}>
-                  🏪 Own a Grocery Store?
-                </Typography.Text>
-                <Typography.Text style={{ color: '#c2410c', fontSize: 11 }}>
-                  Get wholesale tier pricing with GST invoices.
-                </Typography.Text>
-              </div>
-              <Button
-                size="small"
-                type="primary"
-                style={{ background: '#ea580c', borderColor: '#ea580c', borderRadius: 6, fontWeight: 600, fontSize: 11 }}
-                onClick={() => navigate('/register')}
-              >
-                Become a Partner
-              </Button>
-            </div>
+
           </div>
         )}
 
@@ -1223,12 +1154,11 @@ export function ProductDetailPage() {
           </Typography.Text>
           <div style={{ position: 'relative' }}>
             <div
-              style={{
-                display: showFullDesc ? 'block' : '-webkit-box',
-                WebkitLineClamp: showFullDesc ? 'unset' : 6,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
+              style={
+                showFullDesc
+                  ? { display: 'block', overflow: 'visible' }
+                  : { display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+              }
             >
               {/* Description */}
               {(activeProduct as any).description && (
@@ -1280,8 +1210,8 @@ export function ProductDetailPage() {
 
             <Button
               type="text"
-              style={{ padding: 0, color: '#f97316', fontSize: 13, marginTop: 8, height: 'auto', fontWeight: 600 }}
-              onClick={() => setShowFullDesc(!showFullDesc)}
+              style={{ padding: '4px 12px', background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 13, marginTop: 12, height: 'auto', fontWeight: 600 }}
+              onClick={() => setShowFullDesc((prev) => !prev)}
             >
               {showFullDesc ? 'Read Less' : 'Read More & All Specifications'}
             </Button>
@@ -1622,10 +1552,11 @@ export function ProductDetailPage() {
 
       {/* Sticky Bottom Bar for Actions (Mobile only - on tablet/desktop, inline buy panel is used) */}
       <div
-        className="store-safe-bottom pdp-fixed-bottom-bar"
+        className="pdp-fixed-bottom-bar"
         style={{
           position: 'fixed',
-          bottom: 0,
+          // Sits on top of the tab bar, which now shows on every page.
+          bottom: 'var(--store-bottom-nav)',
           left: 0,
           right: 0,
           background: '#fff',

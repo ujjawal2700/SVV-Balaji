@@ -90,22 +90,35 @@ export function AppLayout() {
     });
   }, [can, zone, searchTerm]);
 
+  /**
+   * The menu entry a URL belongs to. A detail page such as /seed-stock/:id has
+   * no entry of its own, so the longest nav path it sits under stays lit.
+   */
+  const activeNavPath = useMemo(() => {
+    const path = location.pathname;
+    return (
+      NAV_SECTIONS.flatMap((section) => section.items)
+        .filter((item) => item.path === path || (item.path !== '/' && path.startsWith(`${item.path}/`)))
+        .sort((a, b) => b.path.length - a.path.length)[0]?.path ?? path
+    );
+  }, [location.pathname]);
+
   const [userOpenKeys, setUserOpenKeys] = useState<string[]>(() =>
     NAV_SECTIONS.filter((section) =>
-      section.items.some((item) => item.path === location.pathname),
+      section.items.some((item) => item.path === activeNavPath),
     ).map((section) => section.key),
   );
 
   useEffect(() => {
     const currentSection = NAV_SECTIONS.find((section) =>
-      section.items.some((item) => item.path === location.pathname),
+      section.items.some((item) => item.path === activeNavPath),
     );
     if (currentSection) {
       setUserOpenKeys((prev) =>
         prev.includes(currentSection.key) ? prev : [...prev, currentSection.key],
       );
     }
-  }, [location.pathname]);
+  }, [activeNavPath]);
 
   const activeOpenKeys = useMemo(() => {
     if (searchTerm.trim()) {
@@ -219,7 +232,7 @@ export function AppLayout() {
           <Menu
             mode="inline"
             items={menuItems}
-            selectedKeys={[location.pathname]}
+            selectedKeys={[activeNavPath]}
             openKeys={activeOpenKeys}
             onOpenChange={(keys) => {
               if (!searchTerm.trim()) {

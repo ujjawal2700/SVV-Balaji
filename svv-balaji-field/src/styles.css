@@ -151,9 +151,45 @@ body {
   }
 }
 
-/* The standalone (installed) case */
-@media (display-mode: standalone) {
-  .field-appbar {
-    padding-top: env(safe-area-inset-top);
+/*
+ * Phone app bar: breathing room above the title on every screen, plus the
+ * notch/status-bar inset when installed. The bar is sticky, so the gap stays
+ * with it (in its own colour) as the page scrolls.
+ */
+.field-appbar {
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-bottom: 12px;
+}
+
+/* More tab: grouped rows with inset dividers and a tap highlight. */
+.field-more-row {
+  position: relative;
+}
+.field-more-group .field-more-row + .field-more-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 62px;
+  right: 0;
+  height: 1px;
+  background: #eef2f6;
+}
+.field-more-row:active {
+  background: #f8fafc !important;
+}
+
+/* Plain <button>s used as list rows and tiles take the app font, not the UA default. */
+button {
+  font-family: inherit;
+}
+
+/* Tappable list rows and tiles (Home, More): quiet highlight on press / hover. */
+.field-tap-row:active {
+  background: #f8fafc !important;
+}
+@media (hover: hover) {
+  .field-tap-row:hover,
+  .field-more-row:hover {
+    background: #f8fafc !important;
   }
 }

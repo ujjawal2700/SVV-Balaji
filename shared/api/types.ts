@@ -1279,12 +1279,22 @@ export interface AdjustStockInput {
 
 /** GET /batches/:batchNumber/trace — the upstream half of the chain. */
 export interface BatchTrace extends RawMaterialBatch {
-  farmer: FarmerRef & {
+  /** Null when the batch came in on a supplier transport — see `supplier`. */
+  farmer: (FarmerRef & {
     village: string;
     district: string;
     state: string;
     gpsLocation: string | null;
-  };
+  }) | null;
+  supplier: {
+    id: string;
+    fullName: string;
+    supplierCode: string | null;
+    companyName: string | null;
+    city: string | null;
+    district: string | null;
+    state: string | null;
+  } | null;
   branch?: BranchRef;
   collection?: RawMaterialCollection & { inspection?: HarvestInspection };
   stockMovements: StockMovement[];

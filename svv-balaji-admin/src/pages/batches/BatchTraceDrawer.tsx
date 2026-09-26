@@ -60,25 +60,42 @@ export function BatchTraceDrawer({ batchNumber, onClose }: BatchTraceDrawerProps
             <Descriptions.Item label="Branch">{data.branch?.name ?? EM_DASH}</Descriptions.Item>
           </Descriptions>
 
-          <Descriptions bordered column={2} size="small" title="Grown by">
-            <Descriptions.Item label="Farmer">{data.farmer.fullName}</Descriptions.Item>
-            <Descriptions.Item label="Traceability code">
-              <Typography.Text code>{data.farmer.farmerCode ?? EM_DASH}</Typography.Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Village">{data.farmer.village}</Descriptions.Item>
-            <Descriptions.Item label="District">
-              {data.farmer.district}, {data.farmer.state}
-            </Descriptions.Item>
-            <Descriptions.Item label="Farm location" span={2}>
-              {data.farmer.gpsLocation ? (
-                <>
-                  <EnvironmentOutlined /> {data.farmer.gpsLocation}
-                </>
-              ) : (
-                EM_DASH
-              )}
-            </Descriptions.Item>
-          </Descriptions>
+          {data.farmer ? (
+            <Descriptions bordered column={2} size="small" title="Grown by">
+              <Descriptions.Item label="Farmer">{data.farmer.fullName}</Descriptions.Item>
+              <Descriptions.Item label="Traceability code">
+                <Typography.Text code>{data.farmer.farmerCode ?? EM_DASH}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Village">{data.farmer.village}</Descriptions.Item>
+              <Descriptions.Item label="District">
+                {data.farmer.district}, {data.farmer.state}
+              </Descriptions.Item>
+              <Descriptions.Item label="Farm location" span={2}>
+                {data.farmer.gpsLocation ? (
+                  <>
+                    <EnvironmentOutlined /> {data.farmer.gpsLocation}
+                  </>
+                ) : (
+                  EM_DASH
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : data.supplier ? (
+            <Descriptions bordered column={2} size="small" title="Supplied by">
+              <Descriptions.Item label="Supplier">{data.supplier.fullName}</Descriptions.Item>
+              <Descriptions.Item label="Supplier code">
+                <Typography.Text code>{data.supplier.supplierCode ?? EM_DASH}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Company">{data.supplier.companyName ?? EM_DASH}</Descriptions.Item>
+              <Descriptions.Item label="Location">
+                {[data.supplier.city, data.supplier.district, data.supplier.state]
+                  .filter(Boolean)
+                  .join(', ') || EM_DASH}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Alert type="warning" showIcon message="This batch has no farmer or supplier recorded." />
+          )}
 
           {data.collection ? (
             <Descriptions bordered column={2} size="small" title="Collection">

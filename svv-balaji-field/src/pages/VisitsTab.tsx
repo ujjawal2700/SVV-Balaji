@@ -11,7 +11,7 @@ import { useCan } from '@shared/auth/useCan';
 import { formatDate, formatQuantity } from '@shared/utils/format';
 import { FieldVisitDetailDrawer } from './FieldVisitDetailDrawer';
 import { FieldVisitFormModal } from './FieldVisitFormModal';
-import { FieldCard, FieldFab, FieldList } from './pieces';
+import { FieldCard, FieldFab, FieldList, FieldToolbar } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
 import { PlannedVisitsPanel } from './PlannedVisits';
 import { PlanVisitModal } from './PlanVisitModal';
@@ -76,19 +76,7 @@ export function FieldVisitsTab() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          background: '#fff',
-          padding: isMobile ? '12px' : '14px 18px',
-          borderRadius: 8,
-          border: '1px solid #e8eae8',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
+      <FieldToolbar>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Segmented<'logged' | 'planned'>
             value={view}
@@ -117,7 +105,7 @@ export function FieldVisitsTab() {
             </Button>
           </Space>
         ) : null}
-      </div>
+      </FieldToolbar>
 
       {view === 'planned' ? (
         <PlannedVisitsPanel

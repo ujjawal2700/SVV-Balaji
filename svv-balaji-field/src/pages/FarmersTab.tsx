@@ -95,17 +95,30 @@ export function FieldFarmersTab() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 14,
+          gap: isMobile ? 10 : 14,
           flexWrap: 'wrap',
-          background: '#ffffff',
-          padding: isMobile ? '12px 14px' : '16px 20px',
-          borderRadius: 14,
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+          // A plain row on a phone; a bordered bar on wider screens.
+          ...(isMobile
+            ? {}
+            : {
+                background: '#ffffff',
+                padding: '16px 20px',
+                borderRadius: 14,
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
+              }),
         }}
       >
         {/* Search Bar with inline icon - flexible width */}
-        <div style={{ flex: '1 1 280px', minWidth: isMobile ? '100%' : 220, maxWidth: isMobile ? '100%' : 420 }}>
+        <div
+          style={{
+            flex: '1 1 280px',
+            minWidth: isMobile ? '100%' : 220,
+            maxWidth: isMobile ? '100%' : 420,
+            display: 'flex',
+            gap: 8,
+          }}
+        >
           <Input
             allowClear
             prefix={<SearchOutlined style={{ color: '#94a3b8', fontSize: 16, marginRight: 6 }} />}
@@ -116,11 +129,21 @@ export function FieldFarmersTab() {
               width: '100%',
               height: 42,
               borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
+              border: '1px solid #dbe2ea',
+              background: '#ffffff',
               fontSize: 14,
             }}
           />
+          {isMobile ? (
+            <Badge count={activeCount} size="small" offset={[-4, 4]}>
+              <Button
+                aria-label="Filters"
+                icon={<FilterOutlined />}
+                onClick={() => setFiltersOpen(true)}
+                style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0 }}
+              />
+            </Badge>
+          ) : null}
         </div>
 
         {/* Action Controls & Segmented Filters */}
@@ -154,13 +177,6 @@ export function FieldFarmersTab() {
             />
           </div>
 
-          {isMobile ? (
-            <Badge count={activeCount} size="small">
-              <Button icon={<FilterOutlined />} onClick={() => setFiltersOpen(true)} style={{ height: 36, borderRadius: 10 }}>
-                Filters
-              </Button>
-            </Badge>
-          ) : null}
 
           {!isMobile && canRegister ? (
             <Button

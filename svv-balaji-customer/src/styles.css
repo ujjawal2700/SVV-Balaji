@@ -107,6 +107,54 @@ select {
 .store-safe-top {
   padding-top: env(safe-area-inset-top);
 }
+
+/*
+ * Global top gap on phones.
+ *
+ * Every page draws its own mobile top bar, and they all sat flush against the
+ * top edge (or under the notch in an installed app). The shell now reserves
+ * this much space above every page with a fixed white strip, and every page's
+ * sticky top bar sticks just below it - so the gap is the same on every screen
+ * and never scrolls away. It includes the safe-area inset, so headers inside
+ * the shell no longer add their own.
+ */
+:root {
+  --store-top-gap: 0px;
+  /* Phone tab bar height incl. home indicator; 0 where the bar is hidden. */
+  --store-bottom-nav: 0px;
+}
+.store-top-gap {
+  display: none;
+}
+@media (max-width: 767px) {
+  :root {
+    --store-top-gap: calc(12px + env(safe-area-inset-top));
+    --store-bottom-nav: calc(60px + env(safe-area-inset-bottom));
+  }
+  .store-top-gap {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--store-top-gap);
+    background: #ffffff;
+    z-index: 200;
+  }
+  .store-content {
+    padding-top: var(--store-top-gap);
+    padding-bottom: var(--store-bottom-nav);
+  }
+  .store-content--bleed {
+    padding-top: 0;
+  }
+  .store-content .store-safe-top {
+    padding-top: 0;
+  }
+  .store-content header[style*='sticky'] {
+    top: var(--store-top-gap) !important;
+  }
+}
 .store-safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -972,6 +1020,8 @@ select {
 .osp-chat {
   position: fixed;
   inset: 0;
+  /* Leave the tab bar visible below the full-screen chat on phones. */
+  bottom: var(--store-bottom-nav);
   z-index: 300;
   display: flex;
   flex-direction: column;
@@ -981,7 +1031,7 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  padding: calc(10px + max(var(--store-top-gap), env(safe-area-inset-top))) 12px 10px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;

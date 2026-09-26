@@ -2627,3 +2627,52 @@ Packaging is printed once and cannot be reissued, so pointing at a URL means lin
 **Verified** on a production build (service worker active) in headless Chrome with the network cut AND the web server stopped: 21/21 — app opens offline with cached data; register farmer → visit to that farmer with a photo → company-stock handout → planned visit, all offline; queue survives reopening the app; on reconnect everything synced in order; server has the farmer, the linked visit, the photo (uploaded to Cloudinary at sync), stock 50→45 exactly once, the plan; replayed handout returned the same record with no second deduction. Conflict run 7/7: offline 8 kg handout vs someone else taking 5 kg meanwhile → "Not accepted: 5 KG left, 8 KG needed", stock not overdrawn, kept until discarded. Backend: 548 tests pass (only the pre-existing 7 `customers` failures); new tests for idempotent re-send of handouts and plans. Test data removed. Two 1×1 test images remain in Cloudinary (`svv-balaji/field-visits/jdnazcrmvan81gxygmft.png`, `…/q8fcjw2judxbv06xidl2.png`) — safe to delete.
 
 **Limits (by design, worth telling the client):** offline works for what the device has already loaded (farmer lists, visits, lots at the expert's branch, etc. — refreshed whenever online); a farmer's full profile/report needs a connection the first time. Approvals, status changes and admin actions still require a connection. A browser without IndexedDB (rare private modes) falls back to online-only.
+
+## 2026-09-26 — Raunak (agent session) — Field app: sidebar replaces More on tablet/desktop, new Profile page
+
+Field app only, no backend or contract change.
+- Tablet/desktop (≥768px) sidebar now lists **Training Sessions** (`/more/training`, `TRAINING_VIEW`), **Offline & sync** (`/more/sync`, badge = changes waiting to sync) and **Profile** (`/profile`) directly; the **More** entry is gone there. Phone bottom bar is unchanged (Home, Farmers, Visits, Seed, More).
+- `ShellTab.only?: 'mobile' | 'desktop'` in `layout/FieldShell.tsx` decides which layout shows an entry.
+- New `pages/ProfilePage.tsx`: account card (role, email, phone, branch, member since, sign out), edit details (`PATCH /auth/profile`) and change password (`POST /auth/change-password`) — same calls as the admin profile page. No 2FA section.
+- `/more` on tablet/desktop redirects to `/profile`; `/profile` on a phone redirects to `/more`, so a resized window or stale bookmark never lands on a page with no lit nav entry.
+- Verified: `tsc --noEmit` clean. Not clicked through in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Fix: batch trace drawer crashed on supplier-sourced batches
+
+**Touches Ujjawal's WS1.x (additive only).** `GET /batches/:batchNumber/trace` now also returns `supplier { id, fullName, supplierCode, companyName, city, district, state }` (`collection.service.ts` `traceBatch`). `farmer` was always nullable in the schema (a batch comes from a farmer collection OR a supplier transport); the shared `BatchTrace` type now says so (`farmer: … | null`, new `supplier: … | null`).
+- Cause: admin `/batches` → clicking a batch with no farmer (e.g. the seeded opening-balance batches such as `RM-20260921-066`, supplier "Opening balance (origin not recorded)") threw `Cannot read properties of null (reading 'fullName')` in `BatchTraceDrawer`.
+- Drawer now shows "Grown by" (farmer), "Supplied by" (supplier), or a warning if a batch has neither.
+- Verified: `tsc --noEmit` clean in backend, admin, field. Not clicked through in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Admin: seed stock ledger is now a page (`/seed-stock/:id`)
+
+Admin only, no API change.
+- New `pages/seed-stock/SeedStockLedgerPage.tsx` at `/seed-stock/:id` (gated `SEED_STOCK_VIEW`), replacing the ledger drawer. Header with status (Active / Expired / Empty / Withdrawn), expiry warning, summary tiles (on hand, received, issued to farmers, other out — all summed from the returned movements), lot details card, movements table with a movement-type filter and links between the two sides of a transfer. Receive more / Recount / Transfer buttons reuse the sheets exported from `SeedStockPage.tsx`.
+- Seed Stock list: "Ledger" button and the seed name now navigate to the page.
+- `layout/AppLayout.tsx`: sidebar highlights the longest nav path a URL sits under, so detail pages (`/seed-stock/:id`, `/customers/:id`, etc.) keep their parent entry lit and its section open.
+- Verified: `tsc --noEmit` clean; Vite serves the changed modules. Not clicked through in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Customer app: global top gap on phones
+
+Customer app only. Every page draws its own mobile top bar and they sat flush against the top edge. `StoreShell` now renders a phone-only fixed white strip (`.store-top-gap`, height `--store-top-gap` = 12px + safe-area inset) and pads `.store-content` by the same amount; `styles.css` makes every sticky `<header>` inside the shell stick at `top: var(--store-top-gap)` and drops `.store-safe-top` padding inside the shell (the gap already includes the inset). `.osp-head` (full-screen order-support chat) adds the gap itself. Pages with a full-bleed coloured banner at the top opt out via `FULL_BLEED_ROUTES` in `StoreShell` (currently `/profile`) and pad the banner for the notch themselves. Desktop unchanged. Login/Register are outside the shell and unchanged. **New mobile page headers need nothing extra** — a sticky `<header>` inside the shell picks this up. Verified: `tsc` clean. Not checked in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Field app: admin logo + top gap on phones
+
+Field app only. Copied `svv-balaji-admin/public/svv-balaji.png` to `svv-balaji-field/public/` and used it (via `import.meta.env.BASE_URL`, so `/field/` hosting works) in the tablet/desktop sidebar brand bar (now white, "SVV Balaji / Field Operations", same styling as the admin sider), the phone app bar (logo left, title centred) and the login screen. Phone app bar gets `padding-top: calc(12px + safe-area inset)` from `.field-appbar` in `styles.css` on every screen (previously only in installed/standalone mode). `public/sw.js` bumped to `svv-field-v3` and precaches the logo so it shows offline. Verified: `tsc` clean. Not checked in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Field app: More tab redesigned (phone)
+
+`svv-balaji-field/src/pages/MoreTab.tsx` rewritten as an app-style settings screen: compact account card (name, email, role, branch), "Field tools" group (Training Sessions with session count; Offline & sync with All synced / N waiting / N failed status), and a Sign out row. Removed the "Active Internet Connection Required" banner — it was wrong since the app works offline (25 Sep). Row dividers/tap highlight in `styles.css` (`.field-more-*`). Verified: `tsc` clean. Not checked in a browser.
+
+## 2026-09-26 (later) — Raunak (agent session) — Field app: UI pass across all tabs + Profile on phones
+
+Field app only, no API change. Verified with headless-Chrome screenshots (phone 390px and desktop 1366px, logged in as Super Admin) before and after; `tsc` clean.
+- **Profile on phones:** `/profile` no longer redirects to More on a phone; reached from the tappable account card and a new "Account → My Profile" row on More. Phone profile card is horizontal; Sign out stays on More there.
+- **Shell (`FieldShell`)**: new `subPages` prop — on a phone, `/more/training`, `/more/sync` and `/profile` show a back arrow and their own title in the app bar and keep More lit (previously the bar said "More" and each page drew its own back button + title). `ShellTab.shortLabel` for the bottom bar ("Farmers", "Seed") so labels no longer wrap.
+- **Shared pieces (`pages/pieces.tsx`)**: `FieldPageHeader` (desktop-only page title/actions), `FieldToolbar` (plain row on phone, bordered bar on desktop), `FieldEmpty` (compact empty/error state used by `FieldList`). **Bug fix:** `FieldCard` had `height: 100%` without `box-sizing: border-box`, so every list card overhung its grid cell by ~30px.
+- **Pages**: Seed and Training use the shared header/toolbar (duplicate in-page titles gone on phones); Visits uses `FieldToolbar`; Farmers toolbar is flat on phones with Filters as an icon button beside search; Sync page is a compact status card (online, last synced, waiting / not accepted) + shared empty state; Home "What needs doing" is one list with whole-row tap targets, "Your work" is a 2×2 tile grid on phones and a single list on desktop, hero tightened.
+- Not touched: the create/edit forms and detail sheets (visit, farmer, handout, training forms; farmer/land profile sheets).
+
+## 2026-09-26 (later) — Raunak (agent session) — Customer app: bottom tab bar on every page (phone)
+
+`StoreShell` no longer limits `BottomNav` to the five tab routes (+ `/products/`); it renders on every page inside the shell (Login/Register are outside it and unchanged). The phone-only "stack page" footer is gone. New CSS var `--store-bottom-nav` (60px + safe-area inset on phones, 0 on desktop; `BottomNav` inner row is now fixed at `BOTTOM_NAV_HEIGHT`): `.store-content` pads by it, and the pages with their own fixed action bar sit on top of the tab bar at `bottom: var(--store-bottom-nav)` — Cart (was hard-coded 56), Checkout and Product detail (were at 0 and would have covered it). Order-support full-screen chat now stops above the tab bar. **New pages with a fixed bottom bar should use `bottom: var(--store-bottom-nav)`.** Verified in headless Chrome at 390px: tab bar present on search, help, trace, wishlist, cart, product detail; product action bar at 728–784px directly above the tab bar at 783–844px. Not verified: Cart with items and Checkout (needs a signed-in customer).

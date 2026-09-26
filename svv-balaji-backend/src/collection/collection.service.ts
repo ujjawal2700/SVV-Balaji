@@ -310,6 +310,19 @@ export class CollectionService {
             gpsLocation: true,
           },
         },
+        // A batch received from a supplier transport has no farmer; this is
+        // its origin instead.
+        supplier: {
+          select: {
+            id: true,
+            fullName: true,
+            supplierCode: true,
+            companyName: true,
+            city: true,
+            district: true,
+            state: true,
+          },
+        },
         branch: { select: { id: true, name: true } },
         warehouse: { select: { id: true, name: true } },
         collection: { include: { inspection: { include: { documents: true } } } },
