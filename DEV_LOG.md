@@ -2685,6 +2685,7 @@ Field app only, no API change. Verified with headless-Chrome screenshots (phone 
 ## 2026-09-26 (later) — Raunak (agent session) — Customer app: bottom tab bar on every page (phone)
 
 `StoreShell` no longer limits `BottomNav` to the five tab routes (+ `/products/`); it renders on every page inside the shell (Login/Register are outside it and unchanged). The phone-only "stack page" footer is gone. New CSS var `--store-bottom-nav` (60px + safe-area inset on phones, 0 on desktop; `BottomNav` inner row is now fixed at `BOTTOM_NAV_HEIGHT`): `.store-content` pads by it, and the pages with their own fixed action bar sit on top of the tab bar at `bottom: var(--store-bottom-nav)` — Cart (was hard-coded 56), Checkout and Product detail (were at 0 and would have covered it). Order-support full-screen chat now stops above the tab bar. **New pages with a fixed bottom bar should use `bottom: var(--store-bottom-nav)`.** Verified in headless Chrome at 390px: tab bar present on search, help, trace, wishlist, cart, product detail; product action bar at 728–784px directly above the tab bar at 783–844px. Not verified: Cart with items and Checkout (needs a signed-in customer).
+<<<<<<< HEAD
 
 ## 2026-09-26 (latest) — Raunak (agent session) — B2B credit receivables (due dates, overdue, statement) + retailer promises made real
 
