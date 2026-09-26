@@ -20,6 +20,8 @@ export interface CheckoutSettings {
   codMaxAmount: string | null;
   reservationTtlMinutes: number;
   deliveryOtpDigits: number;
+  /** B2B credit: the day "Net N days" counts from. */
+  creditPeriodStart: 'DISPATCH' | 'ORDER_DATE';
 }
 
 export type UpdateCheckoutSettingsInput = Partial<{
@@ -39,6 +41,7 @@ export type UpdateCheckoutSettingsInput = Partial<{
   codMaxAmount: number | null;
   reservationTtlMinutes: number;
   deliveryOtpDigits: number;
+  creditPeriodStart: 'DISPATCH' | 'ORDER_DATE';
 }>;
 
 export interface ServerCoupon {

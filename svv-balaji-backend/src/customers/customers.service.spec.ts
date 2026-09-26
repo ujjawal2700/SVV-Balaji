@@ -61,6 +61,11 @@ describe('CustomersService', () => {
       branch: { findUnique: jest.fn(async () => ({ id: 'branch-1', name: 'Hubli' })) },
       user: { findUnique: jest.fn(async () => ({ id: 'user-1', fullName: 'Sales Exec' })) },
       order: { findMany: jest.fn(async () => []) },
+      // create() refuses a phone already used by a storefront login; none here.
+      customerAccount: {
+        findUnique: jest.fn(async () => null),
+        create: jest.fn(async ({ data }) => ({ id: 'acct-1', ...data })),
+      },
       sequenceCounter: {
         findUnique: jest.fn(async ({ where }) =>
           counters[where.key] === undefined ? null : { key: where.key, lastNumber: counters[where.key] },
@@ -183,14 +188,16 @@ describe('CustomersService', () => {
         b2bDto({ paymentTerms: 'CREDIT_30', creditLimit: 100000 }),
       );
       prisma.order.findMany.mockResolvedValueOnce([
-        { orderNumber: 'SO-20260811-001', total: 30000, orderDate: new Date(), paymentStatus: 'PENDING' },
-        { orderNumber: 'SO-20260811-002', total: 25000, orderDate: new Date(), paymentStatus: 'PARTIAL' },
+        { orderNumber: 'SO-20260811-001', total: 30000, amountPaid: 0, orderDate: new Date(), paymentStatus: 'PENDING' },
+        // Part-paid through Receivables: only the unpaid 15000 is still owed.
+        { orderNumber: 'SO-20260811-002', total: 25000, amountPaid: 10000, orderDate: new Date(), paymentStatus: 'PARTIAL' },
       ]);
 
       const position = await service.creditPosition(created.id);
 
-      expect(position.currentExposure).toBe(55000);
-      expect(position.availableCredit).toBe(45000);
+      expect(position.currentExposure).toBe(45000);
+      expect(position.outstanding).toBe(45000);
+      expect(position.availableCredit).toBe(55000);
       expect(position.overLimit).toBe(false);
     });
 
@@ -199,7 +206,7 @@ describe('CustomersService', () => {
         b2bDto({ paymentTerms: 'CREDIT_30', creditLimit: 50000 }),
       );
       prisma.order.findMany.mockResolvedValueOnce([
-        { orderNumber: 'SO-1', total: 80000, orderDate: new Date(), paymentStatus: 'PENDING' },
+        { orderNumber: 'SO-1', total: 80000, amountPaid: 0, orderDate: new Date(), paymentStatus: 'PENDING' },
       ]);
 
       const position = await service.creditPosition(created.id);

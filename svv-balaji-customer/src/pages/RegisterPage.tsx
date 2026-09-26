@@ -558,10 +558,10 @@ export function RegisterPage() {
           }}>
             <ShopOutlined style={{ fontSize: 32, color: '#f97316', marginBottom: 16 }} />
             <Typography.Title level={3} style={{ color: '#fff', margin: '0 0 12px 0', fontWeight: 700 }}>
-              Up to 20% Wholesale Margin
+              Wholesale Pricing for Retailers
             </Typography.Title>
             <Typography.Text style={{ color: '#cbd5e1', fontSize: 16, lineHeight: 1.6 }}>
-              Join the network of top retailers getting direct mill prices, next-day dispatch, and 15-day flexible credit lines.
+              Buy direct from the mill at wholesale tier prices. Credit terms are set for your store once your GSTIN is verified and the account is approved.
             </Typography.Text>
           </div>
         </div>

@@ -62,6 +62,8 @@ export class FulfillmentRouterService {
       address: { latitude: number | null; longitude: number | null };
       items: Array<{ productId: string; quantity: number }>;
       excludeNodeIds?: string[];
+      /** The customer's delivery zone says: courier only when Quick is not possible. */
+      courierOnly?: boolean;
     },
     settings: EffectiveCheckoutSettings,
   ): Promise<Route> {
@@ -73,7 +75,7 @@ export class FulfillmentRouterService {
       ? { lat: input.address.latitude as number, lng: input.address.longitude as number }
       : null;
 
-    if (!input.b2b && from) {
+    if (!input.b2b && from && !input.courierOnly) {
       const outlets = await client.warehouse.findMany({
         where: {
           kind: WarehouseKind.OUTLET,
@@ -119,7 +121,9 @@ export class FulfillmentRouterService {
     assertEnough(input.items, available); // throws OutOfStockException with what is short
     const reason = input.b2b
       ? 'Bulk orders ship from our central warehouse'
-      : !from
+      : input.courierOnly
+        ? 'Shipped from our central warehouse'
+        : !from
         ? 'Shipped from our central warehouse (pin your delivery location for faster local delivery)'
         : considered.some((c) => c.withinRadius)
           ? 'Your nearest store is out of stock on some items, so this ships from our central warehouse'

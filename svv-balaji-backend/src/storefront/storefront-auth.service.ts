@@ -620,25 +620,31 @@ export class StorefrontAuthService {
       pincode: account.pincode,
       creditLimit: null as number | null,
       creditUsed: null as number | null,
+      paymentTerms: null as string | null,
     };
     if (!account.customerId || account.channel !== SalesChannel.B2B) return base;
 
     const [customer, open] = await Promise.all([
-      this.prisma.customer.findUnique({ where: { id: account.customerId }, select: { creditLimit: true } }),
+      this.prisma.customer.findUnique({
+        where: { id: account.customerId },
+        select: { creditLimit: true, paymentTerms: true },
+      }),
+      // Same exposure the order-placement credit check uses, so the number the
+      // retailer sees is the number that decides whether their next order goes through.
       this.prisma.order.aggregate({
         where: {
           customerId: account.customerId,
-          paymentMode: 'CREDIT',
-          paymentStatus: { not: 'PAID' },
+          paymentStatus: { notIn: ['PAID', 'REFUNDED'] },
           status: { not: 'CANCELLED' },
         },
-        _sum: { total: true },
+        _sum: { total: true, amountPaid: true },
       }),
     ]);
     return {
       ...base,
       creditLimit: customer?.creditLimit ? Number(customer.creditLimit) : 0,
-      creditUsed: Number(open._sum.total ?? 0),
+      creditUsed: Number(open._sum.total ?? 0) - Number(open._sum.amountPaid ?? 0),
+      paymentTerms: customer?.paymentTerms ?? null,
     };
   }
 

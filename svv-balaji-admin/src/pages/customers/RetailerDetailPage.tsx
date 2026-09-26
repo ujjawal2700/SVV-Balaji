@@ -44,7 +44,10 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { CreditAccountPanel } from '../receivables/CreditAccountPanel';
+import { PAYMENT_TERMS_LABEL } from '@shared/api/receivables';
+import type { PaymentTerms } from '@shared/api/types';
 import { apiErrorMessage } from '../../api/client';
 import type { CustomerStatus } from '../../api/types';
 import { Can } from '../../components/Can';
@@ -86,6 +89,7 @@ const STATUS_ACTIONS: Record<CustomerStatus, { next: CustomerStatus; label: stri
  */
 export function RetailerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { message, modal } = AntApp.useApp();
 
@@ -422,7 +426,7 @@ export function RetailerDetailPage() {
         {/* Main Content Tabs */}
         <Card bodyStyle={{ padding: '20px 24px' }} className="page-card">
           <Tabs
-            defaultActiveKey="vault"
+            defaultActiveKey={searchParams.get('tab') ?? 'vault'}
             items={[
               {
                 key: 'vault',
@@ -685,38 +689,15 @@ export function RetailerDetailPage() {
                         )}
                       </Descriptions.Item>
                       <Descriptions.Item label="Payment Terms">
-                        <Tag color="blue">{customer?.paymentTerms || 'PREPAID'}</Tag>
+                        <Tag color="blue">{PAYMENT_TERMS_LABEL[(customer?.paymentTerms || 'PREPAID') as PaymentTerms]}</Tag>
                       </Descriptions.Item>
                     </Descriptions>
 
-                    <Card size="small" title="Credit Headroom" style={{ borderRadius: 12 }} loading={creditQuery.isLoading}>
-                      {creditData ? (
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <Row gutter={16}>
-                            <Col span={8}>
-                              <StatCard icon={<CreditCardOutlined />} tone="slate" label="CREDIT LIMIT" value={formatCurrency(creditData.creditLimit ?? 0)} />
-                            </Col>
-                            <Col span={8}>
-                              <StatCard icon={<CreditCardOutlined />} tone="red" label="OUTSTANDING" value={formatCurrency(creditData.outstanding ?? 0)} />
-                            </Col>
-                            <Col span={8}>
-                              <StatCard icon={<CreditCardOutlined />} tone="green" label="AVAILABLE CREDIT" value={formatCurrency(creditData.availableCredit ?? 0)} />
-                            </Col>
-                          </Row>
-
-                          {utilization !== null && (
-                            <div style={{ marginTop: 12 }}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                Credit Utilization Rate
-                              </Text>
-                              <Progress percent={utilization} status={utilization > 90 ? 'exception' : 'active'} />
-                            </div>
-                          )}
-                        </Space>
-                      ) : (
-                        <Text type="secondary">Prepaid account only. No active credit limit set.</Text>
-                      )}
-                    </Card>
+                    {targetCustId ? (
+                      <CreditAccountPanel customerId={targetCustId} />
+                    ) : (
+                      <Text type="secondary">Credit terms apply once the retailer is approved.</Text>
+                    )}
                   </Space>
                 ),
               },

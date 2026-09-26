@@ -7,8 +7,12 @@ import {
   ShopOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { App as AntApp, Avatar, Button, Dropdown, Input, Layout, Menu, Segmented, Spin, Tag, Typography } from 'antd';
+import { App as AntApp, Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Segmented, Spin, Tag, Typography } from 'antd';
+import type { MenuProps } from 'antd';
+import { useQuery } from '@tanstack/react-query';
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import { deliveryApi } from '@shared/api/delivery';
+import { DELIVERY_KEYS } from '@shared/hooks/useDelivery';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '../auth/types';
 import { useCanFn } from '../auth/useCan';
@@ -16,10 +20,48 @@ import { useAuth } from '../auth/useAuth';
 import { BellOutlined } from '@ant-design/icons';
 import { enableOrderAlerts, orderAlertSupport } from '../live/orderAlerts';
 import { useLiveOrders } from '../live/useLiveOrders';
-import { NAV_SECTIONS, findNavItem, type AdminZone } from './navigation';
+import { NAV_SECTIONS, findNavItem, type AdminZone, type NavItem } from './navigation';
 import { useAdminZone } from './useAdminZone';
 
 const { Header, Sider, Content } = Layout;
+
+type MenuEntry = Required<MenuProps>['items'][number];
+const groupKey = (key: string) => `group:${key}`;
+
+/**
+ * A section's entries as menu items, with grouped entries gathered under one
+ * sub-menu at the position of the first of them. Group keys are prefixed so a
+ * click on the sub-menu title is never taken for a path.
+ */
+function nestGroups(items: NavItem[], counts: Record<NonNullable<NavItem['count']>, number>) {
+  const out: Array<MenuEntry & { key: string }> = [];
+  const groups = new Map<string, MenuEntry[]>();
+  for (const item of items) {
+    const n = item.count ? counts[item.count] : 0;
+    const entry: MenuEntry = {
+      key: item.path,
+      label: n ? (
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          {item.label}
+          <Badge count={n} size="small" style={{ background: '#ff8a00' }} />
+        </span>
+      ) : item.label,
+    };
+    if (!item.group) {
+      out.push(entry as MenuEntry & { key: string });
+      continue;
+    }
+    const existing = groups.get(item.group.key);
+    if (existing) {
+      existing.push(entry);
+    } else {
+      const children: MenuEntry[] = [entry];
+      groups.set(item.group.key, children);
+      out.push({ key: groupKey(item.group.key), label: item.group.label, children });
+    }
+  }
+  return out;
+}
 
 const ZONE_OPTIONS: { label: string; value: AdminZone; icon: React.ReactNode }[] = [
   { label: 'Supply Chain', value: 'supply', icon: <GoldOutlined /> },
@@ -61,6 +103,16 @@ export function AppLayout() {
    *
    * Search term matches against label, path, parent section, or description.
    */
+  // Riders awaiting approval, shown as a count on their menu entry. Same query
+  // key as the Pending Approval page, so approving there updates the badge.
+  const pendingRiders = useQuery({
+    queryKey: DELIVERY_KEYS.riders({ status: 'PENDING_APPROVAL' }),
+    queryFn: () => deliveryApi.riders({ status: 'PENDING_APPROVAL' }),
+    enabled: can('RIDERS_VIEW'),
+    refetchInterval: 60_000,
+  });
+  const counts: Record<NonNullable<NavItem['count']>, number> = { pendingRiders: pendingRiders.data?.length ?? 0 };
+
   const menuItems = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return NAV_SECTIONS.flatMap((section) => {
@@ -73,6 +125,7 @@ export function AppLayout() {
           item.label.toLowerCase().includes(query) ||
           item.path.toLowerCase().includes(query) ||
           section.label.toLowerCase().includes(query) ||
+          (item.group && item.group.label.toLowerCase().includes(query)) ||
           (item.description && item.description.toLowerCase().includes(query))
         );
       });
@@ -84,11 +137,12 @@ export function AppLayout() {
           key: section.key,
           icon: section.icon,
           label: section.label,
-          children: visible.map((item) => ({ key: item.path, label: item.label })),
+          children: nestGroups(visible, counts),
         },
       ];
     });
-  }, [can, zone, searchTerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [can, zone, searchTerm, counts.pendingRiders]);
 
   /**
    * The menu entry a URL belongs to. A detail page such as /seed-stock/:id has
@@ -103,26 +157,26 @@ export function AppLayout() {
     );
   }, [location.pathname]);
 
-  const [userOpenKeys, setUserOpenKeys] = useState<string[]>(() =>
-    NAV_SECTIONS.filter((section) =>
-      section.items.some((item) => item.path === activeNavPath),
-    ).map((section) => section.key),
-  );
+  /** The section (and sub-menu, if any) holding the current screen. */
+  const openKeysFor = (path: string) => {
+    const section = NAV_SECTIONS.find((sec) => sec.items.some((item) => item.path === path));
+    const item = section?.items.find((i) => i.path === path);
+    return section ? [section.key, ...(item?.group ? [groupKey(item.group.key)] : [])] : [];
+  };
+
+  const [userOpenKeys, setUserOpenKeys] = useState<string[]>(() => openKeysFor(activeNavPath));
 
   useEffect(() => {
-    const currentSection = NAV_SECTIONS.find((section) =>
-      section.items.some((item) => item.path === activeNavPath),
-    );
-    if (currentSection) {
-      setUserOpenKeys((prev) =>
-        prev.includes(currentSection.key) ? prev : [...prev, currentSection.key],
-      );
+    const keys = openKeysFor(activeNavPath);
+    if (keys.length) {
+      setUserOpenKeys((prev) => (keys.every((k) => prev.includes(k)) ? prev : [...new Set([...prev, ...keys])]));
     }
   }, [activeNavPath]);
 
   const activeOpenKeys = useMemo(() => {
     if (searchTerm.trim()) {
-      return menuItems.map((s) => s.key);
+      // Searching opens every section and sub-menu that has a match.
+      return menuItems.flatMap((s) => [s.key, ...s.children.flatMap((c) => ('children' in c ? [String(c.key)] : []))]);
     }
     return userOpenKeys;
   }, [searchTerm, menuItems, userOpenKeys]);

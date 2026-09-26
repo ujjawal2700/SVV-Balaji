@@ -64,6 +64,19 @@ const AgreementsPage = lazy(() =>
 const SeedStockPage = lazy(() =>
   import('./pages/seed-stock/SeedStockPage').then((m) => ({ default: m.SeedStockPage })),
 );
+const DeliveryZonesPage = lazy(() => import('./pages/delivery/DeliveryZonesPage').then((m) => ({ default: m.DeliveryZonesPage })));
+const RidersPage = lazy(() => import('./pages/delivery/RidersPage').then((m) => ({ default: m.RidersPage })));
+const DeliveryBoardPage = lazy(() => import('./pages/delivery/DeliveryBoardPage').then((m) => ({ default: m.DeliveryBoardPage })));
+const DeliverySettingsPage = lazy(() => import('./pages/delivery/DeliverySettingsPage').then((m) => ({ default: m.DeliverySettingsPage })));
+const RiderPayRulesPage = lazy(() => import('./pages/delivery/DeliverySettingsPage').then((m) => ({ default: m.RiderPayRulesPage })));
+const PendingRidersPage = lazy(() => import('./pages/delivery/riders/PendingRidersPage').then((m) => ({ default: m.PendingRidersPage })));
+const RiderDetailPage = lazy(() => import('./pages/delivery/riders/RiderDetailPage').then((m) => ({ default: m.RiderDetailPage })));
+const LiveRidersPage = lazy(() => import('./pages/delivery/riders/LiveRidersPage').then((m) => ({ default: m.LiveRidersPage })));
+const RiderEarningsPage = lazy(() => import('./pages/delivery/riders/RiderEarningsPage').then((m) => ({ default: m.RiderEarningsPage })));
+const RiderCashPage = lazy(() => import('./pages/delivery/riders/RiderCashPage').then((m) => ({ default: m.RiderCashPage })));
+const ReceivablesPage = lazy(() =>
+  import('./pages/receivables/ReceivablesPage').then((m) => ({ default: m.ReceivablesPage })),
+);
 const SeedStockLedgerPage = lazy(() =>
   import('./pages/seed-stock/SeedStockLedgerPage').then((m) => ({ default: m.SeedStockLedgerPage })),
 );
@@ -129,6 +142,9 @@ const AddEditProductPage = lazy(() =>
 );
 const BannersPage = lazy(() =>
   import('./pages/banners/BannersPage').then((m) => ({ default: m.BannersPage })),
+);
+const HomeSectionsPage = lazy(() =>
+  import('./pages/home-sections/HomeSectionsPage').then((m) => ({ default: m.HomeSectionsPage })),
 );
 const SchemesPage = lazy(() =>
   import('./pages/schemes/SchemesPage').then((m) => ({ default: m.SchemesPage })),
@@ -297,6 +313,16 @@ const SCREENS: Record<string, ReactElement> = {
   '/agreements': <AgreementsPage />,
   '/seed-distribution': <SeedDistributionPage />,
   '/seed-stock': <SeedStockPage />,
+  '/receivables': <ReceivablesPage />,
+  '/delivery-zones': <DeliveryZonesPage />,
+  '/riders': <RidersPage />,
+  '/riders/pending': <PendingRidersPage />,
+  '/riders/live': <LiveRidersPage />,
+  '/riders/earnings': <RiderEarningsPage />,
+  '/riders/cash': <RiderCashPage />,
+  '/riders/pay-rules': <RiderPayRulesPage />,
+  '/delivery-board': <DeliveryBoardPage />,
+  '/delivery-settings': <DeliverySettingsPage />,
   '/training': <TrainingPage />,
   '/field-visits': <FieldVisitsPage />,
   // Supplier Sourcing
@@ -322,6 +348,7 @@ const SCREENS: Record<string, ReactElement> = {
   // Zone 4 — Sales & Distribution (FRD Sections 24-28)
   '/productlists': <ProductListsPage />,
   '/banners': <BannersPage />,
+  '/home-sections': <HomeSectionsPage />,
   '/schemes': <SchemesPage />,
   '/categories': <MainCategoriesPage />,
   '/subcategories': <SubCategoriesPage />,
@@ -403,6 +430,9 @@ export function App() {
           <Route path="/franchise-orders/:id" element={<FranchiseOrderDetailPage />} />
           <Route element={<RequirePermission permission={PERMISSIONS.SEED_STOCK_VIEW} />}>
             <Route path="/seed-stock/:id" element={<SeedStockLedgerPage />} />
+          </Route>
+          <Route element={<RequirePermission permission={PERMISSIONS.RIDERS_VIEW} />}>
+            <Route path="/riders/:id" element={<RiderDetailPage />} />
           </Route>
           <Route element={<RequirePermission permission={PERMISSIONS.ORDER_VIEW} />}>
             <Route path="/b2c-orders/:id" element={<OrderDetailPage />} />

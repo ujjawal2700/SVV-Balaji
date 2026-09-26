@@ -22,6 +22,7 @@ import { Badge, Button, Dropdown, Input, type MenuProps, Tag, Typography } from 
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { useCart } from '../cart/useCart';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { useLoyalty } from '../loyalty/useLoyalty';
@@ -33,6 +34,7 @@ export function DesktopHeader() {
   const cart = useCart();
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, isLoggedIn } = useCustomerAuth();
+  const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const categories = useCategoryTree();
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,7 +62,7 @@ export function DesktopHeader() {
             <Tag color="green" style={{ margin: 0, fontSize: 10, fontWeight: 700 }}>KYC VERIFIED</Tag>
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'}
+            GST: {retailerProfile?.gstin || '—'}
           </Typography.Text>
           <div
             style={{
@@ -73,11 +75,11 @@ export function DesktopHeader() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
               <span style={{ color: '#166534' }}>Credit Limit:</span>
-              <strong style={{ color: '#166534' }}>{formatInr(retailerProfile?.creditLimit || 50000)}</strong>
+              <strong style={{ color: '#166534' }}>{credit.hasCredit ? formatInr(credit.limit) : 'Not set'}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 4 }}>
               <span style={{ color: '#991b1b' }}>Outstanding:</span>
-              <strong style={{ color: '#dc2626' }}>{formatInr(retailerProfile?.creditUsed || 14500)}</strong>
+              <strong style={{ color: '#dc2626' }}>{formatInr(credit.used)}</strong>
             </div>
           </div>
           <Tag color="gold" style={{ margin: '8px 0 0', fontSize: 11 }}>

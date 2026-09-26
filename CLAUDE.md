@@ -29,8 +29,7 @@ here, never in one person's chat history.**
 
 | Developer | Workstreams |
 |---|---|
-| **Ujjawal Mahawar** | Backend API (WS1.x), integrations & infra (WS4.x), Warehouse & Delivery mobile apps (WS3.3–3.4), testing/CI/deployment (WS5.1, 5.2, 5.5) |
-| **Raunak** | Admin web panel (WS2.x), Agriculture Expert & Sales Executive mobile apps (WS3.1–3.2), data migration (WS5.3) |
+| **Raunak** (owner) | All workstreams: backend API (WS1.x), admin web panel (WS2.x), all mobile / web apps incl. field, customer, warehouse and rider/delivery (WS3.x), integrations & infra (WS4.x), testing, data migration and deployment (WS5.x) |
 | **Ravi Tiwari** | Client liaison, weekly reporting |
 
 **Do not edit outside your workstream without logging it in `DEV_LOG.md`.** The backend API is the

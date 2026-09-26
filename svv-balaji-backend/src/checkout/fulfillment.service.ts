@@ -126,6 +126,27 @@ export class FulfillmentService {
     const o = await this.order(orderId);
     if (o.fulfillmentMethod !== 'LOCAL') throw new BadRequestException('Only local-delivery orders use an in-house rider');
     if (o.status !== OrderStatus.PACKED) throw new BadRequestException(`The order must be packed first (it is ${o.status})`);
+    // Packed local orders go on the rider-app delivery board automatically.
+    // Handing one to a rider outside the app (typing their name here) is still
+    // allowed while no app rider has taken it: the waiting task is withdrawn.
+    // Once an app rider has accepted, refuse - one order, one rider.
+    const task = await this.prisma.deliveryTask.findFirst({
+      where: { orderId, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'] } },
+      select: { id: true, taskNumber: true, status: true },
+    });
+    if (task && task.status !== 'READY_FOR_PICKUP' && task.status !== 'OFFERED') {
+      throw new BadRequestException(`A rider-app rider already has this order (${task.taskNumber}) - reassign it on the delivery board`);
+    }
+    if (task) {
+      // Conditional: if an app rider accepts in the same instant, they win and this refuses.
+      const taken = await this.prisma.deliveryTask.updateMany({
+        where: { id: task.id, status: { in: ['READY_FOR_PICKUP', 'OFFERED'] }, riderId: null },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelStage: 'BEFORE_ASSIGNMENT', cancelReason: `Handed to ${rider.name} outside the rider app` },
+      });
+      if (taken.count !== 1) throw new BadRequestException(`A rider-app rider just took this order (${task.taskNumber})`);
+      await this.prisma.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
+      await this.prisma.deliveryTaskEvent.create({ data: { taskId: task.id, type: 'CANCELLED', actorUserId: userId, note: `Handed to ${rider.name} outside the rider app` } });
+    }
     await this.prisma.order.update({ where: { id: orderId }, data: { riderName: rider.name, riderPhone: rider.phone } });
     await this.sales.record(orderId, 'RIDER_ASSIGNED', userId, `${rider.name} (${rider.phone})`);
     return this.sales.advance(orderId, OrderStatus.DISPATCHED, userId);

@@ -119,6 +119,29 @@ export class StorefrontCatalogueService {
     return Promise.all(products.map((p) => this.toCard(p, params)));
   }
 
+  /** Fetch specific list of products by IDs for custom homepage sections. */
+  async listProductsByIds(
+    productIds: string[],
+    params: { channel: SalesChannel; customerType?: CustomerType },
+  ) {
+    if (!productIds || productIds.length === 0) return [];
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        isActive: true,
+        showOnStorefront: true,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+    // Preserve order of productIds array
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const orderedProducts = productIds
+      .map((id) => productMap.get(id))
+      .filter((p): p is NonNullable<typeof p> => p !== undefined);
+
+    return Promise.all(orderedProducts.map((p) => this.toCard(p, params)));
+  }
+
   /**
    * `idOrSlug` because the storefront routes on whatever it was given: links
    * that predate the real catalogue carry the old mock ids, which were seeded

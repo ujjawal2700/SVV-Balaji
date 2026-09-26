@@ -24,11 +24,13 @@ import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStorefrontBanners } from '@shared/hooks/useBanners';
 import { useStorefrontSchemes } from '@shared/hooks/useSchemes';
+import { useStorefrontHomeSections } from '@shared/hooks/useHomeSections';
 import { api as storefrontApi } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
 import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
+import { useRetailerCredit } from '../hooks/useRetailerCredit';
 // Order history is still mock (no storefront order backend yet). Only its
 // "what and how much was last ordered" survives - names, prices and images are
 // re-read from the live catalogue below, so an admin edit reaches this shelf too.
@@ -68,7 +70,7 @@ const FALLBACK_HERO_SLIDES: HeroSlide[] = [
     id: 'fallback-2',
     badgeText: 'MEGA WHOLESALE SAVINGS',
     title: 'Festive Retailer Schemes Live Now',
-    description: 'Enjoy up to 20% margin discounts + Buy 10 Get 1 free on selected spices and pulses.',
+    description: 'Bulk case packs at wholesale tier prices for registered retailers. See Schemes & Offers for what is running today.',
     imageUrl: '/images/cat_spices.jpg',
     ctaTextPrimary: 'Claim Active Schemes',
     ctaLinkPrimary: '/products/atta-flour',
@@ -80,6 +82,7 @@ export function HomePage() {
   const cart = useCart();
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile } = useCustomerAuth();
+  const credit = useRetailerCredit();
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
   const categories = useCategoryTree();
@@ -105,6 +108,7 @@ export function HomePage() {
   // gap, so the section renders nothing rather than substituting placeholder
   // content. See shared/hooks/useSchemes.ts.
   const { data: schemes = [] } = useStorefrontSchemes(isRetailer ? 'B2B' : 'B2C', storefrontApi);
+  const { data: dynamicHomeSections = [] } = useStorefrontHomeSections(isRetailer ? 'B2B' : 'B2C', storefrontApi);
   const heroSlides: HeroSlide[] =
     publishedBanners && publishedBanners.length > 0
       ? publishedBanners.map((banner) => ({
@@ -193,7 +197,7 @@ export function HomePage() {
                       textOverflow: 'ellipsis',
                     }}
                   >
-                    GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'}
+                    GST: {retailerProfile?.gstin || '—'}
                   </div>
                 </>
               ) : (
@@ -493,11 +497,11 @@ export function HomePage() {
                     <div style={{ display: 'flex', gap: 24, marginTop: 6 }}>
                       <div>
                         <span style={{ fontSize: 11, color: '#cbd5e1', display: 'block' }}>Credit Limit</span>
-                        <strong style={{ fontSize: 16, color: '#34d399' }}>{formatInr(retailerProfile?.creditLimit || 50000)}</strong>
+                        <strong style={{ fontSize: 16, color: '#34d399' }}>{credit.hasCredit ? formatInr(credit.limit) : 'Not set'}</strong>
                       </div>
                       <div>
                         <span style={{ fontSize: 11, color: '#cbd5e1', display: 'block' }}>Outstanding</span>
-                        <strong style={{ fontSize: 16, color: '#f87171' }}>{formatInr(retailerProfile?.creditUsed || 14500)}</strong>
+                        <strong style={{ fontSize: 16, color: '#f87171' }}>{formatInr(credit.used)}</strong>
                       </div>
                     </div>
                   </div>
@@ -543,7 +547,7 @@ export function HomePage() {
                       Buy Wholesale / Direct Mill Supply
                     </Typography.Title>
                     <Typography.Text style={{ color: '#fed7aa', fontSize: 12, display: 'block', lineHeight: 1.4 }}>
-                      Get up to 20% margin, GST input tax invoices, and 15-day credit lines for your retail store.
+                      Wholesale tier pricing on bulk packs, and credit terms for your store once your account is approved.
                     </Typography.Text>
                   </div>
 
@@ -885,6 +889,220 @@ export function HomePage() {
             </div>
           </section>
         )}
+
+        {/* ======================================================================= */}
+        {/* DYNAMIC SUPER ADMIN MANAGED HOMEPAGE SECTIONS                           */}
+        {/* ======================================================================= */}
+        {dynamicHomeSections.map((sec) => {
+          if (!sec.products || sec.products.length === 0) return null;
+          return (
+            <section key={sec.id}>
+              <SectionHeader
+                title={sec.title}
+                subtitle={sec.subtitle ?? undefined}
+                to="/products"
+              />
+
+              {/* Mobile horizontal scroll */}
+              <div className="mobile-only">
+                <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
+                  {sec.products.map((product) => {
+                    const price = typeof product.price === 'number' ? product.price : product.price ? product.price.unitPriceInclGst : null;
+                    const img = (product.images && product.images[0]) || '/images/cat_namkeen.jpg';
+                    const weight = product.packLabel || product.unit || '';
+                    return (
+                      <div
+                        key={product.id}
+                        style={{
+                          flex: '0 0 auto',
+                          width: 140,
+                          borderRadius: 14,
+                          padding: 10,
+                          background: '#ffffff',
+                          border: '1px solid #e7e5e4',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <Link to={`/product-detail/${product.slug || product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ height: 85, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#f8f7f5', borderRadius: 8 }}>
+                            <img src={img} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                          </div>
+                          <Typography.Text style={{ fontSize: 12, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                            {product.name}
+                          </Typography.Text>
+                          {product.rating && product.reviewCount ? (
+                            <div style={{ marginTop: 3 }}>
+                              <RatingBadge rating={product.rating} count={product.reviewCount} />
+                            </div>
+                          ) : null}
+                          <Typography.Text style={{ fontSize: 11, color: '#78716c', marginTop: 2 }}>
+                            {weight}
+                          </Typography.Text>
+                        </Link>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                          <Typography.Text style={{ fontSize: 14, fontWeight: 800, color: '#1c1917' }}>
+                            {price !== null ? formatInr(price) : 'N/A'}
+                          </Typography.Text>
+                          <button
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: '50%',
+                              background: '#ea580c',
+                              color: '#ffffff',
+                              border: 'none',
+                              display: 'grid',
+                              placeItems: 'center',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() =>
+                              cart.add({
+                                productId: product.id,
+                                productName: product.name,
+                                unit: weight,
+                                displayUnitPrice: price,
+                                imageUrl: img,
+                                mrp: product.mrp,
+                              })
+                            }
+                          >
+                            <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Desktop 6-column product grid */}
+              <div className="desktop-only">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
+                  {sec.products.map((product) => {
+                    const cartLine = cart.lines.find((line) => line.productId === product.id);
+                    const price = typeof product.price === 'number' ? product.price : product.price ? product.price.unitPriceInclGst : null;
+                    const img = (product.images && product.images[0]) || '/images/cat_namkeen.jpg';
+                    const weight = product.packLabel || product.unit || '';
+                    return (
+                      <div
+                        key={product.id}
+                        className="product-card-hover"
+                        style={{
+                          borderRadius: 14,
+                          background: '#ffffff',
+                          border: '1px solid #e7e5e4',
+                          padding: 12,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Link to={`/product-detail/${product.slug || product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                          <div
+                            style={{
+                              height: 120,
+                              borderRadius: 10,
+                              background: '#f8f7f5',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: 10,
+                              padding: 8,
+                            }}
+                          >
+                            <img src={img} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                          </div>
+                          <Typography.Text strong style={{ fontSize: 13, lineHeight: 1.25, height: 32, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', color: '#1c1917' }}>
+                            {product.name}
+                          </Typography.Text>
+                          {product.rating && product.reviewCount ? (
+                            <div style={{ marginTop: 3 }}>
+                              <RatingBadge rating={product.rating} count={product.reviewCount} />
+                            </div>
+                          ) : null}
+                          <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
+                            {weight}
+                          </Typography.Text>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '8px 0 10px' }}>
+                            <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
+                              {price !== null ? formatInr(price) : 'N/A'}
+                            </Typography.Text>
+                            {product.mrp && (
+                              <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
+                                {formatInr(product.mrp)}
+                              </Typography.Text>
+                            )}
+                          </div>
+                        </Link>
+
+                        <div>
+                          {cartLine ? (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: '#fff7ed',
+                                borderRadius: 8,
+                                padding: '2px 4px',
+                                border: '1px solid #fed7aa',
+                              }}
+                            >
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<MinusOutlined />}
+                                onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                              />
+                              <InputNumber
+                                size="small"
+                                min={1}
+                                value={cartLine.quantity}
+                                controls={false}
+                                onChange={(val) => cart.setQuantity(product.id, val || 1)}
+                                style={{ width: 44, textAlign: 'center', background: 'transparent', border: 'none' }}
+                              />
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<PlusOutlined />}
+                                onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
+                              />
+                            </div>
+                          ) : (
+                            <Button
+                              block
+                              style={{
+                                borderRadius: 8,
+                                background: '#ea580c',
+                                borderColor: '#ea580c',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                              }}
+                              onClick={() =>
+                                cart.add({
+                                  productId: product.id,
+                                  productName: product.name,
+                                  unit: weight,
+                                  displayUnitPrice: price,
+                                  imageUrl: img,
+                                  mrp: product.mrp,
+                                })
+                              }
+                            >
+                              Add to Cart
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          );
+        })}
 
         {/* ======================================================================= */}
         {/* 5. BEST OF THE BASICS (DAILY STAPLES)                                    */}
@@ -1352,7 +1570,7 @@ export function HomePage() {
                   {retailerProfile?.storeName || 'My Store'}
                 </Typography.Title>
                 <Typography.Text style={{ fontSize: 12, color: '#15803d' }}>
-                  GST: {retailerProfile?.gstin || '36AABCU9603R1ZM'} | Dedicated B2B Wholesale Supply
+                  GST: {retailerProfile?.gstin || '—'} | Dedicated B2B Wholesale Supply
                 </Typography.Text>
               </div>
               <Button
@@ -1367,10 +1585,10 @@ export function HomePage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, background: '#ffffff', padding: '16px 20px', borderRadius: 12, border: '1px solid #dcfce7' }}>
               <div>
                 <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                  Available Credit Limit
+                  Credit Limit
                 </Typography.Text>
                 <Typography.Text strong style={{ fontSize: 18, color: '#059669' }}>
-                  {formatInr(retailerProfile?.creditLimit || 50000)}
+                  {credit.hasCredit ? formatInr(credit.limit) : 'Not set'}
                 </Typography.Text>
               </div>
               <div>
@@ -1378,7 +1596,7 @@ export function HomePage() {
                   Current Outstanding Balance
                 </Typography.Text>
                 <Typography.Text strong style={{ fontSize: 18, color: '#dc2626' }}>
-                  {formatInr(retailerProfile?.creditUsed || 14500)}
+                  {formatInr(credit.used)}
                 </Typography.Text>
               </div>
               <div>
@@ -1386,7 +1604,7 @@ export function HomePage() {
                   Payment Terms
                 </Typography.Text>
                 <Typography.Text strong style={{ fontSize: 18, color: '#1e3a8a' }}>
-                  Net 15 Days
+                  {credit.termsLabel}
                 </Typography.Text>
               </div>
             </div>
@@ -1413,7 +1631,7 @@ export function HomePage() {
                 Own a Grocery Store or Supermarket?
               </Typography.Title>
               <Typography.Text style={{ fontSize: 13, color: '#c2410c' }}>
-                Get direct mill supply, up to 20% wholesale margin, GST invoices, and ₹50,000 credit line.
+                Get direct mill supply at wholesale tier prices, with credit terms set for your store once it is approved.
               </Typography.Text>
             </div>
             <Button

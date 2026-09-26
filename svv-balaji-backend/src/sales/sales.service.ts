@@ -230,10 +230,12 @@ export class SalesService {
          */
         paymentStatus: { notIn: [PaymentStatus.PAID, PaymentStatus.REFUNDED] },
       },
-      select: { total: true },
+      select: { total: true, amountPaid: true },
     });
 
-    const exposure = openOrders.reduce((s, o) => s + Number(o.total), 0);
+    // What is still owed: part-paid credit bills count only their unpaid part
+    // (receipts recorded in Receivables raise amountPaid).
+    const exposure = openOrders.reduce((s, o) => s + Number(o.total) - Number(o.amountPaid ?? 0), 0);
     const limit = Number(customer.creditLimit);
 
     if (exposure + orderTotal > limit) {
@@ -1064,6 +1066,12 @@ export class SalesService {
     });
     if (!order) throw new NotFoundException('Order not found');
     this.assertTransition(order.status, OrderStatus.CANCELLED);
+    if (Number(order.amountPaid) > 0) {
+      throw new BadRequestException(
+        `${order.orderNumber} has ${Number(order.amountPaid).toFixed(2)} of payments applied to it. Void those ` +
+          'receipts under Receivables first, so the money is not left recorded against a cancelled order.',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       for (const allocation of order.allocations) {
@@ -1117,6 +1125,18 @@ export class SalesService {
   async setPaymentStatus(id: string, dto: UpdatePaymentStatusDto) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Order not found');
+
+    // A credit bill is settled by recording the payment in Receivables, which
+    // keeps amountPaid, the statement of account and the status in step.
+    // Flipping the status here would mark it paid with no money on record.
+    const creditBill =
+      order.paymentTerms !== PaymentTerms.PREPAID && (order.paymentMode === null || order.paymentMode === 'CREDIT');
+    if (creditBill && order.status !== OrderStatus.CANCELLED) {
+      throw new BadRequestException(
+        `${order.orderNumber} is a credit bill. Record the payment under Receivables for this customer ` +
+          'instead - that applies it to the order and keeps their statement of account correct.',
+      );
+    }
 
     return this.prisma.order.update({
       where: { id },

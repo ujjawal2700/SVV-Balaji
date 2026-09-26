@@ -160,6 +160,59 @@ await invariant('a redeemed coupon\'s amount is part of the order discount', asy
   return rs.filter((r) => cents(r.amount) > cents(r.order.discountTotal)).map((r) => ({ order: r.order.orderNumber, coupon: r.amount, orderDiscount: r.order.discountTotal }));
 });
 
+await invariant('credit bills: amountPaid = the sum of live receipt allocations, and never above the total', async () => {
+  const orders = await prisma.order.findMany({
+    where: { OR: [{ amountPaid: { gt: 0 } }, { creditAllocations: { some: {} } }] },
+    select: { orderNumber: true, total: true, amountPaid: true, paymentStatus: true, creditAllocations: { select: { amount: true } } },
+  });
+  return orders
+    .filter((o) => {
+      const alloc = o.creditAllocations.reduce((n, a) => n + cents(a.amount), 0);
+      const paid = cents(o.amountPaid);
+      const status = paid === 0 ? null : paid >= cents(o.total) ? 'PAID' : 'PARTIAL';
+      return alloc !== paid || paid > cents(o.total) || (status && o.paymentStatus !== status);
+    })
+    .map((o) => ({ order: o.orderNumber, total: o.total, amountPaid: o.amountPaid, status: o.paymentStatus, allocated: o.creditAllocations.reduce((n, a) => n + Number(a.amount), 0) }));
+});
+
+await invariant('receipts: live receipts are fully allocated, voided receipts have no allocations', async () => {
+  const receipts = await prisma.creditReceipt.findMany({ include: { allocations: { select: { amount: true } } } });
+  return receipts
+    .filter((r) => {
+      const alloc = r.allocations.reduce((n, a) => n + cents(a.amount), 0);
+      return r.voidedAt ? r.allocations.length > 0 : alloc !== cents(r.amount);
+    })
+    .map((r) => ({ receipt: r.receiptNumber, amount: r.amount, voided: Boolean(r.voidedAt), allocated: r.allocations.reduce((n, a) => n + Number(a.amount), 0) }));
+});
+
+await invariant('COD collections: the order is paid, and cash (not UPI) is in the rider cash ledger for the same amount', async () => {
+  const cols = await prisma.codCollection.findMany();
+  const out = [];
+  for (const c of cols) {
+    const o = await prisma.order.findUnique({ where: { id: c.orderId }, select: { orderNumber: true, paymentStatus: true } });
+    const entry = await prisma.riderCashEntry.findUnique({ where: { codCollectionId: c.id } });
+    const cashOk = c.method === 'CASH' ? entry && cents(entry.amount) === cents(c.collectedAmount) && entry.type === 'COD_COLLECTED' : !entry;
+    if (o?.paymentStatus !== 'PAID' || !cashOk || cents(c.collectedAmount) !== cents(c.expectedAmount)) out.push({ order: o?.orderNumber, status: o?.paymentStatus, method: c.method, cashEntry: entry?.amount ?? null });
+  }
+  return out;
+});
+
+await invariant('rider cash in hand is never negative', async () => {
+  const g = await prisma.riderCashEntry.groupBy({ by: ['riderId'], _sum: { amount: true } });
+  return g.filter((x) => cents(x._sum.amount ?? 0) < 0).map((x) => ({ rider: x.riderId, balance: x._sum.amount }));
+});
+
+await invariant('delivery tasks: DELIVERED only with a delivered, OTP-verified order; at most one live task per order', async () => {
+  const delivered = await prisma.deliveryTask.findMany({ where: { status: 'DELIVERED' }, select: { taskNumber: true, order: { select: { orderNumber: true, status: true, deliveryOtpVerifiedAt: true } } } });
+  const bad = delivered.filter((t) => t.order && (t.order.status !== 'DELIVERED' || !t.order.deliveryOtpVerifiedAt)).map((t) => ({ task: t.taskNumber, order: t.order.orderNumber, status: t.order.status }));
+  const live = await prisma.deliveryTask.groupBy({
+    by: ['orderId'],
+    where: { orderId: { not: null }, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'] } },
+    _count: { _all: true },
+  });
+  return bad.concat(live.filter((l) => l._count._all > 1).map((l) => ({ order: l.orderId, liveTasks: l._count._all })));
+});
+
 // ------------------------------------------------------------------ 4. loyalty
 console.log('\n4. Loyalty points ledger');
 await invariant('every customer\'s balance = the sum of their ledger', async () => {

@@ -41,6 +41,8 @@ function invalidateOrderWorld(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
   // Outstanding and available credit both move with order status.
   void queryClient.invalidateQueries({ queryKey: queryKeys.customers.all });
+  // Credit bills, due dates and statements follow order status (dispatch starts the clock).
+  void queryClient.invalidateQueries({ queryKey: queryKeys.receivables.all });
   // Reserved and available quantities on the FG stock lines.
   void queryClient.invalidateQueries({ queryKey: queryKeys.finishedGoods.all });
   // Occupancy and the movement ledger.

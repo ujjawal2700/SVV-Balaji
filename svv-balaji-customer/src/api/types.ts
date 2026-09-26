@@ -45,6 +45,8 @@ export interface StorefrontAccountSummary {
   /** Retailers only. */
   creditLimit?: number | null;
   creditUsed?: number | null;
+  /** Retailers only: PREPAID or CREDIT_7..CREDIT_45, as staff set them. */
+  paymentTerms?: string | null;
 }
 
 export interface StorefrontSession {

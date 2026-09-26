@@ -33,6 +33,8 @@ import { deliveryFeeFor, etaWindow, priceCart, type Method } from './checkout.ca
 import { CheckoutSettingsService, type EffectiveCheckoutSettings } from './checkout-settings.service';
 import { CouponsService, type AppliedCoupon } from './coupons.service';
 import { FulfillmentRouterService, type Route } from './fulfillment-router.service';
+import { ZonesService, type QuickDecision } from '../delivery/zones/zones.service';
+import { quickFee } from '../delivery/zones/zone.logic';
 import { PAYMENT_GATEWAY, type PaymentGateway } from './payment/payment-gateway';
 import { OutOfStockException } from './stock-holds';
 import { StockReservationService } from './stock-reservation.service';
@@ -44,6 +46,10 @@ export interface StoredQuote {
   address: AddressSnapshot;
   fulfillment: {
     method: Method;
+    /** QUICK only when the customer chose it and the zone could promise it. */
+    speed: 'STANDARD' | 'QUICK';
+    zoneId: string | null;
+    zoneName: string | null;
     nodeId: string;
     nodeName: string;
     nodeKind: string;
@@ -53,6 +59,11 @@ export interface StoredQuote {
     etaMax: string;
     etaLabel: string;
     reason: string;
+  };
+  /** Both choices, so the customer can switch. `quick` is null when the option is not shown at all. */
+  deliveryOptions: {
+    standard: { method: Method; etaLabel: string; fee: number; reason: string };
+    quick: { available: boolean; reason: string; etaLabel: string | null; fee: number | null; zoneName: string | null } | null;
   };
   lines: Array<{
     productId: string; name: string; sku: string; image: string | null;
@@ -118,6 +129,7 @@ export class CheckoutService {
     private readonly reservations: StockReservationService,
     private readonly sales: SalesService,
     private readonly events: OrderEventsService,
+    private readonly zones: ZonesService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
   ) {}
 
@@ -163,7 +175,29 @@ export class CheckoutService {
     // 3. Address (provably the customer's), then WHERE and HOW it ships.
     const address = await this.addresses.mine(customer.id, dto.addressId);
     const snapshot = this.addresses.toSnapshot(address);
-    const route = await this.router.resolve(this.prisma, { b2b, address: snapshot, items, excludeNodeIds: opts.excludeNodeIds }, settings);
+    // Quick Delivery is decided by the customer's zone (src/delivery); the
+    // normal routing below stays the answer whenever Quick is not chosen or
+    // not possible. B2B bulk never goes Quick.
+    const quick: QuickDecision | null = b2b
+      ? null
+      : await this.zones.quickDecision(this.prisma, {
+          address: { latitude: snapshot.latitude, longitude: snapshot.longitude, pincode: snapshot.pincode },
+          items,
+          goodsTotal: null,
+          excludeNodeIds: opts.excludeNodeIds,
+        });
+    const wantQuick = dto.deliverySpeed === 'QUICK';
+    if (wantQuick && !quick?.available) {
+      throw new ConflictException({ code: 'QUICK_UNAVAILABLE', message: quick?.reason ?? 'Quick Delivery is not available for business orders' });
+    }
+    const standardRoute = await this.router.resolve(
+      this.prisma,
+      { b2b, address: snapshot, items, excludeNodeIds: opts.excludeNodeIds, courierOnly: quick?.zone?.fallback === 'COURIER' },
+      settings,
+    );
+    const route: Route = wantQuick
+      ? { method: 'LOCAL', node: quick!.node!, distanceKm: quick!.distanceKm, reason: quick!.reason, considered: [] }
+      : standardRoute;
 
     // 4. Prices from the price lists, in this customer's channel.
     const priced = await Promise.all(
@@ -236,7 +270,9 @@ export class CheckoutService {
     // 7. Fee depends on the goods total AFTER discounts; then final figures.
     const lineInputs = priced.map((l) => ({ key: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, gstRatePercent: l.gstRatePercent }));
     const goods = priceCart(lineInputs, couponDiscount + walletDiscount, 0);
-    const fee = deliveryFeeFor(route.method, b2b, goods.goodsTotal, settings.fees);
+    const standardFee = deliveryFeeFor(standardRoute.method, b2b, goods.goodsTotal, settings.fees);
+    const quickFeeValue = quick?.feeRule ? quickFee(goods.goodsTotal, quick.feeRule.fee, quick.feeRule.freeAbove) : null;
+    const fee = wantQuick ? quickFeeValue! : standardFee;
     const cart = priceCart(lineInputs, couponDiscount + walletDiscount, fee);
 
     // 8. Which payment modes may be used, and which is selected.
@@ -247,13 +283,17 @@ export class CheckoutService {
       throw new BadRequestException(why ?? `${mode} is not available for this order`);
     }
 
-    const eta = etaWindow(route.method, route.distanceKm, new Date(), settings.eta);
+    const standardEta = etaWindow(standardRoute.method, standardRoute.distanceKm, new Date(), settings.eta);
+    const eta = wantQuick ? quick!.eta! : standardEta;
     const meta = new Map(products.map((p) => [p.id, p]));
     return {
       channel,
       address: snapshot,
       fulfillment: {
         method: route.method,
+        speed: wantQuick ? 'QUICK' : 'STANDARD',
+        zoneId: wantQuick ? quick!.zone!.id : (quick?.zone?.id ?? null),
+        zoneName: wantQuick ? quick!.zone!.name : (quick?.zone?.name ?? null),
         nodeId: route.node.id,
         nodeName: route.node.name,
         nodeKind: route.node.kind,
@@ -263,6 +303,12 @@ export class CheckoutService {
         etaMax: eta.max.toISOString(),
         etaLabel: eta.label,
         reason: route.reason,
+      },
+      deliveryOptions: {
+        standard: { method: standardRoute.method, etaLabel: standardEta.label, fee: standardFee, reason: standardRoute.reason },
+        quick: quick?.offered
+          ? { available: quick.available, reason: quick.reason, etaLabel: quick.eta?.label ?? null, fee: quick.available ? quickFeeValue : null, zoneName: quick.zone?.name ?? null }
+          : null,
       },
       lines: cart.lines.map((l) => {
         const p = meta.get(l.key)!;
@@ -558,10 +604,21 @@ export class CheckoutService {
     return this.confirm(customer, session.id, { gatewayPaymentId: paymentId }, { gatewayVerified: true });
   }
 
+  /**
+   * Called only when the payment could NOT be verified, so `paymentId` is
+   * whatever the client claimed. It is kept in the failure note and never
+   * written to `gatewayPaymentId`: that column is unique, and storing an
+   * unverified id there would let a forged confirm (someone else's real
+   * Razorpay id + a bad signature) block the genuine payment from ever being
+   * recorded - it failed with a 500 until 26 Sep.
+   */
   private async recordPaymentFailure(sessionId: string, paymentId: string | undefined, reason: string) {
     await this.prisma.paymentTransaction.updateMany({
       where: { sessionId, status: PaymentTransactionStatus.PENDING },
-      data: { status: PaymentTransactionStatus.FAILED, gatewayPaymentId: paymentId, failureReason: reason },
+      data: {
+        status: PaymentTransactionStatus.FAILED,
+        failureReason: paymentId ? `${reason} (claimed payment id ${paymentId.slice(0, 80)})` : reason,
+      },
     });
   }
 
@@ -617,6 +674,8 @@ export class CheckoutService {
         gatewayOrderId: session.gatewayOrderId,
         gatewayPaymentId: paymentId,
         fulfillmentMethod: quote.fulfillment.method,
+        deliverySpeed: quote.fulfillment.speed === 'QUICK' ? 'QUICK' : 'STANDARD',
+        deliveryZoneId: quote.fulfillment.zoneId ?? undefined,
         addressSnapshot: a as unknown as Prisma.InputJsonValue,
         pricingSnapshot: quote as unknown as Prisma.InputJsonValue,
         deliveryAddress: [a.fullName, a.line1, a.line2, a.landmark, `${a.city}, ${a.state} ${a.pincode}`, `Ph ${a.phone}`].filter(Boolean).join(', '),
@@ -674,7 +733,12 @@ export class CheckoutService {
       data: {
         orderId: order.id,
         type: 'PLACED',
-        note: quote.fulfillment.method === 'LOCAL' ? 'Express Local Delivery' : 'Standard Courier Delivery',
+        note:
+          quote.fulfillment.speed === 'QUICK'
+            ? `Quick Delivery (${quote.fulfillment.etaLabel})`
+            : quote.fulfillment.method === 'LOCAL'
+              ? 'Express Local Delivery'
+              : 'Standard Courier Delivery',
       },
     });
     return order;

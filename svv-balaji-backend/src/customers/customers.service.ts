@@ -329,19 +329,25 @@ export class CustomersService {
       where: {
         customerId: id,
         status: { not: 'CANCELLED' },
-        paymentStatus: { not: 'PAID' },
+        paymentStatus: { notIn: ['PAID', 'REFUNDED'] },
       },
-      select: { orderNumber: true, total: true, orderDate: true, paymentStatus: true },
+      select: { orderNumber: true, total: true, amountPaid: true, orderDate: true, paymentStatus: true },
     });
 
-    const exposure = openOrders.reduce((sum, o) => sum + Number(o.total), 0);
+    // Part-paid bills count only their unpaid part (see Receivables).
+    const exposure = openOrders.reduce((sum, o) => sum + Number(o.total) - Number(o.amountPaid ?? 0), 0);
     const limit = customer.creditLimit ? Number(customer.creditLimit) : null;
 
     return {
+      customerId: customer.id,
       customerCode: customer.customerCode,
       channel: customer.channel,
       paymentTerms: customer.paymentTerms,
       creditLimit: limit,
+      // `outstanding` is what the admin panel's CustomerCredit type reads; it was
+      // never sent, so the Outstanding tile always showed 0. `currentExposure`
+      // stays for existing callers.
+      outstanding: exposure,
       currentExposure: exposure,
       availableCredit: limit === null ? null : Math.max(limit - exposure, 0),
       overLimit: limit !== null && exposure > limit,

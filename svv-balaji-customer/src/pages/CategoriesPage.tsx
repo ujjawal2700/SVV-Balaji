@@ -28,7 +28,7 @@ const DEFAULT_CAT_BANNER: CategoryPageBanner = {
   id: 'fallback-cat',
   title: 'Direct Bulk Supply & Verified Mandi Quality',
   badgeText: 'CATEGORY SPECIAL PROMO',
-  description: 'Up to 20% Wholesale Margin • Mandi Grade Assured Across All Verticals',
+  description: 'Wholesale tier pricing for registered retailers • Mandi Grade Assured Across All Verticals',
   imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
   ctaTextPrimary: 'Explore All Categories',
   ctaLinkPrimary: '/categories',
@@ -364,7 +364,7 @@ export function CategoriesPage() {
                         <Typography.Title level={5} style={{ margin: 0, color: '#9a3412', fontSize: 14, fontWeight: 700 }}>
                           {selectedCatData.name}
                         </Typography.Title>
-                        <Typography.Text style={{ color: '#ea580c', fontWeight: 600, fontSize: 11 }}>Up to 20% OFF</Typography.Text>
+                        <Typography.Text style={{ color: '#ea580c', fontWeight: 600, fontSize: 11 }}>Farm-traceable range</Typography.Text>
                       </div>
                       <img
                         src={selectedCatData.image}
@@ -703,7 +703,7 @@ export function CategoriesPage() {
                             {selectedCatData.name}
                           </Typography.Title>
                           <Typography.Text style={{ color: '#ffedd5', fontSize: 14, marginTop: 4, display: 'block' }}>
-                            Up to 20% Wholesale Margin • Mandi Grade Assured
+                            Wholesale tier pricing • Mandi Grade Assured
                           </Typography.Text>
                         </div>
                         <img src={selectedCatData.image} alt={selectedCatData.name} style={{ width: 100, height: 100, objectFit: 'contain' }} />

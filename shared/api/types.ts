@@ -2389,10 +2389,12 @@ export interface Customer {
 export interface CustomerCredit {
   customerId: string;
   creditLimit: number | null;
-  /** Unpaid on confirmed-and-beyond orders. */
+  /** Still owed on unpaid orders (part-paid bills count only their unpaid part). */
   outstanding: number;
   /** Null when there is no limit set. */
   availableCredit: number | null;
+  paymentTerms?: PaymentTerms;
+  overLimit?: boolean;
 }
 
 export interface CustomerWalletTransaction {
@@ -3151,4 +3153,47 @@ export interface SetBatchHoldResult {
   status: BatchHoldStatus;
   changed: string[];
   unchanged: string[];
+}
+
+export interface HomeSectionProductRef {
+  id: string;
+  name: string;
+  images: string[];
+  mrp: number | null;
+  price: number | null;
+  packLabel: string | null;
+  category?: { name: string } | null;
+}
+
+export interface HomeSection {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  targetAudience: BannerAudience;
+  displayOrder: number;
+  isActive: boolean;
+  productIds: string[];
+  products?: HomeSectionProductRef[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateHomeSectionInput {
+  title: string;
+  subtitle?: string;
+  targetAudience?: BannerAudience;
+  displayOrder?: number;
+  isActive?: boolean;
+  productIds?: string[];
+}
+
+export type UpdateHomeSectionInput = Partial<CreateHomeSectionInput>;
+
+export interface StorefrontHomeSection {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  displayOrder: number;
+  targetAudience: BannerAudience;
+  products: StorefrontProductCard[];
 }

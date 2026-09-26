@@ -31,7 +31,8 @@ PASSWORD = os.environ.get("SEED_SUPER_ADMIN_PASSWORD", "admin@123")
 WEBHOOK_TOKEN = os.environ.get("SHIPROCKET_WEBHOOK_TOKEN", "dev-shiprocket-webhook-token")
 STAMP = str(int(time.time()))
 TODAY = date.today().isoformat()
-PAY_OK = {"gatewayPaymentId": "mockpay_ok", "signature": "mock_signature"}
+# Stamped: gateway payment ids are unique in the DB, so fixed ids would collide with earlier runs.
+PAY_OK = {"gatewayPaymentId": f"mockpay_ok_{STAMP}", "signature": "mock_signature"}
 token = ""
 failures = 0
 PRODUCTS = []
@@ -296,7 +297,7 @@ step("6. B2C checkout: hold -> pay -> atomic order (coupon + points + loyalty le
 sess = must("POST", "/storefront/checkout/sessions", {"addressId": A_local, "items": items((P1, 3)), "couponCode": CODE, "redeemPoints": 40, "expectedTotal": 250.5}, tok=C1["tok"])
 check(sess["payment"]["requiresPayment"] and sess["payment"]["gateway"]["provider"] == "mock" and sess["quote"]["totals"]["totalPayable"] == 250.5, "session opened: total Rs 250.50, gateway order created for the SERVER's amount", sess["payment"])
 SID = sess["sessionId"]
-status, bad = call("POST", f"/storefront/checkout/sessions/{SID}/confirm", {"gatewayPaymentId": "mockpay_ok", "signature": "forged"}, tok=C1["tok"])
+status, bad = call("POST", f"/storefront/checkout/sessions/{SID}/confirm", {"gatewayPaymentId": PAY_OK["gatewayPaymentId"], "signature": "forged"}, tok=C1["tok"])
 check(status == 402 and bad.get("code") == "PAYMENT_FAILED", "a forged payment signature is refused (402)", bad)
 sess = must("POST", "/storefront/checkout/sessions", {"addressId": A_local, "items": items((P1, 3)), "couponCode": CODE, "redeemPoints": 40}, tok=C1["tok"])
 SID = sess["sessionId"]
@@ -429,7 +430,7 @@ must("POST", f"/storefront/checkout/sessions/{d_ok['sessionId']}/abort", tok=C4[
 C5 = new_customer(5)
 A5 = add_address(C5, *LOCAL_LL)
 sf = must("POST", "/storefront/checkout/sessions", {"addressId": A5, "items": items((P2, 5))}, tok=C5["tok"])
-status, bad = call("POST", f"/storefront/checkout/sessions/{sf['sessionId']}/confirm", {"gatewayPaymentId": "mockfail_1", "signature": "nope"}, tok=C5["tok"])
+status, bad = call("POST", f"/storefront/checkout/sessions/{sf['sessionId']}/confirm", {"gatewayPaymentId": f"mockfail_{STAMP}", "signature": "nope"}, tok=C5["tok"])
 check(status == 402, "a declined payment returns 402")
 status, bad = call("POST", f"/storefront/checkout/sessions/{sf['sessionId']}/confirm", PAY_OK, tok=C5["tok"])
 check(status == 409, "the failed session cannot be revived", msg(bad))

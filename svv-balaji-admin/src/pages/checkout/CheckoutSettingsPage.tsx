@@ -18,6 +18,7 @@ const toDraft = (s: CheckoutSettings): Draft => ({
   prepMinutes: s.prepMinutes, minutesPerKm: s.minutesPerKm, shipMinDays: s.shipMinDays, shipMaxDays: s.shipMaxDays,
   codEnabled: s.codEnabled, codMaxAmount: n(s.codMaxAmount),
   reservationTtlMinutes: s.reservationTtlMinutes, deliveryOtpDigits: s.deliveryOtpDigits,
+  creditPeriodStart: s.creditPeriodStart ?? 'DISPATCH',
 });
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -107,6 +108,27 @@ export function CheckoutSettingsPage() {
             <Col xs={12} sm={8}><Field label="COD limit" hint="Empty = no limit.">{num('codMaxAmount', { min: 0, addonBefore: '₹' })}</Field></Col>
             <Col xs={12} sm={8}><Field label="Stock hold while paying (min)" hint="Released automatically if payment fails or is abandoned.">{num('reservationTtlMinutes', { min: 1, max: 120 })}</Field></Col>
             <Col xs={12} sm={8}><Field label="Delivery OTP digits">{num('deliveryOtpDigits', { min: 4, max: 6 })}</Field></Col>
+          </Row>
+
+          <Typography.Title level={5}>5. B2B credit</Typography.Title>
+          <Row gutter={[24, 16]} style={{ marginBottom: 28 }}>
+            <Col xs={24} sm={12}>
+              <Field
+                label="Credit period counts from"
+                hint="When a Net 7/15/30/45 bill falls due. Not yet confirmed by the client — dispatch is the recommendation (the day the retailer receives the goods)."
+              >
+                <Select
+                  style={{ width: '100%' }}
+                  value={d.creditPeriodStart}
+                  disabled={!canManage}
+                  onChange={(v) => set('creditPeriodStart', v)}
+                  options={[
+                    { value: 'DISPATCH', label: 'Dispatch date (recommended)' },
+                    { value: 'ORDER_DATE', label: 'Order date' },
+                  ]}
+                />
+              </Field>
+            </Col>
           </Row>
 
           {canManage ? <Button type="primary" size="large" icon={<CarOutlined />} loading={update.isPending} disabled={!dirty} onClick={() => void save()}>Save Changes</Button> : <Typography.Text type="secondary">View only — Super Admin can change these.</Typography.Text>}

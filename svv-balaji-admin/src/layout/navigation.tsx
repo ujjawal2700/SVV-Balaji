@@ -1,4 +1,5 @@
 import {
+  ThunderboltOutlined,
   DashboardOutlined,
   ExperimentOutlined,
   GoldOutlined,
@@ -71,6 +72,14 @@ export interface NavItem {
   workstream: string;
   /** Which zone this belongs to. Omit for a screen that is relevant to both. */
   zone?: AdminZone;
+  /**
+   * Nests the entry one level deeper under a sub-menu of its section (e.g.
+   * Quick Delivery -> Manage Riders -> Pending Approval). Entries sharing a
+   * group key are gathered under one sub-menu at the first one's position.
+   */
+  group?: { key: string; label: string };
+  /** A live count shown next to the label (e.g. riders awaiting approval). */
+  count?: 'pendingRiders';
 }
 
 export interface NavSection {
@@ -504,7 +513,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: 'banner-management',
-    label: 'Banner Management',
+    label: 'Banner & Homepage',
     icon: <PictureOutlined />,
     items: [
       {
@@ -513,6 +522,16 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Banner Management',
         permission: 'BANNER_VIEW',
         description: 'Manage storefront homepage hero banners, promotional carousels, and target channels.',
+        endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'home-sections',
+        path: '/home-sections',
+        label: 'Homepage Sections',
+        permission: 'HOME_SECTION_VIEW',
+        description: 'Organize dynamic product sections displayed on customer homepage.',
         endpoints: [],
         workstream: 'WS2.5',
         zone: 'commerce',
@@ -658,6 +677,58 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: 'quick-delivery',
+    label: 'Quick Delivery',
+    icon: <ThunderboltOutlined />,
+    items: [
+      {
+        key: 'delivery-board', path: '/delivery-board', label: 'Delivery Board', permission: 'DELIVERY_TASKS_VIEW',
+        description: 'Every local / Quick delivery: auto-offered to riders, waiting on staff, failed and re-attempted.',
+        endpoints: ['GET /delivery/tasks', 'POST /delivery/tasks/:id/assign'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-pending', path: '/riders/pending', label: 'Pending Approval', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' }, count: 'pendingRiders',
+        description: 'Rider sign-ups waiting for review: licence photo, vehicle, approve with a home outlet or reject with a reason.',
+        endpoints: ['GET /riders?status=PENDING_APPROVAL', 'POST /riders/:id/approve', 'POST /riders/:id/reject'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders', path: '/riders', label: 'All Riders', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'Every rider by status: active, suspended, rejected, unverified. Open one for deliveries, earnings, cash and settings.',
+        endpoints: ['GET /riders', 'GET /riders/:id'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-live', path: '/riders/live', label: 'Live Riders', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'Riders online right now on a map, with the deliveries each one is carrying.',
+        endpoints: ['GET /riders/live'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-earnings', path: '/riders/earnings', label: 'Rider Earnings', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'What every rider earned in a period, split by base, distance, incentives and bonuses; adjustments.',
+        endpoints: ['GET /riders/earnings-report', 'POST /riders/:id/earnings/adjustments'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-cash', path: '/riders/cash', label: 'Cash & Deposits', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'COD cash each rider is holding and the deposits handed over at the outlet.',
+        endpoints: ['GET /riders/cash-report', 'POST /riders/:id/cash/deposits'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-pay-rules', path: '/riders/pay-rules', label: 'Pay Rules', permission: 'DELIVERY_TASKS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'How riders are paid: base, distance slabs, peak hour, zone incentive, daily / weekly targets, waiting time, cancel / fail compensation.',
+        endpoints: ['GET /delivery/earning-rules', 'POST /delivery/earning-rules'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'delivery-zones', path: '/delivery-zones', label: 'Delivery Zones', permission: 'DELIVERY_ZONES_VIEW',
+        description: 'Where Quick Delivery runs: boundaries, pincodes, radius, outlet, promised time, hours, fee and fallback.',
+        endpoints: ['GET /delivery-zones', 'POST /delivery-zones'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'delivery-settings', path: '/delivery-settings', label: 'Delivery Settings', permission: 'DELIVERY_TASKS_VIEW',
+        description: 'Auto-offer timing, geofence, COD rules and failed-delivery reasons. Rider pay is under Manage Riders.',
+        endpoints: ['GET /delivery/settings', 'GET /delivery/earning-rules'], workstream: 'WS3.4', zone: 'commerce',
+      },
+    ],
+  },
+  {
     key: 'crm',
     label: 'CRM & Accounts',
     icon: <UsergroupAddOutlined />,
@@ -679,6 +750,16 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'CUSTOMER_ACCOUNT_VIEW',
         description: 'Self-service Kirana/Retailer registrations awaiting Super Admin approval, GSTIN compliance audit, and address verification.',
         endpoints: [],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'receivables',
+        path: '/receivables',
+        label: 'Receivables & Credit',
+        permission: 'RECEIVABLES_VIEW',
+        description: 'What B2B customers owe on credit, due dates, overdue ageing, payments received and statements of account.',
+        endpoints: ['GET /receivables', 'GET /receivables/customers/:id', 'POST /receivables/customers/:id/receipts', 'POST /receivables/receipts/:id/void'],
         workstream: 'WS2.5',
         zone: 'commerce',
       },

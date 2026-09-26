@@ -43,6 +43,8 @@ export interface RetailerUserProfile {
   walletBalance: number;
   creditLimit: number;
   creditUsed: number;
+  /** PREPAID or CREDIT_7..CREDIT_45 - see hooks/useRetailerCredit. */
+  paymentTerms: string;
   /** This account's own shareable refer-a-friend code. Undefined until the account has a Customer row. */
   referralCode?: string;
 }
@@ -114,6 +116,7 @@ function toRetailerProfile(account: StorefrontAccountSummary): RetailerUserProfi
     walletBalance: 0,
     creditLimit: account.creditLimit ?? 0,
     creditUsed: account.creditUsed ?? 0,
+    paymentTerms: account.paymentTerms ?? 'PREPAID',
     referralCode: account.referralCode ?? undefined,
   };
 }

@@ -10,7 +10,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 export PYTHONIOENCODING=utf-8
 status=0
-for s in e2e-auth-flow.py e2e-recall-flow.py e2e-loyalty-flow.py e2e-checkout-flow.py; do
+for s in e2e-auth-flow.py e2e-recall-flow.py e2e-loyalty-flow.py e2e-checkout-flow.py e2e-receivables-flow.py e2e-quick-delivery-flow.py e2e-rider-flow.py; do
   echo "=== $s"
   python "$s" | tail -4 || status=1
   [ "${PIPESTATUS[0]}" -eq 0 ] || status=1

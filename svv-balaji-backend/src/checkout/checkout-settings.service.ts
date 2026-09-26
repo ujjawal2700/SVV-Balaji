@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CheckoutSettings } from '@prisma/client';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { CheckoutSettings, CreditPeriodStart } from '@prisma/client';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 
 const money = (label: string) => ({ each: false, message: `${label} must be 0 or more` });
@@ -36,6 +36,13 @@ export class UpdateCheckoutSettingsDto {
 
   @IsOptional() @IsInt() @Min(4) @Max(6)
   deliveryOtpDigits?: number;
+
+  @ApiPropertyOptional({
+    enum: CreditPeriodStart,
+    description: 'B2B credit: the day "Net N days" counts from. DISPATCH (default, recommended) or ORDER_DATE.',
+  })
+  @IsOptional() @IsEnum(CreditPeriodStart)
+  creditPeriodStart?: CreditPeriodStart;
 }
 
 export interface EffectiveCheckoutSettings {

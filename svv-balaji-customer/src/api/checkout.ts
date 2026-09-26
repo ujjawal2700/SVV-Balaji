@@ -49,6 +49,8 @@ export interface CheckoutRequest {
   /** Referral coins to spend. Only meaningful in wallet SEPARATE mode. */
   redeemReferralPoints?: number;
   paymentMode?: PaymentMode;
+  /** QUICK only when the quote offered it as available. */
+  deliverySpeed?: 'STANDARD' | 'QUICK';
   /** The total the customer was shown - the server only compares it to notice a price change. */
   expectedTotal?: number;
 }
@@ -57,6 +59,8 @@ export interface Quote {
   channel: 'B2B' | 'B2C';
   fulfillment: {
     method: FulfillmentMethod;
+    speed?: 'STANDARD' | 'QUICK';
+    zoneName?: string | null;
     nodeId: string;
     nodeName: string;
     nodeKind: string;
@@ -65,6 +69,11 @@ export interface Quote {
     etaMax: string;
     etaLabel: string;
     reason: string;
+  };
+  /** Both delivery choices; `quick` null = do not show the Quick option at all. */
+  deliveryOptions?: {
+    standard: { method: FulfillmentMethod; etaLabel: string; fee: number; reason: string };
+    quick: { available: boolean; reason: string; etaLabel: string | null; fee: number | null; zoneName: string | null } | null;
   };
   lines: Array<{
     productId: string; name: string; sku: string; image: string | null;

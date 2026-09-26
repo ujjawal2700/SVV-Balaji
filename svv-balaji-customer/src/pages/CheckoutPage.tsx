@@ -41,6 +41,7 @@ import {
   type CheckoutSession,
   type PaymentMode,
   type PlacedOrder,
+  type Quote,
 } from '../api/checkout';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
@@ -91,6 +92,10 @@ export function CheckoutPage() {
   const [redeem, setRedeem] = useState(0);
   const [redeemReferral, setRedeemReferral] = useState(0);
   const [mode, setMode] = useState<PaymentMode | undefined>();
+  // Quick is pre-selected the first time the quote offers it; the customer can switch.
+  const [speed, setSpeed] = useState<'STANDARD' | 'QUICK'>('STANDARD');
+  const [speedTouched, setSpeedTouched] = useState(false);
+  const [quickDropped, setQuickDropped] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
   const [mockSession, setMockSession] = useState<CheckoutSession | null>(null);
 
@@ -114,9 +119,10 @@ export function CheckoutPage() {
             redeemPoints: redeem || undefined,
             redeemReferralPoints: redeemReferral || undefined,
             paymentMode: mode,
+            deliverySpeed: speed,
           }
         : null,
-    [addressId, cart.lines, couponCode, redeem, redeemReferral, mode],
+    [addressId, cart.lines, couponCode, redeem, redeemReferral, mode, speed],
   );
 
   const quoteQuery = useQuery({
@@ -127,7 +133,25 @@ export function CheckoutPage() {
     staleTime: 0,
   });
   const quote = quoteQuery.data;
-  const quoteError = quoteQuery.error ? checkoutError(quoteQuery.error).message : null;
+  const quoteErr = quoteQuery.error ? checkoutError(quoteQuery.error) : null;
+  // Quick stopped being possible (sold out at the store, closed, moved address): fall back and say why.
+  const quickRefused = quoteErr?.code === 'QUICK_UNAVAILABLE';
+  const quoteError = quoteErr && !quickRefused ? quoteErr.message : null;
+  useEffect(() => {
+    if (quickRefused && speed === 'QUICK') {
+      setQuickDropped(quoteErr?.message ?? 'Quick Delivery is not available right now');
+      setSpeed('STANDARD');
+    }
+  }, [quickRefused, speed, quoteErr?.message]);
+  useEffect(() => {
+    if (!speedTouched && speed === 'STANDARD' && quote?.deliveryOptions?.quick?.available) setSpeed('QUICK');
+  }, [quote?.deliveryOptions?.quick?.available, speedTouched, speed]);
+  useEffect(() => {
+    // A new address is a new decision.
+    setSpeedTouched(false);
+    setQuickDropped(null);
+    setSpeed('STANDARD');
+  }, [addressId]);
   const address = addresses.data?.find((a) => a.id === addressId);
 
   const applyCoupon = (code: string) => {
@@ -411,24 +435,16 @@ export function CheckoutPage() {
                 ) : quoteError ? (
                   <Alert type="error" showIcon message="Delivery Quote Error" description={quoteError} />
                 ) : f ? (
-                  <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
-                        <CarOutlined style={{ fontSize: 20 }} />
-                      </div>
-                      <div>
-                        <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
-                          Approximate Delivery
-                        </Typography.Text>
-                        <Typography.Text strong style={{ fontSize: 14, color: '#0f172a' }}>
-                          Estimated Delivery: {f.etaLabel}
-                        </Typography.Text>
-                      </div>
-                    </div>
-                    <Tag color="green" style={{ borderRadius: 6, fontWeight: 600, margin: 0, padding: '2px 10px' }}>
-                      {quote?.totals?.deliveryFee === 0 ? 'FREE DELIVERY' : 'STANDARD'}
-                    </Tag>
-                  </div>
+                  <DeliveryChoice
+                    quote={quote!}
+                    speed={f.speed === 'QUICK' ? 'QUICK' : 'STANDARD'}
+                    dropped={quickDropped}
+                    onChange={(next) => {
+                      setSpeedTouched(true);
+                      setQuickDropped(null);
+                      setSpeed(next);
+                    }}
+                  />
                 ) : (
                   <Typography.Text type="secondary" style={{ fontSize: 13 }}>Select a delivery address to view approximate delivery date.</Typography.Text>
                 )}
@@ -1022,6 +1038,60 @@ function PriceRow({ label, value, bold, green }: { label: string; value: string;
     >
       <span>{label}</span>
       <span style={{ fontWeight: green || bold ? 700 : 500 }}>{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Quick vs standard delivery. Quick shows only when the address is in a Quick
+ * zone; greyed out with the reason when the zone cannot promise it right now.
+ */
+function DeliveryChoice({
+  quote, speed, dropped, onChange,
+}: {
+  quote: Quote;
+  speed: 'STANDARD' | 'QUICK';
+  dropped: string | null;
+  onChange: (s: 'STANDARD' | 'QUICK') => void;
+}) {
+  const opts = quote.deliveryOptions;
+  const quick = opts?.quick ?? null;
+  const standard = opts?.standard ?? { etaLabel: quote.fulfillment.etaLabel, fee: quote.totals.deliveryFee, reason: quote.fulfillment.reason, method: quote.fulfillment.method };
+  const fee = (n: number | null) => (n === null ? '' : n === 0 ? 'FREE' : formatInr(n));
+  const option = (key: 'QUICK' | 'STANDARD', title: string, eta: string, price: string, sub: string, icon: React.ReactNode, disabled = false) => {
+    const on = speed === key;
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange(key)}
+        style={{
+          flex: 1, minWidth: 200, textAlign: 'left', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
+          padding: '12px 14px', borderRadius: 12, background: on ? (key === 'QUICK' ? '#fff7ed' : '#f0fdf4') : '#fff',
+          border: `2px solid ${on ? (key === 'QUICK' ? '#f97316' : '#16a34a') : '#e2e8f0'}`, display: 'flex', gap: 12, alignItems: 'flex-start',
+        }}
+      >
+        <span style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center', background: key === 'QUICK' ? '#ffedd5' : '#dcfce7', color: key === 'QUICK' ? '#ea580c' : '#16a34a', fontSize: 18 }}>{icon}</span>
+        <span style={{ flex: 1 }}>
+          <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <b style={{ color: '#0f172a', fontSize: 14 }}>{title}</b>
+            <b style={{ color: price === 'FREE' ? '#16a34a' : '#0f172a', fontSize: 13 }}>{price}</b>
+          </span>
+          <span style={{ display: 'block', fontSize: 13, color: key === 'QUICK' && !disabled ? '#c2410c' : '#475569', fontWeight: 600, marginTop: 2 }}>{eta}</span>
+          <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 2 }}>{sub}</span>
+        </span>
+      </button>
+    );
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {quick
+          ? option('QUICK', 'Quick Delivery', quick.available ? `In ${quick.etaLabel}` : 'Not available now', quick.available ? fee(quick.fee) : '', quick.available ? `From your nearby store${quick.zoneName ? ` · ${quick.zoneName}` : ''}` : quick.reason, <ThunderboltOutlined />, !quick.available)
+          : null}
+        {option('STANDARD', quick ? 'Standard Delivery' : 'Delivery', `Estimated ${standard.etaLabel}`, fee(standard.fee), standard.reason, <CarOutlined />)}
+      </div>
+      {dropped ? <Alert style={{ marginTop: 10 }} type="warning" showIcon message={`Switched to standard delivery: ${dropped}`} /> : null}
     </div>
   );
 }

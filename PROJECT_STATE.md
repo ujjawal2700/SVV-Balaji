@@ -16,6 +16,24 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
+**26 Sep (latest) — Quick Delivery + Rider app (WS3.4).**
+Super Admin draws delivery zones on a map (boundary / pincodes / radius cap, serving outlet, promised minutes, hours,
+fee, product scope, fallback). Checkout offers Quick only inside an open zone whose outlet has every item. Packed local
+orders become delivery tasks auto-offered to riders (self sign-up + staff approval) in the new **`svv-balaji-rider`** app:
+accept/reject, pickup (order dispatched), COD collection (order paid only then), doorstep OTP, failed delivery with
+reasons (never auto-cancels), re-attempts, rider pay from configurable rules. Admin: Delivery Board, Riders, Delivery
+Zones, Delivery Settings & Rider Pay. **Scope:** 15-20 min quick commerce is not in the FRD - sits under A-10.
+**Deploy:** 4 migrations (`delivery_zones_quick`, `riders_delivery_tasks`, `rider_refresh_grace`, + receivables),
+new env `RIDER_JWT_ACCESS_SECRET` / `RIDER_JWT_REFRESH_SECRET`, serve the rider app, nginx must forward `/socket.io`.
+Rider screens without a design yet are listed in `DEV_LOG.md`. See `DEV_LOG.md` (2026-09-26, latest+1..+4).
+
+**26 Sep — B2B credit receivables.** Credit bills now have due dates, overdue ageing, payments received
+(recorded by staff, applied oldest-due-first, voidable) and a statement of account — admin **Receivables & Credit**
+screen + retailer page Credit tab, and the retailer's own `/wallet`. Credit start is a Super Admin setting defaulting to
+**dispatch date** — the client still has to confirm this (FRD34 gaps note §3); their answer is now a setting, not code.
+Unconfirmed retailer promises (20% margin, ₹50,000 credit, 15-day credit) and fake fallback figures removed from the
+customer app. **Needs `prisma migrate deploy` + generate + API restart.** See `DEV_LOG.md` (2026-09-26, latest).
+
 **25 Sep (latest) — Field app works offline.** Work recorded with no signal (farmers, plots, visits with photos,
 planned visits, seed handouts, training) is stored on the phone and synced automatically, in order and exactly once,
 when the connection returns; the app opens offline with the last data it saw. Refused changes wait on More → Offline
@@ -118,7 +136,7 @@ screen at `/settings/referrals`: referrer/referee reward amounts (coins), which 
 events credits them, and a program-wide on/off switch. Not a UI shell — `ReferralService` now
 actually credits coins (with a ledger, `CoinTransaction`) at the configured trigger, live, for
 referrals already in flight and not just new ones. Two of the four triggers required touching
-`SalesService` (Ujjawal's WS1.5) — logged clearly in `DEV_LOG.md`, every call best-effort so a
+`SalesService` (WS1.5) — logged clearly in `DEV_LOG.md`, every call best-effort so a
 reward-crediting bug can never block an order or a signup. 357 backend tests passing (was 343).
 Full detail in `DEV_LOG.md` (2026-09-17, "even later").
 
@@ -147,7 +165,7 @@ history are still 100% mock — only identity (login, registration, `/me`) is re
 **16 Sep — Catalog + Inventory (first slice of the "customer side module").** The client/user
 listed ~10 commerce subsystems (dashboard, catalog, pricing, taxonomy, inventory, B2C+B2B orders,
 CRM, promotions, invoicing, analytics). Agreed to build Catalog + Inventory first and explicitly
-skip Invoicing & Payments — it overlaps Ujjawal's assigned WS4.4 (GST e-invoicing) and WS4.5
+skip Invoicing & Payments — it overlaps WS4.4 (GST e-invoicing) and WS4.5
 (Razorpay). Built: a `Category` model (two-level hierarchy, replaces the free-text
 `Product.category` string), a real Category admin screen, product SEO fields (slug/meta
 title/description) and inventory thresholds (reorder point/safety stock/backorder), a new
@@ -484,7 +502,7 @@ must not be read as "nearly ready".
 
 ## 3. What happens next
 
-### Ujjawal — backend & integrations
+### Raunak — backend & integrations
 
 1. ~~**WS1.5 order intake + WS1.6 pricing engine**~~ — ✅ **done 11 Aug.** Customers, dated
    per-channel price lists, orders, batch-wise allocation and the fulfilment lifecycle are in.
@@ -554,8 +572,8 @@ must not be read as "nearly ready".
 | A-09 | Staging environment for client access | Appzeto | 21 Aug | Open |
 | **A-10** | **Agree cost & timeline for added B2C scope, in writing** | Ravi / SVV Balaji | **18 Aug** | **Open — Critical** |
 | **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
-| **A-12** | **Agree a pagination convention for list endpoints** | Ujjawal / Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
-| A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Ujjawal / Raunak | 15 Aug | Open — shapes WS2.5 screens |
+| **A-12** | **Agree a pagination convention for list endpoints** | Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
+| A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Raunak | 15 Aug | Open — shapes WS2.5 screens |
 | A-14 | Fix permission seeding so a new key added to an already-configured role's defaults actually grants | Raunak | — | ✅ **Closed 21 Sep** — `permission_key_state` + `PermissionsService.backfillNewPermissions()`; new keys reach configured roles on boot, revocations stick. See `DEV_LOG.md` (2026-09-21) |
 
 ---

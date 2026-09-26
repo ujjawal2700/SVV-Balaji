@@ -216,12 +216,16 @@ model User {
   // Phase 1 back-relations
   farmerVerificationLogs    FarmerVerificationLog[]
   seedDistributionsGiven    SeedDistribution[]
-  seedStockCreated          SeedStock[]         @relation("SeedStockCreatedBy")
-  seedStockMovements        SeedStockMovement[] @relation("SeedStockMovementBy")
+  seedStockCreated          SeedStock[]             @relation("SeedStockCreatedBy")
+  creditReceiptsRecorded    CreditReceipt[]         @relation("CreditReceiptRecordedBy")
+  ridersReviewed            Rider[]                 @relation("RiderReviewedBy")
+  riderCashRecorded         RiderCashEntry[]        @relation("RiderCashRecordedBy")
+  creditReceiptsVoided      CreditReceipt[]         @relation("CreditReceiptVoidedBy")
+  seedStockMovements        SeedStockMovement[]     @relation("SeedStockMovementBy")
   trainingSessionsConducted TrainingSession[]
   fieldVisitsAsExpert       FieldVisit[]
-  fieldVisitPlansAssigned   FieldVisitPlan[] @relation("FieldVisitPlanExpert")
-  fieldVisitPlansCreated    FieldVisitPlan[] @relation("FieldVisitPlanCreatedBy")
+  fieldVisitPlansAssigned   FieldVisitPlan[]        @relation("FieldVisitPlanExpert")
+  fieldVisitPlansCreated    FieldVisitPlan[]        @relation("FieldVisitPlanCreatedBy")
 
   // Phase 2 back-relations
   procurementPlansCreated ProcurementPlan[]       @relation("ProcurementPlansCreated")
@@ -1788,6 +1792,9 @@ model Warehouse {
   contactPhone    String?
 
   stockReservations StockReservation[]
+  deliveryZones     DeliveryZone[]
+  riders            Rider[]
+  deliveryTasks     DeliveryTask[]
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -1860,6 +1867,25 @@ enum PaymentTerms {
   CREDIT_45
 }
 
+/// The day a credit order's "Net N days" starts counting from. A commercial
+/// decision the client has not confirmed (SVV_Balaji_FRD34_Reporting_Gaps.md
+/// section 3), so it is a Super Admin setting rather than code: DISPATCH is the
+/// documented recommendation and the default.
+enum CreditPeriodStart {
+  DISPATCH
+  ORDER_DATE
+}
+
+/// How a retailer settled a credit bill. Recorded by staff; no money moves
+/// through the system for these.
+enum ReceiptMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  OTHER
+}
+
 enum OrderStatus {
   DRAFT
   PLACED
@@ -1897,8 +1923,9 @@ model Customer {
   state           String?
   pincode         String?
 
-  creditLimit  Decimal?     @db.Decimal(14, 2)
-  paymentTerms PaymentTerms @default(PREPAID)
+  creditLimit    Decimal?        @db.Decimal(14, 2)
+  paymentTerms   PaymentTerms    @default(PREPAID)
+  creditReceipts CreditReceipt[]
 
   status CustomerStatus @default(ACTIVE)
 
@@ -2271,8 +2298,13 @@ model Order {
   taxTotal Decimal @default(0) @db.Decimal(14, 2)
   total    Decimal @default(0) @db.Decimal(14, 2)
 
-  paymentStatus PaymentStatus @default(PENDING)
-  paymentTerms  PaymentTerms  @default(PREPAID)
+  paymentStatus     PaymentStatus             @default(PENDING)
+  paymentTerms      PaymentTerms              @default(PREPAID)
+  /// Credit orders: how much of `total` has been settled by receipts (sum of
+  /// this order's live CreditReceiptAllocation rows). PARTIAL / PAID follow
+  /// from it. Outstanding = total - amountPaid.
+  amountPaid        Decimal                   @default(0) @db.Decimal(14, 2)
+  creditAllocations CreditReceiptAllocation[]
 
   /// Sales executive who captured the order. Null for a B2C order the consumer
   /// placed themselves.
@@ -2358,6 +2390,12 @@ model Order {
 
   riderName  String?
   riderPhone String?
+
+  /// STANDARD unless the customer chose Quick Delivery in an eligible zone.
+  deliverySpeed  DeliverySpeed  @default(STANDARD)
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone?  @relation(fields: [deliveryZoneId], references: [id])
+  deliveryTasks  DeliveryTask[]
 
   checkoutSessionId String?          @unique
   checkoutSession   CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
@@ -3005,6 +3043,24 @@ model Scheme {
   @@map("schemes")
 }
 
+/// Super Admin managed homepage product sections (e.g. "Best of the Basics").
+model HomeSection {
+  id String @id @default(uuid())
+
+  title          String
+  subtitle       String?
+  targetAudience BannerAudience @default(ALL)
+  displayOrder   Int            @default(0)
+  isActive       Boolean        @default(true)
+  productIds     String[]       @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+  @@map("home_sections")
+}
+
 // ---------------------------------------------------------------------------
 // Loyalty rewards (percentage-based, configured by Super Admin)
 //
@@ -3281,6 +3337,9 @@ model CheckoutSettings {
   /// How long stock is held while a customer pays.
   reservationTtlMinutes Int @default(15)
   deliveryOtpDigits     Int @default(4)
+
+  /// B2B credit: the day "Net N days" counts from. See enum CreditPeriodStart.
+  creditPeriodStart CreditPeriodStart @default(DISPATCH)
 
   updatedById String?
   updatedAt   DateTime @updatedAt
@@ -3698,4 +3757,597 @@ model ProductReview {
   @@index([customerId])
   @@index([productId])
   @@map("product_reviews")
+}
+
+/// A payment a B2B customer made against their credit bills (FRD 24 credit
+/// terms). Staff record it; it is applied to the customer's open credit orders,
+/// oldest due first, through CreditReceiptAllocation rows. A mistaken receipt
+/// is voided, never deleted, so the statement of account keeps its history.
+model CreditReceipt {
+  id            String        @id @default(uuid())
+  /// RCPT-YYYYMMDD-NNN
+  receiptNumber String        @unique
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  amount        Decimal       @db.Decimal(14, 2)
+  method        ReceiptMethod
+  /// UTR, cheque number, UPI reference.
+  reference     String?
+  /// The day the money was received (calendar date, not a timestamp).
+  receivedOn    DateTime      @db.Date
+  note          String?
+
+  recordedById String
+  recordedBy   User   @relation("CreditReceiptRecordedBy", fields: [recordedById], references: [id])
+
+  voidedAt   DateTime?
+  voidReason String?
+  voidedById String?
+  voidedBy   User?     @relation("CreditReceiptVoidedBy", fields: [voidedById], references: [id])
+
+  allocations CreditReceiptAllocation[]
+  createdAt   DateTime                  @default(now())
+
+  @@index([customerId, receivedOn])
+  @@map("credit_receipts")
+}
+
+/// How much of one receipt settled one order. Deleted when the receipt is voided
+/// (the receipt row itself stays, marked void).
+model CreditReceiptAllocation {
+  id        String        @id @default(uuid())
+  receiptId String
+  receipt   CreditReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderId   String
+  order     Order         @relation(fields: [orderId], references: [id])
+  amount    Decimal       @db.Decimal(14, 2)
+  createdAt DateTime      @default(now())
+
+  @@unique([receiptId, orderId])
+  @@index([orderId])
+  @@map("credit_receipt_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Delivery zones & Quick Delivery (src/delivery)
+// ---------------------------------------------------------------------------
+
+enum DeliverySpeed {
+  STANDARD
+  QUICK
+}
+
+/// Which products a zone's Quick Delivery promise covers. Stock at the serving
+/// outlet is always required on top of this - nothing can be delivered in
+/// minutes from a shelf it is not on.
+enum ZoneProductScope {
+  ALL_PRODUCTS
+  SELECTED_CATEGORIES
+}
+
+/// What a customer in the zone gets when Quick Delivery is not possible for
+/// this cart (out of hours, not stocked at the outlet, product not eligible).
+enum ZoneFallback {
+  /// The normal routing: local delivery from an outlet in range, else courier.
+  STANDARD
+  /// Always courier from the central depot.
+  COURIER
+}
+
+/// A Super Admin-defined delivery area. Eligibility is decided from the
+/// customer's actual delivery location - never from city names in code.
+///
+/// Coverage: an address is in the zone when its pin falls inside `boundary`,
+/// or (for an address without a pin, or a zone with no drawn boundary) its
+/// pincode is in `pincodes`. `maxRadiusKm` is a hard cap on distance from the
+/// serving outlet on top of either.
+model DeliveryZone {
+  id           String  @id @default(uuid())
+  name         String
+  /// Short code shown to staff/riders, e.g. "NGP-DHARAMPETH".
+  code         String  @unique
+  isActive     Boolean @default(true)
+  /// Off = customers here get normal delivery; the zone still exists.
+  quickEnabled Boolean @default(false)
+
+  /// The outlet/warehouse that serves Quick Delivery in this zone.
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  /// Polygon as [[lat, lng], ...] (first point not repeated). Null = no drawn boundary.
+  boundary    Json?
+  pincodes    String[] @default([])
+  maxRadiusKm Decimal? @db.Decimal(6, 2)
+
+  /// Promised window, e.g. 15-20. No code default: set per zone.
+  targetMinMinutes Int
+  targetMaxMinutes Int
+
+  /// [{ "day": 0-6 (Sun-Sat), "open": "HH:mm", "close": "HH:mm" }, ...]. Empty = always open.
+  operatingHours Json   @default("[]")
+  timezone       String @default("Asia/Kolkata")
+
+  productScope ZoneProductScope @default(ALL_PRODUCTS)
+  categoryIds  String[]         @default([])
+  fallback     ZoneFallback     @default(STANDARD)
+
+  quickFee       Decimal  @default(0) @db.Decimal(10, 2)
+  /// Quick Delivery is free at or above this cart value. Null = never free.
+  quickFreeAbove Decimal? @db.Decimal(12, 2)
+
+  /// When zones overlap, the higher priority wins; ties go to the nearer outlet.
+  priority Int @default(0)
+
+  orders        Order[]
+  deliveryTasks DeliveryTask[]
+  earningRules  RiderEarningRule[]
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([warehouseId])
+  @@map("delivery_zones")
+}
+
+// ---------------------------------------------------------------------------
+// Riders, delivery tasks, COD and rider earnings (src/delivery)
+// ---------------------------------------------------------------------------
+
+enum RiderStatus {
+  /// Signed up, phone not yet verified by OTP.
+  PENDING_VERIFICATION
+  /// Phone verified, waiting for staff to approve and assign an outlet.
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum RiderAvailability {
+  OFFLINE
+  ONLINE
+}
+
+enum VehicleType {
+  BICYCLE
+  MOTORCYCLE
+  SCOOTER
+  EV_SCOOTER
+  OTHER
+}
+
+enum RiderOtpPurpose {
+  VERIFY_PHONE
+  RESET_PASSWORD
+}
+
+/// A delivery partner. Separate from staff `User` and storefront accounts:
+/// own login (phone/email + password, OTP-verified phone), own tokens.
+model Rider {
+  id              String      @id @default(uuid())
+  /// RDR-000001, issued on approval.
+  code            String?     @unique
+  fullName        String
+  phone           String      @unique
+  email           String?     @unique
+  passwordHash    String
+  status          RiderStatus @default(PENDING_VERIFICATION)
+  phoneVerifiedAt DateTime?
+
+  city          String?
+  vehicleType   VehicleType?
+  vehicleNumber String?
+  licenceNumber String?
+  photoUrl      String?
+  /// Driving licence / ID photo uploaded at sign-up, for the approval check.
+  documentUrl   String?
+
+  /// Home outlet. Riders are only offered tasks picked up here. Set on approval.
+  warehouseId    String?
+  warehouse      Warehouse? @relation(fields: [warehouseId], references: [id])
+  /// How many tasks the rider may hold at once (batching); 1 = one at a time.
+  maxActiveTasks Int        @default(1)
+
+  availability          RiderAvailability @default(OFFLINE)
+  availabilityChangedAt DateTime?
+  lastLatitude          Decimal?          @db.Decimal(9, 6)
+  lastLongitude         Decimal?          @db.Decimal(9, 6)
+  lastLocationAt        DateTime?
+
+  reviewedById    String?
+  reviewedBy      User?     @relation("RiderReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  sessions       RiderSession[]
+  otps           RiderOtp[]
+  tasks          DeliveryTask[]
+  offers         DeliveryOffer[]
+  codCollections CodCollection[]
+  cashEntries    RiderCashEntry[]
+  earnings       RiderEarning[]
+  notifications  RiderNotification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([warehouseId, status, availability])
+  @@map("riders")
+}
+
+model RiderSession {
+  id               String    @id @default(uuid())
+  riderId          String
+  rider            Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  /// SHA-256 of the current refresh token (rotated on every refresh).
+  refreshTokenHash String
+  /// The token it replaced, accepted for a short grace window after rotation:
+  /// on mobile data a refresh response is often lost, and the app retries
+  /// with the old token. Treating that as theft would log riders out mid-shift.
+  previousRefreshHash String?
+  rotatedAt           DateTime?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime  @default(now())
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+
+  @@index([riderId])
+  @@map("rider_sessions")
+}
+
+model RiderOtp {
+  id         String          @id @default(uuid())
+  phone      String
+  codeHash   String
+  purpose    RiderOtpPurpose
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int             @default(0)
+  riderId    String?
+  rider      Rider?          @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+
+  @@index([phone, createdAt])
+  @@map("rider_otps")
+}
+
+enum DeliveryTaskKind {
+  ORDER_DELIVERY
+  /// Reserved for return / exchange pickups (same machinery, reverse direction).
+  RETURN_PICKUP
+}
+
+enum DeliveryTaskStatus {
+  READY_FOR_PICKUP
+  OFFERED
+  ASSIGNED
+  AT_PICKUP
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  AT_DROP
+  DELIVERED
+  FAILED
+  RETURNED_TO_STORE
+  CANCELLED
+}
+
+/// One trip by one rider. An order that fails and is re-attempted gets a new
+/// task (attempt 2, 3 ...); the order's own status machine is untouched and is
+/// only advanced at pickup (DISPATCHED) and doorstep OTP (DELIVERED).
+model DeliveryTask {
+  id         String             @id @default(uuid())
+  /// DT-YYYYMMDD-NNN
+  taskNumber String             @unique
+  kind       DeliveryTaskKind   @default(ORDER_DELIVERY)
+  status     DeliveryTaskStatus @default(READY_FOR_PICKUP)
+  speed      DeliverySpeed      @default(STANDARD)
+  attempt    Int                @default(1)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  /// Pickup point.
+  warehouseId String
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id])
+  zoneId      String?
+  zone        DeliveryZone? @relation(fields: [zoneId], references: [id])
+
+  /// Drop point, frozen from the order's address snapshot.
+  dropName      String
+  dropPhone     String
+  dropAddress   String
+  dropLatitude  Decimal? @db.Decimal(9, 6)
+  dropLongitude Decimal? @db.Decimal(9, 6)
+  /// Outlet -> customer, straight line (km).
+  distanceKm    Decimal? @db.Decimal(8, 2)
+
+  /// Cash to collect at the door (0 for prepaid).
+  codAmount  Decimal   @default(0) @db.Decimal(14, 2)
+  /// The time the customer was promised (order etaMax).
+  promisedBy DateTime?
+
+  riderId               String?
+  rider                 Rider?  @relation(fields: [riderId], references: [id])
+  /// No rider accepted / auto-offer off: staff must assign.
+  needsManualAssignment Boolean @default(false)
+  offerRound            Int     @default(0)
+
+  readyAt               DateTime  @default(now())
+  assignedAt            DateTime?
+  arrivedPickupAt       DateTime?
+  pickedUpAt            DateTime?
+  outForDeliveryAt      DateTime?
+  arrivedDropAt         DateTime?
+  deliveredAt           DateTime?
+  failedAt              DateTime?
+  returnedAt            DateTime?
+  cancelledAt           DateTime?
+  /// Arrival confirmed by location within the geofence (used for waiting-time pay).
+  arrivedPickupVerified Boolean   @default(false)
+  arrivedDropVerified   Boolean   @default(false)
+
+  failureReasonCode String?
+  failureNote       String?
+  failureProofUrl   String?
+  /// Where the task was when it was cancelled - drives cancellation pay.
+  cancelStage       String?
+  cancelReason      String?
+
+  events   DeliveryTaskEvent[]
+  offers   DeliveryOffer[]
+  cod      CodCollection?
+  earnings RiderEarning[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riderId, status])
+  @@index([warehouseId, status])
+  @@index([orderId])
+  @@map("delivery_tasks")
+}
+
+model DeliveryTaskEvent {
+  id          String       @id @default(uuid())
+  taskId      String
+  task        DeliveryTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// READY, OFFERED, OFFER_REJECTED, OFFER_EXPIRED, ASSIGNED, AT_PICKUP, PICKED_UP, ...
+  type        String
+  note        String?
+  riderId     String?
+  actorUserId String?
+  latitude    Decimal?     @db.Decimal(9, 6)
+  longitude   Decimal?     @db.Decimal(9, 6)
+  createdAt   DateTime     @default(now())
+
+  @@index([taskId, createdAt])
+  @@map("delivery_task_events")
+}
+
+enum DeliveryOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+}
+
+model DeliveryOffer {
+  id           String              @id @default(uuid())
+  taskId       String
+  task         DeliveryTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  riderId      String
+  rider        Rider               @relation(fields: [riderId], references: [id])
+  round        Int
+  status       DeliveryOfferStatus @default(PENDING)
+  offeredAt    DateTime            @default(now())
+  expiresAt    DateTime
+  respondedAt  DateTime?
+  rejectReason String?
+
+  @@index([riderId, status])
+  @@index([taskId])
+  @@map("delivery_offers")
+}
+
+enum CodMethod {
+  CASH
+  UPI
+}
+
+/// The rider confirming cash (or UPI to the company) at the door. A delivered
+/// COD order is only "paid" once this exists.
+model CodCollection {
+  id              String       @id @default(uuid())
+  taskId          String       @unique
+  task            DeliveryTask @relation(fields: [taskId], references: [id])
+  orderId         String
+  riderId         String
+  rider           Rider        @relation(fields: [riderId], references: [id])
+  expectedAmount  Decimal      @db.Decimal(14, 2)
+  collectedAmount Decimal      @db.Decimal(14, 2)
+  method          CodMethod
+  reference       String?
+  collectedAt     DateTime     @default(now())
+
+  @@index([orderId])
+  @@map("cod_collections")
+}
+
+enum RiderCashEntryType {
+  /// Cash taken at a door (+).
+  COD_COLLECTED
+  /// Handed over to the outlet (-).
+  DEPOSITED
+  ADJUSTMENT
+}
+
+/// Cash a rider is holding for the company. Balance = sum(amount).
+model RiderCashEntry {
+  id              String             @id @default(uuid())
+  riderId         String
+  rider           Rider              @relation(fields: [riderId], references: [id])
+  type            RiderCashEntryType
+  /// Signed: + collected, - deposited.
+  amount          Decimal            @db.Decimal(14, 2)
+  taskId          String?
+  codCollectionId String?            @unique
+  reference       String?
+  note            String?
+  recordedById    String?
+  recordedBy      User?              @relation("RiderCashRecordedBy", fields: [recordedById], references: [id])
+  createdAt       DateTime           @default(now())
+
+  @@index([riderId, createdAt])
+  @@map("rider_cash_entries")
+}
+
+enum FailureCategory {
+  CUSTOMER_UNAVAILABLE
+  CUSTOMER_REFUSED
+  ADDRESS_ISSUE
+  RIDER_ISSUE
+  OTHER
+}
+
+enum FailureFollowUp {
+  /// Rider brings the goods back; staff decide what next.
+  RETURN_TO_STORE
+  /// After the goods are back, a new attempt is dispatched automatically.
+  AUTO_REATTEMPT
+}
+
+/// Super Admin-configured reasons a rider can give for a failed delivery.
+model DeliveryFailureReason {
+  id              String          @id @default(uuid())
+  code            String          @unique
+  label           String
+  category        FailureCategory
+  isActive        Boolean         @default(true)
+  requiresNote    Boolean         @default(false)
+  requiresPhoto   Boolean         @default(false)
+  /// Only allowed once the rider has marked arrival at the customer.
+  requiresArrival Boolean         @default(false)
+  followUp        FailureFollowUp @default(RETURN_TO_STORE)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("delivery_failure_reasons")
+}
+
+/// Single row, Super Admin editable.
+model DeliverySettings {
+  id                       String   @id @default(uuid())
+  /// Offer tasks to riders automatically; off = staff assign every task.
+  autoOffer                Boolean  @default(true)
+  offerTimeoutSeconds      Int      @default(45)
+  /// Riders tried before a task is handed to staff.
+  maxOfferRounds           Int      @default(5)
+  /// Rider location older than this is ignored when ranking candidates.
+  locationFreshMinutes     Int      @default(10)
+  /// "Arrived" counts as verified within this distance of the point.
+  geofenceMeters           Int      @default(250)
+  /// Delivery (OTP) is refused until COD is recorded as collected.
+  requireCodBeforeDelivery Boolean  @default(true)
+  /// No new offers to a rider holding at least this much cash. Null = no limit.
+  maxCashInHand            Decimal? @db.Decimal(12, 2)
+  /// Delay before an AUTO_REATTEMPT task is dispatched once goods are back.
+  reattemptDelayMinutes    Int      @default(15)
+  updatedById              String?
+  updatedAt                DateTime @updatedAt
+
+  @@map("delivery_settings")
+}
+
+enum EarningRuleKind {
+  /// Flat amount per successful delivery.
+  BASE_PER_DELIVERY
+  /// Amount by distance slab, per successful delivery.
+  DISTANCE_SLAB
+  /// Extra per delivery completed inside configured time windows.
+  PEAK_HOUR
+  /// Extra per delivery in a zone (high demand), optionally time-boxed.
+  ZONE_INCENTIVE
+  /// One-off bonus when a rider reaches N deliveries in a day.
+  DAILY_TARGET
+  /// One-off bonus when a rider reaches N deliveries in a week (Mon-Sun).
+  WEEKLY_TARGET
+  /// Pay for verified waiting beyond a free allowance.
+  WAITING_TIME
+  /// Pay for a cancelled or failed task, by stage / reason.
+  OUTCOME_COMPENSATION
+}
+
+/// Super Admin-configured rider pay rules. `config` shape depends on `kind`
+/// (validated in EarningRulesService). No rule = no pay for that component.
+model RiderEarningRule {
+  id          String          @id @default(uuid())
+  name        String
+  kind        EarningRuleKind
+  isActive    Boolean         @default(true)
+  /// Null = every zone.
+  zoneId      String?
+  zone        DeliveryZone?   @relation(fields: [zoneId], references: [id])
+  config      Json
+  validFrom   DateTime?
+  validTo     DateTime?
+  earnings    RiderEarning[]
+  createdById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("rider_earning_rules")
+}
+
+enum RiderEarningType {
+  BASE
+  DISTANCE
+  PEAK
+  ZONE_INCENTIVE
+  DAILY_BONUS
+  WEEKLY_BONUS
+  WAITING
+  OUTCOME
+  ADJUSTMENT
+}
+
+/// What a rider has earned, line by line. Never recomputed in place: each line
+/// carries a snapshot of the rule that produced it.
+model RiderEarning {
+  id           String            @id @default(uuid())
+  riderId      String
+  rider        Rider             @relation(fields: [riderId], references: [id])
+  type         RiderEarningType
+  amount       Decimal           @db.Decimal(10, 2)
+  taskId       String?
+  task         DeliveryTask?     @relation(fields: [taskId], references: [id])
+  ruleId       String?
+  rule         RiderEarningRule? @relation(fields: [ruleId], references: [id])
+  /// Makes crediting idempotent: task:<id>:<rule>, bonus:<rider>:<rule>:<period>:<target>, ...
+  dedupeKey    String?           @unique
+  detail       Json?
+  note         String?
+  recordedById String?
+  earnedAt     DateTime          @default(now())
+
+  @@index([riderId, earnedAt])
+  @@map("rider_earnings")
+}
+
+model RiderNotification {
+  id        String    @id @default(uuid())
+  riderId   String
+  rider     Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  taskId    String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([riderId, createdAt])
+  @@map("rider_notifications")
 }

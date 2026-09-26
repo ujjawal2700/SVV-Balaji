@@ -37,12 +37,14 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
+import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { useLoyalty } from '../loyalty/useLoyalty';
 import { useAccountStats } from '../hooks/useAccountStats';
 
 export function ProfilePage() {
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout } = useCustomerAuth();
+  const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const stats = useAccountStats();
   const [whatsappAlerts, setWhatsappAlerts] = useState(true);
@@ -451,9 +453,9 @@ export function ProfilePage() {
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{((retailerProfile?.creditLimit || 0) - (retailerProfile?.creditUsed || 0)).toLocaleString('en-IN')}
+                    ₹{credit.available.toLocaleString('en-IN')}
                   </Typography.Text>
-                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Credit Line</Typography.Text>
+                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Available credit</Typography.Text>
                 </div>
               </>
             ) : (
@@ -510,13 +512,13 @@ export function ProfilePage() {
                     Are you a Kirana / Retailer?
                   </Typography.Text>
                   <Typography.Text style={{ color: '#c2410c', fontSize: 12 }}>
-                    Get Mandi-Direct Wholesale Rates & GST Invoices
+                    Mandi-direct wholesale rates for your store
                   </Typography.Text>
                 </div>
               </div>
 
               <Typography.Text style={{ color: '#7c2d12', fontSize: 12, display: 'block', marginBottom: 12, lineHeight: 1.4 }}>
-                Register your business to unlock bulk case rates, up to 20% margin, and instant ₹50,000 credit line.
+                Register your business for bulk case rates and wholesale tier pricing. Credit terms are set for your store after approval.
               </Typography.Text>
 
               <Button
@@ -831,7 +833,7 @@ export function ProfilePage() {
                     🏪 Own a Grocery Store?
                   </Typography.Text>
                   <Typography.Text style={{ color: '#c2410c', fontSize: 12, display: 'block', marginBottom: 14 }}>
-                    Upgrade to a B2B Partner Account for wholesale mandi bulk pricing, GST bills & credit line.
+                    Upgrade to a B2B Partner Account for wholesale mandi bulk pricing, with credit terms after approval.
                   </Typography.Text>
                   <Button
                     type="primary"
@@ -889,13 +891,13 @@ export function ProfilePage() {
 
                     <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
                       <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
-                        CREDIT LINE
+                        AVAILABLE CREDIT
                       </Typography.Text>
                       <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
-                        ₹{((retailerProfile?.creditLimit || 0) - (retailerProfile?.creditUsed || 0)).toLocaleString('en-IN')}
+                        ₹{credit.available.toLocaleString('en-IN')}
                       </Typography.Text>
                       <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
-                        Limit: ₹50,000
+                        {credit.hasCredit ? `Limit ₹${credit.limit.toLocaleString('en-IN')} · ${credit.termsLabel}` : 'No credit limit set yet'}
                       </Typography.Text>
                     </div>
                   </>

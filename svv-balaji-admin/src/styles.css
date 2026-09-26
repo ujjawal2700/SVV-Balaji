@@ -346,3 +346,6 @@ body {
 .page-pill--red    { background: #fff1f0; color: #cf1322; }
 .page-pill--slate  { background: #f1f5f9; color: #475569; }
 
+
+/* Delivery Board: a task waiting on staff */
+.row-attention > td { background: #fff7ed !important; }

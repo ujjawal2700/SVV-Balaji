@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMode } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 
 export class CheckoutItemDto {
@@ -35,6 +35,11 @@ export class CheckoutDto {
   })
   @IsOptional() @IsInt() @Min(0) redeemReferralPoints?: number;
   @ApiPropertyOptional({ enum: PaymentMode }) @IsOptional() @IsEnum(PaymentMode) paymentMode?: PaymentMode;
+  @ApiPropertyOptional({
+    enum: ['STANDARD', 'QUICK'],
+    description: 'QUICK only when the quote offered it as available; otherwise 409 QUICK_UNAVAILABLE. Default STANDARD.',
+  })
+  @IsOptional() @IsIn(['STANDARD', 'QUICK']) deliverySpeed?: 'STANDARD' | 'QUICK';
   @ApiPropertyOptional({ description: 'The total the customer was shown; used only to detect a price change' })
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) expectedTotal?: number;
 }

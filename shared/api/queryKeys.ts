@@ -266,6 +266,13 @@ export const queryKeys = {
 
   // --- Zone 4 ---------------------------------------------------------------
 
+  receivables: {
+    all: ['receivables'] as const,
+    list: (query: Record<string, unknown>) => [...queryKeys.receivables.all, 'list', query] as const,
+    account: (customerId: string, range: { from?: string; to?: string } = {}) =>
+      [...queryKeys.receivables.all, 'account', customerId, range] as const,
+  },
+
   customers: {
     all: ['customers'] as const,
     list: (query: CustomerQuery) => [...queryKeys.customers.all, 'list', query] as const,
@@ -331,5 +338,11 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.orders.all, 'detail', id] as const,
     traceability: (orderNumber: string) =>
       [...queryKeys.orders.all, 'traceability', orderNumber] as const,
+  },
+  homeSections: {
+    all: ['home-sections'] as const,
+    list: (includeInactive = false) => [...queryKeys.homeSections.all, 'list', includeInactive] as const,
+    detail: (id: string) => [...queryKeys.homeSections.all, 'detail', id] as const,
+    storefront: (audience?: string) => [...queryKeys.homeSections.all, 'storefront', audience ?? 'all'] as const,
   },
 } as const;

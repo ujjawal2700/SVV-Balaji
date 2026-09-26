@@ -1274,6 +1274,98 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
 
+  {
+    // Riders: self sign-up, approval, outlet, cash they hold (src/delivery).
+    key: 'riders',
+    label: 'Riders',
+    path: '/riders',
+    viewKey: 'riders.view',
+    permissions: [
+      { key: 'riders.view', label: 'View riders', description: 'Rider applications, status, outlet, live position, cash in hand and earnings.', defaultRoles: [BM, LT] },
+      {
+        key: 'riders.manage',
+        label: 'Approve and manage riders',
+        description: 'Approve or reject sign-ups (assigning the home outlet), suspend and reactivate riders, change outlet or task limit.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'riderCash.record',
+        label: 'Record cash handed over by riders',
+        description: 'Record COD cash a rider deposits at the outlet; lowers what the rider owes.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    // The delivery board: tasks, assignment, re-attempts, settings and pay rules.
+    key: 'deliveryTasks',
+    label: 'Delivery Board',
+    path: '/delivery-board',
+    viewKey: 'deliveryTasks.view',
+    permissions: [
+      { key: 'deliveryTasks.view', label: 'View delivery tasks', description: 'Every local / Quick delivery, who has it and where it is.', defaultRoles: [BM, LT] },
+      {
+        key: 'deliveryTasks.manage',
+        label: 'Assign and re-attempt deliveries',
+        description: 'Assign or take back a rider, re-offer a waiting task, schedule a new attempt after a failed delivery.',
+        defaultRoles: [BM, LT],
+      },
+      {
+        key: 'deliverySettings.manage',
+        label: 'Delivery settings and rider pay rules',
+        description: 'Auto-offer timing, geofence, COD rules, failed-delivery reasons and every rider earning rule. Changes what riders are paid.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    // Zone-based Quick Delivery (src/delivery). Super Admin decides where it runs.
+    key: 'deliveryZones',
+    label: 'Delivery Zones',
+    path: '/delivery-zones',
+    viewKey: 'deliveryZones.view',
+    permissions: [
+      {
+        key: 'deliveryZones.view',
+        label: 'View delivery zones',
+        description: 'Which areas get Quick Delivery, from which outlet, in what time and during which hours.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'deliveryZones.manage',
+        label: 'Create and edit delivery zones',
+        description:
+          'Draw zone boundaries, set pincodes and radius, turn Quick Delivery on or off, and set its promised ' +
+          'time, hours, fee, serving outlet and fallback. Changes what customers are promised at checkout.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    // FRD 24 credit terms: due dates, ageing, payments received, statement.
+    key: 'receivables',
+    label: 'Receivables',
+    path: '/receivables',
+    viewKey: 'receivables.view',
+    permissions: [
+      {
+        key: 'receivables.view',
+        label: 'View receivables and statements',
+        description:
+          'What each B2B customer owes on credit, when it falls due, what is overdue, and their ' +
+          'statement of account.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'receivables.record',
+        label: 'Record and void payments received',
+        description:
+          'Enter a payment a retailer made against their credit bills (it settles the oldest due ' +
+          'first), or void one entered by mistake. Changes what the customer owes.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
   // --- Storefront -------------------------------------------------------------
   {
     key: 'customerAccounts',
@@ -1451,6 +1543,39 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'schemes.delete',
         label: 'Delete a scheme',
         description: 'Nothing else references a scheme, so this is always allowed.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+
+  {
+    key: 'homeSections',
+    label: 'Homepage Product Sections',
+    path: '/home-sections',
+    viewKey: 'homeSections.view',
+    permissions: [
+      {
+        key: 'homeSections.view',
+        label: 'View homepage product sections',
+        description: 'Organize dynamic product sections displayed on customer homepage.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'homeSections.create',
+        label: 'Create a homepage section',
+        description: 'Create a new dynamic product section for the customer homepage.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'homeSections.edit',
+        label: 'Edit, reorder or publish/unpublish a section',
+        description: 'Edit, reorder, or toggle active status of a homepage section.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'homeSections.delete',
+        label: 'Delete a homepage section',
+        description: 'Delete a homepage section.',
         defaultRoles: [BM],
       },
     ],

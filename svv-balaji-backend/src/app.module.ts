@@ -36,6 +36,8 @@ import { StorefrontTraceModule } from './storefront/storefront-trace.module';
 import { RecallModule } from './recall/recall.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { CheckoutModule } from './checkout/checkout.module';
+import { ReceivablesModule } from './receivables/receivables.module';
+import { DeliveryModule } from './delivery/delivery.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ReferralSettingsModule } from './referral-settings/referral-settings.module';
@@ -44,6 +46,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
 import { BannersModule } from './banners/banners.module';
 import { SchemesModule } from './schemes/schemes.module';
+import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { SupportSettingsModule } from './support-settings/support-settings.module';
 
 @Module({
@@ -95,6 +98,8 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
     LoyaltyModule, // percentage-based rewards: settings, earn on delivery, reversal on return
     RealtimeModule, // live admin order feed (socket.io), web push, reconciliation
     CheckoutModule, // storefront checkout, stock holds, fulfilment pipeline
+    DeliveryModule, // zones & Quick Delivery (riders, tasks, COD, earnings to follow)
+    ReceivablesModule, // B2B credit: due dates, ageing, payments received, statement of account
     RecallModule, // forward/backward trace + batch freeze/recall (Super Admin & QA)
     CategoriesModule,
     ReferralSettingsModule,
@@ -103,6 +108,7 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
     WalletModule, // unified referral + loyalty coin balance and combined/separate redemption config
     BannersModule,
     SchemesModule,
+    HomeSectionsModule,
     SupportSettingsModule,
     // Still to land: DispatchModule (vehicle, route, POD), InvoicingModule
     // (GST invoice + GSP e-invoicing), FeedbackModule.
