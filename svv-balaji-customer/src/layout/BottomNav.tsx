@@ -51,6 +51,8 @@ export function BottomNav() {
           margin: '0 auto',
           display: 'flex',
           alignItems: 'stretch',
+          // Fixed height so --store-bottom-nav (styles.css) matches it exactly.
+          height: BOTTOM_NAV_HEIGHT,
         }}
       >
         {TABS.map((tab) => (
@@ -97,5 +99,5 @@ export function BottomNav() {
   );
 }
 
-/** Read by pages that need to keep content clear of the fixed bar on mobile. */
+/** Height of the bar above the safe-area inset. Mirrored by --store-bottom-nav in styles.css. */
 export const BOTTOM_NAV_HEIGHT = 60;

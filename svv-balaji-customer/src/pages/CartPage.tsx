@@ -630,7 +630,7 @@ export function CartPage() {
         className="mobile-only"
         style={{
           position: 'fixed',
-          bottom: 56,
+          bottom: 'var(--store-bottom-nav)',
           left: 0,
           right: 0,
           background: '#fff',

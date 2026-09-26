@@ -900,11 +900,12 @@ export function CheckoutPage() {
       <div
         style={{
           position: 'fixed',
-          bottom: 0,
+          // Sits on top of the tab bar, which now shows on every page.
+          bottom: 'var(--store-bottom-nav)',
           left: 0,
           right: 0,
           background: '#fff',
-          padding: '12px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
+          padding: '12px 16px',
           boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
           zIndex: 99,
           borderTop: '1px solid #e2e8f0',

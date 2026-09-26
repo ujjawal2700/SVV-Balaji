@@ -1,302 +1,276 @@
-import {
-  CloudSyncOutlined,
-  ExperimentOutlined,
-  InfoCircleOutlined,
-  LogoutOutlined,
-  ReadOutlined,
-  RightOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
-import { App as AntApp, Avatar, Button, Card, List, Space, Tag, Typography } from 'antd';
-import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { CloudSyncOutlined, IdcardOutlined, LogoutOutlined, ReadOutlined, RightOutlined, UserOutlined } from '@ant-design/icons';
+import { App as AntApp, Avatar, Typography } from 'antd';
+import type { CSSProperties, ReactNode } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { ROLE_LABELS } from '@shared/auth/types';
 import { useAuth } from '@shared/auth/useAuth';
 import { useCanFn } from '@shared/auth/useCan';
+import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useTrainingSessions } from '@shared/hooks/useTraining';
 import { useSafeLogout } from '../offline/OfflineBar';
 import { useOutbox } from '../offline/outbox';
 
+const groupStyle: CSSProperties = {
+  background: '#ffffff',
+  borderRadius: 14,
+  border: '1px solid #e8edf3',
+  overflow: 'hidden',
+};
+
+/**
+ * Phone-only "More" tab, laid out like an app settings screen: who you are,
+ * then the field tools that do not fit in the bottom bar, then sign out.
+ * Tablet and desktop list these pages in the sidebar instead.
+ */
 export function FieldMoreTab() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const safeLogout = useSafeLogout();
   const outbox = useOutbox();
-  const waiting = outbox.items.filter((i) => i.userId === user?.id).length;
   const { message, modal } = AntApp.useApp();
   const can = useCanFn();
-
   const training = useTrainingSessions();
+  const isMobile = useIsMobile();
 
-  const areas = [
-    {
-      key: 'sync',
-      icon: <CloudSyncOutlined />,
-      iconBg: '#fffbeb',
-      iconColor: '#b45309',
-      title: 'Offline & sync',
-      description: 'Work saved on this device without a connection, and its sync status.',
-      count: waiting,
-      countLabel: 'waiting to sync',
-      path: '/more/sync',
-    },
-    can('TRAINING_VIEW')
-      ? {
-          key: 'training',
-          icon: <ReadOutlined />,
-          iconBg: '#e0e7ff',
-          iconColor: '#4338ca',
-          title: 'Training Sessions',
-          description: 'Schedule farmer workshops, track attendance, and log curriculum notes.',
-          count: training.data?.data?.length ?? 0,
-          countLabel: 'sessions',
-          path: '/more/training',
-        }
-      : null,
-  ].filter(Boolean) as Array<{
-    key: string;
-    icon: ReactNode;
-    iconBg: string;
-    iconColor: string;
-    title: string;
-    description: string;
-    count: number;
-    countLabel: string;
-    path: string;
-  }>;
+  const mine = outbox.items.filter((i) => i.userId === user?.id);
+  const waiting = mine.length;
+  const failed = mine.filter((i) => i.status === 'failed').length;
+  const sessions = training.data?.data?.length ?? 0;
+
+  // Tablet and desktop list these pages in the sidebar; More is phone-only.
+  if (!isMobile) return <Navigate to="/profile" replace />;
+
 
   const signOut = () => {
     modal.confirm({
       title: 'Sign out of Field Operations?',
-      content:
-        waiting
-          ? `${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to sync on this device.`
-          : 'You will need your email and password to log in again. Everything you recorded has synced to the server.',
+      content: waiting
+        ? `${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to sync on this device.`
+        : 'Everything you recorded has synced. You will need your email and password to sign in again.',
       okText: 'Sign out',
       okButtonProps: { danger: true },
       onOk: async () => {
         await safeLogout({ confirmed: true });
-        message.success('Signed out successfully');
+        message.success('Signed out');
       },
     });
   };
 
+  const syncStatus = failed ? (
+    <StatusPill tone="danger">{failed} failed</StatusPill>
+  ) : waiting ? (
+    <StatusPill tone="warning">{waiting} waiting</StatusPill>
+  ) : (
+    <StatusPill tone="success">All synced</StatusPill>
+  );
+
   return (
-    <div style={{ maxWidth: 768, margin: '0 auto', width: '100%', paddingBottom: 24 }}>
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        {/* Section Header */}
-        <div style={{ marginBottom: 4 }}>
-          <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
-            Operations & Settings
-          </Typography.Title>
-          <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
-            Manage agricultural input logs, training workshops, and your field session
+    <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 4 }}>
+      {/* Account — the whole card opens the profile */}
+      <button
+        type="button"
+        onClick={() => navigate('/profile')}
+        className="field-more-row"
+        style={{ ...groupStyle, width: '100%', padding: 16, display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', textAlign: 'left' }}
+      >
+        <Avatar
+          size={52}
+          style={{ background: '#0f172a', color: '#fff', fontWeight: 700, fontSize: 20, flexShrink: 0 }}
+        >
+          {user?.fullName?.charAt(0).toUpperCase() || <UserOutlined />}
+        </Avatar>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Typography.Text strong ellipsis style={{ display: 'block', fontSize: 16, color: '#0f172a' }}>
+            {user?.fullName}
           </Typography.Text>
+          <Typography.Text ellipsis style={{ display: 'block', fontSize: 13, color: '#64748b' }}>
+            {user?.email}
+          </Typography.Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <Chip color="#1d4ed8" background="#eff6ff">
+              {user ? ROLE_LABELS[user.role] : ''}
+            </Chip>
+            {user?.branch ? (
+              <Chip color="#047857" background="#ecfdf5">
+                {user.branch.name}
+              </Chip>
+            ) : null}
+          </div>
         </div>
+        <RightOutlined style={{ fontSize: 12, color: '#cbd5e1', flexShrink: 0 }} />
+      </button>
 
-        {/* Module Action Rows */}
-        <Card
-          styles={{ body: { padding: 0 } }}
-          style={{
-            borderRadius: 14,
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
-            overflow: 'hidden',
-          }}
-        >
-          <List
-            itemLayout="horizontal"
-            dataSource={areas}
-            renderItem={(area, index) => (
-              <List.Item
-                onClick={() => navigate(area.path)}
-                style={{
-                  padding: '16px 20px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  borderBottom: index < areas.length - 1 ? '1px solid #f1f5f9' : 'none',
-                }}
-                className="hover:bg-slate-50"
-                extra={
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 8,
-                      background: '#f8fafc',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#94a3b8',
-                      marginLeft: 12,
-                    }}
-                  >
-                    <RightOutlined style={{ fontSize: 12 }} />
-                  </div>
-                }
-              >
-                <List.Item.Meta
-                  avatar={
-                    <div
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 10,
-                        background: area.iconBg,
-                        color: area.iconColor,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 19,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {area.icon}
-                    </div>
-                  }
-                  title={
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <Typography.Text strong style={{ fontSize: 15, color: '#0f172a' }}>
-                        {area.title}
-                      </Typography.Text>
-                      <Tag
-                        style={{
-                          margin: 0,
-                          borderRadius: 999,
-                          border: 'none',
-                          background: '#f1f5f9',
-                          color: '#334155',
-                          fontWeight: 600,
-                          fontSize: 11,
-                          padding: '1px 10px',
-                        }}
-                      >
-                        {`${area.count} ${area.countLabel}`}
-                      </Tag>
-                    </div>
-                  }
-                  description={
-                    <Typography.Text style={{ color: '#64748b', fontSize: 13, display: 'block', marginTop: 2 }}>
-                      {area.description}
-                    </Typography.Text>
-                  }
-                />
-              </List.Item>
-            )}
+      {/* Field tools */}
+      <Section label="Field tools">
+        {can('TRAINING_VIEW') ? (
+          <Row
+            icon={<ReadOutlined />}
+            iconColor="#4338ca"
+            iconBg="#eef2ff"
+            title="Training Sessions"
+            subtitle={`${sessions} session${sessions === 1 ? '' : 's'}`}
+            onClick={() => navigate('/more/training')}
           />
-        </Card>
+        ) : null}
+        <Row
+          icon={<CloudSyncOutlined />}
+          iconColor="#b45309"
+          iconBg="#fffbeb"
+          title="Offline & sync"
+          subtitle="Work saved on this device"
+          trailing={syncStatus}
+          onClick={() => navigate('/more/sync')}
+        />
+      </Section>
 
-        {/* User Profile & Account Actions */}
-        <Card
+      <Section label="Account">
+        <Row
+          icon={<IdcardOutlined />}
+          iconColor="#0f766e"
+          iconBg="#f0fdfa"
+          title="My Profile"
+          subtitle="Personal details and password"
+          onClick={() => navigate('/profile')}
+        />
+      </Section>
+
+      {/* Session */}
+      <div style={groupStyle}>
+        <button
+          type="button"
+          onClick={signOut}
           style={{
-            borderRadius: 14,
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04)',
-          }}
-          styles={{ body: { padding: '18px 20px' } }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <Avatar
-                size={48}
-                style={{
-                  background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  fontSize: 18,
-                  boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
-                }}
-              >
-                {user?.fullName?.charAt(0).toUpperCase() || <UserOutlined />}
-              </Avatar>
-              <div style={{ flex: 1 }}>
-                <Typography.Text strong style={{ fontSize: 15, color: '#0f172a', display: 'block' }}>
-                  {user?.fullName}
-                </Typography.Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                  <Tag
-                    color="blue"
-                    style={{
-                      margin: 0,
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '0 8px',
-                    }}
-                  >
-                    {user ? ROLE_LABELS[user.role] : ''}
-                  </Tag>
-                  {user?.branch && (
-                    <Typography.Text style={{ color: '#64748b', fontSize: 12 }}>
-                      {user.branch.name}
-                    </Typography.Text>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
-              <Button
-                block
-                icon={<LogoutOutlined />}
-                onClick={signOut}
-                style={{
-                  height: 40,
-                  borderRadius: 10,
-                  fontWeight: 600,
-                  color: '#dc2626',
-                  background: '#fef2f2',
-                  border: '1px solid #fee2e2',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                Sign out
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        {/* Connectivity & Offline Notice Banner */}
-        <div
-          style={{
-            borderRadius: 14,
-            border: '1px solid #fef3c7',
-            background: 'linear-gradient(135deg, #fffbeb 0%, #fefce8 100%)',
-            padding: '16px 18px',
+            width: '100%',
+            border: 'none',
+            background: 'none',
+            padding: '14px 16px',
             display: 'flex',
-            gap: 12,
-            alignItems: 'flex-start',
-            boxShadow: '0 1px 2px 0 rgba(217, 119, 6, 0.04)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            color: '#dc2626',
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: 'pointer',
           }}
         >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: '#fde68a',
-              color: '#b45309',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 16,
-              flexShrink: 0,
-              marginTop: 2,
-            }}
-          >
-            <InfoCircleOutlined />
-          </div>
-          <div>
-            <Typography.Text strong style={{ fontSize: 14, color: '#92400e', display: 'block', marginBottom: 2 }}>
-              Active Internet Connection Required
-            </Typography.Text>
-            <Typography.Text style={{ color: '#78350f', fontSize: 13, lineHeight: 1.5, display: 'block' }}>
-              All field visits, seed handouts, and farmer onboarding logs are instantly synced to the central
-              cloud database. If you are operating in low-connectivity areas, keep written notes and submit the records once you are back in network range.
-            </Typography.Text>
-          </div>
-        </div>
-      </Space>
+          <LogoutOutlined /> Sign out
+        </button>
+      </div>
     </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <Typography.Text
+        style={{
+          display: 'block',
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: '#94a3b8',
+          padding: '0 4px 8px',
+        }}
+      >
+        {label}
+      </Typography.Text>
+      <div style={groupStyle} className="field-more-group">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  icon,
+  iconColor,
+  iconBg,
+  title,
+  subtitle,
+  trailing,
+  onClick,
+}: {
+  icon: ReactNode;
+  iconColor: string;
+  iconBg: string;
+  title: string;
+  subtitle?: string;
+  trailing?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="field-more-row"
+      style={{
+        width: '100%',
+        border: 'none',
+        background: 'none',
+        padding: '12px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: iconBg,
+          color: iconColor,
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 17,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{title}</span>
+        {subtitle ? <span style={{ display: 'block', fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{subtitle}</span> : null}
+      </span>
+      {trailing}
+      <RightOutlined style={{ fontSize: 12, color: '#cbd5e1', flexShrink: 0 }} />
+    </button>
+  );
+}
+
+function Chip({ children, color, background }: { children: ReactNode; color: string; background: string }) {
+  return (
+    <span style={{ fontSize: 11.5, fontWeight: 600, color, background, borderRadius: 6, padding: '2px 8px', lineHeight: '18px' }}>
+      {children}
+    </span>
+  );
+}
+
+const TONES = {
+  success: { color: '#047857', background: '#ecfdf5' },
+  warning: { color: '#b45309', background: '#fffbeb' },
+  danger: { color: '#b91c1c', background: '#fef2f2' },
+};
+
+function StatusPill({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
+  return (
+    <span
+      style={{
+        ...TONES[tone],
+        fontSize: 12,
+        fontWeight: 600,
+        borderRadius: 999,
+        padding: '3px 10px',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </span>
   );
 }

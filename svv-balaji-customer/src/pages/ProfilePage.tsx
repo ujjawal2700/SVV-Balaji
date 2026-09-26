@@ -304,7 +304,8 @@ export function ProfilePage() {
             background: isRetailer
               ? 'linear-gradient(135deg, #065f46 0%, #047857 50%, #0f766e 100%)'
               : 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-            padding: '32px 20px 24px',
+            // Reaches the top edge (the shell skips its top gap here), so it clears the notch itself.
+            padding: 'calc(32px + env(safe-area-inset-top)) 20px 24px',
             position: 'relative',
             overflow: 'hidden',
           }}

@@ -63,6 +63,11 @@ export function LoginPage() {
     >
       <Space direction="vertical" size={20} style={{ width: '100%', maxWidth: 420, margin: '0 auto' }}>
         <div style={{ textAlign: 'center' }}>
+          <img
+            src={`${import.meta.env.BASE_URL}svv-balaji.png`}
+            alt="SVV Balaji Logo"
+            style={{ width: 88, height: 88, objectFit: 'contain', marginBottom: 12 }}
+          />
           <Typography.Title level={2} style={{ color: '#fff', margin: 0 }}>
             SVV Balaji
           </Typography.Title>

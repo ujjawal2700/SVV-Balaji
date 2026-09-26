@@ -6,17 +6,15 @@ import { useAuth } from '@shared/auth/useAuth';
 import { useCan } from '@shared/auth/useCan';
 import { useSeedStock } from '@shared/hooks/useSeedStock';
 import { SeedSourceTag } from '@shared/components/SeedLotField';
-import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { useSeedDistribution } from '@shared/hooks/useSeedDistribution';
 import { formatDate, formatQuantity } from '@shared/utils/format';
 import { SeedDistributionFormModal } from './SeedDistributionFormModal';
-import { FieldCard, FieldFab, FieldList } from './pieces';
+import { FieldCard, FieldFab, FieldList, FieldPageHeader, FieldToolbar } from './pieces';
 import { MineToggle, useMineFilter } from './MineToggle';
 import { PendingTag } from '../offline/OfflineBar';
 import { isPendingRecord } from '../offline/adapter';
 
 export function FieldSeedTab() {
-  const isMobile = useIsMobile();
   const { user } = useAuth();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SeedDistribution | null>(null);
@@ -42,59 +40,24 @@ export function FieldSeedTab() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      {/* Page Navigation & Title Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div>
-            <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
-              Seed & Agri-Input Handouts
-            </Typography.Title>
-            <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
-              Traceable record of certified seed and inputs distributed to farmers
-            </Typography.Text>
-          </div>
-        </div>
-
-        {!isMobile && (
-          <Button
-            type="primary"
-            icon={<ExperimentOutlined />}
-            onClick={() => setFormOpen(true)}
-            style={{
-              borderRadius: 10,
-              height: 40,
-              fontWeight: 600,
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              border: 'none',
-              boxShadow: '0 2px 8px 0 rgba(16, 185, 129, 0.3)',
-            }}
-          >
-            Record Handout
+      <FieldPageHeader
+        title="Seed & Input Handouts"
+        subtitle="Certified seed and inputs distributed to farmers"
+        actions={
+          <Button type="primary" icon={<ExperimentOutlined />} onClick={() => setFormOpen(true)}>
+            Record handout
           </Button>
-        )}
-      </div>
+        }
+      />
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          background: '#fff',
-          padding: isMobile ? '12px 14px' : '14px 18px',
-          borderRadius: 12,
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.03)',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
+      <FieldToolbar>
         <MineToggle
           mineOnly={mineOnly}
           onChange={setMineOnly}
           total={everyone.data?.data?.length ?? 0}
           shown={rows.length}
         />
-      </div>
+      </FieldToolbar>
 
       <SeedSummary rows={rows} loading={seed.isLoading} mineOnly={mineOnly} />
 

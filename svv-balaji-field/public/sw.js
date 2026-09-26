@@ -16,11 +16,11 @@
  * the app is served at "/" (per-app host) or "/field/" (one origin behind nginx).
  * -----------------------------------------------------------------------------
  */
-const VERSION = 'svv-field-v2';
+const VERSION = 'svv-field-v3';
 const SHELL = `${VERSION}-shell`;
 const BASE = new URL(self.registration.scope).pathname; // "/" or "/field/"
 
-const SHELL_URLS = [BASE, `${BASE}index.html`, `${BASE}manifest.webmanifest`];
+const SHELL_URLS = [BASE, `${BASE}index.html`, `${BASE}manifest.webmanifest`, `${BASE}svv-balaji.png`];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

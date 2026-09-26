@@ -1,8 +1,105 @@
-import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Empty, Row, Skeleton, Space, Typography } from 'antd';
+import { InboxOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
+import { Button, Card, Col, Row, Skeleton, Space, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
+
+/**
+ * A page's own title block — tablet and desktop only.
+ *
+ * On a phone the app bar already names the screen (and carries the back arrow
+ * on sub-pages), so repeating the title under it only pushes the content down.
+ */
+export function FieldPageHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+}) {
+  const isMobile = useIsMobile();
+  if (isMobile) return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div>
+        <Typography.Title level={4} style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
+          {title}
+        </Typography.Title>
+        {subtitle ? (
+          <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>{subtitle}</Typography.Text>
+        ) : null}
+      </div>
+      {actions ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{actions}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * The filter row above a list.
+ *
+ * A plain row on a phone — a white card around two small toggles is chrome,
+ * not content — and a bordered bar on wider screens where it anchors the page.
+ */
+export function FieldToolbar({ children }: { children: ReactNode }) {
+  const isMobile = useIsMobile();
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: isMobile ? 10 : 12,
+        ...(isMobile
+          ? {}
+          : {
+              background: '#ffffff',
+              padding: '12px 16px',
+              borderRadius: 12,
+              border: '1px solid #e2e8f0',
+            }),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Compact "nothing here" block, shared by every list. */
+export function FieldEmpty({ text, icon, action }: { text: ReactNode; icon?: ReactNode; action?: ReactNode }) {
+  return (
+    <div
+      style={{
+        border: '1px dashed #d8dee6',
+        borderRadius: 14,
+        background: '#ffffff',
+        padding: '28px 20px',
+        textAlign: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: '#f1f5f9',
+          color: '#94a3b8',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 20,
+          margin: '0 auto 10px',
+        }}
+      >
+        {icon ?? <InboxOutlined />}
+      </div>
+      <Typography.Text style={{ color: '#64748b', fontSize: 13.5, display: 'block' }}>{text}</Typography.Text>
+      {action ? <div style={{ marginTop: 12 }}>{action}</div> : null}
+    </div>
+  );
+}
 
 /**
  * The floating action button.
@@ -71,16 +168,11 @@ export function FieldList<T>({
   // A failed refresh (typically no signal) must not hide rows already on screen.
   if (error && (!rows || rows.length === 0)) {
     return (
-      <Card>
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Typography.Text type="danger">{apiErrorMessage(error)}</Typography.Text>
-          {onRetry ? (
-            <Button block onClick={onRetry}>
-              Try again
-            </Button>
-          ) : null}
-        </Space>
-      </Card>
+      <FieldEmpty
+        icon={<WarningOutlined style={{ color: '#dc2626' }} />}
+        text={apiErrorMessage(error)}
+        action={onRetry ? <Button onClick={onRetry}>Try again</Button> : undefined}
+      />
     );
   }
 
@@ -100,9 +192,7 @@ export function FieldList<T>({
 
   if (!rows || rows.length === 0) {
     return (
-      <Card>
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
-      </Card>
+<FieldEmpty text={emptyText} />
     );
   }
 
@@ -146,11 +236,14 @@ export function FieldCard({
         background: '#ffffff',
         border: '1px solid #e2e8f0',
         borderRadius: 14,
-        padding: '16px 18px',
-        boxShadow: '0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02)',
+        padding: '14px 16px',
+        boxShadow: '0 1px 2px 0 rgba(15, 23, 42, 0.04)',
         cursor: onOpen ? 'pointer' : 'default',
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         height: '100%',
+        // Without this the padding and border are added on top of 100% and
+        // every card overhangs its grid cell by ~30px.
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -172,7 +265,7 @@ export function FieldCard({
     >
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', fontWeight: 600 }}>
+          <Typography.Text strong style={{ fontSize: 15.5, color: '#0f172a', fontWeight: 600 }}>
             {title}
           </Typography.Text>
           {extra}
