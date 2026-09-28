@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CodMethod, DeliveryTaskStatus, OrderStatus, PaymentStatus, PaymentTransactionStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -57,7 +57,7 @@ export class TaskFlowService {
     private readonly dispatch: DispatchService,
     private readonly settings: DeliverySettingsService,
     private readonly sales: SalesService,
-    private readonly fulfillment: FulfillmentService,
+    @Inject(forwardRef(() => FulfillmentService)) private readonly fulfillment: FulfillmentService,
     private readonly earnings: EarningsService,
   ) {}
 

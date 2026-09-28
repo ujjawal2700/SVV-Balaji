@@ -9,6 +9,7 @@ import { useAuth } from '@shared/auth/useAuth';
 import { useCanFn } from '@shared/auth/useCan';
 import { useIsMobile } from '@shared/hooks/useIsMobile';
 import { OfflineBar, useSafeLogout } from '../offline/OfflineBar';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 const { Header, Sider, Content } = Layout;
 
@@ -221,6 +222,7 @@ export function FieldShell({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <NotificationBell />
               {user?.branch ? (
                 <Tag color="success" style={{ borderRadius: 6, fontWeight: 500 }}>
                   {user.branch.name}
@@ -323,8 +325,10 @@ export function FieldShell({
         <Typography.Text strong ellipsis style={{ color: '#fff', fontSize: 16, flex: 1, textAlign: 'center' }}>
           {subPage?.title ?? (activePath === '/' ? title : (activeTab?.label ?? title))}
         </Typography.Text>
-        {/* Balances the logo so the title stays centred. */}
-        <span style={{ width: 32, flexShrink: 0 }} />
+        {/* Same width as the logo on the left, so the title stays centred. */}
+        <span style={{ width: 32, flexShrink: 0, display: 'grid', placeItems: 'center' }}>
+          <NotificationBell color="#fff" />
+        </span>
       </header>
 
       <main

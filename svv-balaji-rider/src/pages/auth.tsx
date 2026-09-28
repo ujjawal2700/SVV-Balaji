@@ -57,6 +57,7 @@ export function hasOnboarded() {
 export function SignIn() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,18 +66,34 @@ export function SignIn() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    const cleanId = identifier.trim();
+    if (!cleanId) {
+      const msg = 'Please enter your Mobile Number or Email';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (!password) {
+      const msg = 'Please enter your Password';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
     setBusy(true);
     try {
-      signIn(await riderApi.login(identifier.trim(), password));
+      signIn(await riderApi.login(cleanId, password));
+      toast('Signed in successfully', 'success');
       navigate('/', { replace: true });
     } catch (err) {
       if (errorCode(err) === 'PHONE_NOT_VERIFIED') {
-        const phone = (err as { response?: { data?: { phone?: string } } }).response?.data?.phone ?? identifier;
+        const phone = (err as { response?: { data?: { phone?: string } } }).response?.data?.phone ?? cleanId;
         await riderApi.resend(phone).catch(() => undefined);
         navigate('/verify', { state: { phone, purpose: 'signup' } });
         return;
       }
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -91,16 +108,29 @@ export function SignIn() {
         <p className="auth-sub">Sign in to your account</p>
 
         <Field label="Mobile Number or Email" required>
-          <TextInput value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="98765 43210" autoComplete="username" inputMode="email" required />
+          <TextInput
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            placeholder="98765 43210"
+            autoComplete="username"
+            inputMode="email"
+            maxLength={120}
+          />
         </Field>
         <Field label="Password" required>
-          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+          <PasswordInput
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            maxLength={72}
+          />
         </Field>
         <div style={{ textAlign: 'right', marginTop: 10 }}>
           <Link to="/forgot" className="link dark" style={{ fontSize: 13, color: 'var(--muted)' }}>Forgot Password?</Link>
         </div>
         {error ? <div className="form-error">{error}</div> : null}
-        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy || !identifier || !password}>
+        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy}>
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
         <p className="muted" style={{ textAlign: 'center', fontSize: 14, marginTop: 20 }}>
@@ -123,25 +153,135 @@ const VEHICLES: Array<{ value: VehicleType; label: string }> = [
 
 export function SignUp() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [f, setF] = useState({ fullName: '', phone: '', email: '', city: '', vehicleType: 'MOTORCYCLE' as VehicleType, vehicleNumber: '', password: '' });
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow letters, spaces, dots, hyphens, and apostrophes (max 80 chars)
+    const val = e.target.value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 80);
+    setF((x) => ({ ...x, fullName: val }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow digits up to 10 characters
+    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setF((x) => ({ ...x, phone: val }));
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setF((x) => ({ ...x, email: e.target.value.slice(0, 120) }));
+  };
+
+  const handleCityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^a-zA-Z\s.'-]/g, '').slice(0, 60);
+    setF((x) => ({ ...x, city: val }));
+  };
+
+  const handleVehicleNumChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9\s-]/g, '').slice(0, 15);
+    setF((x) => ({ ...x, vehicleNumber: val }));
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setF((x) => ({ ...x, password: e.target.value.slice(0, 72) }));
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (f.password.length < 8) return setError('Use at least 8 characters for the password');
+
+    const cleanName = f.fullName.trim();
+    if (!cleanName) {
+      const msg = 'Please enter your Full Name';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (cleanName.length < 2 || !/^[a-zA-Z\s.'-]+$/.test(cleanName)) {
+      const msg = 'Full Name should contain only letters (at least 2 characters)';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    const cleanPhone = f.phone.trim();
+    if (!cleanPhone) {
+      const msg = 'Please enter your Mobile Number';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      const msg = 'Please enter a valid 10-digit Indian mobile number starting with 6-9';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    const cleanEmail = f.email.trim();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      const msg = 'Please enter a valid email address';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    const cleanCity = f.city.trim();
+    if (cleanCity && (cleanCity.length < 2 || !/^[a-zA-Z\s.'-]+$/.test(cleanCity))) {
+      const msg = 'Please enter a valid city name (alphabets only)';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    const cleanVehNum = f.vehicleNumber.trim();
+    if (cleanVehNum && !/^[A-Z0-9\s-]{5,15}$/.test(cleanVehNum)) {
+      const msg = 'Please enter a valid vehicle number (e.g. MP04 AB 1234)';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    if (!f.password) {
+      const msg = 'Please enter a password';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (f.password.length < 8) {
+      const msg = 'Password must be at least 8 characters long';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
+    if (!agree) {
+      const msg = 'Please accept the SVV Balaji delivery partner terms to sign up';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
     setBusy(true);
     try {
       const r = await riderApi.signup({
-        fullName: f.fullName.trim(), phone: f.phone, email: f.email.trim() || undefined, password: f.password,
-        city: f.city.trim() || undefined, vehicleType: f.vehicleType, vehicleNumber: f.vehicleNumber.trim() || undefined,
+        fullName: cleanName,
+        phone: cleanPhone,
+        email: cleanEmail || undefined,
+        password: f.password,
+        city: cleanCity || undefined,
+        vehicleType: f.vehicleType,
+        vehicleNumber: cleanVehNum || undefined,
       });
-      navigate('/verify', { state: { phone: f.phone, purpose: 'signup', devCode: r.devCode } });
+      toast('Verification code sent to your mobile number', 'success');
+      navigate('/verify', { state: { phone: cleanPhone, purpose: 'signup', devCode: r.devCode } });
     } catch (err) {
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
@@ -149,43 +289,85 @@ export function SignUp() {
 
   return (
     <div className="plain">
-      <form className="page" onSubmit={submit} style={{ paddingTop: 'calc(24px + env(safe-area-inset-top))' }}>
+      <form className="page" onSubmit={submit} style={{ paddingTop: 'calc(24px + env(safe-area-inset-top))' }} noValidate>
         <Logo />
         <h2 className="auth-title">Create An Account</h2>
         <p className="auth-sub">Sign up as a delivery partner</p>
 
         <Field label="Full Name" required>
-          <TextInput value={f.fullName} onChange={set('fullName')} placeholder="As on your driving licence" autoComplete="name" required />
+          <TextInput
+            value={f.fullName}
+            onChange={handleNameChange}
+            placeholder="As on your driving licence"
+            autoComplete="name"
+            maxLength={80}
+          />
         </Field>
         <Field label="Mobile Number" required>
-          <TextInput value={f.phone} onChange={set('phone')} placeholder="98765 43210" inputMode="tel" autoComplete="tel" required />
+          <TextInput
+            value={f.phone}
+            onChange={handlePhoneChange}
+            placeholder="98765 43210"
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={10}
+          />
         </Field>
         <Field label="Email Address">
-          <TextInput value={f.email} onChange={set('email')} placeholder="you@example.com" type="email" autoComplete="email" />
+          <TextInput
+            value={f.email}
+            onChange={handleEmailChange}
+            placeholder="you@example.com"
+            type="email"
+            autoComplete="email"
+            maxLength={120}
+          />
         </Field>
         <Field label="City">
-          <TextInput value={f.city} onChange={set('city')} placeholder="Where you will deliver" />
+          <TextInput
+            value={f.city}
+            onChange={handleCityChange}
+            placeholder="Where you will deliver"
+            maxLength={60}
+          />
         </Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Vehicle" required>
-            <select className="control" value={f.vehicleType} onChange={set('vehicleType')}>
+            <select className="control" value={f.vehicleType} onChange={(e) => setF((x) => ({ ...x, vehicleType: e.target.value as VehicleType }))}>
               {VEHICLES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
             </select>
           </Field>
           <Field label="Vehicle No.">
-            <TextInput value={f.vehicleNumber} onChange={set('vehicleNumber')} placeholder="MP04 AB 1234" style={{ textTransform: 'uppercase' }} />
+            <TextInput
+              value={f.vehicleNumber}
+              onChange={handleVehicleNumChange}
+              placeholder="MP04 AB 1234"
+              maxLength={15}
+              style={{ textTransform: 'uppercase' }}
+            />
           </Field>
         </div>
         <Field label="Password" required hint="We'll send a verification code to your mobile number">
-          <PasswordInput value={f.password} onChange={set('password')} placeholder="At least 8 characters" autoComplete="new-password" required />
+          <PasswordInput
+            value={f.password}
+            onChange={handlePasswordChange}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            maxLength={72}
+          />
         </Field>
 
         <label className="check">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          <span>I've read and understood the SVV Balaji <span style={{ color: 'var(--orange)' }}>delivery partner terms</span></span>
+          <span>
+            I've read and understood the SVV Balaji{' '}
+            <Link to="/terms-and-conditions" onClick={(e) => e.stopPropagation()} style={{ color: 'var(--orange)', textDecoration: 'underline' }}>
+              delivery partner terms
+            </Link>
+          </span>
         </label>
         {error ? <div className="form-error">{error}</div> : null}
-        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy || !agree || !f.fullName || !f.phone || !f.password}>
+        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy}>
           {busy ? 'Creating account…' : 'Sign Up'}
         </button>
         <p className="muted" style={{ textAlign: 'center', fontSize: 14, marginTop: 20 }}>
@@ -237,11 +419,13 @@ export function Verify() {
         navigate('/location', { replace: true });
       })
       .catch((e) => {
-        setError(errorMessage(e));
+        const msg = errorMessage(e);
+        setError(msg);
+        toast(msg, 'error');
         setCode('');
       })
       .finally(() => setBusy(false));
-  }, [code, state, busy, navigate, signIn]);
+  }, [code, state, busy, navigate, signIn, toast]);
 
   if (!state?.phone) return <Navigate to="/login" replace />;
 
@@ -291,44 +475,77 @@ export function Verify() {
 
 export function Forgot() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    const cleanPhone = phone.trim();
+    if (!cleanPhone) {
+      const msg = 'Please enter your Mobile Number';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      const msg = 'Please enter a valid 10-digit mobile number starting with 6-9';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    setBusy(true);
     try {
-      const r = await riderApi.forgot(phone);
-      navigate('/verify', { state: { phone, purpose: 'reset', devCode: r.devCode } });
+      const r = await riderApi.forgot(cleanPhone);
+      toast('Verification code sent to your mobile number', 'success');
+      navigate('/verify', { state: { phone: cleanPhone, purpose: 'reset', devCode: r.devCode } });
     } catch (err) {
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
   };
+
   return (
     <div className="plain">
       <TopBar title="Forgot Password" back />
-      <form className="page" onSubmit={submit} style={{ paddingTop: 26 }}>
+      <form className="page" onSubmit={submit} style={{ paddingTop: 26 }} noValidate>
         <p className="auth-sub" style={{ textAlign: 'left' }}>Enter your registered mobile number. We'll send a code to reset your password.</p>
         <Field label="Mobile Number" required>
-          <TextInput value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98765 43210" inputMode="tel" required />
+          <TextInput
+            value={phone}
+            onChange={handlePhoneChange}
+            placeholder="98765 43210"
+            inputMode="tel"
+            maxLength={10}
+          />
         </Field>
         {error ? <div className="form-error">{error}</div> : null}
-        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy || !phone}>Send Code</button>
+        <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy}>Send Code</button>
       </form>
     </div>
   );
 }
 
+// ---------------------------------------------------------------- reset password
+
 export function ResetPassword() {
   const { state } = useLocation() as { state: { phone: string; code: string } | null };
   const navigate = useNavigate();
+  const toast = useToast();
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
   if (done) {
     return (
       <div className="plain" style={{ display: 'grid', placeItems: 'center', padding: 20, background: 'var(--bg)' }}>
@@ -342,25 +559,48 @@ export function ResetPassword() {
     );
   }
   if (!state) return <Navigate to="/forgot" replace />;
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (pw.length < 8) return setError('Use at least 8 characters');
+    setError(null);
+    if (!pw) {
+      const msg = 'Please enter a new password';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+    if (pw.length < 8) {
+      const msg = 'Password must be at least 8 characters long';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
     setBusy(true);
     try {
       await riderApi.reset(state.phone, state.code, pw);
+      toast('Password reset successfully!', 'success');
       setDone(true);
     } catch (err) {
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setBusy(false);
     }
   };
+
   return (
     <div className="plain">
       <TopBar title="New Password" back />
-      <form className="page" onSubmit={submit} style={{ paddingTop: 26 }}>
+      <form className="page" onSubmit={submit} style={{ paddingTop: 26 }} noValidate>
         <Field label="New Password" required>
-          <PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" />
+          <PasswordInput
+            value={pw}
+            onChange={(e) => setPw(e.target.value.slice(0, 72))}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            maxLength={72}
+          />
         </Field>
         {error ? <div className="form-error">{error}</div> : null}
         <button className="btn primary block" style={{ marginTop: 22 }} disabled={busy}>Save Password</button>
@@ -368,3 +608,4 @@ export function ResetPassword() {
     </div>
   );
 }
+

@@ -7,11 +7,13 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { apiErrorMessage } from './api/client';
 import { CustomerAuthProvider } from './auth/CustomerAuthContext';
+import { PushBridge } from './notifications/PushBridge';
 import { App } from './App';
 import { CartProvider } from './cart/CartProvider';
 import { LoyaltyProvider } from './loyalty/LoyaltyProvider';
 import { theme } from './theme';
 import './styles.css';
+import { initAnalytics } from './firebase';
 
 /**
  * A 401 is already handled by the API client, which refreshes the token and
@@ -79,6 +81,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
           <BrowserRouter>
             <CartProvider>
               <CustomerAuthProvider>
+                <PushBridge />
                 <LoyaltyProvider>
                   <App />
                 </LoyaltyProvider>
@@ -90,3 +93,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </ConfigProvider>
   </React.StrictMode>,
 );
+
+void initAnalytics();
+

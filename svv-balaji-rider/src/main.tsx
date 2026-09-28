@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthContext';
+import { PushBridge } from './PushBridge';
 import './styles.css';
 import { ToastProvider } from './ui/kit';
 
@@ -20,6 +21,7 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <ToastProvider>
           <AuthProvider>
+            <PushBridge />
             <App />
           </AuthProvider>
         </ToastProvider>
@@ -28,6 +30,14 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined));
+import { initAnalytics } from './firebase';
+
+void initAnalytics();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    if (import.meta.env.PROD) {
+      void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+    }
+  });
 }

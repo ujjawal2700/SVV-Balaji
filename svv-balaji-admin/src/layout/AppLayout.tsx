@@ -20,6 +20,7 @@ import { useAuth } from '../auth/useAuth';
 import { BellOutlined } from '@ant-design/icons';
 import { enableOrderAlerts, orderAlertSupport } from '../live/orderAlerts';
 import { useLiveOrders } from '../live/useLiveOrders';
+import { NotificationBell } from '../notifications/NotificationBell';
 import { NAV_SECTIONS, findNavItem, type AdminZone, type NavItem } from './navigation';
 import { useAdminZone } from './useAdminZone';
 
@@ -352,6 +353,7 @@ export function AppLayout() {
             {alertsReady ? (
               <Button size="small" icon={<BellOutlined />} onClick={() => void turnOnAlerts()}>Enable order alerts</Button>
             ) : null}
+            <NotificationBell />
             {user?.branch ? <Tag>{user.branch.name}</Tag> : null}
             <Tag color="blue">{user ? ROLE_LABELS[user.role] : ''}</Tag>
 

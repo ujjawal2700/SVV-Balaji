@@ -5,6 +5,7 @@ import { useAuth } from './auth/AuthContext';
 import { useLive } from './live/useLive';
 import { CashScreen, EarningsScreen, History, Notifications, Profile } from './pages/account';
 import { Forgot, hasOnboarded, Onboarding, ResetPassword, SignIn, SignUp, Verify } from './pages/auth';
+import { PrivacyPolicyPage, TermsPage } from './pages/legal';
 import { Dashboard } from './pages/dashboard';
 import { LocationScreen, PendingScreen } from './pages/onboard';
 import { Orders } from './pages/orders';
@@ -77,6 +78,9 @@ export function App() {
         <Route path="/verify" element={<Verify />} />
         <Route path="/forgot" element={<Forgot />} />
         <Route path="/reset" element={<ResetPassword />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms-and-conditions" element={<TermsPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<Navigate to={hasOnboarded() ? '/login' : '/welcome'} replace />} />
       </Routes>
     );
@@ -86,6 +90,9 @@ export function App() {
     return (
       <Routes>
         <Route path="/location" element={<LocationScreen />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms-and-conditions" element={<TermsPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<PendingScreen />} />
       </Routes>
     );
@@ -113,6 +120,9 @@ export function App() {
         <Route path="forgot" element={<Forgot />} />
         <Route path="verify" element={<Verify />} />
         <Route path="reset" element={<ResetPassword />} />
+        <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="terms-and-conditions" element={<TermsPage />} />
+        <Route path="terms" element={<TermsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

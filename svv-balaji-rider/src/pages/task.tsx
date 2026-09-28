@@ -7,7 +7,16 @@ import { currentPosition } from '../live/geo';
 import { Alert, Camera, Cash, Check, Navigate as NavIcon, Phone, Pin, Store } from '../ui/icons';
 import { Field, Modal, OtpInput, Spinner, TextInput, TopBar, inr, time, useToast } from '../ui/kit';
 import { MiniMap, type MapPoint } from '../ui/MiniMap';
-import { STATUS_LABEL } from '../ui/orders';
+import { STATUS_LABEL, resolveImageUrl } from '../ui/orders';
+
+function TaskItemImage({ src }: { src: string | null | undefined }) {
+  const [error, setError] = useState(false);
+  const imgUrl = resolveImageUrl(src);
+  if (!imgUrl || error) {
+    return <div className="thumb" style={{ width: 44, height: 44, display: 'grid', placeItems: 'center' }} />;
+  }
+  return <img src={imgUrl} alt="" className="thumb" style={{ width: 44, height: 44, objectFit: 'cover' }} onError={() => setError(true)} />;
+}
 
 const FLOW: Array<{ key: string; label: string; statuses: string[] }> = [
   { key: 'assigned', label: 'Accepted', statuses: ['ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'DELIVERED'] },
@@ -132,7 +141,7 @@ export function TaskScreen() {
           <div className="kv-title" style={{ marginTop: 0 }}>Items ({t.items.reduce((s, i) => s + i.quantity, 0)})</div>
           {t.items.map((i, k) => (
             <div key={k} className="row" style={{ padding: '8px 0', borderTop: k ? '1px solid var(--line)' : 'none' }}>
-              {i.image ? <img src={i.image} alt="" className="thumb" style={{ width: 44, height: 44 }} /> : <div className="thumb" style={{ width: 44, height: 44 }} />}
+              <TaskItemImage src={i.image} />
               <div style={{ flex: 1, fontSize: 14, color: 'var(--ink)' }}>{i.name}</div>
               <b style={{ color: 'var(--ink)' }}>× {i.quantity}</b>
             </div>

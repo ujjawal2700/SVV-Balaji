@@ -251,6 +251,9 @@ model User {
   batchHoldEvents          BatchHoldEvent[]        @relation("BatchHoldEvents")
   orderReturnsRecorded     OrderReturn[]           @relation("OrderReturnsRecorded")
   pushSubscriptions        PushSubscription[]
+  pushDevices              PushDevice[]
+  appNotifications         AppNotification[]
+  pushBroadcastsSent       PushBroadcast[]         @relation("PushBroadcastsSent")
   orderEventsActed         OrderEvent[]            @relation("OrderEventsActed")
   loyaltySettingsUpdated   LoyaltySettings[]       @relation("LoyaltySettingsUpdated")
 
@@ -2931,9 +2934,11 @@ model CustomerAccount {
 
   otpChallenges CustomerOtpChallenge[]
 
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  sessions  CustomerSession[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sessions         CustomerSession[]
+  pushDevices      PushDevice[]
+  appNotifications AppNotification[]
 
   @@index([status])
   @@index([channel])
@@ -3968,6 +3973,7 @@ model Rider {
   cashEntries    RiderCashEntry[]
   earnings       RiderEarning[]
   notifications  RiderNotification[]
+  pushDevices    PushDevice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3977,21 +3983,21 @@ model Rider {
 }
 
 model RiderSession {
-  id               String    @id @default(uuid())
-  riderId          String
-  rider            Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  id                  String    @id @default(uuid())
+  riderId             String
+  rider               Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
   /// SHA-256 of the current refresh token (rotated on every refresh).
-  refreshTokenHash String
+  refreshTokenHash    String
   /// The token it replaced, accepted for a short grace window after rotation:
   /// on mobile data a refresh response is often lost, and the app retries
   /// with the old token. Treating that as theft would log riders out mid-shift.
   previousRefreshHash String?
   rotatedAt           DateTime?
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  lastUsedAt       DateTime  @default(now())
-  userAgent        String?
-  createdAt        DateTime  @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  lastUsedAt          DateTime  @default(now())
+  userAgent           String?
+  createdAt           DateTime  @default(now())
 
   @@index([riderId])
   @@map("rider_sessions")
@@ -4345,9 +4351,147 @@ model RiderNotification {
   title     String
   body      String
   taskId    String?
+  imageUrl  String?
+  link      String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([riderId, createdAt])
   @@map("rider_notifications")
+}
+
+enum PolicyAudience {
+  RIDER
+  RETAILER
+  CUSTOMER
+}
+
+enum PolicyType {
+  PRIVACY_POLICY
+  TERMS_AND_CONDITIONS
+}
+
+model LegalPolicy {
+  id          String         @id @default(uuid())
+  audience    PolicyAudience
+  type        PolicyType
+  title       String
+  content     String         @db.Text
+  version     String         @default("1.0")
+  isActive    Boolean        @default(true)
+  updatedById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([audience, type])
+  @@map("legal_policies")
+}
+
+// ---------------------------------------------------------------------------
+// Push notifications (Firebase Cloud Messaging) + in-app inbox
+// ---------------------------------------------------------------------------
+
+/// Which app a device token was issued to - decides the click-through base path and logo.
+enum PushApp {
+  ADMIN
+  FIELD
+  CUSTOMER
+  RIDER
+}
+
+/// The three separate identity systems a notification can be addressed to.
+enum PushRecipientKind {
+  STAFF
+  CUSTOMER
+  RIDER
+}
+
+/// One browser/phone that asked to receive pushes while signed in. Registered at login and
+/// deleted at logout. `sessionId` pins it to the login session (CustomerSession / RiderSession):
+/// a device whose session was revoked or has expired is skipped, so a signed-out person never
+/// gets a system pop-up even if the logout call never reached us. Staff have no session row;
+/// for them a cleared `User.refreshTokenHash` (what staff logout does) means signed out.
+model PushDevice {
+  id    String            @id @default(uuid())
+  /// FCM registration token. Unique: the same browser signing in as someone else moves the row.
+  token String            @unique
+  app   PushApp
+  kind  PushRecipientKind
+
+  userId            String?
+  user              User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customerAccountId String?
+  customerAccount   CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+  riderId           String?
+  rider             Rider?           @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  userAgent String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([customerAccountId])
+  @@index([riderId])
+  @@map("push_devices")
+}
+
+/// A message Super Admin sent from the Push Notifications screen. `audience` is the filter as
+/// submitted; the counts are what actually happened when it went out.
+model PushBroadcast {
+  id       String  @id @default(uuid())
+  title    String
+  body     String
+  imageUrl String?
+  /// Path inside the receiving app opened on tap, e.g. "/offers". Null = app home.
+  link     String?
+
+  audience        Json
+  audienceSummary String
+
+  /// People matched by the filter - every one of them gets an inbox entry.
+  recipientCount Int @default(0)
+  /// Of those, how many had at least one signed-in device.
+  reachableCount Int @default(0)
+  deviceCount    Int @default(0)
+  sentCount      Int @default(0)
+  failedCount    Int @default(0)
+
+  createdById String
+  createdBy   User     @relation("PushBroadcastsSent", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  notifications AppNotification[]
+
+  @@index([createdAt])
+  @@map("push_broadcasts")
+}
+
+/// In-app inbox for staff and storefront accounts (riders keep using `rider_notifications`).
+/// Written for every recipient whether or not a push could be delivered, so someone who was
+/// signed out still sees the message in the app after signing in.
+model AppNotification {
+  id String @id @default(uuid())
+
+  broadcastId String?
+  broadcast   PushBroadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
+  kind              PushRecipientKind
+  userId            String?
+  user              User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customerAccountId String?
+  customerAccount   CustomerAccount?  @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+
+  title    String
+  body     String
+  imageUrl String?
+  link     String?
+  readAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([customerAccountId, createdAt])
+  @@map("app_notifications")
 }

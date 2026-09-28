@@ -121,10 +121,26 @@ export function Dashboard() {
           <>
             <div className="card" style={{ padding: 14 }}>
               <div className="stats">
-                <div className="stat mint"><div className="ico"><Gift size={30} /></div><div className="label">Complete Delivery</div><div className="value">{d.today.completed}</div></div>
-                <div className="stat cream"><div className="ico"><Deliver size={30} /></div><div className="label">Pending Delivery</div><div className="value">{d.today.pending}</div></div>
-                <div className="stat pink"><div className="ico"><CancelIco size={30} /></div><div className="label">Cancel Delivery</div><div className="value">{d.today.cancelled}</div></div>
-                <div className="stat lav"><div className="ico"><Return size={30} /></div><div className="label">Return Delivery</div><div className="value">{d.today.returned}</div></div>
+                <button type="button" className="stat mint" onClick={() => navigate('/orders?tab=delivered')} aria-label="View Complete Deliveries">
+                  <div className="ico"><Gift size={30} /></div>
+                  <div className="label">Complete Delivery</div>
+                  <div className="value">{d.today.completed}</div>
+                </button>
+                <button type="button" className="stat cream" onClick={() => navigate('/orders?tab=active')} aria-label="View Pending Deliveries">
+                  <div className="ico"><Deliver size={30} /></div>
+                  <div className="label">Pending Delivery</div>
+                  <div className="value">{d.today.pending}</div>
+                </button>
+                <button type="button" className="stat pink" onClick={() => navigate('/orders?tab=cancelled')} aria-label="View Cancelled Deliveries">
+                  <div className="ico"><CancelIco size={30} /></div>
+                  <div className="label">Cancel Delivery</div>
+                  <div className="value">{d.today.cancelled}</div>
+                </button>
+                <button type="button" className="stat lav" onClick={() => navigate('/orders?tab=returned')} aria-label="View Returned Deliveries">
+                  <div className="ico"><Return size={30} /></div>
+                  <div className="label">Return Delivery</div>
+                  <div className="value">{d.today.returned}</div>
+                </button>
               </div>
               {d.cashInHand > 0 ? (
                 <Link to="/cash" className="between" style={{ marginTop: 12, background: 'var(--orange-soft)', borderRadius: 12, padding: '10px 12px', color: 'var(--orange-dark)', fontSize: 14 }}>

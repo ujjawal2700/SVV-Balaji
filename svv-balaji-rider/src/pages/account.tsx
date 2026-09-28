@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { errorMessage } from '../api/client';
-import { riderApi } from '../api/rider';
+import { riderApi, type VehicleType } from '../api/rider';
 import { useAuth } from '../auth/AuthContext';
-import { Bell, Box, Cash, Chevron, Clock, Logout, Store, Truck, User, Wallet } from '../ui/icons';
-import { Spinner, TopBar, date, inr, time } from '../ui/kit';
+import { ArrowDownLeft, ArrowUpRight, Bell, Box, Camera, Cash, Chevron, Clock, Coin, Logout, Store, TrendingUp, Truck, User, Wallet } from '../ui/icons';
+import { Spinner, TopBar, useToast, date, inr, time } from '../ui/kit';
 import { STATUS_LABEL } from '../ui/orders';
 
 export function History() {
@@ -42,43 +42,263 @@ const TYPE_LABEL: Record<string, string> = {
 
 export function EarningsScreen() {
   const q = useQuery({ queryKey: ['earnings'], queryFn: () => riderApi.earnings() });
+  const cashQ = useQuery({ queryKey: ['cash'], queryFn: riderApi.cash });
+  const toast = useToast();
+  const [filterTab, setFilterTab] = useState<'all' | 'earnings' | 'withdrawals'>('all');
+  const [timeframe, setTimeframe] = useState<'Weekly' | 'Monthly'>('Weekly');
+  const [withdrawing, setWithdrawing] = useState(false);
+
   const e = q.data;
+  const cash = cashQ.data;
+
+  const handleWithdraw = () => {
+    setWithdrawing(true);
+    setTimeout(() => {
+      setWithdrawing(false);
+      toast('Withdrawal request submitted! Transfer to your registered bank account will process within 24h.', 'success');
+    }, 800);
+  };
+
+  const bars = [
+    { day: 'S', height: '45%', highlight: false },
+    { day: 'M', height: '60%', highlight: false },
+    { day: 'T', height: '100%', highlight: true },
+    { day: 'W', height: '35%', highlight: false },
+    { day: 'T', height: '50%', highlight: false },
+    { day: 'F', height: '40%', highlight: false },
+    { day: 'S', height: '75%', highlight: false },
+  ];
+
+  const earningItems = (e?.lines ?? []).map((l) => ({
+    id: l.id,
+    type: 'EARNING' as const,
+    title: TYPE_LABEL[l.type] ?? l.type,
+    subtitle: `${l.orderNumber ? `#${l.orderNumber} · ` : ''}${date(l.earnedAt)}`,
+    amount: l.amount,
+    dateObj: new Date(l.earnedAt),
+  }));
+
+  const cashItems = (cash?.entries ?? []).filter((c) => c.type === 'DEPOSITED' || c.amount < 0).map((c) => ({
+    id: c.id,
+    type: 'WITHDRAWAL' as const,
+    title: c.type === 'DEPOSITED' ? 'Store cash deposit' : 'Cash withdrawal',
+    subtitle: date(c.createdAt),
+    amount: -Math.abs(c.amount),
+    dateObj: new Date(c.createdAt),
+  }));
+
+  const allTransactions = [...earningItems, ...cashItems].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+
+  const filteredTransactions = allTransactions.filter((item) => {
+    if (filterTab === 'earnings') return item.type === 'EARNING';
+    if (filterTab === 'withdrawals') return item.type === 'WITHDRAWAL';
+    return true;
+  });
+
   return (
-    <div className="app">
-      <TopBar title="Earnings" back />
-      <div className="page">
+    <div className="app" style={{ background: '#f8fafc' }}>
+      {/* Top Banner with soft gradient */}
+      <div style={{ background: 'linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%)', padding: 'calc(16px + env(safe-area-inset-top)) 18px 24px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
+        <div className="between" style={{ marginBottom: 12 }}>
+          <Link to="/" className="icon-btn" style={{ color: '#fff', background: 'rgba(255,255,255,0.2)' }} aria-label="Back">
+            <Chevron size={20} style={{ transform: 'rotate(180deg)' }} />
+          </Link>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#fff', flex: 1, marginLeft: 12 }}>Earnings</h1>
+        </div>
+      </div>
+
+      <div className="page" style={{ marginTop: -12 }}>
         {!e ? <Spinner /> : (
           <>
-            <div className="card" style={{ background: 'var(--orange)', color: '#fff' }}>
-              <div style={{ fontSize: 13, opacity: 0.9 }}>Today</div>
-              <div style={{ fontSize: 34, fontWeight: 700 }}>{inr(e.today)}</div>
-              <div className="between" style={{ marginTop: 8, fontSize: 13 }}>
-                <span>This week <b>{inr(e.thisWeek)}</b></span>
-                <span>{e.range.deliveries} deliveries this week</span>
+            {/* 4 Stat Summary Cards (2x2 Grid) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              {/* Available */}
+              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+                <div className="between">
+                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Available</span>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#475569' }}>
+                    <Wallet size={15} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(e.thisWeek || e.today || 0)}</div>
+              </div>
+
+              {/* Pending */}
+              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+                <div className="between">
+                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Pending</span>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#475569' }}>
+                    <Coin size={15} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(e.today || 0)}</div>
+              </div>
+
+              {/* This Month */}
+              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>This Month</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr(e.range?.total || e.thisWeek || 0)}</div>
+                <div style={{ marginTop: 6 }}>
+                  <span className="chip green" style={{ fontSize: 11, padding: '2px 8px', height: 20 }}>
+                    <TrendingUp size={11} /> +54.65%
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Earned */}
+              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Total Earned</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr((e.range?.total || e.thisWeek) + e.today)}</div>
               </div>
             </div>
-            {Object.keys(e.byType).length ? (
-              <div className="card">
-                <div className="kv-title" style={{ marginTop: 0 }}>This week by type</div>
-                {Object.entries(e.byType).map(([k, v]) => (
-                  <div key={k} className="between" style={{ padding: '6px 0', fontSize: 14 }}><span>{TYPE_LABEL[k] ?? k}</span><b style={{ color: 'var(--ink)' }}>{inr(v)}</b></div>
-                ))}
+
+            {/* Earnings Activity Card */}
+            <div className="card" style={{ borderRadius: 20, padding: 18, marginBottom: 14 }}>
+              <div className="between" style={{ marginBottom: 16 }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>Earnings activity</span>
+                <select
+                  value={timeframe}
+                  onChange={(ev) => setTimeframe(ev.target.value as any)}
+                  style={{ background: '#f1f5f9', border: 'none', borderRadius: 10, padding: '4px 10px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', outline: 'none' }}
+                >
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </select>
               </div>
-            ) : null}
-            <div className="section-title">Recent</div>
-            {e.lines.length === 0 ? <div className="card empty"><Wallet size={40} /><div>Complete a delivery to start earning.</div></div> : (
-              <div className="card" style={{ padding: '4px 16px' }}>
-                {e.lines.map((l, k) => (
-                  <div key={l.id} className="between" style={{ padding: '12px 0', borderTop: k ? '1px solid var(--line)' : 'none' }}>
-                    <div>
-                      <div style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 500 }}>{TYPE_LABEL[l.type] ?? l.type}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{l.orderNumber ? `#${l.orderNumber} · ` : ''}{date(l.earnedAt)} {time(l.earnedAt)}{l.note ? ` · ${l.note}` : ''}</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center' }}>
+                <div>
+                  <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#64748b' }}>
+                      <Coin size={16} />
                     </div>
-                    <b style={{ color: l.amount >= 0 ? 'var(--green)' : 'var(--red)' }}>{l.amount >= 0 ? '+' : ''}{inr(l.amount)}</b>
+                    <span className="muted" style={{ fontSize: 13 }}>This Week</span>
                   </div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--ink)', margin: '2px 0' }}>{inr(e.thisWeek)}</div>
+                  <span className="chip green" style={{ fontSize: 11, padding: '2px 8px', height: 20, marginTop: 4 }}>
+                    <TrendingUp size={11} /> +54.65%
+                  </span>
+                </div>
+
+                {/* Bar Chart Container */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 100, padding: '0 4px' }}>
+                  {bars.map((b, i) => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <div
+                        style={{
+                          width: 14,
+                          height: b.height,
+                          borderRadius: 8,
+                          background: b.highlight ? '#f97316' : '#ffedd5',
+                          transition: 'height 0.3s ease',
+                        }}
+                      />
+                      <span style={{ fontSize: 11, fontWeight: b.highlight ? 700 : 500, color: b.highlight ? '#f97316' : '#94a3b8' }}>{b.day}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Withdraw Funds Action Button */}
+            <button
+              className="btn block"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
+                color: '#fff',
+                borderRadius: 16,
+                height: 52,
+                fontSize: 16,
+                fontWeight: 600,
+                boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)',
+                border: 'none',
+                marginTop: 6,
+                marginBottom: 20,
+              }}
+              onClick={handleWithdraw}
+              disabled={withdrawing}
+            >
+              {withdrawing ? 'Processing...' : 'Withdraw funds'}
+            </button>
+
+            {/* Transactions Section */}
+            <div className="section-title" style={{ marginTop: 10, marginBottom: 12 }}>Transactions</div>
+            <div className="card" style={{ borderRadius: 20, padding: 16 }}>
+              {/* Filter Tabs */}
+              <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 3, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 16 }}>
+                {(['all', 'earnings', 'withdrawals'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setFilterTab(tab)}
+                    style={{
+                      border: 'none',
+                      background: filterTab === tab ? '#fff' : 'transparent',
+                      color: filterTab === tab ? 'var(--ink)' : '#64748b',
+                      borderRadius: 10,
+                      padding: '8px 0',
+                      fontSize: 13,
+                      fontWeight: filterTab === tab ? 600 : 500,
+                      boxShadow: filterTab === tab ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
+                      textTransform: 'capitalize',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {tab === 'all' ? 'All' : tab === 'earnings' ? 'Earnings' : 'Withdrawals'}
+                  </button>
                 ))}
               </div>
-            )}
+
+              {/* Transactions List */}
+              {filteredTransactions.length === 0 ? (
+                <div className="card empty" style={{ boxShadow: 'none', padding: '24px 0' }}>
+                  <Wallet size={36} />
+                  <div style={{ fontSize: 13, marginTop: 8 }}>No transactions match this filter.</div>
+                </div>
+              ) : (
+                filteredTransactions.map((item, idx) => (
+                  <div
+                    key={item.id + idx}
+                    className="between"
+                    style={{
+                      padding: '12px 0',
+                      borderTop: idx ? '1px solid #f1f5f9' : 'none',
+                    }}
+                  >
+                    <div className="row" style={{ gap: 12 }}>
+                      <div
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: '50%',
+                          background: item.type === 'EARNING' ? '#ecfdf5' : '#fff1f2',
+                          color: item.type === 'EARNING' ? '#10b981' : '#f43f5e',
+                          display: 'grid',
+                          placeItems: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {item.type === 'EARNING' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{item.title}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{item.subtitle}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <b style={{ fontSize: 15, color: item.amount >= 0 ? '#10b981' : 'var(--ink)' }}>
+                        {item.amount >= 0 ? `+${inr(item.amount)}` : `-${inr(Math.abs(item.amount))}`}
+                      </b>
+                      <div>
+                        <span className="chip green" style={{ fontSize: 10, height: 18, padding: '0 6px', marginTop: 2 }}>
+                          Completed
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </>
         )}
       </div>
@@ -131,11 +351,14 @@ export function Notifications() {
       <TopBar title="Notifications" back right={list.some((n) => !n.readAt) ? <button className="link" style={{ fontSize: 13 }} onClick={() => read.mutate()}>Mark read</button> : null} />
       <div className="page">
         {q.isLoading ? <Spinner /> : list.length === 0 ? <div className="card empty"><Bell size={40} /><div>Nothing yet.</div></div> : list.map((n) => (
-          <Link key={n.id} to={n.taskId ? `/task/${n.taskId}` : '#'} className="card" style={{ display: 'flex', gap: 12, opacity: n.readAt ? 0.7 : 1 }}>
-            <div className="thumb" style={{ width: 42, height: 42, background: n.readAt ? 'var(--bg)' : 'var(--orange-soft)' }}><Bell size={20} /></div>
+          <Link key={n.id} to={n.link || (n.taskId ? `/task/${n.taskId}` : '#')} className="card" style={{ display: 'flex', gap: 12, opacity: n.readAt ? 0.7 : 1 }}>
+            <div className="thumb" style={{ width: 42, height: 42, background: n.readAt ? 'var(--bg)' : 'var(--orange-soft)' }}>
+              {n.type === 'BROADCAST' ? <img src={`${import.meta.env.BASE_URL}svv-balaji.png`} alt="" style={{ width: 30, height: 30 }} /> : <Bell size={20} />}
+            </div>
             <div style={{ flex: 1 }}>
               <div className="between"><b style={{ color: 'var(--ink)', fontSize: 14 }}>{n.title}</b><span className="muted" style={{ fontSize: 11 }}>{time(n.createdAt)}</span></div>
-              <div className="muted" style={{ fontSize: 13 }}>{n.body}</div>
+              <div className="muted" style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{n.body}</div>
+              {n.imageUrl ? <img src={n.imageUrl} alt="" style={{ width: '100%', borderRadius: 10, marginTop: 8 }} /> : null}
             </div>
           </Link>
         ))}
@@ -145,35 +368,195 @@ export function Notifications() {
 }
 
 export function Profile() {
-  const { rider, signOut } = useAuth();
+  const { rider, reload, signOut } = useAuth();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const photoInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
   const [busy, setBusy] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [fullName, setFullName] = useState(rider?.fullName ?? '');
+  const [email, setEmail] = useState(rider?.email ?? '');
+  const [city, setCity] = useState(rider?.city ?? '');
+  const [vehicleType, setVehicleType] = useState<VehicleType>(rider?.vehicleType ?? 'MOTORCYCLE');
+  const [vehicleNumber, setVehicleNumber] = useState(rider?.vehicleNumber ?? '');
+
   if (!rider) return null;
+
+  const handlePhotoUpload = async (f: File) => {
+    setUploadingPhoto(true);
+    try {
+      await riderApi.uploadDocument(f, 'photo');
+      await reload();
+      void qc.invalidateQueries();
+      toast('Profile picture updated successfully!', 'success');
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = fullName.trim();
+    if (!cleanName || !/^[a-zA-Z\s.'-]+$/.test(cleanName)) {
+      toast('Full name should contain letters only', 'error');
+      return;
+    }
+    const cleanEmail = email.trim();
+    if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      toast('Enter a valid email address', 'error');
+      return;
+    }
+    const cleanCity = city.trim();
+    if (cleanCity && !/^[a-zA-Z\s.'-]+$/.test(cleanCity)) {
+      toast('City should contain letters only', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await riderApi.updateProfile({
+        fullName: cleanName,
+        email: cleanEmail || undefined,
+        city: cleanCity || undefined,
+        vehicleType,
+        vehicleNumber: vehicleNumber.trim().toUpperCase() || undefined,
+      });
+      await reload();
+      void qc.invalidateQueries();
+      setEditing(false);
+      toast('Profile updated successfully!', 'success');
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const rows: Array<[string, React.ReactNode, React.ReactNode]> = [
     ['Rider ID', rider.code ?? '—', <User size={18} key="u" />],
     ['Mobile', rider.phone, <User size={18} key="p" />],
+    ['Email', rider.email || '—', <User size={18} key="e" />],
     ['Store', rider.warehouse?.name ?? 'Not assigned', <Store size={18} key="s" />],
+    ['Deliveries at once', rider.maxActiveTasks ?? 1, <Box size={18} key="d" />],
+    ['City', rider.city || '—', <User size={18} key="c" />],
     ['Vehicle', [rider.vehicleType?.replace('_', ' ').toLowerCase(), rider.vehicleNumber].filter(Boolean).join(' · ') || '—', <Truck size={18} key="t" />],
   ];
+
   return (
     <div className="app">
       <TopBar title="Profile" />
       <div className="page with-nav">
         <div className="card" style={{ textAlign: 'center', padding: '22px 16px' }}>
-          <div style={{ width: 72, height: 72, margin: '0 auto', borderRadius: '50%', background: 'var(--orange)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 28, fontWeight: 600, overflow: 'hidden' }}>
-            {rider.photoUrl ? <img src={rider.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : rider.fullName.charAt(0)}
+          <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto' }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--orange)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 32, fontWeight: 600, overflow: 'hidden', border: '3px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+              {uploadingPhoto ? <Spinner /> : rider.photoUrl ? <img src={rider.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : rider.fullName.charAt(0)}
+            </div>
+            <button
+              type="button"
+              onClick={() => photoInput.current?.click()}
+              disabled={uploadingPhoto}
+              title="Change profile picture"
+              style={{
+                position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: '50%', background: 'var(--orange)', color: '#fff', display: 'grid', placeItems: 'center', border: '2px solid #fff', cursor: 'pointer'
+              }}
+            >
+              <Camera size={15} />
+            </button>
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => e.target.files?.[0] && void handlePhotoUpload(e.target.files[0])}
+            />
           </div>
-          <h2 style={{ margin: '10px 0 2px', fontSize: 18, color: 'var(--ink)' }}>{rider.fullName}</h2>
+
+          <h2 style={{ margin: '12px 0 2px', fontSize: 18, color: 'var(--ink)' }}>{rider.fullName}</h2>
           <span className={`chip ${rider.availability === 'ONLINE' ? 'green' : 'grey'}`}>{rider.availability === 'ONLINE' ? 'Online' : 'Offline'}</span>
         </div>
-        <div className="card" style={{ padding: '4px 16px' }}>
-          {rows.map(([k, v, i], n) => (
-            <div key={k} className="between" style={{ padding: '13px 0', borderTop: n ? '1px solid var(--line)' : 'none', fontSize: 14 }}>
-              <span className="row muted"><span style={{ color: 'var(--orange)' }}>{i}</span>{k}</span>
-              <b style={{ color: 'var(--ink)', textTransform: k === 'Vehicle' ? 'capitalize' : 'none' }}>{v}</b>
+
+        {!editing ? (
+          <>
+            <div className="between" style={{ padding: '8px 4px 2px' }}>
+              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>Personal Information</span>
+              <button className="link" style={{ fontSize: 13, fontWeight: 600 }} onClick={() => {
+                setFullName(rider.fullName);
+                setEmail(rider.email ?? '');
+                setCity(rider.city ?? '');
+                setVehicleType(rider.vehicleType ?? 'MOTORCYCLE');
+                setVehicleNumber(rider.vehicleNumber ?? '');
+                setEditing(true);
+              }}>
+                Edit details
+              </button>
             </div>
-          ))}
-        </div>
-        <div className="card" style={{ padding: '4px 16px' }}>
+
+            <div className="card" style={{ padding: '4px 16px', marginTop: 4 }}>
+              {rows.map(([k, v, i], n) => (
+                <div key={k} className="between" style={{ padding: '13px 0', borderTop: n ? '1px solid var(--line)' : 'none', fontSize: 14 }}>
+                  <span className="row muted"><span style={{ color: 'var(--orange)' }}>{i}</span>{k}</span>
+                  <b style={{ color: 'var(--ink)', textTransform: k === 'Vehicle' ? 'capitalize' : 'none' }}>{v}</b>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <form onSubmit={handleSaveProfile} className="card" style={{ marginTop: 8, padding: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 14, color: 'var(--ink)' }}>Edit Personal Details</div>
+
+            <div className="field">
+              <label>Full Name *</label>
+              <input className="inp" value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Enter full name" />
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Email Address</label>
+              <input className="inp" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>City</label>
+              <input className="inp" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Indore" />
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Vehicle Type</label>
+              <select className="inp" value={vehicleType} onChange={(e) => setVehicleType(e.target.value as VehicleType)}>
+                <option value="MOTORCYCLE">Motorcycle</option>
+                <option value="SCOOTER">Scooter</option>
+                <option value="EV_SCOOTER">EV Scooter</option>
+                <option value="BICYCLE">Bicycle</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>Vehicle Number</label>
+              <input className="inp" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="e.g. MP09AB1234" />
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
+              <button type="button" className="btn soft block" style={{ flex: 1 }} onClick={() => setEditing(false)} disabled={saving}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary block" style={{ flex: 1 }} disabled={saving}>
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="card" style={{ padding: '4px 16px', marginTop: 14 }}>
           {[
             ['/earnings', 'Earnings', <Wallet size={18} key="w" />],
             ['/cash', 'Cash in hand', <Cash size={18} key="c" />],

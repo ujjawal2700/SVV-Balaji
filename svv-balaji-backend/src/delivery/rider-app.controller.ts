@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { IsArray, IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { VehicleType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService, type UploadedFileLike } from '../uploads/storage.service';
 import { FailureReasonsService } from './core/delivery-core';
@@ -27,6 +28,13 @@ class RejectOfferDto {
 }
 class MarkReadDto {
   @IsOptional() @IsArray() @IsString({ each: true }) ids?: string[];
+}
+export class UpdateRiderProfileDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MinLength(2) @MaxLength(80) @Matches(/^[a-zA-Z\s.'-]+$/, { message: 'Full name should only contain letters' }) fullName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEmail({}, { message: 'Enter a valid email address' }) email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) @Matches(/^[a-zA-Z\s.'-]+$/, { message: 'City should only contain letters' }) city?: string;
+  @ApiPropertyOptional({ enum: VehicleType }) @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) @Matches(/^[A-Z0-9\s-]{5,15}$/i, { message: 'Enter a valid vehicle number' }) vehicleNumber?: string;
 }
 
 const IMAGE = /^image\/(jpeg|png|webp|heic|heif)$/;
@@ -111,6 +119,30 @@ export class RiderAppController {
   async me(@CurrentRider() r: RiderJwtPayload) {
     const rider = await this.prisma.rider.findUnique({ where: { id: r.sub }, include: { warehouse: { select: { id: true, name: true } } } });
     return this.auth.publicRider(rider!);
+  }
+
+  @Patch('me')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update personal profile details (fullName, email, city, vehicleType, vehicleNumber)' })
+  async updateProfile(@CurrentRider() r: RiderJwtPayload, @Body() dto: UpdateRiderProfileDto) {
+    if (dto.email) {
+      const email = dto.email.trim().toLowerCase();
+      const existing = await this.prisma.rider.findFirst({ where: { email, id: { not: r.sub } } });
+      if (existing) throw new ConflictException('This email is already registered with another account');
+    }
+    const updated = await this.prisma.rider.update({
+      where: { id: r.sub },
+      data: {
+        ...(dto.fullName ? { fullName: dto.fullName.trim() } : {}),
+        ...(dto.email !== undefined ? { email: dto.email ? dto.email.trim().toLowerCase() : null } : {}),
+        ...(dto.city !== undefined ? { city: dto.city ? dto.city.trim() : null } : {}),
+        ...(dto.vehicleType !== undefined ? { vehicleType: dto.vehicleType } : {}),
+        ...(dto.vehicleNumber !== undefined ? { vehicleNumber: dto.vehicleNumber ? dto.vehicleNumber.trim().toUpperCase() : null } : {}),
+      },
+      include: { warehouse: { select: { id: true, name: true } } },
+    });
+    return this.auth.publicRider(updated);
   }
 
   /** Photo of the licence / ID for approval (pending riders), or a profile photo. */

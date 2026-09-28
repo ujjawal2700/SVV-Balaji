@@ -139,13 +139,13 @@ function Settings({ r }: { r: RiderDetail }) {
   const [form] = Form.useForm();
   const { message } = AntApp.useApp();
   const save = useDeliveryMutation((v: { warehouseId?: string; maxActiveTasks?: number; vehicleType?: string; vehicleNumber?: string; city?: string }) => deliveryApi.updateRider(r.id, v));
-  const editable = canManage && (r.status === 'ACTIVE' || r.status === 'SUSPENDED');
+  const editable = canManage;
   return (
     <Card size="small" title="Dispatch settings" className="page-card"
       extra={editable ? <Button type="primary" size="small" loading={save.isPending} onClick={() => form.submit()}>Save</Button> : null}>
       <Form form={form} layout="vertical" disabled={!editable} key={r.id}
         initialValues={{ warehouseId: r.warehouse?.id, maxActiveTasks: r.maxActiveTasks, vehicleType: r.vehicleType ?? undefined, vehicleNumber: r.vehicleNumber ?? '', city: r.city ?? '' }}
-        onFinish={(v) => save.mutate(v, { onSuccess: () => message.success('Saved'), onError: (e) => message.error(apiErrorMessage(e)) })}>
+        onFinish={(v) => save.mutate(v, { onSuccess: () => message.success('Dispatch settings saved'), onError: (e) => message.error(apiErrorMessage(e)) })}>
         <Row gutter={12}>
           <Col span={16}>
             <Form.Item name="warehouseId" label="Home outlet" extra="Deliveries picked up here are offered to this rider.">
@@ -166,7 +166,6 @@ function Settings({ r }: { r: RiderDetail }) {
           </Col>
         </Row>
       </Form>
-      {!editable && canManage ? <Typography.Text type="secondary">Settings open once the rider is approved.</Typography.Text> : null}
     </Card>
   );
 }

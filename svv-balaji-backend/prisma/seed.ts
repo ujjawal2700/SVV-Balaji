@@ -34,6 +34,7 @@ async function main() {
   await seedDefaultCategories();
   await seedDefaultSchemes();
   await seedDefaultProducts();
+  await seedDefaultPayRules();
 }
 
 async function seedSuperAdmin(email: string, password: string, resetPassword: boolean) {
@@ -765,6 +766,25 @@ async function seedDefaultProducts() {
       ? `Migrated ${created} storefront product(s) into the catalogue`
       : 'Storefront products already present - nothing to migrate',
   );
+}
+
+async function seedDefaultPayRules() {
+  const count = await prisma.riderEarningRule.count();
+  if (count > 0) {
+    console.log(`Rider Pay Rules already present (${count}) - leaving them alone`);
+    return;
+  }
+
+  await prisma.riderEarningRule.create({
+    data: {
+      name: 'Standard Base Pay',
+      kind: 'BASE_PER_DELIVERY',
+      isActive: true,
+      zoneId: null,
+      config: { amount: 35 },
+    },
+  });
+  console.log('Created default Rider Pay Rule: ₹35 base pay per delivery');
 }
 
 main()

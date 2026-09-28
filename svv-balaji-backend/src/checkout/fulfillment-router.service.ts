@@ -59,7 +59,7 @@ export class FulfillmentRouterService {
     client: Prisma.TransactionClient | PrismaService,
     input: {
       b2b: boolean;
-      address: { latitude: number | null; longitude: number | null };
+      address: { latitude: number | null; longitude: number | null; pincode?: string | null; city?: string | null };
       items: Array<{ productId: string; quantity: number }>;
       excludeNodeIds?: string[];
       /** The customer's delivery zone says: courier only when Quick is not possible. */
@@ -75,28 +75,33 @@ export class FulfillmentRouterService {
       ? { lat: input.address.latitude as number, lng: input.address.longitude as number }
       : null;
 
-    if (!input.b2b && from && !input.courierOnly) {
+    if (!input.b2b && !input.courierOnly) {
       const outlets = await client.warehouse.findMany({
         where: {
           kind: WarehouseKind.OUTLET,
           isActive: true,
-          latitude: { not: null },
-          longitude: { not: null },
           ...(input.excludeNodeIds?.length ? { id: { notIn: input.excludeNodeIds } } : {}),
         },
-        select: { id: true, name: true, kind: true, branchId: true, city: true, latitude: true, longitude: true, serviceRadiusKm: true },
+        select: { id: true, name: true, kind: true, branchId: true, city: true, pincode: true, latitude: true, longitude: true, serviceRadiusKm: true },
       });
 
       const ranked = outlets
         .map((o) => {
-          const distanceKm = haversineKm(from, { lat: Number(o.latitude), lng: Number(o.longitude) });
+          const distanceKm = from && o.latitude !== null && o.longitude !== null
+            ? haversineKm(from, { lat: Number(o.latitude), lng: Number(o.longitude) })
+            : null;
           const radius = o.serviceRadiusKm === null ? settings.localRadiusKm : Number(o.serviceRadiusKm);
-          return { o, distanceKm, withinRadius: distanceKm <= radius };
+          const samePincodeOrCity = Boolean(
+            (input.address.pincode && o.pincode && input.address.pincode.trim() === o.pincode.trim()) ||
+            (o.city && input.address.city && o.city.toLowerCase() === input.address.city.toLowerCase())
+          );
+          const withinRadius = distanceKm !== null ? distanceKm <= radius : samePincodeOrCity;
+          return { o, distanceKm, withinRadius };
         })
-        .sort((a, b) => a.distanceKm - b.distanceKm);
+        .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
 
       for (const r of ranked) {
-        const round2 = Math.round(r.distanceKm * 100) / 100;
+        const round2 = r.distanceKm !== null ? Math.round(r.distanceKm * 100) / 100 : null;
         if (!r.withinRadius) {
           considered.push({ nodeId: r.o.id, name: r.o.name, distanceKm: round2, withinRadius: false, hasStock: null });
           continue;
@@ -109,7 +114,7 @@ export class FulfillmentRouterService {
             method: 'LOCAL',
             node: { id: r.o.id, name: r.o.name, kind: r.o.kind, branchId: r.o.branchId, city: r.o.city },
             distanceKm: round2,
-            reason: `Delivered from ${r.o.name}, ${round2} km from you`,
+            reason: round2 !== null ? `Delivered from ${r.o.name}, ${round2} km from you` : `Delivered from ${r.o.name} (Local Outlet)`,
             considered,
           };
         }

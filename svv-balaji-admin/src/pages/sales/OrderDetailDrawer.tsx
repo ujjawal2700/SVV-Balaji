@@ -195,9 +195,28 @@ export function OrderDetailDrawer({
       }
     } catch (error) {
       const msg = apiErrorMessage(error, `Could not ${step.label.toLowerCase()}`);
-      message.error(msg, 10);
       if (msg.toLowerCase().includes('scan') || msg.toLowerCase().includes('batch')) {
         setActiveTab('fulfillment');
+        setTimeout(() => {
+          document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        modal.info({
+          centered: true,
+          title: '📦 Batch Verification Required',
+          content: (
+            <div style={{ marginTop: 8 }}>
+              <p style={{ margin: 0, fontSize: 14 }}>
+                Please click <strong>Verify Batch</strong> or <strong>Verify All Batches</strong> in the <strong>Pick List</strong> below before marking this order packed.
+              </p>
+            </div>
+          ),
+          okText: 'Go to Pick List',
+          onOk: () => {
+            document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          },
+        });
+      } else {
+        message.error(msg, 10);
       }
     }
   };

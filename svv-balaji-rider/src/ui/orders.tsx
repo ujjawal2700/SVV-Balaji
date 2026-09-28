@@ -21,11 +21,36 @@ export function itemsTitle(items: ItemPreview[], count: number) {
   return `${items[0].name}${more ? ` + ${more} more` : ''}`;
 }
 
+export function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  if (url.startsWith('/images/') || url.startsWith('/icons/') || url.startsWith('/favicon')) {
+    return url;
+  }
+  const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') || 'http://localhost:3000';
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${apiBase}${cleanPath}`;
+}
+
 export function ItemThumb({ items, size = 76 }: { items: ItemPreview[]; size?: number }) {
-  const img = items.find((i) => i.image)?.image;
+  const [error, setError] = useState(false);
+  const rawImg = items.find((i) => i.image)?.image;
+  const imgUrl = resolveImageUrl(rawImg);
+
   return (
     <div className="thumb" style={{ width: size, height: size }}>
-      {img ? <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Box size={Math.round(size * 0.45)} />}
+      {imgUrl && !error ? (
+        <img
+          src={imgUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setError(true)}
+        />
+      ) : (
+        <Box size={Math.round(size * 0.45)} />
+      )}
     </div>
   );
 }
@@ -75,7 +100,7 @@ export function OfferCard({ offer, onOpen, onAccept, onReject, busy }: { offer: 
           <Countdown until={offer.expiresAt} />
         </div>
         <div className="meta"><Pin size={15} /> <span className="ellipsis">{offer.dropArea}</span></div>
-        <div className="meta"><span className="ellipsis">#{offer.orderNumber ?? offer.taskNumber} · {date(offer.offeredAt)}{offer.cod > 0 ? ` · COD ${inr(offer.cod)}` : ''}</span></div>
+        <div className="meta"><Clock size={15} /> <span className="ellipsis">{date(offer.offeredAt)}{offer.cod > 0 ? ` · COD ${inr(offer.cod)}` : ''}</span></div>
         <div className="actions" onClick={(e) => e.stopPropagation()}>
           <button className="btn success small" onClick={onAccept} disabled={busy}>Accept</button>
           <button className="btn danger small" onClick={onReject} disabled={busy}>Reject</button>

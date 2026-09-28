@@ -96,13 +96,13 @@ const normalisePhone = (p: string) => {
 };
 
 export class RiderSignupDto {
-  @ApiProperty() @IsString() @MinLength(2) @MaxLength(80) fullName!: string;
-  @ApiProperty({ example: '9876543210' }) @IsString() phone!: string;
-  @ApiPropertyOptional() @IsOptional() @IsEmail() email?: string;
+  @ApiProperty() @IsString() @MinLength(2) @MaxLength(80) @Matches(/^[a-zA-Z\s.'-]+$/, { message: 'Full name should only contain letters' }) fullName!: string;
+  @ApiProperty({ example: '9876543210' }) @IsString() @Matches(/^[6-9]\d{9}$/, { message: 'Enter a valid 10-digit Indian mobile number starting with 6-9' }) phone!: string;
+  @ApiPropertyOptional() @IsOptional() @IsEmail({}, { message: 'Enter a valid email address' }) email?: string;
   @ApiProperty({ minLength: 8 }) @IsString() @MinLength(8) @MaxLength(72) password!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) city?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) @Matches(/^[a-zA-Z\s.'-]+$/, { message: 'City should only contain letters' }) city?: string;
   @ApiPropertyOptional({ enum: VehicleType }) @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) vehicleNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) @Matches(/^[A-Z0-9\s-]{5,15}$/i, { message: 'Enter a valid vehicle number' }) vehicleNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) licenceNumber?: string;
   @ApiPropertyOptional({ description: 'Licence / ID photo URL from POST /rider/uploads/signup' })
   @IsOptional() @IsString() @MaxLength(500) documentUrl?: string;
@@ -329,7 +329,7 @@ export class RiderAuthService {
     return { reset: true };
   }
 
-  publicRider(r: Rider & { warehouse?: { id: string; name: string } | null }) {
+  publicRider(r: Rider & { warehouse?: { id: string; name: string } | null; maxActiveTasks?: number }) {
     return {
       id: r.id,
       code: r.code,
@@ -343,6 +343,7 @@ export class RiderAuthService {
       photoUrl: r.photoUrl,
       availability: r.availability,
       warehouse: r.warehouse ?? null,
+      maxActiveTasks: r.maxActiveTasks ?? 1,
       rejectionReason: r.status === RiderStatus.REJECTED ? r.rejectionReason : null,
     };
   }

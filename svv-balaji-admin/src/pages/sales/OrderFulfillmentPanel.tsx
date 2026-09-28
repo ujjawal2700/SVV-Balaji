@@ -1,8 +1,9 @@
-import { Alert, App as AntApp, Button, Descriptions, Form, Input, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App as AntApp, Button, Descriptions, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import { checkoutAdminApi, type PickPlanRow, type ScanResult } from '@shared/api/checkout';
 import { useFulfillmentAction, usePickPlan } from '@shared/hooks/useCheckoutAdmin';
+import { useRiders } from '@shared/hooks/useDelivery';
 import { Can } from '../../components/Can';
 
 const { Text } = Typography;
@@ -34,6 +35,8 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
   const [rider, setRider] = useState({ name: '', phone: '' });
   const showPlan = ['ALLOCATED', 'PACKED', 'DISPATCHED', 'DELIVERED'].includes(order.status);
   const plan = usePickPlan(order.id, showPlan);
+  const activeRidersQuery = useRiders({ status: 'ACTIVE' });
+  const activeRiders = activeRidersQuery.data ?? [];
 
   const startAction = useFulfillmentAction(() => checkoutAdminApi.startPacking(order.id));
   const assignAction = useFulfillmentAction((r: { name: string; phone: string }) => checkoutAdminApi.assignRider(order.id, r.name, r.phone));
@@ -95,6 +98,19 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
     }
   };
 
+  const handleVerifyAllBatches = async () => {
+    const unscanned = (plan.data ?? []).filter((r) => !r.scanned);
+    if (!unscanned.length) return;
+    try {
+      for (const row of unscanned) {
+        await scanAction.mutateAsync(row.fgBatchNumber);
+      }
+      message.success('🎉 All allocated batches verified successfully! Order is now PACKED.', 5);
+    } catch (e) {
+      message.error(apiErrorMessage(e, 'Could not verify batches'), 6);
+    }
+  };
+
   const local = order.fulfillmentMethod === 'LOCAL';
   const busy = scanAction.isPending || startAction.isPending || assignAction.isPending || shipAction.isPending || verifyAction.isPending;
 
@@ -123,8 +139,28 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
       ) : null}
 
       {showPlan ? (
-        <div>
-          <Text strong>Pick list (oldest expiry first)</Text>
+        <div id="pick-list-section" style={{ scrollMarginTop: 80, padding: 12, background: order.status === 'ALLOCATED' ? '#fefce8' : 'transparent', borderRadius: 10, border: order.status === 'ALLOCATED' ? '1px solid #fef08a' : 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <Text strong style={{ fontSize: 14 }}>Pick list (oldest expiry first)</Text>
+              {order.status === 'ALLOCATED' && (plan.data ?? []).some((r) => !r.scanned) && (
+                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                  Click <strong>Verify Batch</strong> or <strong>Verify All Batches</strong> to confirm items before packing.
+                </Text>
+              )}
+            </div>
+            {order.status === 'ALLOCATED' && (plan.data ?? []).some((r) => !r.scanned) ? (
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => void handleVerifyAllBatches()}
+                loading={scanAction.isPending}
+                style={{ borderRadius: 6, backgroundColor: '#16a34a', borderColor: '#16a34a', fontWeight: 600 }}
+              >
+                ✓ Verify All Batches
+              </Button>
+            ) : null}
+          </div>
           <Table<PickPlanRow>
             size="small"
             style={{ marginTop: 8 }}
@@ -138,18 +174,23 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
                 title: 'Batch to pull',
                 dataIndex: 'fgBatchNumber',
                 render: (v: string, row: PickPlanRow) => (
-                  <Space size={6}>
+                  <Space size={8}>
                     <Text
                       code
-                      style={{ cursor: 'pointer', color: '#1677ff' }}
+                      style={{ cursor: 'pointer', color: '#1677ff', fontWeight: 600 }}
                       title="Click to fill into scan input"
                       onClick={() => setScanCode(v)}
                     >
                       {v}
                     </Text>
                     {!row.scanned && order.status === 'ALLOCATED' ? (
-                      <Button size="small" type="link" onClick={() => void handleScanBatch(v)} style={{ fontSize: 11, padding: 0 }}>
-                        Verify
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() => void handleScanBatch(v)}
+                        style={{ fontSize: 11, borderRadius: 4, height: 22, padding: '0 8px', backgroundColor: '#2563eb' }}
+                      >
+                        Verify Batch
                       </Button>
                     ) : null}
                   </Space>
@@ -157,7 +198,7 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
               },
               { title: 'Expires', dataIndex: 'expiryDate', render: (v: string | null) => (v ? new Date(v).toLocaleDateString('en-IN') : '—') },
               { title: 'Packs', dataIndex: 'quantity', align: 'right' },
-              { title: 'Scanned', dataIndex: 'scanned', render: (v: boolean) => (v ? <Tag color="green">✓ Scanned</Tag> : <Tag color="orange">Pending</Tag>) },
+              { title: 'Scanned', dataIndex: 'scanned', render: (v: boolean) => (v ? <Tag color="green">✓ Scanned</Tag> : <Tag color="orange">Pending Verification</Tag>) },
             ]}
           />
         </div>
@@ -188,6 +229,25 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
       {order.status === 'PACKED' && local ? (
         <Can do="ORDER_DISPATCH">
           <Form layout="inline" onFinish={() => void handleAssignRider()}>
+            {activeRiders.length > 0 && (
+              <Form.Item>
+                <Select
+                  placeholder="Select registered rider"
+                  style={{ minWidth: 200 }}
+                  allowClear
+                  onChange={(val) => {
+                    const selected = activeRiders.find((r) => r.id === val);
+                    if (selected) {
+                      setRider({ name: selected.fullName, phone: selected.phone });
+                    }
+                  }}
+                  options={activeRiders.map((r) => ({
+                    value: r.id,
+                    label: `${r.fullName} (${r.phone})`,
+                  }))}
+                />
+              </Form.Item>
+            )}
             <Form.Item><Input placeholder="Rider name" value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} /></Form.Item>
             <Form.Item><Input placeholder="Rider mobile" maxLength={10} value={rider.phone} onChange={(e) => setRider({ ...rider, phone: e.target.value })} /></Form.Item>
             <Button type="primary" htmlType="submit" loading={assignAction.isPending} disabled={rider.name.length < 2 || rider.phone.length !== 10 || busy}>Assign rider & send out</Button>

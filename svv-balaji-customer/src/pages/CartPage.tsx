@@ -19,7 +19,7 @@ import { useCart } from '../cart/useCart';
 import { useLoyaltyEstimate } from '../loyalty/useLoyaltyEstimate';
 import { couponsApi } from '@shared/api/coupons';
 import type { Coupon } from '@shared/api/types';
-import { checkoutApi, type OfferCoupon, type Address } from '../api/checkout';
+import { checkoutApi, type OfferCoupon, type Address, type CheckoutRequest } from '../api/checkout';
 import Lottie from 'lottie-react';
 import shoppingCartAnimation from '../assets/animations/shopping-cart.json';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
@@ -54,13 +54,52 @@ export function CartPage() {
   const cart = useCart();
   const { role, isLoggedIn } = useCustomerAuth();
   const toggleWishlist = useToggleWishlist();
+  const qc = useQueryClient();
 
   // Coupons state. The offers are the SERVER's (active, in date, for this channel);
   // the amounts shown in the cart are only an estimate - checkout prices the coupon for real.
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponInput, setCouponInput] = useState('');
-  const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [addressSelectModalOpen, setAddressSelectModalOpen] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => localStorage.getItem('selectedAddressId'));
+
+  const cartLinesForLoyalty = useMemo(
+    () => cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+    [cart.lines],
+  );
+
+  // Worked out by the server (same engine that credits the delivered order).
+  const loyaltyEstimate = useLoyaltyEstimate(cartLinesForLoyalty);
+  const estimatedPoints = loyaltyEstimate.data?.enabled ? loyaltyEstimate.data.points : 0;
+
+  const addressesQuery = useQuery({ queryKey: ADDRESSES_KEY, queryFn: checkoutApi.addresses, enabled: role !== 'GUEST' });
+  const addressesList = addressesQuery.data ?? [];
+
+  const selectedAddress: Address | null = useMemo(() => {
+    if (!addressesList.length) return null;
+    return addressesList.find((a) => a.id === selectedAddressId) ?? addressesList.find((a) => a.isDefault) ?? addressesList[0];
+  }, [addressesList, selectedAddressId]);
+
+  const quoteRequest: CheckoutRequest | null = useMemo(
+    () =>
+      selectedAddress?.id && cart.lines.length > 0
+        ? {
+            addressId: selectedAddress.id,
+            couponCode: appliedCoupon?.code || undefined,
+            items: cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+          }
+        : null,
+    [selectedAddress?.id, cart.lines, appliedCoupon?.code],
+  );
+
+  const quoteQuery = useQuery({
+    queryKey: ['storefront', 'checkout', 'quote', quoteRequest],
+    queryFn: () => checkoutApi.quote(quoteRequest!),
+    enabled: !!quoteRequest && role !== 'GUEST',
+  });
+  const quote = quoteQuery.data;
 
   useEffect(() => {
     if (role === 'GUEST') return;
@@ -123,17 +162,28 @@ export function CartPage() {
     );
   }
 
-  // Calculations
+  // Calculations: use real server quote when available so Cart and Checkout amounts match 100%
   const totalMrp = cart.lines.reduce((acc, line) => acc + ((line.mrp || line.displayUnitPrice || 0) * line.quantity), 0);
-  const subtotal = cart.indicativeTotal || 0;
-  const productDiscount = totalMrp - subtotal;
-  const gst = Math.floor(subtotal * 0.05); // 5% GST
+  const rawSubtotal = cart.indicativeTotal || 0;
+  const productDiscount = Math.max(0, totalMrp - rawSubtotal);
 
-  const couponDiscount = appliedCoupon ? couponsApi.calculateDiscount(appliedCoupon, subtotal) : 0;
+  const couponDiscount = quote
+    ? quote.totals.couponDiscount
+    : (appliedCoupon ? couponsApi.calculateDiscount(appliedCoupon, rawSubtotal) : 0);
 
-  const deliveryCharge = cart.deliveryInfo ? cart.deliveryInfo.charge : (subtotal > 500 ? 0 : 50);
-  const grandTotal = Math.max(0, subtotal + gst + deliveryCharge - couponDiscount);
-  const totalSavings = productDiscount + couponDiscount + (deliveryCharge === 0 && subtotal <= 500 ? 50 : 0);
+  const gst = quote
+    ? quote.totals.tax
+    : Math.max(0, rawSubtotal - Math.round(rawSubtotal / 1.05));
+
+  const deliveryCharge = quote
+    ? quote.totals.deliveryFee
+    : (cart.deliveryInfo ? cart.deliveryInfo.charge : (rawSubtotal > 500 ? 0 : 50));
+
+  const grandTotal = quote
+    ? quote.totals.totalPayable
+    : Math.max(0, rawSubtotal + deliveryCharge - couponDiscount);
+
+  const totalSavings = productDiscount + couponDiscount + (deliveryCharge === 0 && rawSubtotal <= 500 ? 50 : 0);
 
   const handleApplyCode = (codeToApply?: string) => {
     const code = (codeToApply || couponInput).trim().toUpperCase();
@@ -146,16 +196,15 @@ export function CartPage() {
       message.error(`Coupon code "${code}" is invalid or expired.`);
       return;
     }
-    if (subtotal < found.minOrderValue) {
-      message.warning(`Add items worth ${formatInr(found.minOrderValue - subtotal)} more to apply "${found.code}"`);
+    if (rawSubtotal < found.minOrderValue) {
+      message.warning(`Add items worth ${formatInr(found.minOrderValue - rawSubtotal)} more to apply "${found.code}"`);
       return;
     }
     setAppliedCoupon(found);
     sessionStorage.setItem('applied_coupon_code', found.code);
-    const saving = couponsApi.calculateDiscount(found, subtotal);
+    const saving = couponsApi.calculateDiscount(found, rawSubtotal);
     message.success(`🎉 Coupon "${found.code}" applied! You saved ${formatInr(saving)}.`);
     setCouponInput('');
-    setCouponModalOpen(false);
   };
 
   const handleRemoveCoupon = () => {
@@ -164,27 +213,10 @@ export function CartPage() {
     message.info('Coupon removed');
   };
 
-  // Worked out by the server (same engine that credits the delivered order).
-  const loyaltyEstimate = useLoyaltyEstimate(cart.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })));
-  const estimatedPoints = loyaltyEstimate.data?.enabled ? loyaltyEstimate.data.points : 0;
-
   const today = new Date();
   const tmrw = new Date(today);
   tmrw.setDate(tmrw.getDate() + 1);
   const dayStr = tmrw.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-
-  const qc = useQueryClient();
-  const [addressModalOpen, setAddressModalOpen] = useState(false);
-  const [addressSelectModalOpen, setAddressSelectModalOpen] = useState(false);
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(() => localStorage.getItem('selectedAddressId'));
-
-  const addressesQuery = useQuery({ queryKey: ADDRESSES_KEY, queryFn: checkoutApi.addresses, enabled: role !== 'GUEST' });
-  const addressesList = addressesQuery.data ?? [];
-
-  const selectedAddress: Address | null = useMemo(() => {
-    if (!addressesList.length) return null;
-    return addressesList.find((a) => a.id === selectedAddressId) ?? addressesList.find((a) => a.isDefault) ?? addressesList[0];
-  }, [addressesList, selectedAddressId]);
 
   const handleSelectAddress = (id: string) => {
     setSelectedAddressId(id);
@@ -429,16 +461,6 @@ export function CartPage() {
                 <Typography.Text strong style={{ fontSize: 14, color: '#1c1917', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <TagsOutlined style={{ color: '#f97316' }} /> Apply Coupon &amp; Offers
                 </Typography.Text>
-                {coupons.length > 0 && (
-                  <Button
-                    type="link"
-                    size="small"
-                    style={{ padding: 0, color: '#f97316', fontWeight: 600 }}
-                    onClick={() => setCouponModalOpen(true)}
-                  >
-                    View All ({coupons.length})
-                  </Button>
-                )}
               </div>
 
               {appliedCoupon ? (
@@ -494,33 +516,6 @@ export function CartPage() {
                       Apply
                     </Button>
                   </Space.Compact>
-
-                  {/* Available Quick Coupon Chips */}
-                  {coupons.slice(0, 2).map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => handleApplyCode(c.code)}
-                      style={{
-                        marginTop: 10,
-                        padding: '6px 10px',
-                        background: '#fffbeb',
-                        border: '1px solid #fef3c7',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Tag color="orange" style={{ fontWeight: 700, margin: 0, fontSize: 11 }}>
-                          {c.code}
-                        </Tag>
-                        <span style={{ fontSize: 12, color: '#92400e' }}>{c.description}</span>
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#d97706' }}>TAP TO APPLY</span>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -665,78 +660,7 @@ export function CartPage() {
         </Button>
       </div>
 
-      {/* Available Coupons Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <TagsOutlined style={{ color: '#f97316' }} />
-            <span>Available Coupons &amp; Offers</span>
-          </div>
-        }
-        open={couponModalOpen}
-        onCancel={() => setCouponModalOpen(false)}
-        footer={null}
-        width={500}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          {coupons.map((c) => {
-            const isApplied = appliedCoupon?.id === c.id;
-            const qualifies = subtotal >= c.minOrderValue;
-            const saving = couponsApi.calculateDiscount(c, subtotal);
 
-            return (
-              <div
-                key={c.id}
-                style={{
-                  border: isApplied ? '2px solid #22c55e' : '1px solid #e5e7eb',
-                  borderRadius: 12,
-                  padding: '14px 16px',
-                  background: isApplied ? '#f0fdf4' : '#fff',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Tag color="orange" style={{ fontWeight: 700, fontSize: 13, letterSpacing: 0.5 }}>
-                      {c.code}
-                    </Tag>
-                    <span style={{ fontWeight: 600, fontSize: 13, color: '#1f2937' }}>{c.title}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>{c.description}</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                    Min order: {formatInr(c.minOrderValue)}
-                    {c.discountType === 'PERCENTAGE' && c.maxDiscount ? ` • Max discount: ${formatInr(c.maxDiscount)}` : ''}
-                  </div>
-                </div>
-
-                <div>
-                  {isApplied ? (
-                    <Button type="text" danger size="small" onClick={handleRemoveCoupon} style={{ fontWeight: 700 }}>
-                      Remove
-                    </Button>
-                  ) : (
-                    <Button
-                      type="primary"
-                      size="small"
-                      disabled={!qualifies}
-                      style={{
-                        background: qualifies ? '#059669' : undefined,
-                        borderColor: qualifies ? '#059669' : undefined,
-                        fontWeight: 600,
-                      }}
-                      onClick={() => handleApplyCode(c.code)}
-                    >
-                      {qualifies ? `Apply (-${formatInr(saving)})` : 'Under Min Cart'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Modal>
 
       {/* Address Switcher Modal */}
       <Modal

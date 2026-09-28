@@ -1,5 +1,6 @@
 import {
   BarcodeOutlined,
+  BellOutlined,
   CompassOutlined,
   CreditCardOutlined,
   DownOutlined,
@@ -28,6 +29,7 @@ import { useCategoryTree } from '../hooks/useCategoryTree';
 import { useLoyalty } from '../loyalty/useLoyalty';
 
 import { formatInr } from '../utils/money';
+import { useUnreadNotifications } from '../notifications/useUnreadNotifications';
 
 
 export function DesktopHeader() {
@@ -36,6 +38,7 @@ export function DesktopHeader() {
   const { role, customerProfile, retailerProfile, logout, isLoggedIn } = useCustomerAuth();
   const credit = useRetailerCredit();
   const loyalty = useLoyalty();
+  const unreadNotifications = useUnreadNotifications();
   const categories = useCategoryTree();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -420,6 +423,14 @@ export function DesktopHeader() {
                 </Button>
               </Link>
             )}
+
+            {isLoggedIn ? (
+              <Link to="/notifications" aria-label="Notifications" style={{ display: 'flex', alignItems: 'center', padding: '0 4px' }}>
+                <Badge count={unreadNotifications} size="small" offset={[2, -2]}>
+                  <BellOutlined style={{ fontSize: 20, color: '#334155' }} />
+                </Badge>
+              </Link>
+            ) : null}
 
             {/* Cart Button */}
             <Link to="/cart" style={{ textDecoration: 'none' }}>

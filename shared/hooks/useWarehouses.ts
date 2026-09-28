@@ -26,6 +26,12 @@ export function useUpdateWarehouse() {
       warehousesApi.update(id, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.warehouses.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.batches.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finishedGoods.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.procurementPlans.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
+      void queryClient.invalidateQueries({ queryKey: ['delivery'] });
     },
   });
 }

@@ -1514,6 +1514,29 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   {
+    key: 'pushNotifications',
+    label: 'Push Notifications',
+    path: '/push-notifications',
+    viewKey: 'pushNotifications.view',
+    permissions: [
+      {
+        key: 'pushNotifications.view',
+        label: 'View sent push notifications',
+        description: 'History of broadcasts with how many people each reached, and the compose form filters.',
+        defaultRoles: [],
+      },
+      {
+        key: 'pushNotifications.send',
+        label: 'Send push notifications',
+        description:
+          'Message customers, retailers, riders, staff roles or chosen people. Appears on their phone even ' +
+          'with the app closed - Super Admin only by default because it reaches everyone at once.',
+        defaultRoles: [],
+      },
+    ],
+  },
+
+  {
     key: 'schemes',
     label: 'Homepage Schemes & Offers',
     path: '/schemes',

@@ -59,8 +59,31 @@ export function PendingScreen() {
   const qc = useQueryClient();
   const file = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [checking, setChecking] = useState(false);
+
   if (!rider) return null;
   const rejected = rider.status === 'REJECTED';
+
+  const checkStatus = async () => {
+    setChecking(true);
+    try {
+      const updated = await riderApi.me();
+      await reload();
+      void qc.invalidateQueries();
+
+      if (updated.status === 'ACTIVE') {
+        toast('Congratulations! Your application has been approved.', 'success');
+      } else if (updated.status === 'REJECTED') {
+        toast(updated.rejectionReason ?? 'Application not approved. Contact your store for details.', 'error');
+      } else {
+        toast('Application is still under review. We will notify you once approved.', 'info');
+      }
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const upload = async (f: File) => {
     setUploading(true);
@@ -110,7 +133,7 @@ export function PendingScreen() {
         {[
           ['Account created', true],
           ['Mobile number verified', true],
-          ['Approved and store assigned', false],
+          ['Approved and store assigned', rider.status === 'ACTIVE'],
         ].map(([label, ok]) => (
           <div key={String(label)} className="row" style={{ padding: '8px 0', color: ok ? 'var(--ink)' : 'var(--muted)', fontSize: 14 }}>
             <span style={{ width: 24, height: 24, borderRadius: '50%', display: 'grid', placeItems: 'center', background: ok ? 'var(--green-soft)' : '#f0f0f3', color: ok ? 'var(--green)' : '#b5b5bd' }}>
@@ -121,7 +144,23 @@ export function PendingScreen() {
         ))}
       </div>
 
-      <button className="btn outline block" style={{ marginTop: 22 }} onClick={() => void reload()}>Check status</button>
+      {(rider.warehouse?.name || rider.maxActiveTasks) ? (
+        <div className="card" style={{ marginTop: 14, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: 'var(--ink)' }}>Assigned Dispatch Settings</div>
+          <div className="between" style={{ fontSize: 13, marginBottom: 6 }}>
+            <span className="muted">Home Outlet</span>
+            <b style={{ color: 'var(--ink)' }}>{rider.warehouse?.name ?? 'Not assigned'}</b>
+          </div>
+          <div className="between" style={{ fontSize: 13 }}>
+            <span className="muted">Deliveries at once</span>
+            <b style={{ color: 'var(--ink)' }}>{rider.maxActiveTasks ?? 1}</b>
+          </div>
+        </div>
+      ) : null}
+
+      <button className="btn outline block" style={{ marginTop: 22 }} disabled={checking} onClick={checkStatus}>
+        {checking ? 'Checking status…' : 'Check status'}
+      </button>
       <button className="btn block" style={{ marginTop: 10, background: 'none', color: 'var(--muted)' }} onClick={() => void signOut()}>
         <Logout size={18} /> Sign out
       </button>

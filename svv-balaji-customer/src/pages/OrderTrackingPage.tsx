@@ -215,7 +215,7 @@ export function OrderTrackingPage() {
               </Card>
             )}
 
-            {!delivered && o.deliveryOtp ? (
+            {!delivered && o.deliveryOtp && o.status === 'DISPATCHED' ? (
               <Card>
                 <div style={{ textAlign: 'center' }}>
                   <Typography.Text type="secondary"><SafetyCertificateOutlined /> Delivery OTP</Typography.Text>

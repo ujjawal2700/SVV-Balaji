@@ -207,6 +207,8 @@ export const PERMISSIONS = {
   SCHEME_CREATE: 'schemes.create',
   SCHEME_MANAGE: 'schemes.edit',
   SCHEME_DELETE: 'schemes.delete',
+  PUSH_NOTIFICATIONS_VIEW: 'pushNotifications.view',
+  PUSH_NOTIFICATIONS_SEND: 'pushNotifications.send',
   HOME_SECTION_VIEW: 'homeSections.view',
   HOME_SECTION_CREATE: 'homeSections.create',
   HOME_SECTION_MANAGE: 'homeSections.edit',

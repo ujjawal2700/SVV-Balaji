@@ -33,7 +33,7 @@ a { color: inherit; text-decoration: none; }
 .app { max-width: 480px; margin: 0 auto; min-height: 100dvh; background: var(--bg); position: relative; }
 .page { padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
 .page.with-nav { padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); }
-.plain { background: #fff; min-height: 100dvh; }
+.plain { max-width: 480px; margin: 0 auto; min-height: 100dvh; background: #fff; position: relative; }
 
 /* Top bar: white card with rounded bottom, back arrow left, title centred. */
 .topbar {
@@ -110,9 +110,10 @@ a { color: inherit; text-decoration: none; }
 
 /* Dashboard stat tiles */
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stat { border-radius: 16px; padding: 16px 12px; text-align: center; }
+.stat { border-radius: 16px; padding: 16px 12px; text-align: center; border: none; cursor: pointer; width: 100%; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.stat:active { transform: scale(0.96); opacity: 0.9; }
 .stat .ico { height: 34px; display: grid; place-items: center; }
-.stat .label { font-size: 13px; color: var(--text); margin-top: 6px; }
+.stat .label { font-size: 13px; color: var(--text); margin-top: 6px; font-weight: 500; }
 .stat .value { font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1.2; }
 .stat.mint { background: #e8f6f1; color: #16a085; }
 .stat.cream { background: #fff5dd; color: #d99b00; }

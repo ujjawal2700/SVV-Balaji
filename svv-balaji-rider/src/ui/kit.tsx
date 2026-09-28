@@ -4,14 +4,45 @@ import { ArrowLeft, Eye, EyeOff } from './icons';
 
 // ------------------------------------------------------------------ top bar
 
-export function TopBar({ title, back, right, left, leftTitle }: { title: ReactNode; back?: boolean | string; right?: ReactNode; left?: ReactNode; leftTitle?: boolean }) {
+export function TopBar({
+  title,
+  back,
+  right,
+  left,
+  leftTitle,
+}: {
+  title: ReactNode;
+  back?: boolean | string | (() => void);
+  right?: ReactNode;
+  left?: ReactNode;
+  leftTitle?: boolean;
+}) {
   const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (typeof back === 'function') {
+      back();
+      return;
+    }
+    if (typeof back === 'string') {
+      navigate(back);
+      return;
+    }
+    if (window.history.state && typeof window.history.state.idx === 'number' && window.history.state.idx > 0) {
+      navigate(-1);
+    } else if (window.opener) {
+      window.close();
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
     <header className={`topbar${leftTitle ? ' left-title' : ''}`}>
       <div>
         {left ??
           (back ? (
-            <button className="icon-btn" aria-label="Back" onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}>
+            <button type="button" className="icon-btn" aria-label="Back" onClick={handleBack}>
               <ArrowLeft />
             </button>
           ) : null)}

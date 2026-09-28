@@ -97,8 +97,8 @@ export function matchZone(zone: ZoneShape, addr: AddressPoint): ZoneMatch | null
   const pincodes = zone.pincodes.map(normalisePincode).filter((x): x is string => x !== null);
   const dist = hasPin && zone.outlet ? distanceKm({ lat: addr.lat!, lng: addr.lng! }, zone.outlet) : null;
 
-  if (zone.maxRadiusKm !== null) {
-    if (dist === null || dist > zone.maxRadiusKm) return null;
+  if (hasPin && zone.maxRadiusKm !== null && dist !== null && dist > zone.maxRadiusKm) {
+    return null;
   }
 
   if (hasPin && zone.boundary) {

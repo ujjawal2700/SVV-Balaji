@@ -20,6 +20,10 @@ build/
 .env
 .env.*
 !.env.example
+# Firebase Admin private key (server-side push). Loaded from disk or from the
+# FIREBASE_SERVICE_ACCOUNT_JSON env var, never committed.
+firebase-service-account*.json
+*-firebase-adminsdk-*.json
 
 # --- Generated code --------------------------------------------------------
 # The Prisma client is regenerated from schema.prisma by `npx prisma generate`

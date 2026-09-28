@@ -173,9 +173,28 @@ export function OrderDetailPage() {
       }
     } catch (error) {
       const msg = apiErrorMessage(error, `Could not ${step.label.toLowerCase()}`);
-      message.error(msg, 10);
       if (msg.toLowerCase().includes('scan') || msg.toLowerCase().includes('batch')) {
         setActiveTab('fulfillment');
+        setTimeout(() => {
+          document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+        modal.info({
+          centered: true,
+          title: '📦 Batch Verification Required',
+          content: (
+            <div style={{ marginTop: 8 }}>
+              <p style={{ margin: 0, fontSize: 14 }}>
+                Please click <strong>Verify Batch</strong> or <strong>Verify All Batches</strong> in the <strong>Pick List</strong> below before marking this order packed.
+              </p>
+            </div>
+          ),
+          okText: 'Go to Pick List',
+          onOk: () => {
+            document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          },
+        });
+      } else {
+        message.error(msg, 10);
       }
     }
   };
@@ -481,6 +500,37 @@ export function OrderDetailPage() {
                   showIcon
                   message={`Order Cancelled on ${formatDateTime(data.cancelledAt)}`}
                   description={data.cancelledReason || 'No reason specified.'}
+                />
+              )}
+
+              {data.status === 'ALLOCATED' && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={<Text strong style={{ fontSize: 14 }}>Next Step: Verify Allocated Batches</Text>}
+                  description={
+                    <div style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 13, color: '#475569' }}>
+                        Batches have been allocated for this order. Please verify each batch in the <strong>PACK &amp; DELIVERY</strong> tab before marking packed.
+                      </Text>
+                      <div style={{ marginTop: 10 }}>
+                        <Button
+                          type="primary"
+                          size="small"
+                          onClick={() => {
+                            setActiveTab('fulfillment');
+                            setTimeout(() => {
+                              document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 100);
+                          }}
+                          style={{ borderRadius: 6, backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 600 }}
+                        >
+                          📦 Go to Pack &amp; Delivery (Verify Batches)
+                        </Button>
+                      </div>
+                    </div>
+                  }
+                  style={{ borderRadius: 10, border: '1px solid #fcd34d' }}
                 />
               )}
 

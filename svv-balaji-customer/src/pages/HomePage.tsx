@@ -37,6 +37,7 @@ import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { buyAgainProducts as buyAgainHistory } from '../mock/homeMockData';
 import { formatInr } from '../utils/money';
 import { RatingBadge } from '../components/ProductReviews';
+import { useUnreadNotifications } from '../notifications/useUnreadNotifications';
 
 
 interface HeroSlide {
@@ -81,7 +82,8 @@ const FALLBACK_HERO_SLIDES: HeroSlide[] = [
 export function HomePage() {
   const cart = useCart();
   const navigate = useNavigate();
-  const { role, customerProfile, retailerProfile } = useCustomerAuth();
+  const { role, customerProfile, retailerProfile, isLoggedIn } = useCustomerAuth();
+  const unreadNotifications = useUnreadNotifications();
   const credit = useRetailerCredit();
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
@@ -273,11 +275,11 @@ export function HomePage() {
               <QrcodeOutlined style={{ fontSize: 15 }} />
               <span className="home-trace-text">Trace</span>
             </Link>
-            <Badge dot offset={[-3, 3]} color="#ef4444">
+            <Badge count={unreadNotifications} size="small" offset={[-3, 3]} color="#ef4444">
               <button
                 aria-label="Notifications"
                 className="home-bell-btn"
-                onClick={() => navigate(isRetailer ? '/profile' : '/profile')}
+                onClick={() => navigate(isLoggedIn ? '/notifications' : '/login')}
               >
                 <BellOutlined style={{ fontSize: 17, color: '#334155' }} />
               </button>

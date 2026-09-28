@@ -46,6 +46,9 @@ const OrdersPage = lazy(() => import('./pages/OrdersPage').then((m) => ({ defaul
 const OrderTrackingPage = lazy(() =>
   import('./pages/OrderTrackingPage').then((m) => ({ default: m.OrderTrackingPage })),
 );
+const OrderPlacedPage = lazy(() =>
+  import('./pages/OrderPlacedPage').then((m) => ({ default: m.OrderPlacedPage })),
+);
 const AddressesPage = lazy(() => import('./pages/AddressesPage').then((m) => ({ default: m.AddressesPage })));
 const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
 const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
@@ -62,6 +65,9 @@ const OrderSupportPage = lazy(() =>
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+);
+const NotificationsPage = lazy(() =>
+  import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
 );
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() =>
@@ -121,8 +127,12 @@ export function App() {
           <Route path="orders/:orderId/support" element={<OrderSupportPage />} />
           <Route path="order-support" element={<OrderSupportPage />} />
           <Route path="orders/:orderId" element={<OrderTrackingPage />} />
+          <Route path="order-placed/:orderNumber" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />
+          <Route path="order-placed" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />
+          <Route path="order-success/:orderNumber" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />
           <Route path="addresses" element={<AddressesPage />} />
           <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="notifications" element={<RequireAccount><NotificationsPage /></RequireAccount>} />
           <Route path="wallet" element={<WalletPage />} />
           <Route path="loyalty" element={<LoyaltyPage />} />
 

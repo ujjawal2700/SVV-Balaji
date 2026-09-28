@@ -31,6 +31,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setInitialising(false);
       }
     })();
+
+    const onFocus = () => {
+      if (tokens.refresh) {
+        void reload();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [reload]);
 
   const signIn = useCallback((s: Session) => {

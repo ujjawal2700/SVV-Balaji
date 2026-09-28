@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { CheckoutModule } from '../checkout/checkout.module';
@@ -26,7 +26,7 @@ import { DeliveryZonesModule } from './zones/zones.module';
  * machinery can later carry return pickups and other delivery SLAs.
  */
 @Module({
-  imports: [DeliveryZonesModule, CheckoutModule, SalesModule, RealtimeModule, CommonModule, PassportModule, JwtModule.register({})],
+  imports: [DeliveryZonesModule, forwardRef(() => CheckoutModule), SalesModule, RealtimeModule, CommonModule, PassportModule, JwtModule.register({})],
   controllers: [RiderAppController, RidersAdminController, DeliveryAdminController],
   providers: [
     DeliverySettingsService, FailureReasonsService, DeliveryEventsService,

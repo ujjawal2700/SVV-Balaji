@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
   HttpException,
   HttpStatus,
   Inject,
@@ -13,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
 import type { AddressSnapshot } from './addresses.service';
 import { SHIPPING_PROVIDER, type ShippingProvider } from './shipping/shipping-provider';
+import { DispatchService } from '../delivery/dispatch/dispatch.service';
 
 const MAX_OTP_ATTEMPTS = 5;
 const FG_NUMBER = /FG-[A-Z0-9_-]+/i;
@@ -36,6 +38,7 @@ export class FulfillmentService {
     private readonly prisma: PrismaService,
     private readonly sales: SalesService,
     @Inject(SHIPPING_PROVIDER) private readonly shipping: ShippingProvider,
+    @Inject(forwardRef(() => DispatchService)) private readonly dispatch: DispatchService,
   ) {}
 
   private async order(id: string) {
@@ -121,15 +124,48 @@ export class FulfillmentService {
     return { scanned: number, remaining, packed: remaining === 0, plan: await this.plan(orderId) };
   }
 
-  /** LOCAL: a rider takes it. */
+  /** LOCAL: a rider takes it. Matches registered app rider by phone or falls back to external driver. */
   async assignRider(orderId: string, rider: { name: string; phone: string }, userId: string) {
     const o = await this.order(orderId);
     if (o.fulfillmentMethod !== 'LOCAL') throw new BadRequestException('Only local-delivery orders use an in-house rider');
-    if (o.status !== OrderStatus.PACKED) throw new BadRequestException(`The order must be packed first (it is ${o.status})`);
-    // Packed local orders go on the rider-app delivery board automatically.
-    // Handing one to a rider outside the app (typing their name here) is still
-    // allowed while no app rider has taken it: the waiting task is withdrawn.
-    // Once an app rider has accepted, refuse - one order, one rider.
+    if (o.status !== OrderStatus.PACKED && o.status !== OrderStatus.DISPATCHED) {
+      throw new BadRequestException(`The order must be packed first (it is ${o.status})`);
+    }
+
+    const rawPhone = rider.phone.replace(/\D/g, '');
+    const phoneDigits = rawPhone.length >= 10 ? rawPhone.slice(-10) : rawPhone;
+
+    // Check if there is an active registered app rider matching this phone number
+    const appRider = await this.prisma.rider.findFirst({
+      where: {
+        status: 'ACTIVE',
+        phone: { contains: phoneDigits },
+      },
+    });
+
+    if (appRider) {
+      // Ensure a DeliveryTask exists for this order
+      let task = await this.prisma.deliveryTask.findFirst({
+        where: { orderId, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'] } },
+      });
+
+      if (!task) {
+        task = await this.dispatch.ensureTaskForOrder(orderId, userId);
+      }
+
+      if (task) {
+        if (appRider.warehouseId && task.warehouseId && appRider.warehouseId !== task.warehouseId) {
+          await this.prisma.rider.update({ where: { id: appRider.id }, data: { warehouseId: task.warehouseId } });
+        }
+        await this.dispatch.assignManually(task.id, appRider.id, userId);
+        if (o.status !== OrderStatus.DISPATCHED) {
+          await this.sales.advance(orderId, OrderStatus.DISPATCHED, userId);
+        }
+        return this.order(orderId);
+      }
+    }
+
+    // Fallback: external manual driver (not on rider app)
     const task = await this.prisma.deliveryTask.findFirst({
       where: { orderId, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'] } },
       select: { id: true, taskNumber: true, status: true },
@@ -138,14 +174,14 @@ export class FulfillmentService {
       throw new BadRequestException(`A rider-app rider already has this order (${task.taskNumber}) - reassign it on the delivery board`);
     }
     if (task) {
-      // Conditional: if an app rider accepts in the same instant, they win and this refuses.
       const taken = await this.prisma.deliveryTask.updateMany({
         where: { id: task.id, status: { in: ['READY_FOR_PICKUP', 'OFFERED'] }, riderId: null },
         data: { status: 'CANCELLED', cancelledAt: new Date(), cancelStage: 'BEFORE_ASSIGNMENT', cancelReason: `Handed to ${rider.name} outside the rider app` },
       });
-      if (taken.count !== 1) throw new BadRequestException(`A rider-app rider just took this order (${task.taskNumber})`);
-      await this.prisma.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
-      await this.prisma.deliveryTaskEvent.create({ data: { taskId: task.id, type: 'CANCELLED', actorUserId: userId, note: `Handed to ${rider.name} outside the rider app` } });
+      if (taken.count === 1) {
+        await this.prisma.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
+        await this.prisma.deliveryTaskEvent.create({ data: { taskId: task.id, type: 'CANCELLED', actorUserId: userId, note: `Handed to ${rider.name} outside the rider app` } });
+      }
     }
     await this.prisma.order.update({ where: { id: orderId }, data: { riderName: rider.name, riderPhone: rider.phone } });
     await this.sales.record(orderId, 'RIDER_ASSIGNED', userId, `${rider.name} (${rider.phone})`);

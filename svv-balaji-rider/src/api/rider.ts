@@ -19,6 +19,7 @@ export interface Rider {
   photoUrl: string | null;
   availability: 'ONLINE' | 'OFFLINE';
   warehouse: { id: string; name: string } | null;
+  maxActiveTasks?: number;
   rejectionReason: string | null;
 }
 
@@ -132,6 +133,9 @@ export interface Notification {
   title: string;
   body: string;
   taskId: string | null;
+  /** Super Admin broadcasts (type BROADCAST) may carry a picture and a page to open. */
+  imageUrl?: string | null;
+  link?: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -153,6 +157,8 @@ export const riderApi = {
   reset: (phone: string, code: string, newPassword: string) => d(api.post('/rider/auth/reset-password', { phone, code, newPassword })),
   logout: () => d(api.post('/rider/auth/logout')),
   me: () => d<Rider>(api.get('/rider/me')),
+  updateProfile: (body: { fullName?: string; email?: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string }) =>
+    d<Rider>(api.patch('/rider/me', body)),
   uploadDocument: (file: File, kind: 'document' | 'photo') => {
     const f = new FormData();
     f.append('file', file);
@@ -184,4 +190,7 @@ export const riderApi = {
   cash: () => d<{ balance: number; entries: Array<{ id: string; type: string; amount: number; reference: string | null; note: string | null; createdAt: string }> }>(api.get('/rider/cash')),
   notifications: () => d<Notification[]>(api.get('/rider/notifications')),
   markRead: (ids?: string[]) => d(api.patch('/rider/notifications/read', { ids })),
+  registerPushDevice: (token: string) => d(api.post('/rider/push-devices', { token, app: 'RIDER' })),
+  /** No auth needed - called while signing out. */
+  unregisterPushDevice: (token: string) => d(api.post('/notifications/devices/unregister', { token })),
 };

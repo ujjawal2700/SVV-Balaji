@@ -39,3 +39,7 @@ export const Chat = (p: P) => <S {...p}><path d="M4 5.5h16v10H9l-5 4v-14Z" /><pa
 export const Send = (p: P) => <S {...p}><path d="m4 12 16-8-6 16-2.5-6.5L4 12Z" /><path d="m11.5 13.5 3-3" /></S>;
 export const Locate = (p: P) => <S {...p}><circle cx="12" cy="12" r="6.5" /><circle cx="12" cy="12" r="2" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" /></S>;
 export const Calendar = (p: P) => <S {...p}><rect x="4" y="5.5" width="16" height="14" rx="2" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" /></S>;
+export const Coin = (p: P) => <S {...p}><circle cx="12" cy="12" r="8" /><path d="M12 7v10M15 9.5H10.5a1.5 1.5 0 0 0 0 3h3a1.5 1.5 0 0 1 0 3H9" /></S>;
+export const TrendingUp = (p: P) => <S {...p}><path d="M22 6L13.5 14.5L8.5 9.5L2 16" /><path d="M16 6H22V12" /></S>;
+export const ArrowDownLeft = (p: P) => <S {...p}><path d="M17 7L7 17M7 17H15M7 17V9" /></S>;
+export const ArrowUpRight = (p: P) => <S {...p}><path d="M7 17L17 7M17 7H9M17 7V15" /></S>;

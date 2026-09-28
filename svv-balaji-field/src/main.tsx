@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { api, apiErrorMessage } from '@shared/api/client';
 import { AuthProvider } from '@shared/auth/AuthProvider';
 import { App } from './App';
+import { PushBridge } from './notifications/PushBridge';
 import { installOfflineAdapter, isUnreachable } from './offline/adapter';
 import { persistQueryCache, restoreQueryCache } from './offline/persist';
 import { offlineProfile } from './offline/session';
@@ -126,6 +127,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             }
           >
             <AuthProvider offlineSession={offlineProfile}>
+              <PushBridge />
               <App />
             </AuthProvider>
           </BrowserRouter>

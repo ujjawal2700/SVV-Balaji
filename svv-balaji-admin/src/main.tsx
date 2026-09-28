@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { apiErrorMessage } from './api/client';
 import { AuthProvider } from './auth/AuthProvider';
+import { PushBridge } from './notifications/PushBridge';
 import { theme } from './theme';
 import './styles.css';
 
@@ -72,6 +73,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
           */}
           <BrowserRouter basename={import.meta.env.VITE_ROUTER_BASE || (import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, ''))}>
             <AuthProvider>
+              <PushBridge />
               <App />
             </AuthProvider>
           </BrowserRouter>

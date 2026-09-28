@@ -2779,3 +2779,81 @@ On-screen keypad removed (Verification and Delivery OTP screens); `useDigitEntry
 **API (additive):** `GET /rider/offers`, `/rider/dashboard` offers and `GET /rider/tasks` now include `items` (first 3: name, quantity, image) and `itemCount`; offers also `offeredAt`.
 **Verified:** backend `tsc`; rider `tsc` + `vite build`; headless Chrome at 390 px against a seeded demo (dashboard, order pop-up, reject reason, all four Orders tabs, track, task, full forgot -> OTP -> reset -> success), no page errors. Demo data removed.
 **Note:** e2e seed's refresh-replay checks now "fail" by design (2-min grace window added earlier) - the official `e2e-rider-flow.py` already accounts for it.
+
+---
+
+## 2026-09-28 — INCIDENT: local DB wiped, product catalogue restored from 22 Sep backup (Raunak, via agent)
+
+**What happened.** While starting the push-notification feature, the agent ran
+`prisma migrate diff --from-migrations ... --shadow-database-url <DATABASE_URL>`. Prisma resets the shadow
+database, so the local `svv_balaji` DB was emptied: the schema was replayed from `prisma/migrations`, but every row and
+the `_prisma_migrations` table were gone. Local dev DB only - no server DB touched. **Never point a shadow URL at a real DB.**
+
+**Restored (at Raunak's request, catalogue only - not a full restore).** Source: `svv-balaji-backend/svv_balaji_backup_20260922_133114.dump`,
+restored into a scratch DB `svv_balaji_restore_0922` (kept for now), then a data-only copy of: `users` (1 row -
+admin@svvbalaji.com, required by `price_lists.createdById`), `categories` 16, `products` 7, `product_variants` 1,
+`product_specifications` 18, `product_faqs` 2, `product_offers` 2, `price_lists` 42. Verified per-table md5 identical to
+the backup and zero orphaned FKs. Safety dump of the DB just before import: `backups/svv_balaji_before_product_import_20260928_152330.dump`.
+Extract used: `backups/product_data_from_20260922.sql`.
+
+**Not restored:** stock (FG batches pull the full farmer→raw→production chain), orders, customers, riders, zones,
+warehouses, settings, permissions grants, and everything created 23-28 Sep (not in any backup).
+
+**Still broken locally:** `_prisma_migrations` is missing, so `prisma migrate dev` will see drift and offer a reset -
+**do not accept it.** Baseline with `prisma migrate resolve --applied <name>` for each migration first. `home_sections`
+and `legal_policies` tables are also absent (they never had a migration).
+
+---
+
+## 2026-09-28 — Push notifications (Super Admin broadcasts) + DB recovery follow-ups (Raunak, via agent)
+
+**Recovery (follow-up to the incident entry above).** Also restored from the 22 Sep backup, again only into empty
+tables and verified md5-identical with 0 FK violations: the stock chain behind the 7 products (warehouses 2, branches 2,
+FG batches 7 + FG stock 7 → 500 units each at Main Store, production batches/consumptions 7, recipes/ingredients 7,
+raw batches 8, warehouse_stock 8, stock_movements 22, supplier + 7 transports, 1 farmer + agreement + inspection +
+collection, code counters). Every FG batch traces FG → PB → RM → source. **Migration history fixed**: all 53 migrations
+marked applied (`migrate resolve`), new idempotent `20260928090000_home_sections_legal_policies` (those two tables only
+ever existed via `db push` - safe on DBs that already have them). `migrate status` clean, zero drift.
+
+**Push notifications - new module `src/notifications`.**
+- Super Admin screen **`/push-notifications`** (admin, Promotions & Billing): audience = Everyone / Customers (B2C) /
+  Retailers (B2B) / Riders / Staff roles (Sales Executive = `SALES_TEAM`, any role, branch) / Specific people (search by
+  name, phone, email, business, rider code). Filters: city/state/pincode (customers & retailers; matches signup,
+  Customer record or any saved address), sales executive (retailers), outlet + online-now (riders). Live "will receive /
+  pop-up now" counts, phone-style preview, optional picture + in-app link, send history with delivered/read counts.
+- **Delivery rule** (the client ask): signed in → system notification with the app logo, even with the app closed;
+  signed out → **no pop-up**, message waits in the in-app inbox. Enforced twice: apps unregister the token at sign-out,
+  and the API only pushes to devices whose login session is still live (CustomerSession/RiderSession not revoked or
+  expired; staff: `refreshTokenHash` not null). Verified live: customer signed out without unregistering → 0 devices
+  targeted; inbox had the message on sign-in. Real FCM delivery to a Chrome admin tab verified.
+- **Schema** (migration `20260928100000_push_notifications`): `push_devices`, `push_broadcasts`, `app_notifications`;
+  `rider_notifications` + `imageUrl`, `link` (rider broadcasts land in the rider app's existing inbox, type `BROADCAST`).
+- **API (new)**: `GET/POST /notifications/broadcasts`, `GET .../options`, `GET .../recipients?q=`, `POST .../preview`
+  (perms `pushNotifications.view` / `.send`, Super Admin only by default); staff self `POST /notifications/me/devices`,
+  `GET /notifications/me/inbox`, `PATCH /notifications/me/inbox/read`; `POST /notifications/devices/unregister` (no auth,
+  by token); storefront `POST /storefront/notifications/devices`, `GET /storefront/notifications`, `PATCH .../read`;
+  rider `POST /rider/push-devices`. Existing VAPID staff order alerts (`/notifications/push/*`) untouched.
+- **Apps**: each has `src/push.ts` + a `PushBridge` mounted in the auth provider. Firebase's service worker now registers
+  under its own scope (`<base>firebase-cloud-messaging-push-scope`) - the rider app previously registered it on the same
+  scope as `sw.js`, so they kept replacing each other. Messages are data-only so the worker draws them (no duplicates)
+  with `svv-balaji.png` (added to the customer app). Bells: admin header, field app bar (both layouts), customer home
+  page (was a decorative fake red dot linking to /profile) + desktop header; new customer `/notifications` page.
+  Field app gained the `firebase` dependency.
+- **Config**: `FIREBASE_SERVICE_ACCOUNT_JSON` or `firebase-service-account.json` (git-ignored; present locally). Without
+  it push is off and the screen says so. **The key was pasted into an agent chat - rotate it** (Firebase console →
+  Service accounts) once things are stable, and because of the malware note below.
+- **Security**: the VS Code autorun malware loader was back in commit `39502d3` ("field app completed", 26 Sep):
+  `.vscode/tasks.json` folderOpen task + `task.allowAutomaticTasks: true` + `public/fonts/README.md`. Removed/restored in
+  the working tree (staged, not committed). Treat this machine's credentials as exposed.
+
+**Verified:** backend `tsc` (only a pre-existing error in `checkout/fulfillment.service.spec.ts` from the uncommitted
+checkout changes), `jest src/auth` 50/50; admin/customer/rider/field `tsc` (admin's remaining errors are pre-existing
+in HomeSections/Outlets/WarehouseForm) and `vite build` all four. Live API: preview counts, send, dead-token cleanup,
+sign-out gating, inbox, validation, 401s. **Not verified:** rider and field apps in a real browser; iOS (needs the app
+added to the home screen, iOS 16.4+, for web push at all).
+**Test data left locally:** customer account "Push Test Shopper" (9790591235) and 3 test broadcasts.
+**Later 28 Sep — storefront notifications use the Desi Tokri logo.** Customer/retailer app push (service worker + in-app
+pop-up) and its Notifications page now use `public/images/desi-tokri-emblem.png` (the round "dt" badge - the full
+`desi-tokri.png` is mostly whitespace and unreadable at icon size); fallback title "Desi Tokri". Removed the
+`svv-balaji.png` copy added to the customer app earlier. Admin Push Notifications preview shows the Desi Tokri brand when
+the audience is Customers/Retailers. Riders, field and admin keep the SVV Balaji logo.

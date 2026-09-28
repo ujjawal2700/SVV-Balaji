@@ -471,6 +471,26 @@ function OutletFormDrawer({
 
   const isEdit = Boolean(outlet);
 
+  const initialValues = useMemo(() => {
+    if (!outlet) {
+      return {
+        code: `OUTLET-${Math.floor(100 + Math.random() * 900)}`,
+        counterStatus: 'COUNTER_OPEN',
+        posTerminalsCount: 2,
+        openingCash: 5000,
+        state: 'Bihar',
+      };
+    }
+    return outlet;
+  }, [outlet]);
+
+  useEffect(() => {
+    if (open) {
+      form.resetFields();
+      form.setFieldsValue(initialValues);
+    }
+  }, [open, initialValues, form]);
+
   const handleFinish = (values: OutletStore) => {
     onSave(values);
   };
@@ -486,17 +506,10 @@ function OutletFormDrawer({
       destroyOnClose
     >
       <Form
+        key={outlet?.id || 'new-outlet'}
         form={form}
         layout="vertical"
-        initialValues={
-          outlet || {
-            code: `OUTLET-${Math.floor(100 + Math.random() * 900)}`,
-            counterStatus: 'COUNTER_OPEN',
-            posTerminalsCount: 2,
-            openingCash: 5000,
-            state: 'Bihar',
-          }
-        }
+        initialValues={initialValues}
         onFinish={handleFinish}
       >
         <Row gutter={16}>
@@ -616,7 +629,32 @@ function OutletFormDrawer({
  */
 export function OutletsPage() {
   const { message } = AntApp.useApp();
-  const [outlets, setOutlets] = useState<OutletStore[]>(MOCK_OUTLETS);
+  const [outlets, setOutlets] = useState<OutletStore[]>(() => {
+    try {
+      const raw = localStorage.getItem('svv_balaji_outlets');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback to MOCK_OUTLETS
+    }
+    return MOCK_OUTLETS;
+  });
+
+  const updateOutletsState = (updater: (prev: OutletStore[]) => OutletStore[]) => {
+    setOutlets((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem('svv_balaji_outlets', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('svv_outlets_updated', { detail: next }));
+      } catch (e) {
+        console.error('Failed to sync outlets to storage', e);
+      }
+      return next;
+    });
+  };
+
   const [selectedOutlet, setSelectedOutlet] = useState<OutletStore | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -641,14 +679,37 @@ export function OutletsPage() {
   };
 
   const handleDeleteOutlet = (id: string) => {
-    setOutlets((prev) => prev.filter((o) => o.id !== id));
-    message.success('Outlet deleted successfully.');
+    const target = outlets.find((o) => o.id === id);
+    if (!target) return;
+
+    const reasons: string[] = [];
+
+    if (target.localStockCount > 0) {
+      reasons.push(`${target.localStockCount} units of active local stock in inventory`);
+    }
+    if (target.totalCounterSalesToday > 0) {
+      reasons.push(`${formatCurrency(target.totalCounterSalesToday)} in active counter sales today`);
+    }
+    if (target.counterStatus === 'COUNTER_OPEN') {
+      reasons.push('POS counter terminal is currently OPEN');
+    }
+
+    if (reasons.length > 0) {
+      message.error({
+        content: `Cannot delete "${target.name}". Reason: ${reasons.join('; ')}. Please transfer stock or reconcile daily sales before deleting.`,
+        duration: 8,
+      });
+      return;
+    }
+
+    updateOutletsState((prev) => prev.filter((o) => o.id !== id));
+    message.success(`Outlet "${target.name}" deleted successfully.`);
   };
 
   const handleSaveOutlet = (values: Partial<OutletStore>) => {
     if (editingOutlet) {
       // Edit existing outlet
-      setOutlets((prev) =>
+      updateOutletsState((prev) =>
         prev.map((o) => (o.id === editingOutlet.id ? ({ ...o, ...values } as OutletStore) : o)),
       );
       message.success(`Outlet "${values.name || editingOutlet.name}" updated successfully!`);
@@ -681,7 +742,7 @@ export function OutletsPage() {
         localInventory: [],
         lastReconciledAt: 'Just now',
       };
-      setOutlets((prev) => [newOutlet, ...prev]);
+      updateOutletsState((prev) => [newOutlet, ...prev]);
       message.success(`New Outlet "${newOutlet.name}" registered successfully!`);
     }
     setEditModalOpen(false);

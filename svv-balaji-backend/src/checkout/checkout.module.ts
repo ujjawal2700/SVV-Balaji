@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { DeliveryZonesModule } from '../delivery/zones/zones.module';
+import { DeliveryModule } from '../delivery/delivery.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { SalesModule } from '../sales/sales.module';
@@ -23,7 +24,7 @@ import { StorefrontOrdersService } from './storefront-orders.service';
  * dev mocks refuse to boot when NODE_ENV=production.
  */
 @Module({
-  imports: [SalesModule, PricingModule, WalletModule, DeliveryZonesModule],
+  imports: [SalesModule, PricingModule, WalletModule, DeliveryZonesModule, forwardRef(() => DeliveryModule)],
   controllers: [StorefrontCheckoutController, CheckoutSettingsController, CouponsAdminController, FulfillmentController, WebhooksController],
   providers: [
     CheckoutService,

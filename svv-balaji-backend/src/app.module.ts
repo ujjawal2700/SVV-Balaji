@@ -48,6 +48,8 @@ import { BannersModule } from './banners/banners.module';
 import { SchemesModule } from './schemes/schemes.module';
 import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { SupportSettingsModule } from './support-settings/support-settings.module';
+import { LegalPoliciesModule } from './legal-policies/legal-policies.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -110,8 +112,8 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
     SchemesModule,
     HomeSectionsModule,
     SupportSettingsModule,
-    // Still to land: DispatchModule (vehicle, route, POD), InvoicingModule
-    // (GST invoice + GSP e-invoicing), FeedbackModule.
+    LegalPoliciesModule,
+    NotificationsModule, // Super Admin push broadcasts (FCM), device registry, in-app inbox
   ],
 })
 export class AppModule {}

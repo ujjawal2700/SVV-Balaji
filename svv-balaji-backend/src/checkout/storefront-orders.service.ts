@@ -114,9 +114,9 @@ export class StorefrontOrdersService {
     });
     const reviewByProduct = new Map(reviews.map((r) => [r.productId, { rating: r.rating, comment: r.comment }]));
 
-    // The OTP exists to be read out to the rider: only shown while it is useful,
+    // The OTP exists to be read out to the rider: only shown when order is Out For Delivery (DISPATCHED),
     // and only to the customer who owns the order.
-    const showOtp = o.fulfillmentMethod === 'LOCAL' && !o.deliveryOtpVerifiedAt && ['PLACED', 'CONFIRMED', 'ALLOCATED', 'PACKED', 'DISPATCHED'].includes(o.status);
+    const showOtp = o.fulfillmentMethod === 'LOCAL' && !o.deliveryOtpVerifiedAt && o.status === 'DISPATCHED';
 
     return {
       orderNumber: o.orderNumber,

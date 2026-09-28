@@ -771,6 +771,15 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <TagsOutlined />,
     items: [
       {
+        key: 'push-notifications',
+        path: '/push-notifications',
+        label: 'Push Notifications',
+        permission: 'PUSH_NOTIFICATIONS_VIEW',
+        description: 'Send instant notifications to customers, retailers, riders, staff roles or specific people - shown on their phone even with the app closed.',
+        endpoints: ['GET /notifications/broadcasts', 'POST /notifications/broadcasts', 'POST /notifications/broadcasts/preview'],
+        workstream: 'WS2.5',
+      },
+      {
         key: 'schemes',
         path: '/schemes',
         label: 'Schemes & Offers',
@@ -913,6 +922,15 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'CHECKOUT_SETTINGS_VIEW',
         description: 'Local delivery radius, fees, ETAs, COD limit and stock-hold time. Outlets are set on Warehouses.',
         endpoints: ['GET /checkout-settings', 'PATCH /checkout-settings'],
+        workstream: 'WS2.5',
+      },
+      {
+        key: 'legalPolicies',
+        path: '/legal-policies',
+        label: 'Terms & Privacy Policies',
+        permission: 'USER_VIEW',
+        description: 'Manage dynamic Terms & Conditions and Privacy Policies for Delivery Partners (Riders), Retailers, and Customers.',
+        endpoints: ['GET /legal-policies', 'PUT /legal-policies'],
         workstream: 'WS2.5',
       },
       {

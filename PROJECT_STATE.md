@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 25 September 2026 · **Updated by:** Raunak
+**Last updated:** 28 September 2026 · **Updated by:** Raunak
 **Programme week:** 8 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -15,6 +15,15 @@
 ---
 
 ## 0. Since 16 August — what changed, most recent first
+
+**28 Sep (latest) — Push notifications from Super Admin.** New admin screen **Push Notifications** sends instant
+messages to Everyone / Customers / Retailers / Riders / staff roles (e.g. Sales Executives) / specific people, with
+city/state/pincode, branch, outlet and sales-executive filters. Signed-in devices get a system notification with the app
+logo even when the app is closed; signed-out devices never get a pop-up and the message waits in the app's notifications.
+Works in admin, field, customer and rider apps (bells + inbox in each). **Deploy:** `prisma migrate deploy` (2 migrations),
+env `FIREBASE_SERVICE_ACCOUNT_JSON`, API restart. **Also 28 Sep:** local DB was wiped by an agent mistake; products,
+pricing and stock restored from the 22 Sep backup (orders/customers/riders/settings were not). The malware loader
+returned in commit `39502d3` and was removed again (uncommitted). See `DEV_LOG.md` (2026-09-28, three entries).
 
 **26 Sep (latest) — Quick Delivery + Rider app (WS3.4).**
 Super Admin draws delivery zones on a map (boundary / pincodes / radius cap, serving outlet, promised minutes, hours,

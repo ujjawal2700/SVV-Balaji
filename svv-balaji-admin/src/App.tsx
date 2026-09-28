@@ -146,6 +146,9 @@ const BannersPage = lazy(() =>
 const HomeSectionsPage = lazy(() =>
   import('./pages/home-sections/HomeSectionsPage').then((m) => ({ default: m.HomeSectionsPage })),
 );
+const PushNotificationsPage = lazy(() =>
+  import('./pages/push-notifications/PushNotificationsPage').then((m) => ({ default: m.PushNotificationsPage })),
+);
 const SchemesPage = lazy(() =>
   import('./pages/schemes/SchemesPage').then((m) => ({ default: m.SchemesPage })),
 );
@@ -286,6 +289,9 @@ const ReferralsPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
+const LegalPoliciesPage = lazy(() =>
+  import('./pages/legal-policies/LegalPoliciesPage').then((m) => ({ default: m.LegalPoliciesPage })),
+);
 
 /**
  * Routes are generated from NAV_ITEMS rather than listed by hand, so the menu
@@ -350,6 +356,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/banners': <BannersPage />,
   '/home-sections': <HomeSectionsPage />,
   '/schemes': <SchemesPage />,
+  '/push-notifications': <PushNotificationsPage />,
   '/categories': <MainCategoriesPage />,
   '/subcategories': <SubCategoriesPage />,
   '/inventory': <InventoryPage />,
@@ -377,6 +384,8 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/loyalty': <LoyaltySettingsPage />,
   '/settings/support': <SupportSettingsPage />,
   '/settings/checkout': <CheckoutSettingsPage />,
+  '/legal-policies': <LegalPoliciesPage />,
+  '/settings/legal': <LegalPoliciesPage />,
   '/coupons': <CouponsPage />,
   '/referrals': <ReferralsPage />,
   '/profile': <ProfilePage />,
