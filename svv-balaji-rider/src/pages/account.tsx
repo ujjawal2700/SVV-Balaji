@@ -52,23 +52,46 @@ export function EarningsScreen() {
   const cash = cashQ.data;
 
   const handleWithdraw = () => {
+    if (!e || e.thisWeek <= 0) {
+      toast('No available earnings to withdraw right now.', 'info');
+      return;
+    }
     setWithdrawing(true);
     setTimeout(() => {
       setWithdrawing(false);
-      toast('Withdrawal request submitted! Transfer to your registered bank account will process within 24h.', 'success');
+      toast(`Withdrawal request of ${inr(e.thisWeek)} submitted! Payout will transfer to your bank account within 24h.`, 'success');
     }, 800);
   };
 
-  const bars = [
-    { day: 'S', height: '45%', highlight: false },
-    { day: 'M', height: '60%', highlight: false },
-    { day: 'T', height: '100%', highlight: true },
-    { day: 'W', height: '35%', highlight: false },
-    { day: 'T', height: '50%', highlight: false },
-    { day: 'F', height: '40%', highlight: false },
-    { day: 'S', height: '75%', highlight: false },
-  ];
+  // Dynamically aggregate daily earnings totals for S M T W T F S from real API lines
+  const dayTotals = [0, 0, 0, 0, 0, 0, 0]; // 0=Sun, 1=Mon, ..., 6=Sat
+  if (e?.lines) {
+    for (const line of e.lines) {
+      const dayIdx = new Date(line.earnedAt).getDay();
+      dayTotals[dayIdx] += line.amount;
+    }
+  }
 
+  const maxDaySum = Math.max(...dayTotals, 1);
+  const currentDayIndex = new Date().getDay();
+  const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  const bars = dayTotals.map((tot, idx) => {
+    const hasData = maxDaySum > 1;
+    const heightPercent = hasData
+      ? Math.max(16, Math.round((tot / maxDaySum) * 100))
+      : (idx === currentDayIndex ? 80 : 25 + ((idx * 11) % 35));
+    const isHighlight = hasData ? (tot === maxDaySum && tot > 0) : (idx === currentDayIndex);
+
+    return {
+      day: dayLabels[idx],
+      height: `${heightPercent}%`,
+      highlight: isHighlight,
+      amount: tot,
+    };
+  });
+
+  // Dynamic Transaction Items combining order earnings & cash handovers
   const earningItems = (e?.lines ?? []).map((l) => ({
     id: l.id,
     type: 'EARNING' as const,
@@ -96,70 +119,70 @@ export function EarningsScreen() {
   });
 
   return (
-    <div className="app" style={{ background: '#f8fafc' }}>
-      {/* Top Banner with soft gradient */}
-      <div style={{ background: 'linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%)', padding: 'calc(16px + env(safe-area-inset-top)) 18px 24px', borderRadius: '0 0 28px 28px', color: '#fff' }}>
-        <div className="between" style={{ marginBottom: 12 }}>
-          <Link to="/" className="icon-btn" style={{ color: '#fff', background: 'rgba(255,255,255,0.2)' }} aria-label="Back">
+    <div className="app">
+      {/* Rider Theme Orange Header */}
+      <div style={{ background: 'linear-gradient(135deg, var(--orange) 0%, var(--orange-dark) 100%)', padding: 'calc(16px + env(safe-area-inset-top)) 18px 26px', borderRadius: '0 0 26px 26px', color: '#fff', boxShadow: '0 8px 24px rgba(255,138,0,0.2)' }}>
+        <div className="between" style={{ marginBottom: 10 }}>
+          <Link to="/" className="icon-btn" style={{ color: '#fff', background: 'rgba(255,255,255,0.22)', width: 38, height: 38 }} aria-label="Back">
             <Chevron size={20} style={{ transform: 'rotate(180deg)' }} />
           </Link>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: '#fff', flex: 1, marginLeft: 12 }}>Earnings</h1>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#fff', flex: 1, marginLeft: 12 }}>Earnings</h1>
         </div>
       </div>
 
-      <div className="page" style={{ marginTop: -12 }}>
+      <div className="page" style={{ marginTop: -10 }}>
         {!e ? <Spinner /> : (
           <>
-            {/* 4 Stat Summary Cards (2x2 Grid) */}
+            {/* 4 Stat Summary Cards in Rider Theme (2x2 Grid) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               {/* Available */}
-              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+              <div className="card" style={{ padding: '14px 16px' }}>
                 <div className="between">
                   <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Available</span>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#475569' }}>
-                    <Wallet size={15} />
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--orange-soft)', color: 'var(--orange-dark)', display: 'grid', placeItems: 'center' }}>
+                    <Wallet size={16} />
                   </div>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(e.thisWeek || e.today || 0)}</div>
               </div>
 
               {/* Pending */}
-              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+              <div className="card" style={{ padding: '14px 16px' }}>
                 <div className="between">
                   <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Pending</span>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#475569' }}>
-                    <Coin size={15} />
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--orange-soft)', color: 'var(--orange-dark)', display: 'grid', placeItems: 'center' }}>
+                    <Coin size={16} />
                   </div>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(e.today || 0)}</div>
               </div>
 
-              {/* This Month */}
-              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
-                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>This Month</span>
+              {/* Range Total */}
+              <div className="card" style={{ padding: '14px 16px' }}>
+                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>This Period</span>
                 <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr(e.range?.total || e.thisWeek || 0)}</div>
                 <div style={{ marginTop: 6 }}>
                   <span className="chip green" style={{ fontSize: 11, padding: '2px 8px', height: 20 }}>
-                    <TrendingUp size={11} /> +54.65%
+                    <TrendingUp size={11} /> {e.range.deliveries} deliveries
                   </span>
                 </div>
               </div>
 
               {/* Total Earned */}
-              <div className="card" style={{ padding: '14px 16px', borderRadius: 18, border: '1px solid #f1f5f9' }}>
+              <div className="card" style={{ padding: '14px 16px' }}>
                 <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Total Earned</span>
                 <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr((e.range?.total || e.thisWeek) + e.today)}</div>
               </div>
             </div>
 
-            {/* Earnings Activity Card */}
-            <div className="card" style={{ borderRadius: 20, padding: 18, marginBottom: 14 }}>
+            {/* Dynamic Earnings Activity Card */}
+            <div className="card" style={{ padding: 18, marginBottom: 14 }}>
               <div className="between" style={{ marginBottom: 16 }}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>Earnings activity</span>
                 <select
                   value={timeframe}
                   onChange={(ev) => setTimeframe(ev.target.value as any)}
-                  style={{ background: '#f1f5f9', border: 'none', borderRadius: 10, padding: '4px 10px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', outline: 'none' }}
+                  style={{ background: 'var(--bg)', border: 'none', borderRadius: 10, padding: '4px 10px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', outline: 'none' }}
                 >
                   <option value="Weekly">Weekly</option>
                   <option value="Monthly">Monthly</option>
@@ -169,50 +192,46 @@ export function EarningsScreen() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center' }}>
                 <div>
                   <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'grid', placeItems: 'center', color: '#64748b' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--orange-soft)', color: 'var(--orange-dark)', display: 'grid', placeItems: 'center' }}>
                       <Coin size={16} />
                     </div>
                     <span className="muted" style={{ fontSize: 13 }}>This Week</span>
                   </div>
                   <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--ink)', margin: '2px 0' }}>{inr(e.thisWeek)}</div>
                   <span className="chip green" style={{ fontSize: 11, padding: '2px 8px', height: 20, marginTop: 4 }}>
-                    <TrendingUp size={11} /> +54.65%
+                    <TrendingUp size={11} /> {e.range.deliveries} trips
                   </span>
                 </div>
 
-                {/* Bar Chart Container */}
+                {/* Dynamic Weekly Bar Chart Pillars */}
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 100, padding: '0 4px' }}>
                   {bars.map((b, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }} title={`${b.day}: ${inr(b.amount)}`}>
                       <div
                         style={{
                           width: 14,
                           height: b.height,
                           borderRadius: 8,
-                          background: b.highlight ? '#f97316' : '#ffedd5',
+                          background: b.highlight ? 'var(--orange)' : 'var(--orange-soft)',
                           transition: 'height 0.3s ease',
                         }}
                       />
-                      <span style={{ fontSize: 11, fontWeight: b.highlight ? 700 : 500, color: b.highlight ? '#f97316' : '#94a3b8' }}>{b.day}</span>
+                      <span style={{ fontSize: 11, fontWeight: b.highlight ? 700 : 500, color: b.highlight ? 'var(--orange-dark)' : 'var(--muted)' }}>{b.day}</span>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Withdraw Funds Action Button */}
+            {/* Withdraw Funds Primary Action Button (Rider Theme) */}
             <button
-              className="btn block"
+              className="btn primary block"
               style={{
-                background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)',
-                color: '#fff',
-                borderRadius: 16,
+                borderRadius: 999,
                 height: 52,
                 fontSize: 16,
                 fontWeight: 600,
-                boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)',
-                border: 'none',
-                marginTop: 6,
+                marginTop: 4,
                 marginBottom: 20,
               }}
               onClick={handleWithdraw}
@@ -222,10 +241,10 @@ export function EarningsScreen() {
             </button>
 
             {/* Transactions Section */}
-            <div className="section-title" style={{ marginTop: 10, marginBottom: 12 }}>Transactions</div>
-            <div className="card" style={{ borderRadius: 20, padding: 16 }}>
+            <div className="section-title" style={{ marginTop: 6, marginBottom: 12 }}>Transactions</div>
+            <div className="card" style={{ padding: 16 }}>
               {/* Filter Tabs */}
-              <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 3, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 16 }}>
+              <div style={{ background: 'var(--bg)', borderRadius: 12, padding: 3, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 16 }}>
                 {(['all', 'earnings', 'withdrawals'] as const).map((tab) => (
                   <button
                     key={tab}
@@ -233,12 +252,12 @@ export function EarningsScreen() {
                     style={{
                       border: 'none',
                       background: filterTab === tab ? '#fff' : 'transparent',
-                      color: filterTab === tab ? 'var(--ink)' : '#64748b',
+                      color: filterTab === tab ? 'var(--ink)' : 'var(--muted)',
                       borderRadius: 10,
                       padding: '8px 0',
                       fontSize: 13,
                       fontWeight: filterTab === tab ? 600 : 500,
-                      boxShadow: filterTab === tab ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
+                      boxShadow: filterTab === tab ? 'var(--shadow)' : 'none',
                       textTransform: 'capitalize',
                       transition: 'all 0.15s ease',
                     }}
@@ -248,11 +267,11 @@ export function EarningsScreen() {
                 ))}
               </div>
 
-              {/* Transactions List */}
+              {/* Dynamic Transactions List */}
               {filteredTransactions.length === 0 ? (
                 <div className="card empty" style={{ boxShadow: 'none', padding: '24px 0' }}>
                   <Wallet size={36} />
-                  <div style={{ fontSize: 13, marginTop: 8 }}>No transactions match this filter.</div>
+                  <div style={{ fontSize: 13, marginTop: 8 }}>No transaction history found for this filter.</div>
                 </div>
               ) : (
                 filteredTransactions.map((item, idx) => (
@@ -261,23 +280,23 @@ export function EarningsScreen() {
                     className="between"
                     style={{
                       padding: '12px 0',
-                      borderTop: idx ? '1px solid #f1f5f9' : 'none',
+                      borderTop: idx ? '1px solid var(--line)' : 'none',
                     }}
                   >
                     <div className="row" style={{ gap: 12 }}>
                       <div
                         style={{
-                          width: 42,
-                          height: 42,
+                          width: 40,
+                          height: 40,
                           borderRadius: '50%',
-                          background: item.type === 'EARNING' ? '#ecfdf5' : '#fff1f2',
-                          color: item.type === 'EARNING' ? '#10b981' : '#f43f5e',
+                          background: item.type === 'EARNING' ? 'var(--green-soft)' : 'var(--orange-soft)',
+                          color: item.type === 'EARNING' ? 'var(--green)' : 'var(--orange-dark)',
                           display: 'grid',
                           placeItems: 'center',
                           flexShrink: 0,
                         }}
                       >
-                        {item.type === 'EARNING' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                        {item.type === 'EARNING' ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
                       </div>
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{item.title}</div>
@@ -286,7 +305,7 @@ export function EarningsScreen() {
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <b style={{ fontSize: 15, color: item.amount >= 0 ? '#10b981' : 'var(--ink)' }}>
+                      <b style={{ fontSize: 15, color: item.amount >= 0 ? 'var(--green)' : 'var(--ink)' }}>
                         {item.amount >= 0 ? `+${inr(item.amount)}` : `-${inr(Math.abs(item.amount))}`}
                       </b>
                       <div>
