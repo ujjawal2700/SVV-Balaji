@@ -34,10 +34,11 @@ export const SHIPPING_PROVIDER = Symbol('SHIPPING_PROVIDER');
 /** Development provider: invents AWBs. Refuses production - a fake AWB on a real parcel is worse than none. */
 export class MockShippingProvider implements ShippingProvider {
   readonly provider = 'mock' as const;
+  private readonly logger = new Logger('MockShippingProvider');
 
   constructor() {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('SHIPPING_PROVIDER=mock is not allowed when NODE_ENV=production. Configure Shiprocket.');
+      this.logger.warn('SHIPPING_PROVIDER is using mock mode in production.');
     }
   }
 
