@@ -1,475 +1,197 @@
-import {
-  BarChartOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  CreditCardOutlined,
-  DollarOutlined,
-  ExclamationCircleOutlined,
-  FileDoneOutlined,
-  PieChartOutlined,
-  PrinterOutlined,
-  QrcodeOutlined,
-  ReloadOutlined,
-  ShopOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Card,
-  Col,
-  Descriptions,
-  Divider,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Progress,
-  Row,
-  Select,
-  Space,
-  Statistic,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+import { BarChartOutlined, ClockCircleOutlined, FileDoneOutlined, PieChartOutlined, ShopOutlined, UserOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Col, DatePicker, Progress, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
+import { apiErrorMessage } from '@shared/api/client';
+import type { PosShift } from '@shared/api/pos';
+import { useAuth } from '@shared/auth/useAuth';
+import { useCan } from '@shared/auth/useCan';
+import { usePosReport, usePosShifts } from '@shared/hooks/usePos';
+import { toIsoDay } from '@shared/utils/format';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatDateTime } from '../../utils/format';
+import { CloseShiftModal } from './PosNewSalePage';
+import { OutletPicker } from './posShared';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text } = Typography;
 
-export interface ShiftReconciliationRecord {
-  id: string;
-  shiftId: string;
-  outletId: string;
-  outletName: string;
-  cashierName: string;
-  shiftTime: string;
-  openingCash: number;
-  cashSales: number;
-  upiSales: number;
-  cardSales: number;
-  creditSales: number;
-  totalSales: number;
-  expectedCashInDrawer: number;
-  actualCashCounted: number;
-  discrepancy: number;
-  status: 'OPEN' | 'BALANCED' | 'DISCREPANCY';
-}
-
-const MOCK_SHIFTS: ShiftReconciliationRecord[] = [
-  {
-    id: 'shift-01',
-    shiftId: 'SHIFT-20260917-A',
-    outletId: 'outlet-pat-01',
-    outletName: 'Patna City Flagship Store',
-    cashierName: 'Rajesh Kumar (Shift #A)',
-    shiftTime: '09:00 AM - 05:00 PM',
-    openingCash: 5000,
-    cashSales: 12450,
-    upiSales: 18900,
-    cardSales: 6400,
-    creditSales: 4210,
-    totalSales: 41960,
-    expectedCashInDrawer: 17450,
-    actualCashCounted: 17450,
-    discrepancy: 0,
-    status: 'BALANCED',
-  },
-  {
-    id: 'shift-02',
-    shiftId: 'SHIFT-20260917-B',
-    outletId: 'outlet-ind-02',
-    outletName: 'Indore Central Retail Store',
-    cashierName: 'Suresh Verma',
-    shiftTime: '10:00 AM - 06:00 PM',
-    openingCash: 3000,
-    cashSales: 8400,
-    upiSales: 14200,
-    cardSales: 3018,
-    creditSales: 0,
-    totalSales: 25618,
-    expectedCashInDrawer: 11400,
-    actualCashCounted: 11400,
-    discrepancy: 0,
-    status: 'BALANCED',
-  },
-  {
-    id: 'shift-03',
-    shiftId: 'SHIFT-20260917-C',
-    outletId: 'outlet-rnc-03',
-    outletName: 'Ranchi Hub Counter',
-    cashierName: 'Amit Mahato',
-    shiftTime: '09:30 AM - 05:30 PM',
-    openingCash: 2500,
-    cashSales: 4800,
-    upiSales: 6500,
-    cardSales: 1288,
-    creditSales: 0,
-    totalSales: 12588,
-    expectedCashInDrawer: 7300,
-    actualCashCounted: 7250,
-    discrepancy: -50,
-    status: 'DISCREPANCY',
-  },
-];
-
-const MOCK_TOP_COUNTER_ITEMS = [
-  { sku: 'FG-ATT-10KG', name: 'Shree Vighnaharta Chakki Atta (10 KG)', category: 'Flour', soldQty: 142, revenue: 59640 },
-  { sku: 'FG-OIL-01L', name: 'Pure Kachi Ghani Mustard Oil (1 Litre)', category: 'Edible Oils', soldQty: 98, revenue: 16170 },
-  { sku: 'FG-RIC-05KG', name: 'Organic Sonamasuri Rice (5 KG Pack)', category: 'Grains', soldQty: 64, revenue: 24320 },
-  { sku: 'FG-PUL-01KG', name: 'Organic Arhar / Toor Dal (1 KG)', category: 'Pulses', soldQty: 85, revenue: 12325 },
-  { sku: 'FG-GHE-01L', name: 'Pure Desi A2 Cow Ghee (1 Litre Jar)', category: 'Dairy', soldQty: 24, revenue: 27600 },
-];
-
+/**
+ * Counter performance and cash-drawer reconciliation, computed by the server
+ * from recorded sales, refunds and shifts. Nothing on this page is typed in
+ * except the cash a cashier counts when closing a shift.
+ */
 export function PosReportsPage() {
-  const { message } = AntApp.useApp();
-  const [shifts, setShifts] = useState<ShiftReconciliationRecord[]>(MOCK_SHIFTS);
-  const [selectedOutletFilter, setSelectedOutletFilter] = useState<string>('ALL');
+  const { user } = useAuth();
+  const canReconcileAny = useCan('POS_RECONCILE');
+  const [outletId, setOutletId] = useState<string | undefined>();
+  const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>([dayjs(), dayjs()]);
+  const [closing, setClosing] = useState<PosShift | null>(null);
+  const from = toIsoDay(range?.[0]);
+  const to = toIsoDay(range?.[1]);
 
-  // Modal State for Shift Close & Reconciliation
-  const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
-  const [activeShift, setActiveShift] = useState<ShiftReconciliationRecord | null>(null);
-  const [reconcileForm] = Form.useForm<{ actualCash: number; notes: string }>();
+  const report = usePosReport({ outletId, from, to });
+  const shifts = usePosShifts({ outletId, from, to });
+  // Open shifts from earlier days still need closing, so show them whatever the range.
+  const stillOpen = usePosShifts({ outletId, status: 'OPEN' });
+  const r = report.data;
+  const shiftRows = [...(stillOpen.data ?? []).filter((s) => !(shifts.data ?? []).some((x) => x.id === s.id)), ...(shifts.data ?? [])];
 
-  // Filtered Shifts
-  const filteredShifts = shifts.filter((s) =>
-    selectedOutletFilter === 'ALL' ? true : s.outletId === selectedOutletFilter,
-  );
+  const net = r?.totals.netSales ?? 0;
+  const pct = (v: number) => (net > 0 ? Math.round((v / net) * 100) : 0);
 
-  // Overall KPI aggregates
-  const totalRevenue = filteredShifts.reduce((sum, s) => sum + s.totalSales, 0);
-  const totalCashSales = filteredShifts.reduce((sum, s) => sum + s.cashSales, 0);
-  const totalUpiSales = filteredShifts.reduce((sum, s) => sum + s.upiSales, 0);
-  const totalCardSales = filteredShifts.reduce((sum, s) => sum + s.cardSales, 0);
-  const totalCreditSales = filteredShifts.reduce((sum, s) => sum + s.creditSales, 0);
-  const totalDigitalSales = totalUpiSales + totalCardSales;
-
-  const handleOpenReconcileModal = (shift: ShiftReconciliationRecord) => {
-    setActiveShift(shift);
-    reconcileForm.setFieldsValue({
-      actualCash: shift.actualCashCounted,
-      notes: '',
-    });
-    setReconcileModalOpen(true);
-  };
-
-  const handleSaveReconciliation = (values: { actualCash: number; notes: string }) => {
-    if (!activeShift) return;
-    const diff = values.actualCash - activeShift.expectedCashInDrawer;
-    const newStatus = diff === 0 ? 'BALANCED' : 'DISCREPANCY';
-
-    setShifts((prev) =>
-      prev.map((s) =>
-        s.id === activeShift.id
-          ? {
-              ...s,
-              actualCashCounted: values.actualCash,
-              discrepancy: diff,
-              status: newStatus,
-            }
-          : s,
-      ),
-    );
-
-    message.success(`Shift reconciliation saved for ${activeShift.shiftId}! Status: ${newStatus}`);
-    setReconcileModalOpen(false);
-  };
-
-  const shiftColumns: ColumnsType<ShiftReconciliationRecord> = [
+  const shiftColumns: ColumnsType<PosShift> = [
     {
-      title: 'Shift ID & Outlet',
+      title: 'Shift & Store',
       key: 'shift',
       width: 230,
-      render: (_, record) => (
+      render: (_, s) => (
         <Space direction="vertical" size={2}>
-          <Text strong style={{ color: '#1890ff' }}>
-            {record.shiftId}
-          </Text>
-          <Text style={{ fontSize: 12 }}>
-            <ShopOutlined /> {record.outletName}
-          </Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            <UserOutlined /> {record.cashierName}
-          </Text>
+          <Text strong style={{ color: '#1890ff' }}>{s.shiftNumber}</Text>
+          <Text style={{ fontSize: 12 }}><ShopOutlined /> {s.outlet?.name}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}><UserOutlined /> {s.cashier?.fullName} · {formatDateTime(s.openedAt)}{s.closedAt ? ` – ${formatDateTime(s.closedAt)}` : ''}</Text>
         </Space>
       ),
     },
-    {
-      title: 'Opening Cash',
-      key: 'openingCash',
-      width: 120,
-      render: (_, record) => <Text>{formatCurrency(record.openingCash)}</Text>,
-    },
-    {
-      title: 'Cash Sales',
-      key: 'cashSales',
-      width: 120,
-      render: (_, record) => <Text style={{ color: '#52c41a' }}>{formatCurrency(record.cashSales)}</Text>,
-    },
-    {
-      title: 'Digital Sales',
-      key: 'digitalSales',
-      width: 140,
-      render: (_, record) => (
-        <Text style={{ color: '#13c2c2' }}>{formatCurrency(record.upiSales + record.cardSales)}</Text>
-      ),
-    },
-    {
-      title: 'Total Revenue',
-      key: 'totalSales',
-      width: 140,
-      render: (_, record) => <Text strong>{formatCurrency(record.totalSales)}</Text>,
-    },
-    {
-      title: 'Expected Cash',
-      key: 'expected',
-      width: 130,
-      render: (_, record) => <Text strong>{formatCurrency(record.expectedCashInDrawer)}</Text>,
-    },
-    {
-      title: 'Actual Counted',
-      key: 'actual',
-      width: 130,
-      render: (_, record) => (
-        <Text strong style={{ color: record.discrepancy < 0 ? '#ff4d4f' : '#52c41a' }}>
-          {formatCurrency(record.actualCashCounted)}
-        </Text>
-      ),
-    },
+    { title: 'Opening cash', key: 'open', width: 120, render: (_, s) => formatCurrency(s.openingCash) },
+    { title: 'Cash sales', key: 'cash', width: 120, render: (_, s) => <Text style={{ color: '#52c41a' }}>{formatCurrency(s.salesByMode.CASH)}</Text> },
+    { title: 'Digital', key: 'digital', width: 120, render: (_, s) => <Text style={{ color: '#13c2c2' }}>{formatCurrency(s.salesByMode.UPI + s.salesByMode.CARD)}</Text> },
+    { title: 'Cash refunds', key: 'ref', width: 120, render: (_, s) => (s.cashRefunds ? <Text type="danger">-{formatCurrency(s.cashRefunds)}</Text> : '—') },
+    { title: 'Expected cash', key: 'exp', width: 130, render: (_, s) => <Text strong>{formatCurrency(s.expectedCash)}</Text> },
+    { title: 'Counted', key: 'counted', width: 120, render: (_, s) => (s.countedCash === null ? '—' : formatCurrency(s.countedCash)) },
     {
       title: 'Status',
       key: 'status',
-      width: 170,
-      render: (_, record) => (
-        <Tag color={record.status === 'BALANCED' ? 'success' : 'warning'}>
-          {record.status === 'BALANCED' ? 'BALANCED (₹0)' : `DISCREPANCY (${formatCurrency(record.discrepancy)})`}
-        </Tag>
-      ),
+      width: 190,
+      render: (_, s) =>
+        s.status === 'OPEN' ? (
+          <Tag color="processing">OPEN</Tag>
+        ) : s.discrepancy === 0 ? (
+          <Tag color="success">BALANCED (₹0)</Tag>
+        ) : (
+          <Tag color="warning">{(s.discrepancy ?? 0) < 0 ? 'SHORT' : 'OVER'} ({formatCurrency(s.discrepancy)})</Tag>
+        ),
     },
     {
       title: 'Action',
       key: 'action',
       width: 150,
       fixed: 'right',
-      render: (_, record) => (
-        <Button
-          type="primary"
-          size="small"
-          icon={<FileDoneOutlined />}
-          onClick={() => handleOpenReconcileModal(record)}
-        >
-          Reconcile Shift
-        </Button>
-      ),
+      render: (_, s) =>
+        s.status === 'OPEN' && (s.cashierId === user?.id || canReconcileAny) ? (
+          <Button type="primary" size="small" icon={<FileDoneOutlined />} onClick={() => setClosing(s)}>Close & reconcile</Button>
+        ) : s.notes ? (
+          <Text type="secondary" style={{ fontSize: 11 }}>{s.notes}</Text>
+        ) : null,
     },
   ];
 
   return (
-    <Can do="ORDER_VIEW" fallback={<div style={{ padding: 24 }}>Access Denied</div>}>
+    <Can do="POS_VIEW" fallback={<div style={{ padding: 24 }}>Access Denied</div>}>
       <PageHeader
         title="POS Sale Reports & Cash Shift Reconciliation"
-        subtitle="Analyze offline counter performance, cashier shift logs, payment method splits, and cash drawer reconciliations."
+        subtitle="Counter sales, payment split, cashier shifts and drawer reconciliation - all computed from recorded sales. Refunds count on the day the money went back."
         actions={[
-          <Select
-            key="outlet"
-            value={selectedOutletFilter}
-            onChange={setSelectedOutletFilter}
-            style={{ width: 240 }}
-            options={[
-              { value: 'ALL', label: '🏬 All Physical Outlets' },
-              { value: 'outlet-pat-01', label: 'Patna City Flagship' },
-              { value: 'outlet-ind-02', label: 'Indore Central Store' },
-              { value: 'outlet-rnc-03', label: 'Ranchi Hub Counter' },
-            ]}
-          />,
+          <OutletPicker key="outlet" allowAll value={outletId} onChange={setOutletId} style={{ width: 240 }} />,
+          <DatePicker.RangePicker key="range" value={range} onChange={setRange} allowClear={false} />,
         ]}
       />
 
-      {/* KPI Cards */}
+      {report.error ? <Alert style={{ marginBottom: 16 }} type="error" showIcon message={apiErrorMessage(report.error, 'Could not load the report')} /> : null}
+
       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
         <Col xs={24} sm={12} lg={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Today's Counter Revenue"
-              value={totalRevenue}
-              precision={2}
-              prefix="₹"
-              valueStyle={{ color: '#52c41a' }}
+          <Card size="small" style={{ borderRadius: 8 }} loading={report.isLoading}>
+            <Statistic title={`Net counter revenue (${r?.totals.salesCount ?? 0} bill${r?.totals.salesCount === 1 ? '' : 's'})`} value={net} precision={2} prefix="₹" valueStyle={{ color: '#52c41a' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card size="small" style={{ borderRadius: 8 }} loading={report.isLoading}>
+            <Statistic title="Average bill" value={r?.totals.averageBill ?? 0} precision={2} prefix="₹" valueStyle={{ color: '#1890ff' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card size="small" style={{ borderRadius: 8 }} loading={report.isLoading}>
+            <Statistic title="GST collected" value={r?.totals.taxCollected ?? 0} precision={2} prefix="₹" valueStyle={{ color: '#722ed1' }} />
+            <Text type="secondary" style={{ fontSize: 12 }}>Discounts given: {formatCurrency(r?.totals.discountGiven ?? 0)}</Text>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card size="small" style={{ borderRadius: 8 }} loading={report.isLoading}>
+            <Statistic title={`Refunds (${r?.totals.refundsCount ?? 0})`} value={r?.totals.refundsAmount ?? 0} precision={2} prefix="₹" valueStyle={{ color: '#ff4d4f' }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card title={<Space><PieChartOutlined style={{ color: '#1890ff' }} /><span>Payment split</span></Space>} style={{ marginBottom: 20, borderRadius: 8 }} loading={report.isLoading}>
+        <Row gutter={[24, 16]} align="middle">
+          {([['CASH', 'Cash', '#52c41a'], ['UPI', 'UPI QR', '#13c2c2'], ['CARD', 'Card', '#1890ff']] as const).map(([m, label, color]) => (
+            <Col xs={24} md={8} key={m}>
+              <Text type="secondary">{label} ({pct(r?.byMode[m].total ?? 0)}%, {r?.byMode[m].count ?? 0} bill{(r?.byMode[m].count ?? 0) === 1 ? '' : 's'})</Text>
+              <Progress percent={pct(r?.byMode[m].total ?? 0)} strokeColor={color} />
+              <Text strong>{formatCurrency(r?.byMode[m].total ?? 0)}</Text>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+
+      <Card
+        title={<Space><ClockCircleOutlined style={{ color: '#fa8c16' }} /><span>Cashier shifts & drawer reconciliation</span></Space>}
+        bodyStyle={{ padding: 0 }}
+        style={{ marginBottom: 20, borderRadius: 8 }}
+      >
+        <Table
+          dataSource={shiftRows}
+          columns={shiftColumns}
+          rowKey="id"
+          loading={shifts.isLoading}
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1300 }}
+          locale={{ emptyText: 'No shifts in this period' }}
+        />
+      </Card>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={14}>
+          <Card title={<Space><BarChartOutlined style={{ color: '#52c41a' }} /><span>Top selling products</span></Space>} style={{ borderRadius: 8 }}>
+            <Table
+              dataSource={r?.topItems ?? []}
+              rowKey="productId"
+              pagination={false}
+              size="small"
+              scroll={{ x: 560 }}
+              locale={{ emptyText: 'No sales in this period' }}
+              columns={[
+                { title: 'SKU', dataIndex: 'sku', render: (v: string | null) => (v ? <Tag color="blue">{v}</Tag> : '—') },
+                { title: 'Product', dataIndex: 'name', render: (v: string) => <Text strong>{v}</Text> },
+                { title: 'Packs sold', dataIndex: 'quantity', align: 'right' },
+                { title: 'Revenue', dataIndex: 'revenue', align: 'right', render: (v: number) => <Text strong style={{ color: '#52c41a' }}>{formatCurrency(v)}</Text> },
+              ]}
             />
           </Card>
         </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Cash Collected in Drawer"
-              value={totalCashSales}
-              precision={2}
-              prefix="₹"
-              valueStyle={{ color: '#fa8c16' }}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Digital Collections (UPI + Cards)"
-              value={totalDigitalSales}
-              precision={2}
-              prefix="₹"
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
-          <Card size="small" style={{ borderRadius: 8 }}>
-            <Statistic
-              title="Store Credit Sales"
-              value={totalCreditSales}
-              precision={2}
-              prefix="₹"
-              valueStyle={{ color: '#722ed1' }}
+        <Col xs={24} lg={10}>
+          <Card title={<Space><ShopOutlined /><span>By store</span></Space>} style={{ borderRadius: 8 }}>
+            <Table
+              dataSource={r?.byOutlet ?? []}
+              rowKey="outletId"
+              pagination={false}
+              size="small"
+              locale={{ emptyText: 'No sales in this period' }}
+              columns={[
+                { title: 'Store', dataIndex: 'name' },
+                { title: 'Bills', dataIndex: 'count', align: 'right' },
+                { title: 'Net', dataIndex: 'total', align: 'right', render: (v: number) => formatCurrency(v) },
+              ]}
             />
           </Card>
         </Col>
       </Row>
 
-      {/* Payment Method Distribution Visual Breakdown */}
-      <Card
-        title={
-          <Space>
-            <PieChartOutlined style={{ color: '#1890ff' }} />
-            <span>Counter Sales Payment Channel Breakdown</span>
-          </Space>
-        }
-        style={{ marginBottom: 20, borderRadius: 8 }}
-      >
-        <Row gutter={[24, 16]} align="middle">
-          <Col xs={24} md={6}>
-            <Text type="secondary">Cash Payment ({Math.round((totalCashSales / (totalRevenue || 1)) * 100)}%)</Text>
-            <Progress percent={Math.round((totalCashSales / (totalRevenue || 1)) * 100)} strokeColor="#52c41a" />
-            <Text strong>{formatCurrency(totalCashSales)}</Text>
-          </Col>
-
-          <Col xs={24} md={6}>
-            <Text type="secondary">UPI Dynamic QR ({Math.round((totalUpiSales / (totalRevenue || 1)) * 100)}%)</Text>
-            <Progress percent={Math.round((totalUpiSales / (totalRevenue || 1)) * 100)} strokeColor="#13c2c2" />
-            <Text strong>{formatCurrency(totalUpiSales)}</Text>
-          </Col>
-
-          <Col xs={24} md={6}>
-            <Text type="secondary">Card Terminal Swipe ({Math.round((totalCardSales / (totalRevenue || 1)) * 100)}%)</Text>
-            <Progress percent={Math.round((totalCardSales / (totalRevenue || 1)) * 100)} strokeColor="#1890ff" />
-            <Text strong>{formatCurrency(totalCardSales)}</Text>
-          </Col>
-
-          <Col xs={24} md={6}>
-            <Text type="secondary">Kirana Store Credit ({Math.round((totalCreditSales / (totalRevenue || 1)) * 100)}%)</Text>
-            <Progress percent={Math.round((totalCreditSales / (totalRevenue || 1)) * 100)} strokeColor="#722ed1" />
-            <Text strong>{formatCurrency(totalCreditSales)}</Text>
-          </Col>
-        </Row>
-      </Card>
-
-      {/* Cashier Shift Reconciliation Table */}
-      <Card
-        title={
-          <Space>
-            <ClockCircleOutlined style={{ color: '#fa8c16' }} />
-            <span>Cashier Shift Cash Drawer Reconciliations</span>
-          </Space>
-        }
-        bodyStyle={{ padding: 0 }}
-        style={{ marginBottom: 20, borderRadius: 8 }}
-      >
-        <Table
-          dataSource={filteredShifts}
-          columns={shiftColumns}
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 1200 }}
-        />
-      </Card>
-
-      {/* Top Counter Selling Items */}
-      <Card
-        title={
-          <Space>
-            <BarChartOutlined style={{ color: '#52c41a' }} />
-            <span>Top Selling Products at Offline Store Counters Today</span>
-          </Space>
-        }
-        style={{ borderRadius: 8 }}
-      >
-        <Table
-          dataSource={MOCK_TOP_COUNTER_ITEMS}
-          rowKey="sku"
-          pagination={false}
-          size="small"
-          scroll={{ x: 750 }}
-          columns={[
-            { title: 'SKU', dataIndex: 'sku', key: 'sku', render: (val) => <Tag color="blue">{val}</Tag> },
-            { title: 'Product Name', dataIndex: 'name', key: 'name', render: (val) => <Text strong>{val}</Text> },
-            { title: 'Category', dataIndex: 'category', key: 'category' },
-            { title: 'Counter Units Sold', dataIndex: 'soldQty', key: 'soldQty', render: (val) => <Text strong>{val} Units</Text> },
-            { title: 'Total Counter Revenue', dataIndex: 'revenue', key: 'revenue', render: (val) => <Text strong style={{ color: '#52c41a' }}>{formatCurrency(val)}</Text> },
-          ]}
-        />
-      </Card>
-
-      {/* Shift Reconcile Modal */}
-      <Modal
-        title={`Shift Cash Reconciliation — ${activeShift?.shiftId}`}
-        open={reconcileModalOpen}
-        onCancel={() => setReconcileModalOpen(false)}
-        onOk={() => reconcileForm.submit()}
-        okText="Submit Shift Reconciliation"
-        width={500}
-      >
-        {activeShift && (
-          <Form
-            form={reconcileForm}
-            layout="vertical"
-            onFinish={handleSaveReconciliation}
-          >
-            <Descriptions bordered size="small" column={1} style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="Outlet">{activeShift.outletName}</Descriptions.Item>
-              <Descriptions.Item label="Cashier">{activeShift.cashierName}</Descriptions.Item>
-              <Descriptions.Item label="Opening Cash">{formatCurrency(activeShift.openingCash)}</Descriptions.Item>
-              <Descriptions.Item label="Counter Cash Sales">{formatCurrency(activeShift.cashSales)}</Descriptions.Item>
-              <Descriptions.Item label="Expected Cash in Drawer">
-                <Text strong style={{ fontSize: 15, color: '#1890ff' }}>
-                  {formatCurrency(activeShift.expectedCashInDrawer)}
-                </Text>
-              </Descriptions.Item>
-            </Descriptions>
-
-            <Form.Item
-              name="actualCash"
-              label="Actual Physical Cash Counted in Drawer (₹)"
-              rules={[{ required: true, message: 'Please enter physical cash counted' }]}
-            >
-              <InputNumber
-                style={{ width: '100%' }}
-                min={0}
-                prefix="₹"
-                size="large"
-              />
-            </Form.Item>
-
-            <Form.Item name="notes" label="Reconciliation / Variance Remarks">
-              <Input.TextArea rows={2} placeholder="Optional notes regarding discrepancy or shift handoff" />
-            </Form.Item>
-          </Form>
-        )}
-      </Modal>
+      {closing ? (
+        <CloseShiftModal open onClose={() => setClosing(null)} shiftId={closing.id} shiftNumber={closing.shiftNumber} expected={closing.expectedCash} />
+      ) : null}
     </Can>
   );
 }

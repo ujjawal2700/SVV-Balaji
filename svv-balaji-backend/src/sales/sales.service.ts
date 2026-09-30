@@ -7,6 +7,7 @@ import {
   Prisma,
   SalesChannel,
 } from '@prisma/client';
+import { InvoicesService } from '../invoices/invoices.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -66,6 +67,7 @@ export class SalesService {
     private readonly loyalty: LoyaltyService,
     private readonly wallet: WalletService,
     private readonly events: OrderEventsService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   async create(dto: CreateOrderDto, placedById: string | null) {
@@ -491,12 +493,18 @@ export class SalesService {
 
   /** Timeline entry + live update for anyone watching the orders screen. Never fails the caller. */
   async record(orderId: string, type: string, actorId?: string, note?: string): Promise<void> {
+    let eventId: string | null = null;
     try {
-      await this.prisma.orderEvent.create({ data: { orderId, type, note, actorId: actorId && actorId !== 'system' ? actorId : undefined } });
+      const event = await this.prisma.orderEvent.create({
+        data: { orderId, type, note, actorId: actorId && actorId !== 'system' ? actorId : undefined },
+        select: { id: true },
+      });
+      eventId = event.id;
     } catch (err) {
       this.logger.warn(`Could not log ${type} for order ${orderId}: ${err instanceof Error ? err.message : String(err)}`);
     }
     this.events.publish('updated', orderId);
+    if (eventId) this.events.publishTimeline({ orderId, eventId });
   }
 
   async confirm(id: string) {
@@ -862,6 +870,12 @@ export class SalesService {
         where: { id },
         data: { status: OrderStatus.DISPATCHED, ...this.stampFor(OrderStatus.DISPATCHED) },
       });
+    }).then(async (dispatched) => {
+      // Dispatch is the time of supply, so the tax invoice is raised now.
+      // Best-effort (onDispatched never throws): an invoicing problem must not
+      // un-dispatch goods that have left, and InvoicesService's sweep retries.
+      await this.invoices.onDispatched(id, performedById);
+      return dispatched;
     });
   }
 
@@ -1027,7 +1041,7 @@ export class SalesService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const rows: Prisma.OrderReturnGetPayload<object>[] = [];
       for (const [orderItemId, quantity] of wanted) {
         rows.push(
@@ -1047,6 +1061,8 @@ export class SalesService {
       const { pointsReversed } = await this.loyalty.reverseForReturn(tx, order.id, [...wanted.keys()]);
       return { orderNumber: order.orderNumber, returns: rows, loyaltyPointsReversed: pointsReversed };
     });
+    await this.record(id, 'RETURN_RECORDED', recordedById, dto.reason);
+    return result;
   }
 
   /** Cancelling releases every reservation the order was holding. */

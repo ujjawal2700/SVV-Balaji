@@ -104,7 +104,9 @@ export function matchZone(zone: ZoneShape, addr: AddressPoint): ZoneMatch | null
   if (hasPin && zone.boundary) {
     return pointInPolygon({ lat: addr.lat!, lng: addr.lng! }, zone.boundary) ? { zoneId: zone.id, by: 'BOUNDARY', distanceKm: dist } : null;
   }
-  if (pin && pincodes.includes(pin)) return { zoneId: zone.id, by: 'PINCODE', distanceKm: dist };
+  // A radius cap with no distance to check it against is a refusal, not a pass.
+  const capUncheckable = zone.maxRadiusKm !== null && dist === null;
+  if (pin && pincodes.includes(pin) && !capUncheckable) return { zoneId: zone.id, by: 'PINCODE', distanceKm: dist };
   if (!zone.boundary && pincodes.length === 0 && zone.maxRadiusKm !== null && dist !== null) {
     return { zoneId: zone.id, by: 'RADIUS', distanceKm: dist };
   }

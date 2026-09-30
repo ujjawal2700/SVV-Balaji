@@ -7,15 +7,15 @@ import {
   DollarOutlined,
   EditOutlined,
   FileTextOutlined,
+  LockOutlined,
   MinusOutlined,
   PlusOutlined,
   PrinterOutlined,
   QrcodeOutlined,
-  ReloadOutlined,
   SearchOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
-  UserAddOutlined,
+  UnlockOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import {
@@ -27,6 +27,7 @@ import {
   Col,
   Descriptions,
   Divider,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -41,284 +42,162 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { apiErrorMessage } from '@shared/api/client';
+import { CUSTOMER_TYPE_LABEL, type PosCatalogueItem, type PosCustomerInput, type PosPaymentMode, type PosSale } from '@shared/api/pos';
+import { useAuth } from '@shared/auth/useAuth';
+import { useCan } from '@shared/auth/useCan';
+import { useClosePosShift, useCreatePosSale, useMyPosShift, useOpenPosShift, usePosCatalogue, usePosOutlet } from '@shared/hooks/usePos';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatDateTime } from '../../utils/format';
+import { OutletPicker, printSale } from './posShared';
 
 const { Text, Title, Paragraph } = Typography;
 
-export interface PosProductItem {
-  id: string;
-  sku: string;
-  name: string;
-  category: string;
-  unitPrice: number;
-  availableStock: number;
-  unit: string;
-  taxRate: number; // e.g. 5 for 5%
-}
-
-export interface CartItem extends PosProductItem {
+interface CartItem extends PosCatalogueItem {
   quantity: number;
 }
 
-export interface OfflineCustomerDetails {
-  customerType: 'WALK_IN' | 'REGULAR_KIRANA' | 'NEW_MANUAL';
-  fullName: string;
-  mobile: string;
-  emailOrGst: string;
-  address: string;
-  city: string;
-  notes?: string;
-}
+const WALK_IN: PosCustomerInput = { type: 'WALK_IN', name: 'Walk-in customer' };
+const newRequestId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-const MOCK_POS_PRODUCTS: PosProductItem[] = [
-  {
-    id: 'prod-001',
-    sku: 'FG-ATT-10KG',
-    name: 'Shree Vighnaharta Premium Whole Wheat Chakki Atta (10 KG)',
-    category: 'Flour & Atta',
-    unitPrice: 420,
-    availableStock: 185,
-    unit: 'BAG',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-002',
-    sku: 'FG-ATT-05KG',
-    name: 'Shree Vighnaharta Multigrain Superfood Atta (5 KG)',
-    category: 'Flour & Atta',
-    unitPrice: 285,
-    availableStock: 94,
-    unit: 'BAG',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-003',
-    sku: 'FG-OIL-01L',
-    name: 'Pure Kachi Ghani Mustard Oil (1 Litre Pouch)',
-    category: 'Edible Oils',
-    unitPrice: 165,
-    availableStock: 320,
-    unit: 'POUCH',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-004',
-    sku: 'FG-OIL-05L',
-    name: 'Organic Cold-Pressed Groundnut Oil (5 Litre Can)',
-    category: 'Edible Oils',
-    unitPrice: 940,
-    availableStock: 42,
-    unit: 'CAN',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-005',
-    sku: 'FG-RIC-05KG',
-    name: 'Traditional Organic Sonamasuri Rice (5 KG Pack)',
-    category: 'Grains & Rice',
-    unitPrice: 380,
-    availableStock: 110,
-    unit: 'PACK',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-006',
-    sku: 'FG-PUL-01KG',
-    name: 'Unpolished Organic Arhar / Toor Dal (1 KG)',
-    category: 'Pulses & Dal',
-    unitPrice: 145,
-    availableStock: 240,
-    unit: 'PACK',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-007',
-    sku: 'FG-SPC-500G',
-    name: 'Authentic Organic Turmeric Powder (500 Grams)',
-    category: 'Spices & Seasoning',
-    unitPrice: 120,
-    availableStock: 150,
-    unit: 'PACK',
-    taxRate: 5,
-  },
-  {
-    id: 'prod-008',
-    sku: 'FG-GHE-01L',
-    name: 'Pure Desi A2 Cow Ghee (1 Litre Jar)',
-    category: 'Dairy & Ghee',
-    unitPrice: 1150,
-    availableStock: 65,
-    unit: 'JAR',
-    taxRate: 12,
-  },
-];
-
+/**
+ * POS billing terminal for a company store. The cashier works inside their own
+ * shift; every price, tax figure and stock number shown before "Complete" is an
+ * estimate from the catalogue - the server re-prices and takes the stock, and
+ * the receipt shows what it decided.
+ */
 export function PosNewSalePage() {
   const { message } = AntApp.useApp();
-  const [selectedOutlet, setSelectedOutlet] = useState<string>('outlet-pat-01');
-  const [cashierName] = useState<string>('Rajesh Kumar (Shift #A)');
+  const { user } = useAuth();
+  const canSell = useCan('POS_SELL');
+  const [outletId, setOutletId] = useState<string | undefined>();
+  const outlet = usePosOutlet(outletId);
+  const shift = useMyPosShift(outletId);
+  const catalogue = usePosCatalogue(shift.data ? outletId : undefined);
 
-  // Product search & filtering
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-
-  // Customer details for offline walk-in
-  const [customerDetails, setCustomerDetails] = useState<OfflineCustomerDetails>({
-    customerType: 'WALK_IN',
-    fullName: 'Walk-in Store Customer',
-    mobile: '9876500000',
-    emailOrGst: '',
-    address: 'Patna Outlet Counter',
-    city: 'Patna',
-    notes: '',
-  });
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [customer, setCustomer] = useState<PosCustomerInput>(WALK_IN);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
-  const [customerForm] = Form.useForm<OfflineCustomerDetails>();
+  const [customerForm] = Form.useForm<PosCustomerInput>();
 
-  // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'CARD' | 'CREDIT'>('CASH');
-  const [cashTendered, setCashTendered] = useState<number>(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [paymentMode, setPaymentMode] = useState<PosPaymentMode>('CASH');
+  const [cashTendered, setCashTendered] = useState<number | null>(null);
+  const [paymentReference, setPaymentReference] = useState('');
+  const [requestId, setRequestId] = useState(newRequestId);
+  const [completed, setCompleted] = useState<PosSale | null>(null);
+  const [openingCash, setOpeningCash] = useState<number | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
 
-  // Invoice Receipt Modal
-  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<any>(null);
+  const createSale = useCreatePosSale();
+  const openShift = useOpenPosShift();
 
-  // Categories list
-  const categories = useMemo(() => {
-    const set = new Set(MOCK_POS_PRODUCTS.map((p) => p.category));
-    return ['ALL', ...Array.from(set)];
-  }, []);
-
-  // Filtered products
+  const products = catalogue.data ?? [];
+  const categories = useMemo(() => ['ALL', ...Array.from(new Set(products.map((p) => p.category)))], [products]);
   const filteredProducts = useMemo(() => {
-    return MOCK_POS_PRODUCTS.filter((p) => {
-      const matchesSearch =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCat = selectedCategory === 'ALL' || p.category === selectedCategory;
-      return matchesSearch && matchesCat;
-    });
-  }, [searchQuery, selectedCategory]);
+    const q = searchQuery.trim().toLowerCase();
+    return products.filter(
+      (p) =>
+        (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)) &&
+        (selectedCategory === 'ALL' || p.category === selectedCategory),
+    );
+  }, [products, searchQuery, selectedCategory]);
 
-  // Cart Calculations
-  const cartSubtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  }, [cart]);
-
-  const totalTax = useMemo(() => {
-    return cart.reduce((sum, item) => {
-      const lineSubtotal = item.unitPrice * item.quantity;
-      return sum + (lineSubtotal * item.taxRate) / 100;
+  // Estimate only - the same rule the server applies: discount spread over the lines before GST.
+  const est = useMemo(() => {
+    const subtotal = cart.reduce((s, i) => s + (i.unitPrice ?? 0) * i.quantity, 0);
+    const discount = Math.min(discountAmount, subtotal);
+    const tax = cart.reduce((s, i) => {
+      const gross = (i.unitPrice ?? 0) * i.quantity;
+      const share = subtotal > 0 ? (discount * gross) / subtotal : 0;
+      return s + ((gross - share) * (i.gstRatePercent ?? 0)) / 100;
     }, 0);
-  }, [cart]);
+    const total = Math.max(0, subtotal - discount + tax);
+    return { subtotal, discount, tax, total };
+  }, [cart, discountAmount]);
+  const changeDue = paymentMode === 'CASH' && cashTendered !== null ? Math.max(0, cashTendered - est.total) : 0;
 
-  const netPayable = useMemo(() => {
-    const total = cartSubtotal + totalTax - discountAmount;
-    return total > 0 ? total : 0;
-  }, [cartSubtotal, totalTax, discountAmount]);
+  const resetBill = () => {
+    setCart([]);
+    setDiscountAmount(0);
+    setCashTendered(null);
+    setPaymentReference('');
+    setCustomer(WALK_IN);
+    setRequestId(newRequestId());
+  };
 
-  const changeDue = useMemo(() => {
-    if (paymentMode !== 'CASH') return 0;
-    const diff = cashTendered - netPayable;
-    return diff > 0 ? diff : 0;
-  }, [cashTendered, netPayable, paymentMode]);
-
-  // Handlers
-  const handleAddToCart = (product: PosProductItem) => {
+  const handleAddToCart = (product: PosCatalogueItem) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((i) => i.id === product.id);
       if (existing) {
         if (existing.quantity >= product.availableStock) {
-          message.warning(`Maximum available stock (${product.availableStock}) reached!`);
+          message.warning(`Only ${product.availableStock} ${product.unit} in this store`);
           return prev;
         }
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
-        );
+        return prev.map((i) => (i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
       }
       return [...prev, { ...product, quantity: 1 }];
     });
-    message.success(`Added ${product.name} to bill cart`);
   };
 
-  const handleUpdateQty = (productId: string, newQty: number) => {
-    if (newQty <= 0) {
-      handleRemoveItem(productId);
+  const handleUpdateQty = (productId: string, qty: number) => {
+    if (qty <= 0) {
+      setCart((prev) => prev.filter((i) => i.id !== productId));
       return;
     }
-    const product = MOCK_POS_PRODUCTS.find((p) => p.id === productId);
-    if (product && newQty > product.availableStock) {
-      message.warning(`Cannot exceed available stock of ${product.availableStock} ${product.unit}`);
+    const p = products.find((x) => x.id === productId);
+    if (p && qty > p.availableStock) {
+      message.warning(`Cannot exceed ${p.availableStock} ${p.unit} in stock`);
       return;
     }
-    setCart((prev) =>
-      prev.map((item) => (item.id === productId ? { ...item, quantity: newQty } : item)),
-    );
+    setCart((prev) => prev.map((i) => (i.id === productId ? { ...i, quantity: qty } : i)));
   };
 
-  const handleRemoveItem = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.id !== productId));
-  };
-
-  const handleSaveCustomerDetails = (values: OfflineCustomerDetails) => {
-    setCustomerDetails(values);
-    setCustomerModalOpen(false);
-    message.success('Offline Customer details updated!');
-  };
-
-  const handleCompleteSale = () => {
-    if (cart.length === 0) {
-      message.error('Cart is empty! Add products to process sale.');
+  const handleCompleteSale = async () => {
+    if (!outletId || cart.length === 0) return;
+    if (paymentMode === 'CASH' && (cashTendered === null || cashTendered < est.total)) {
+      message.warning(`Cash tendered is less than the bill (${formatCurrency(est.total)})`);
       return;
     }
-    if (paymentMode === 'CASH' && cashTendered < netPayable) {
-      message.warning(`Cash tendered (${formatCurrency(cashTendered)}) is less than net payable (${formatCurrency(netPayable)})!`);
-      return;
+    try {
+      const sale = await createSale.mutateAsync({
+        outletId,
+        items: cart.map((i) => ({ productId: i.id, quantity: i.quantity })),
+        discount: est.discount || undefined,
+        paymentMode,
+        amountTendered: paymentMode === 'CASH' ? cashTendered ?? undefined : undefined,
+        paymentReference: paymentMode !== 'CASH' ? paymentReference.trim() || undefined : undefined,
+        customer: {
+          ...customer,
+          phone: customer.phone?.trim() || undefined,
+          gstin: customer.gstin?.trim() || undefined,
+          address: customer.address?.trim() || undefined,
+          city: customer.city?.trim() || undefined,
+        },
+        clientRequestId: requestId,
+      });
+      setCompleted(sale);
+      resetBill();
+    } catch (e) {
+      message.error(apiErrorMessage(e, 'The sale was not recorded'), 8);
     }
-
-    const orderRecord = {
-      orderId: `POS-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`,
-      createdAt: new Date().toLocaleString(),
-      outlet: selectedOutlet === 'outlet-pat-01' ? 'Patna City Flagship Retail Store' : 'Indore Central Outlet',
-      cashier: cashierName,
-      customer: customerDetails,
-      cartItems: [...cart],
-      subtotal: cartSubtotal,
-      tax: totalTax,
-      discount: discountAmount,
-      netTotal: netPayable,
-      paymentMode,
-      cashTendered: paymentMode === 'CASH' ? cashTendered : netPayable,
-      changeDue,
-    };
-
-    setCompletedOrder(orderRecord);
-    setInvoiceModalOpen(true);
   };
 
-  const handlePrintReceiptAndReset = () => {
-    message.success(`Receipt printed for ${completedOrder?.orderId}! Order completed.`);
-    setInvoiceModalOpen(false);
-    setCart([]);
-    setDiscountAmount(0);
-    setCashTendered(0);
-    setCompletedOrder(null);
-  };
-
-  const columns: ColumnsType<PosProductItem> = [
+  const columns: ColumnsType<PosCatalogueItem> = [
     {
       title: 'Item Details',
       key: 'name',
-      render: (_, record) => (
+      render: (_, r) => (
         <Space direction="vertical" size={2}>
-          <Text strong style={{ fontSize: 13 }}>{record.name}</Text>
-          <Space size={6}>
-            <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>SKU: {record.sku}</Tag>
-            <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>{record.category}</Tag>
+          <Text strong style={{ fontSize: 13 }}>{r.name}</Text>
+          <Space size={6} wrap>
+            <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>SKU: {r.sku}</Tag>
+            <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>{r.category}</Tag>
+            {r.unitPrice === null ? <Tag color="red" style={{ fontSize: 10, margin: 0 }}>No B2C price</Tag> : null}
           </Space>
         </Space>
       ),
@@ -326,649 +205,392 @@ export function PosNewSalePage() {
     {
       title: 'Stock',
       key: 'stock',
-      width: 90,
-      render: (_, record) => (
-        <Tag color={record.availableStock < 50 ? 'warning' : 'green'}>
-          {record.availableStock} {record.unit}
+      width: 100,
+      render: (_, r) => (
+        <Tag color={r.availableStock === 0 ? 'red' : r.availableStock < 10 ? 'warning' : 'green'}>
+          {r.availableStock} {r.unit}
         </Tag>
       ),
     },
     {
       title: 'Price',
       key: 'price',
-      width: 100,
-      render: (_, record) => <Text strong>{formatCurrency(record.unitPrice)}</Text>,
+      width: 120,
+      render: (_, r) =>
+        r.unitPrice === null ? '—' : (
+          <div>
+            <Text strong>{formatCurrency(r.unitPrice)}</Text>
+            <div><Text type="secondary" style={{ fontSize: 11 }}>+{r.gstRatePercent}% GST</Text></div>
+          </div>
+        ),
     },
     {
       title: 'Action',
       key: 'action',
-      width: 110,
-      render: (_, record) => (
-        <Button
-          type="primary"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={() => handleAddToCart(record)}
-        >
+      width: 90,
+      render: (_, r) => (
+        <Button type="primary" size="small" icon={<PlusOutlined />} disabled={r.availableStock === 0 || r.unitPrice === null} onClick={() => handleAddToCart(r)}>
           Add
         </Button>
       ),
     },
   ];
 
+  const s = shift.data;
   return (
-    <Can do="ORDER_VIEW" fallback={<div style={{ padding: 24 }}>Access Denied</div>}>
+    <Can do="POS_SELL" fallback={<div style={{ padding: 24 }}>Access Denied</div>}>
       <PageHeader
         title="POS Counter Billing Terminal (New Sale)"
-        subtitle="Process walk-in offline store sales, manually input customer details, scan catalog products, and print instant tax invoices."
+        subtitle="Bill walk-in customers at a company store. Prices, GST and stock come from the server; every sale issues its GST invoice."
         actions={[
-          <Select
-            key="outlet"
-            value={selectedOutlet}
-            onChange={setSelectedOutlet}
-            style={{ width: 260 }}
-            options={[
-              { value: 'outlet-pat-01', label: '🏬 Patna City Flagship Store' },
-              { value: 'outlet-ind-02', label: '🏬 Indore Central Retail Store' },
-              { value: 'outlet-rnc-03', label: '🏬 Ranchi Hub Counter' },
-            ]}
-          />,
+          <OutletPicker key="outlet" autoSelect value={outletId} onChange={(v) => { setOutletId(v); resetBill(); }} />,
           <Tag key="cashier" color="cyan" style={{ fontSize: 13, padding: '4px 10px' }}>
-            <UserOutlined /> {cashierName}
+            <UserOutlined /> {user?.fullName}{s ? ` · ${s.shiftNumber}` : ''}
           </Tag>,
+          s ? (
+            <Button key="close" icon={<LockOutlined />} onClick={() => setCloseOpen(true)}>Close shift</Button>
+          ) : null,
         ]}
       />
 
-      <Row gutter={[16, 16]}>
-        {/* Left Column: Offline Customer Info & Product Catalog */}
-        <Col xs={24} lg={14} xl={15}>
-          {/* Offline Customer Info Header Card */}
-          <Card
-            size="small"
-            style={{ marginBottom: 16, borderRadius: 8, borderColor: '#d9d9d9' }}
-            title={
-              <Space>
-                <UserOutlined style={{ color: '#1890ff' }} />
-                <span>Offline Walk-in Customer Details</span>
-                <Tag color={customerDetails.customerType === 'WALK_IN' ? 'blue' : 'purple'}>
-                  {customerDetails.customerType === 'WALK_IN' ? 'Walk-in Guest' : customerDetails.customerType === 'REGULAR_KIRANA' ? 'Kirana Wholesale Partner' : 'Manual Entry Customer'}
-                </Tag>
-              </Space>
-            }
-            extra={
-              <Button
-                type="link"
-                icon={<EditOutlined />}
-                onClick={() => {
-                  customerForm.setFieldsValue(customerDetails);
-                  setCustomerModalOpen(true);
-                }}
-              >
-                Edit Details
-              </Button>
-            }
-          >
-            <Row gutter={[16, 8]}>
-              <Col span={12}>
-                <Text type="secondary">Customer Name: </Text>
-                <Text strong>{customerDetails.fullName}</Text>
-              </Col>
-              <Col span={12}>
-                <Text type="secondary">Mobile #: </Text>
-                <Text strong>{customerDetails.mobile || 'N/A'}</Text>
-              </Col>
-              {customerDetails.emailOrGst && (
-                <Col span={12}>
-                  <Text type="secondary">GSTIN / Email: </Text>
-                  <Tag color="volcano">{customerDetails.emailOrGst}</Tag>
-                </Col>
-              )}
-              <Col span={12}>
-                <Text type="secondary">City / Counter: </Text>
-                <Text>{customerDetails.city} ({customerDetails.address})</Text>
-              </Col>
-            </Row>
-          </Card>
-
-          {/* Product Search & Filter Bar */}
-          <Card size="small" style={{ marginBottom: 16, borderRadius: 8 }}>
-            <Row gutter={[12, 12]} align="middle">
-              <Col xs={24} sm={12}>
-                <Input
-                  placeholder="Search product name, SKU or scan barcode..."
-                  prefix={<SearchOutlined />}
-                  suffix={<BarcodeOutlined />}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  allowClear
-                />
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <Space wrap>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Category: </Text>
-                  <Select
-                    value={selectedCategory}
-                    onChange={setSelectedCategory}
-                    style={{ width: 170 }}
-                    options={categories.map((cat) => ({ value: cat, label: cat }))}
-                  />
-                </Space>
-              </Col>
-            </Row>
-          </Card>
-
-          {/* Product Catalog Table */}
-          <Card
-            title={
-              <Space>
-                <ShopOutlined />
-                <span>Store Available Inventory ({filteredProducts.length} Items)</span>
-              </Space>
-            }
-            bodyStyle={{ padding: 0 }}
-            style={{ borderRadius: 8 }}
-          >
-            <Table
-              dataSource={filteredProducts}
-              columns={columns}
-              rowKey="id"
-              pagination={{ pageSize: 5 }}
-              size="small"
+      {!outletId ? (
+        <Card><Empty description={<>Choose a store to start billing. No stores yet? <Link to="/outlets">Register one on Outlets</Link>.</>} /></Card>
+      ) : shift.isLoading ? (
+        <Card loading />
+      ) : !s ? (
+        <Card style={{ maxWidth: 520 }}>
+          <Title level={4} style={{ marginTop: 0 }}><UnlockOutlined /> Open your shift</Title>
+          <Paragraph type="secondary">
+            Count the cash in the drawer before your first bill. Your sales and refunds are reconciled against it when you close.
+          </Paragraph>
+          <Space>
+            <InputNumber
+              prefix="₹"
+              min={0}
+              style={{ width: 200 }}
+              placeholder="Opening cash"
+              value={openingCash ?? outlet.data?.defaultOpeningCash ?? null}
+              onChange={(v) => setOpeningCash(v === null ? null : Number(v))}
             />
-          </Card>
-        </Col>
-
-        {/* Right Column: Cart & Checkout Payment Panel */}
-        <Col xs={24} lg={10} xl={9}>
-          <Card
-            title={
-              <Row justify="space-between" align="middle" style={{ width: '100%' }}>
+            <Button
+              type="primary"
+              loading={openShift.isPending}
+              disabled={!canSell}
+              onClick={async () => {
+                try {
+                  await openShift.mutateAsync({ outletId, openingCash: openingCash ?? outlet.data?.defaultOpeningCash ?? 0 });
+                  message.success('Shift opened - ready to bill');
+                } catch (e) {
+                  message.error(apiErrorMessage(e, 'Could not open the shift'));
+                }
+              }}
+            >
+              Open shift
+            </Button>
+          </Space>
+        </Card>
+      ) : (
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={14} xl={15}>
+            <Card
+              size="small"
+              style={{ marginBottom: 16, borderRadius: 8, borderColor: '#d9d9d9' }}
+              title={
                 <Space>
-                  <ShoppingCartOutlined style={{ fontSize: 18, color: '#52c41a' }} />
-                  <span>Current Bill Cart</span>
-                  <Badge count={cart.length} showZero overflowCount={99} color="#52c41a" />
+                  <UserOutlined style={{ color: '#1890ff' }} />
+                  <span>Customer</span>
+                  <Tag color={customer.type === 'WALK_IN' ? 'blue' : 'purple'}>{CUSTOMER_TYPE_LABEL[customer.type ?? 'WALK_IN']}</Tag>
                 </Space>
-                {cart.length > 0 && (
-                  <Button
-                    type="text"
-                    danger
-                    icon={<ClearOutlined />}
-                    size="small"
-                    onClick={() => setCart([])}
-                  >
-                    Clear
-                  </Button>
-                )}
+              }
+              extra={
+                <Button type="link" icon={<EditOutlined />} onClick={() => { customerForm.setFieldsValue(customer); setCustomerModalOpen(true); }}>
+                  Edit Details
+                </Button>
+              }
+            >
+              <Row gutter={[16, 8]}>
+                <Col span={12}><Text type="secondary">Name: </Text><Text strong>{customer.name || 'Walk-in customer'}</Text></Col>
+                <Col span={12}><Text type="secondary">Mobile: </Text><Text strong>{customer.phone || '—'}</Text></Col>
+                {customer.gstin ? <Col span={12}><Text type="secondary">GSTIN: </Text><Tag color="volcano">{customer.gstin}</Tag></Col> : null}
+                {customer.city ? <Col span={12}><Text type="secondary">City: </Text><Text>{customer.city}</Text></Col> : null}
               </Row>
-            }
-            style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
-          >
-            {cart.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 16px' }}>
-                <ShoppingCartOutlined style={{ fontSize: 42, color: '#bfbfbf' }} />
-                <Paragraph type="secondary" style={{ marginTop: 12 }}>
-                  Bill cart is empty. Click "+ Add" on catalog products to start building counter bill.
-                </Paragraph>
-              </div>
-            ) : (
-              <div>
-                {/* Cart Items List */}
-                <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
-                  {cart.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        padding: '8px 0',
-                        borderBottom: '1px dashed #f0f0f0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div style={{ flex: 1, paddingRight: 8 }}>
-                        <Text strong style={{ fontSize: 12, display: 'block' }}>
-                          {item.name}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                          {formatCurrency(item.unitPrice)} x {item.quantity} ={' '}
-                          <Text strong style={{ color: '#1890ff' }}>
-                            {formatCurrency(item.unitPrice * item.quantity)}
-                          </Text>
-                        </Text>
-                      </div>
+            </Card>
 
-                      {/* Quantity Controls */}
-                      <Space size={4}>
-                        <Button
-                          size="small"
-                          icon={<MinusOutlined />}
-                          onClick={() => handleUpdateQty(item.id, item.quantity - 1)}
-                        />
-                        <InputNumber
-                          min={1}
-                          max={item.availableStock}
-                          value={item.quantity}
-                          onChange={(val) => handleUpdateQty(item.id, Number(val) || 1)}
-                          style={{ width: 50, textAlign: 'center' }}
-                          controls={false}
-                          size="small"
-                        />
-                        <Button
-                          size="small"
-                          icon={<PlusOutlined />}
-                          onClick={() => handleUpdateQty(item.id, item.quantity + 1)}
-                        />
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          size="small"
-                          onClick={() => handleRemoveItem(item.id)}
-                        />
-                      </Space>
-                    </div>
-                  ))}
+            <Card size="small" style={{ marginBottom: 16, borderRadius: 8 }}>
+              <Row gutter={[12, 12]} align="middle">
+                <Col xs={24} sm={12}>
+                  <Input placeholder="Search product name or SKU…" prefix={<SearchOutlined />} suffix={<BarcodeOutlined />} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} allowClear />
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Space wrap>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Category: </Text>
+                    <Select value={selectedCategory} onChange={setSelectedCategory} style={{ width: 170 }} options={categories.map((c) => ({ value: c, label: c === 'ALL' ? 'All' : c }))} />
+                  </Space>
+                </Col>
+              </Row>
+            </Card>
+
+            <Card title={<Space><ShopOutlined /><span>Store Inventory ({filteredProducts.length} items)</span></Space>} bodyStyle={{ padding: 0 }} style={{ borderRadius: 8 }}>
+              <Table
+                dataSource={filteredProducts}
+                columns={columns}
+                rowKey="id"
+                loading={catalogue.isLoading}
+                pagination={{ pageSize: 8 }}
+                size="small"
+                scroll={{ x: 560 }}
+                locale={{ emptyText: 'No stock in this store yet - transfer finished goods to it from the Finished Goods screen' }}
+              />
+            </Card>
+          </Col>
+
+          <Col xs={24} lg={10} xl={9}>
+            <Card
+              title={
+                <Row justify="space-between" align="middle" style={{ width: '100%' }}>
+                  <Space>
+                    <ShoppingCartOutlined style={{ fontSize: 18, color: '#52c41a' }} />
+                    <span>Current Bill</span>
+                    <Badge count={cart.length} showZero overflowCount={99} color="#52c41a" />
+                  </Space>
+                  {cart.length > 0 ? <Button type="text" danger icon={<ClearOutlined />} size="small" onClick={resetBill}>Clear</Button> : null}
+                </Row>
+              }
+              style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+            >
+              {cart.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+                  <ShoppingCartOutlined style={{ fontSize: 42, color: '#bfbfbf' }} />
+                  <Paragraph type="secondary" style={{ marginTop: 12 }}>Bill is empty. Click "+ Add" on a product to start.</Paragraph>
                 </div>
-
-                <Divider style={{ margin: '12px 0' }} />
-
-                {/* Subtotal & Taxes Breakdown */}
-                <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                  <Row justify="space-between">
-                    <Text type="secondary">Item Subtotal:</Text>
-                    <Text strong>{formatCurrency(cartSubtotal)}</Text>
-                  </Row>
-
-                  <Row justify="space-between">
-                    <Text type="secondary">Est. GST Tax (CGST + SGST):</Text>
-                    <Text>{formatCurrency(totalTax)}</Text>
-                  </Row>
-
-                  <Row justify="space-between" align="middle">
-                    <Text type="secondary">Manual Counter Discount (₹):</Text>
-                    <InputNumber
-                      min={0}
-                      max={cartSubtotal}
-                      value={discountAmount}
-                      onChange={(val) => setDiscountAmount(Number(val) || 0)}
-                      size="small"
-                      style={{ width: 110 }}
-                      prefix="₹"
-                    />
-                  </Row>
-
-                  <Divider style={{ margin: '8px 0' }} />
-
-                  {/* Net Payable Highlight */}
-                  <div
-                    style={{
-                      background: '#f6ffed',
-                      border: '1px solid #b7eb8f',
-                      padding: 12,
-                      borderRadius: 6,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <Text type="secondary" style={{ fontSize: 12, textTransform: 'uppercase' }}>
-                      Net Payable Bill Amount
-                    </Text>
-                    <Title level={2} style={{ margin: 0, color: '#52c41a' }}>
-                      {formatCurrency(netPayable)}
-                    </Title>
+              ) : (
+                <div>
+                  <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
+                    {cart.map((item) => (
+                      <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px dashed #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ flex: 1, paddingRight: 8 }}>
+                          <Text strong style={{ fontSize: 12, display: 'block' }}>{item.name}</Text>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {formatCurrency(item.unitPrice)} x {item.quantity} = <Text strong style={{ color: '#1890ff' }}>{formatCurrency((item.unitPrice ?? 0) * item.quantity)}</Text>
+                          </Text>
+                        </div>
+                        <Space size={4}>
+                          <Button size="small" icon={<MinusOutlined />} onClick={() => handleUpdateQty(item.id, item.quantity - 1)} />
+                          <InputNumber min={1} max={item.availableStock} value={item.quantity} onChange={(v) => handleUpdateQty(item.id, Number(v) || 1)} style={{ width: 52 }} controls={false} size="small" />
+                          <Button size="small" icon={<PlusOutlined />} onClick={() => handleUpdateQty(item.id, item.quantity + 1)} />
+                          <Button type="text" danger icon={<DeleteOutlined />} size="small" onClick={() => handleUpdateQty(item.id, 0)} />
+                        </Space>
+                      </div>
+                    ))}
                   </div>
-                </Space>
 
-                <Divider style={{ margin: '12px 0' }} />
+                  <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                    <Row justify="space-between"><Text type="secondary">Subtotal (before GST):</Text><Text strong>{formatCurrency(est.subtotal)}</Text></Row>
+                    <Row justify="space-between" align="middle">
+                      <Text type="secondary">Counter discount (₹):</Text>
+                      <InputNumber min={0} max={est.subtotal} value={discountAmount} onChange={(v) => setDiscountAmount(Number(v) || 0)} size="small" style={{ width: 110 }} prefix="₹" />
+                    </Row>
+                    <Row justify="space-between"><Text type="secondary">GST (on the discounted value):</Text><Text>{formatCurrency(est.tax)}</Text></Row>
+                    <Divider style={{ margin: '8px 0' }} />
+                    <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', padding: 12, borderRadius: 6, textAlign: 'center' }}>
+                      <Text type="secondary" style={{ fontSize: 12, textTransform: 'uppercase' }}>Net Payable (estimate)</Text>
+                      <Title level={2} style={{ margin: 0, color: '#52c41a' }}>{formatCurrency(est.total)}</Title>
+                    </div>
+                  </Space>
 
-                {/* Payment Options */}
-                <div style={{ marginBottom: 16 }}>
-                  <Text strong style={{ marginBottom: 8, display: 'block' }}>
-                    Select Payment Mode:
-                  </Text>
-                  <Radio.Group
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value)}
-                    buttonStyle="solid"
-                    style={{ width: '100%' }}
-                  >
+                  <Divider style={{ margin: '12px 0' }} />
+
+                  <Text strong style={{ marginBottom: 8, display: 'block' }}>Payment Mode:</Text>
+                  <Radio.Group value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} buttonStyle="solid" style={{ width: '100%', marginBottom: 16 }}>
                     <Row gutter={[8, 8]}>
-                      <Col span={12}>
-                        <Radio.Button
-                          value="CASH"
-                          style={{
-                            width: '100%',
-                            textAlign: 'center',
-                            height: 38,
-                            lineHeight: '36px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <DollarOutlined /> Cash
-                        </Radio.Button>
-                      </Col>
-                      <Col span={12}>
-                        <Radio.Button
-                          value="UPI"
-                          style={{
-                            width: '100%',
-                            textAlign: 'center',
-                            height: 38,
-                            lineHeight: '36px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <QrcodeOutlined /> UPI QR
-                        </Radio.Button>
-                      </Col>
-                      <Col span={12}>
-                        <Radio.Button
-                          value="CARD"
-                          style={{
-                            width: '100%',
-                            textAlign: 'center',
-                            height: 38,
-                            lineHeight: '36px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <CreditCardOutlined /> Card Swipe
-                        </Radio.Button>
-                      </Col>
-                      <Col span={12}>
-                        <Radio.Button
-                          value="CREDIT"
-                          style={{
-                            width: '100%',
-                            textAlign: 'center',
-                            height: 38,
-                            lineHeight: '36px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <ShopOutlined /> Store Credit
-                        </Radio.Button>
-                      </Col>
+                      {([['CASH', <DollarOutlined key="c" />, 'Cash'], ['UPI', <QrcodeOutlined key="u" />, 'UPI QR'], ['CARD', <CreditCardOutlined key="d" />, 'Card']] as const).map(([v, icon, label]) => (
+                        <Col span={8} key={v}>
+                          <Radio.Button value={v} style={{ width: '100%', textAlign: 'center', height: 38, lineHeight: '36px', borderRadius: 6 }}>{icon} {label}</Radio.Button>
+                        </Col>
+                      ))}
                     </Row>
                   </Radio.Group>
+
+                  {paymentMode === 'CASH' ? (
+                    <Card size="small" style={{ background: '#fafafa', marginBottom: 16 }}>
+                      <Row gutter={12} align="middle">
+                        <Col span={12}>
+                          <Text type="secondary">Cash tendered (₹):</Text>
+                          <InputNumber min={0} value={cashTendered} onChange={(v) => setCashTendered(v === null ? null : Number(v))} style={{ width: '100%', marginTop: 4 }} prefix="₹" />
+                        </Col>
+                        <Col span={12}>
+                          <Text type="secondary">Change due (₹):</Text>
+                          <Title level={4} style={{ margin: '4px 0 0 0', color: changeDue > 0 ? '#1890ff' : '#000' }}>{formatCurrency(changeDue)}</Title>
+                        </Col>
+                      </Row>
+                    </Card>
+                  ) : (
+                    <Input
+                      style={{ marginBottom: 16 }}
+                      placeholder={paymentMode === 'UPI' ? 'UPI transaction ID (recommended)' : 'Card slip / approval number (recommended)'}
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      maxLength={80}
+                    />
+                  )}
+
+                  <Button
+                    type="primary"
+                    size="large"
+                    block
+                    icon={<CheckCircleOutlined />}
+                    loading={createSale.isPending}
+                    onClick={() => void handleCompleteSale()}
+                    style={{ height: 48, fontSize: 16, background: '#52c41a', borderColor: '#52c41a' }}
+                  >
+                    Complete Sale
+                  </Button>
                 </div>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      )}
 
-                {/* Mode Specific Inputs */}
-                {paymentMode === 'CASH' && (
-                  <Card size="small" style={{ background: '#fafafa', marginBottom: 16 }}>
-                    <Row gutter={12} align="middle">
-                      <Col span={12}>
-                        <Text type="secondary">Cash Tendered (₹):</Text>
-                        <InputNumber
-                          min={0}
-                          value={cashTendered}
-                          onChange={(val) => setCashTendered(Number(val) || 0)}
-                          style={{ width: '100%', marginTop: 4 }}
-                          prefix="₹"
-                        />
-                      </Col>
-                      <Col span={12}>
-                        <Text type="secondary">Change Due (₹):</Text>
-                        <Title level={4} style={{ margin: '4px 0 0 0', color: changeDue > 0 ? '#1890ff' : '#000' }}>
-                          {formatCurrency(changeDue)}
-                        </Title>
-                      </Col>
-                    </Row>
-                  </Card>
-                )}
-
-                {paymentMode === 'UPI' && (
-                  <Alert
-                    message="Dynamic UPI QR Payment"
-                    description="Show counter QR scanner display to customer. Ensure payment notification is received before completing sale."
-                    type="info"
-                    showIcon
-                    icon={<QrcodeOutlined />}
-                    style={{ marginBottom: 16 }}
-                  />
-                )}
-
-                {/* Checkout Submit Button */}
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<CheckCircleOutlined />}
-                  onClick={handleCompleteSale}
-                  style={{ height: 48, fontSize: 16, background: '#52c41a', borderColor: '#52c41a' }}
-                >
-                  Complete Sale & Print Invoice
-                </Button>
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Manual Customer Entry Modal */}
       <Modal
-        title="Add / Edit Offline Store Customer Details"
+        title="Customer details"
         open={customerModalOpen}
         onCancel={() => setCustomerModalOpen(false)}
         onOk={() => customerForm.submit()}
-        okText="Save Customer Info"
+        okText="Use these details"
         width={560}
       >
         <Form
           form={customerForm}
           layout="vertical"
-          onFinish={handleSaveCustomerDetails}
-          initialValues={customerDetails}
+          onFinish={(v) => { setCustomer({ ...v, type: v.type ?? 'WALK_IN' }); setCustomerModalOpen(false); }}
+          initialValues={customer}
         >
-          <Form.Item name="customerType" label="Customer Type">
-            <Radio.Group buttonStyle="solid">
-              <Radio.Button value="WALK_IN">Walk-in Retail Guest</Radio.Button>
-              <Radio.Button value="REGULAR_KIRANA">Regular Kirana Wholesale</Radio.Button>
-              <Radio.Button value="NEW_MANUAL">New Offline Registration</Radio.Button>
-            </Radio.Group>
+          <Form.Item name="type" label="Customer type">
+            <Radio.Group buttonStyle="solid" options={Object.entries(CUSTOMER_TYPE_LABEL).map(([value, label]) => ({ value, label }))} optionType="button" />
           </Form.Item>
-
+          <Row gutter={16}>
+            <Col span={12}><Form.Item name="name" label="Name" rules={[{ max: 120 }]}><Input placeholder="Walk-in customer" prefix={<UserOutlined />} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="phone" label="Mobile" rules={[{ pattern: /^[0-9+\- ]{10,15}$/, message: '10-15 digits' }]}><Input placeholder="e.g. 9876543210" /></Form.Item></Col>
+          </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-                name="fullName"
-                label="Customer Full Name"
-                rules={[{ required: true, message: 'Please enter customer name' }]}
-              >
-                <Input placeholder="e.g. Ramesh Kumar" prefix={<UserOutlined />} />
+              <Form.Item name="gstin" label="GSTIN (for a B2B tax invoice)" normalize={(v: string) => v?.toUpperCase().replace(/\s/g, '')}
+                rules={[{ pattern: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, message: '15 characters, e.g. 27AAAAA0000A1Z5' }]}>
+                <Input maxLength={15} />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Form.Item
-                name="mobile"
-                label="Mobile Number"
-                rules={[{ required: true, message: 'Please enter mobile number' }]}
-              >
-                <Input placeholder="e.g. 9876543210" />
-              </Form.Item>
-            </Col>
+            <Col span={12}><Form.Item name="city" label="City"><Input /></Form.Item></Col>
           </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="emailOrGst" label="GSTIN / Tax ID (Optional)">
-                <Input placeholder="e.g. 10AAACB1234F1Z5" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="city" label="City / Region">
-                <Input placeholder="e.g. Patna" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="address" label="Store Location / Address Notes">
-            <Input.TextArea rows={2} placeholder="Physical address or counter notes" />
-          </Form.Item>
+          <Form.Item name="address" label="Address (optional)"><Input.TextArea rows={2} /></Form.Item>
         </Form>
       </Modal>
 
-      {/* Tax Invoice Printable Modal */}
       <Modal
-        title={
-          <Space>
-            <FileTextOutlined style={{ color: '#52c41a' }} />
-            <span>POS Tax Invoice & Receipt — {completedOrder?.orderId}</span>
-          </Space>
-        }
-        open={invoiceModalOpen}
-        onCancel={() => setInvoiceModalOpen(false)}
+        title={<Space><FileTextOutlined style={{ color: '#52c41a' }} /><span>Sale complete — {completed?.saleNumber}</span></Space>}
+        open={Boolean(completed)}
+        onCancel={() => setCompleted(null)}
         footer={[
-          <Button key="close" onClick={() => setInvoiceModalOpen(false)}>
-            Close
-          </Button>,
+          <Button key="new" onClick={() => setCompleted(null)}>New bill</Button>,
           <Button
             key="print"
             type="primary"
             icon={<PrinterOutlined />}
-            onClick={handlePrintReceiptAndReset}
             style={{ background: '#52c41a', borderColor: '#52c41a' }}
-          >
-            Print Thermal Receipt & Complete
-          </Button>,
-        ]}
-        width={650}
-      >
-        {completedOrder && (
-          <div
-            style={{
-              padding: 16,
-              background: '#fff',
-              border: '1px solid #e8e8e8',
-              borderRadius: 6,
-              fontSize: 13,
+            onClick={async () => {
+              if (!completed) return;
+              try {
+                if (!(await printSale(completed))) message.warning('Allow pop-ups to print');
+              } catch (e) {
+                message.error(apiErrorMessage(e, 'Could not load the invoice'));
+              }
             }}
           >
-            {/* Store Header */}
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <Title level={4} style={{ margin: 0 }}>SHREE VIGHNAHARTA VALUE BALAJI AGRO</Title>
-              <Text type="secondary">Patna City Flagship Retail Store • GSTIN: 10AAACS8812F1Z9</Text>
-              <br />
-              <Text type="secondary">Helpline: +91 91234 56789 | Email: pos@svvbalaji.com</Text>
-              <Divider style={{ margin: '8px 0' }} />
-              <Tag color="green">TAX INVOICE / COUNTER CASH RECEIPT</Tag>
-            </div>
-
-            {/* Invoice Meta */}
-            <Row gutter={[16, 8]} style={{ marginBottom: 16 }}>
-              <Col span={12}>
-                <Text type="secondary">Invoice No: </Text>
-                <Text strong>{completedOrder.orderId}</Text>
-              </Col>
-              <Col span={12}>
-                <Text type="secondary">Date & Time: </Text>
-                <Text>{completedOrder.createdAt}</Text>
-              </Col>
-              <Col span={12}>
-                <Text type="secondary">Customer Name: </Text>
-                <Text strong>{completedOrder.customer?.fullName}</Text>
-              </Col>
-              <Col span={12}>
-                <Text type="secondary">Customer Mobile: </Text>
-                <Text>{completedOrder.customer?.mobile}</Text>
-              </Col>
-              {completedOrder.customer?.emailOrGst && (
-                <Col span={12}>
-                  <Text type="secondary">Customer GSTIN: </Text>
-                  <Text strong>{completedOrder.customer?.emailOrGst}</Text>
-                </Col>
-              )}
-              <Col span={12}>
-                <Text type="secondary">Cashier: </Text>
-                <Text>{completedOrder.cashier}</Text>
-              </Col>
-            </Row>
-
-            {/* Line Items Table */}
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                marginBottom: 16,
-                fontSize: 12,
-              }}
-            >
-              <thead>
-                <tr style={{ background: '#fafafa', borderBottom: '1px solid #d9d9d9' }}>
-                  <th style={{ padding: 6, textAlign: 'left' }}>Item</th>
-                  <th style={{ padding: 6, textAlign: 'right' }}>Price</th>
-                  <th style={{ padding: 6, textAlign: 'center' }}>Qty</th>
-                  <th style={{ padding: 6, textAlign: 'right' }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedOrder.cartItems.map((item: CartItem) => (
-                  <tr key={item.id} style={{ borderBottom: '1px dashed #f0f0f0' }}>
-                    <td style={{ padding: 6 }}>
-                      {item.name}
-                      <br />
-                      <span style={{ fontSize: 10, color: '#8c8c8c' }}>SKU: {item.sku}</span>
-                    </td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
-                    <td style={{ padding: 6, textAlign: 'center' }}>{item.quantity}</td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>
-                      {formatCurrency(item.unitPrice * item.quantity)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Invoice Totals Summary */}
-            <div style={{ width: '60%', marginLeft: 'auto' }}>
-              <Row justify="space-between">
-                <Text type="secondary">Subtotal:</Text>
-                <Text>{formatCurrency(completedOrder.subtotal)}</Text>
-              </Row>
-              <Row justify="space-between">
-                <Text type="secondary">GST Tax:</Text>
-                <Text>{formatCurrency(completedOrder.tax)}</Text>
-              </Row>
-              {completedOrder.discount > 0 && (
-                <Row justify="space-between">
-                  <Text type="secondary">Discount:</Text>
-                  <Text style={{ color: '#ff4d4f' }}>-{formatCurrency(completedOrder.discount)}</Text>
-                </Row>
-              )}
-              <Divider style={{ margin: '4px 0' }} />
-              <Row justify="space-between">
-                <Text strong style={{ fontSize: 14 }}>Grand Total:</Text>
-                <Text strong style={{ fontSize: 16, color: '#52c41a' }}>
-                  {formatCurrency(completedOrder.netTotal)}
-                </Text>
-              </Row>
-              <Row justify="space-between" style={{ marginTop: 4 }}>
-                <Text type="secondary">Payment Mode:</Text>
-                <Tag color="blue">{completedOrder.paymentMode}</Tag>
-              </Row>
-              {completedOrder.paymentMode === 'CASH' && (
-                <>
-                  <Row justify="space-between">
-                    <Text type="secondary">Cash Tendered:</Text>
-                    <Text>{formatCurrency(completedOrder.cashTendered)}</Text>
-                  </Row>
-                  <Row justify="space-between">
-                    <Text type="secondary">Change Returned:</Text>
-                    <Text>{formatCurrency(completedOrder.changeDue)}</Text>
-                  </Row>
-                </>
-              )}
-            </div>
-
-            <Divider style={{ margin: '16px 0 8px 0' }} />
-            <div style={{ textAlign: 'center', fontSize: 11, color: '#8c8c8c' }}>
-              Thank you for shopping at Shree Vighnaharta Value Balaji Store!
-              <br />
-              Goods once sold are non-refundable except for quality defects reported within 48 hrs.
-            </div>
-          </div>
-        )}
+            {completed?.invoice ? 'Print GST invoice' : 'Print receipt'}
+          </Button>,
+        ]}
+        width={620}
+      >
+        {completed ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            {completed.invoice ? (
+              <Alert type="success" showIcon message={`GST invoice ${completed.invoice.invoiceNumber} issued`} />
+            ) : (
+              <Alert type="warning" showIcon message="No GST invoice yet" description="GST Settings are not complete; the invoice is issued automatically once they are. You can print a receipt now." />
+            )}
+            <Descriptions size="small" column={2} bordered>
+              <Descriptions.Item label="Customer">{completed.customerName}</Descriptions.Item>
+              <Descriptions.Item label="Time">{formatDateTime(completed.createdAt)}</Descriptions.Item>
+              <Descriptions.Item label="Subtotal">{formatCurrency(completed.subtotal)}</Descriptions.Item>
+              <Descriptions.Item label="Discount">{formatCurrency(completed.discountTotal)}</Descriptions.Item>
+              <Descriptions.Item label="GST">{formatCurrency(completed.taxTotal)}</Descriptions.Item>
+              <Descriptions.Item label="Total"><Text strong style={{ color: '#52c41a' }}>{formatCurrency(completed.total)}</Text></Descriptions.Item>
+              <Descriptions.Item label="Paid by">{completed.paymentMode}</Descriptions.Item>
+              {completed.changeDue !== null ? <Descriptions.Item label="Change">{formatCurrency(completed.changeDue)}</Descriptions.Item> : null}
+            </Descriptions>
+            <Table
+              size="small"
+              pagination={false}
+              rowKey="id"
+              dataSource={completed.lines}
+              columns={[
+                { title: 'Item', dataIndex: 'nameSnapshot' },
+                { title: 'Qty', dataIndex: 'quantity', align: 'right' },
+                { title: 'Batches', key: 'b', render: (_, l) => l.batches.map((b) => `${b.fgBatchNumber} ×${b.quantity}`).join(', ') },
+                { title: 'Total', dataIndex: 'lineTotal', align: 'right', render: (v: number) => formatCurrency(v) },
+              ]}
+            />
+          </Space>
+        ) : null}
       </Modal>
+
+      {s ? <CloseShiftModal open={closeOpen} onClose={() => setCloseOpen(false)} shiftId={s.id} shiftNumber={s.shiftNumber} expected={s.expectedCash} /> : null}
     </Can>
+  );
+}
+
+/** Count the drawer and close. Shows the expected figure so the cashier can recount before submitting. */
+export function CloseShiftModal({ open, onClose, shiftId, shiftNumber, expected }: { open: boolean; onClose: () => void; shiftId: string; shiftNumber: string; expected: number }) {
+  const { message } = AntApp.useApp();
+  const close = useClosePosShift();
+  const [form] = Form.useForm<{ countedCash: number; notes?: string }>();
+  const counted = Form.useWatch('countedCash', form);
+  const diff = typeof counted === 'number' ? Math.round((counted - expected) * 100) / 100 : null;
+
+  return (
+    <Modal
+      title={`Close shift ${shiftNumber}`}
+      open={open}
+      onCancel={onClose}
+      okText="Close shift"
+      okButtonProps={{ loading: close.isPending }}
+      onOk={async () => {
+        const v = await form.validateFields();
+        try {
+          const r = (await close.mutateAsync({ id: shiftId, countedCash: v.countedCash, notes: v.notes?.trim() || undefined })) as { discrepancy: string | number };
+          const d = Number(r.discrepancy);
+          message[d === 0 ? 'success' : 'warning'](d === 0 ? 'Shift closed - drawer balanced' : `Shift closed with a difference of ${formatCurrency(d)}`);
+          form.resetFields();
+          onClose();
+        } catch (e) {
+          message.error(apiErrorMessage(e, 'Could not close the shift'));
+        }
+      }}
+    >
+      <Descriptions size="small" column={1} bordered style={{ marginBottom: 16 }}>
+        <Descriptions.Item label="Expected cash in drawer"><Text strong style={{ fontSize: 15, color: '#1890ff' }}>{formatCurrency(expected)}</Text></Descriptions.Item>
+        {diff !== null ? (
+          <Descriptions.Item label="Difference">
+            <Text strong style={{ color: diff === 0 ? '#52c41a' : '#ff4d4f' }}>{diff === 0 ? 'Balanced' : formatCurrency(diff)}</Text>
+          </Descriptions.Item>
+        ) : null}
+      </Descriptions>
+      <Form form={form} layout="vertical">
+        <Form.Item name="countedCash" label="Cash counted in the drawer (₹)" rules={[{ required: true, message: 'Count the drawer' }]}>
+          <InputNumber min={0} prefix="₹" size="large" style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="notes" label="Remarks"><Input.TextArea rows={2} maxLength={500} placeholder="Reason for any difference, handover notes" /></Form.Item>
+      </Form>
+    </Modal>
   );
 }

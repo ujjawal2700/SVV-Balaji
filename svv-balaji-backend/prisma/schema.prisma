@@ -221,6 +221,12 @@ model User {
   ridersReviewed            Rider[]                 @relation("RiderReviewedBy")
   riderCashRecorded         RiderCashEntry[]        @relation("RiderCashRecordedBy")
   creditReceiptsVoided      CreditReceipt[]         @relation("CreditReceiptVoidedBy")
+  invoicesIssued            Invoice[]               @relation("InvoiceIssuedBy")
+  invoicesCancelled         Invoice[]               @relation("InvoiceCancelledBy")
+  posShiftsOpened           PosShift[]              @relation("PosShiftCashier")
+  posShiftsClosed           PosShift[]              @relation("PosShiftClosedBy")
+  posSales                  PosSale[]               @relation("PosSaleCashier")
+  posSalesRefunded          PosSale[]               @relation("PosSaleRefundedBy")
   seedStockMovements        SeedStockMovement[]     @relation("SeedStockMovementBy")
   trainingSessionsConducted TrainingSession[]
   fieldVisitsAsExpert       FieldVisit[]
@@ -318,6 +324,7 @@ model Branch {
   fieldVisits      FieldVisit[]
   fieldVisitPlans  FieldVisitPlan[]
   seedStock        SeedStock[]
+  posOutlets       PosOutlet[]
 
   // Phase 2
   procurementPlans       ProcurementPlan[]
@@ -1446,7 +1453,9 @@ model FinishedGoodsBatch {
 
   // Phase 4 - every allocation is a traceability link from an order line to a
   // specific pack batch, and through it back to the farmer.
-  allocations OrderAllocation[]
+  allocations    OrderAllocation[]
+  /// The same link for counter (POS) sales.
+  posAllocations PosSaleAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1637,8 +1646,9 @@ model Product {
   offers         ProductOffer[]
 
   // Phase 4
-  priceLists PriceList[]
-  orderItems OrderItem[]
+  priceLists   PriceList[]
+  orderItems   OrderItem[]
+  posSaleLines PosSaleLine[]
 
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
@@ -1811,6 +1821,9 @@ model Warehouse {
   // Phase 3
   finishedGoodsStock FinishedGoodsStock[]
 
+  /// Set when this warehouse is a POS store's stock location.
+  posOutlet PosOutlet?
+
   // Phase 4
   orders           Order[]
   orderAllocations OrderAllocation[]
@@ -1929,6 +1942,7 @@ model Customer {
   creditLimit    Decimal?        @db.Decimal(14, 2)
   paymentTerms   PaymentTerms    @default(PREPAID)
   creditReceipts CreditReceipt[]
+  invoices       Invoice[]
 
   status CustomerStatus @default(ACTIVE)
 
@@ -2404,6 +2418,7 @@ model Order {
   checkoutSession   CheckoutSession? @relation(fields: [checkoutSessionId], references: [id])
 
   shipment            OrderShipment?
+  invoices            Invoice[]
   events              OrderEvent[]
   paymentTransactions PaymentTransaction[]
   stockReservations   StockReservation[]
@@ -3236,6 +3251,9 @@ model OrderReturn {
 enum WarehouseKind {
   CENTRAL
   OUTLET
+  /// A company-owned store that sells over the counter (POS). Never a checkout
+  /// or delivery node - routing and riders select CENTRAL / OUTLET explicitly.
+  STORE
 }
 
 enum OrderSource {
@@ -3497,9 +3515,19 @@ model OrderEvent {
   actorId String?
   actor   User?   @relation("OrderEventsActed", fields: [actorId], references: [id])
 
+  /// The customer inbox/push generated for this timeline event. Unique on the
+  /// notification side so a retried/replayed event can never alert twice.
+  appNotification AppNotification?
+
+  /// Durable outbox marker for the customer notification bridge. A null value
+  /// is retried after process restarts; handled events (including intentionally
+  /// silent internal events) are stamped once processing finishes.
+  customerNotificationHandledAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([orderId, createdAt])
+  @@index([customerNotificationHandledAt, createdAt])
   @@map("order_events")
 }
 
@@ -4477,6 +4505,11 @@ model AppNotification {
   broadcastId String?
   broadcast   PushBroadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
 
+  /// Set for automatic order-status notifications. Broadcasts leave it null.
+  /// One-to-one is the delivery idempotency key for lifecycle event retries.
+  orderEventId String?     @unique
+  orderEvent   OrderEvent? @relation(fields: [orderEventId], references: [id], onDelete: SetNull)
+
   kind              PushRecipientKind
   userId            String?
   user              User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4494,4 +4527,385 @@ model AppNotification {
   @@index([userId, createdAt])
   @@index([customerAccountId, createdAt])
   @@map("app_notifications")
+}
+
+// --- GST invoicing (WS4.4) ---------------------------------------------------
+
+/// The selling company as it must appear on a tax invoice. Single row, created
+/// on first read. Invoices snapshot these fields when issued, so editing this
+/// never restates an invoice already out.
+model GstSettings {
+  id String @id @default(uuid())
+
+  legalName    String?
+  tradeName    String?
+  /// 15-character GSTIN. Its first two digits are the seller's state code, which
+  /// decides intra-state (CGST+SGST) vs inter-state (IGST) on every invoice.
+  gstin        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  pincode      String?
+  phone        String?
+  email        String?
+
+  /// Up to 4 letters/digits. Numbers read PREFIX/YYYY-NNNNNN (e.g. INV/2627-000001),
+  /// restarting each financial year, never more than the 16 characters GST Rule 46 allows.
+  invoicePrefix String @default("INV")
+
+  /// Only turn on once the company is notified for e-invoicing and the GSP
+  /// credentials are in place (A-11). Applies to B2B invoices only.
+  eInvoiceEnabled Boolean @default(false)
+
+  /// The delivery fee is charged GST-inclusive at checkout. On the invoice it is
+  /// a separate service line; tax is carved out of it at this rate, so the
+  /// customer's total never changes. Pending confirmation by the client's CA.
+  deliveryFeeSac            String  @default("996812")
+  deliveryFeeGstRatePercent Decimal @default(18) @db.Decimal(5, 2)
+
+  /// Printed at the foot of every invoice.
+  footerNote String?
+
+  /// Set the first time the seller details become complete. Automatic issuing
+  /// (and the catch-up sweep) only covers orders dispatched from this moment,
+  /// so turning invoicing on never mass-issues invoices for old orders.
+  invoicingStartsAt DateTime?
+
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("gst_settings")
+}
+
+enum InvoiceStatus {
+  ISSUED
+  CANCELLED
+}
+
+/// B2B = the buyer has a GSTIN (input tax credit, e-invoice applies).
+/// B2C = everyone else, including a retailer who never supplied one.
+enum InvoiceSupplyType {
+  B2B
+  B2C
+}
+
+enum EInvoiceStatus {
+  /// B2C, or e-invoicing is switched off.
+  NOT_APPLICABLE
+  /// Waiting for the sweep to submit it to the GSP.
+  PENDING
+  GENERATED
+  /// Refused or unreachable; `eInvoiceError` says why. Retried until it is fixed.
+  FAILED
+  CANCELLED
+}
+
+/// A GST tax invoice for one order. Issued at dispatch (the time of supply for
+/// goods). An order has at most one ISSUED invoice; cancelling it frees the
+/// order to be invoiced again under a new number.
+model Invoice {
+  id String @id @default(uuid())
+
+  /// PREFIX/YYYY-NNNNNN - unique for all time, consecutive within a financial year.
+  invoiceNumber String   @unique
+  invoiceDate   DateTime
+  financialYear String
+
+  /// Exactly one of orderId / posSaleId is set: an invoice is for an order or for a counter sale.
+  orderId    String?
+  order      Order?       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  posSaleId  String?
+  posSale    PosSale?     @relation(fields: [posSaleId], references: [id], onDelete: Restrict)
+  /// Null for a counter sale to a walk-in, who has no Customer record.
+  customerId String?
+  customer   Customer?    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  channel    SalesChannel
+
+  supplyType InvoiceSupplyType
+  status     InvoiceStatus     @default(ISSUED)
+
+  /// Frozen copies of who sold to whom, as printed.
+  seller Json
+  buyer  Json
+
+  /// Two-digit GST state code of where the goods were delivered.
+  placeOfSupply        String
+  /// True when no delivery state could be found and the seller's state was used.
+  placeOfSupplyAssumed Boolean @default(false)
+  isInterState         Boolean
+
+  taxableTotal  Decimal @db.Decimal(14, 2)
+  cgstTotal     Decimal @db.Decimal(14, 2)
+  sgstTotal     Decimal @db.Decimal(14, 2)
+  igstTotal     Decimal @db.Decimal(14, 2)
+  taxTotal      Decimal @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  /// Whatever reconciles the lines to what the order actually charged (normally 0).
+  roundOff      Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal @db.Decimal(14, 2)
+
+  lines InvoiceLine[]
+
+  // ---- E-invoice (IRN) ----
+  eInvoiceStatus        EInvoiceStatus @default(NOT_APPLICABLE)
+  irn                   String?        @unique
+  ackNo                 String?
+  ackDate               DateTime?
+  /// The signed QR payload the IRP returns; printed as a QR on the invoice.
+  signedQrCode          String?
+  eInvoiceProvider      String?
+  eInvoiceError         String?
+  eInvoiceAttempts      Int            @default(0)
+  eInvoiceNextAttemptAt DateTime?
+
+  issuedById String?
+  issuedBy   User?   @relation("InvoiceIssuedBy", fields: [issuedById], references: [id])
+
+  cancelledAt   DateTime?
+  cancelReason  String?
+  cancelledById String?
+  cancelledBy   User?     @relation("InvoiceCancelledBy", fields: [cancelledById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([posSaleId])
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([status])
+  @@index([eInvoiceStatus])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNo    Int
+
+  /// Null on the delivery-charge line.
+  productId   String?
+  description String
+  sku         String?
+  /// HSN for goods, SAC for the delivery service. Null when the product has none
+  /// recorded - such an invoice cannot be e-invoiced until it is added.
+  hsnSac      String?
+  isService   Boolean @default(false)
+
+  quantity     Decimal @db.Decimal(12, 3)
+  /// GST unit quantity code (PAC = packs, OTH = other).
+  uqc          String
+  unitPrice    Decimal @db.Decimal(12, 2)
+  gross        Decimal @db.Decimal(14, 2)
+  discount     Decimal @default(0) @db.Decimal(14, 2)
+  taxableValue Decimal @db.Decimal(14, 2)
+
+  gstRatePercent Decimal @db.Decimal(5, 2)
+  cgstAmount     Decimal @db.Decimal(14, 2)
+  sgstAmount     Decimal @db.Decimal(14, 2)
+  igstAmount     Decimal @db.Decimal(14, 2)
+  lineTotal      Decimal @db.Decimal(14, 2)
+
+  @@unique([invoiceId, lineNo])
+  @@map("invoice_lines")
+}
+
+// --- POS: company-owned stores selling over the counter ------------------------
+
+/// A company-owned physical store with a POS counter. Its stock lives in its own
+/// warehouse (kind STORE), so counter sales draw on the same inventory truth,
+/// batch by batch, as every other sale. Franchise outlets are a separate,
+/// future module and are not modelled here.
+model PosOutlet {
+  id   String @id @default(uuid())
+  /// Human code staff read aloud, e.g. OUT-PAT-01. Unique.
+  code String @unique
+  name String
+
+  address  String
+  city     String
+  district String?
+  state    String
+  pincode  String?
+
+  managerName        String?
+  managerPhone       String?
+  /// Display only. Whoever actually sells is the signed-in user on an open shift.
+  defaultCashierName String?
+  posTerminalsCount  Int     @default(1)
+  /// Suggested opening float when a cashier opens a shift here.
+  defaultOpeningCash Decimal @default(0) @db.Decimal(12, 2)
+
+  isActive Boolean @default(true)
+
+  branchId    String
+  branch      Branch    @relation(fields: [branchId], references: [id])
+  warehouseId String    @unique
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  shifts PosShift[]
+  sales  PosSale[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@map("pos_outlets")
+}
+
+enum PosShiftStatus {
+  OPEN
+  CLOSED
+}
+
+/// One cashier's session at one outlet: opening float in, sales against it,
+/// cash counted at close. Expected cash and the discrepancy are frozen at close.
+model PosShift {
+  id          String @id @default(uuid())
+  /// SHIFT-YYYYMMDD-NNN
+  shiftNumber String @unique
+
+  outletId  String
+  outlet    PosOutlet @relation(fields: [outletId], references: [id])
+  cashierId String
+  cashier   User      @relation("PosShiftCashier", fields: [cashierId], references: [id])
+
+  status      PosShiftStatus @default(OPEN)
+  openedAt    DateTime       @default(now())
+  openingCash Decimal        @db.Decimal(12, 2)
+
+  closedAt     DateTime?
+  closedById   String?
+  closedBy     User?     @relation("PosShiftClosedBy", fields: [closedById], references: [id])
+  expectedCash Decimal?  @db.Decimal(12, 2)
+  countedCash  Decimal?  @db.Decimal(12, 2)
+  /// counted - expected. Negative = cash short.
+  discrepancy  Decimal?  @db.Decimal(12, 2)
+  notes        String?
+
+  sales   PosSale[] @relation("PosSaleShift")
+  refunds PosSale[] @relation("PosSaleRefundShift")
+
+  @@index([outletId, status])
+  @@index([cashierId, status])
+  @@map("pos_shifts")
+}
+
+enum PosPaymentMode {
+  CASH
+  UPI
+  CARD
+}
+
+enum PosSaleStatus {
+  COMPLETED
+  REFUNDED
+}
+
+enum PosCustomerType {
+  WALK_IN
+  REGULAR_KIRANA
+  INSTITUTIONAL
+}
+
+/// A counter sale. Priced by the server from the B2C price list, stock taken
+/// first-expiry-first-out from the store's QA-released batches, and the exact
+/// batches recorded (PosSaleAllocation) so a pack sold at the counter traces
+/// back to the farmer like any other.
+model PosSale {
+  id              String  @id @default(uuid())
+  /// POS-YYYYMMDD-NNN
+  saleNumber      String  @unique
+  /// Sent by the terminal so a double-click or retry never records the sale twice.
+  clientRequestId String? @unique
+
+  outletId    String
+  outlet      PosOutlet @relation(fields: [outletId], references: [id])
+  shiftId     String
+  shift       PosShift  @relation("PosSaleShift", fields: [shiftId], references: [id])
+  cashierId   String
+  cashier     User      @relation("PosSaleCashier", fields: [cashierId], references: [id])
+  warehouseId String
+
+  customerType    PosCustomerType @default(WALK_IN)
+  customerName    String
+  customerPhone   String?
+  customerGstin   String?
+  customerAddress String?
+  customerCity    String?
+  notes           String?
+
+  subtotal      Decimal @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal      Decimal @db.Decimal(14, 2)
+  total         Decimal @db.Decimal(14, 2)
+
+  paymentMode      PosPaymentMode
+  /// Cash handed over (CASH only) and the change given back.
+  amountTendered   Decimal?       @db.Decimal(14, 2)
+  changeDue        Decimal?       @db.Decimal(14, 2)
+  /// UPI transaction id / card slip number.
+  paymentReference String?
+
+  status        PosSaleStatus @default(COMPLETED)
+  refundedAt    DateTime?
+  refundedById  String?
+  refundedBy    User?         @relation("PosSaleRefundedBy", fields: [refundedById], references: [id])
+  refundReason  String?
+  /// The shift whose drawer the refund came out of (cash refunds reduce its expected cash).
+  refundShiftId String?
+  refundShift   PosShift?     @relation("PosSaleRefundShift", fields: [refundShiftId], references: [id])
+
+  lines    PosSaleLine[]
+  invoices Invoice[]
+
+  createdAt DateTime @default(now())
+
+  @@index([outletId, createdAt])
+  @@index([shiftId])
+  @@index([status])
+  @@map("pos_sales")
+}
+
+model PosSaleLine {
+  id     String  @id @default(uuid())
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  lineNo Int
+
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  nameSnapshot String
+  skuSnapshot  String?
+
+  quantity       Int
+  /// Per pack, before GST, from the B2C price rule in force at the sale.
+  unitPrice      Decimal @db.Decimal(12, 2)
+  priceListId    String?
+  gstRatePercent Decimal @db.Decimal(5, 2)
+  lineSubtotal   Decimal @db.Decimal(14, 2)
+  /// Share of the counter discount; GST is charged on subtotal minus this.
+  lineDiscount   Decimal @default(0) @db.Decimal(14, 2)
+  lineTax        Decimal @db.Decimal(14, 2)
+  lineTotal      Decimal @db.Decimal(14, 2)
+
+  allocations PosSaleAllocation[]
+
+  @@unique([saleId, lineNo])
+  @@map("pos_sale_lines")
+}
+
+/// Which finished-goods batch each counter sale line was taken from.
+model PosSaleAllocation {
+  id        String             @id @default(uuid())
+  lineId    String
+  line      PosSaleLine        @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  fgBatchId String
+  fgBatch   FinishedGoodsBatch @relation(fields: [fgBatchId], references: [id])
+  quantity  Int
+
+  @@index([fgBatchId])
+  @@map("pos_sale_allocations")
 }

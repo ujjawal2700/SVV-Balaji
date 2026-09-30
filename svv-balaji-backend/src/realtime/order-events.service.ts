@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 
 export type OrderEventKind = 'new' | 'updated';
+export interface OrderTimelineEvent {
+  orderId: string;
+  eventId: string;
+}
 
 /**
  * In-process pub/sub between the code that changes an order and whatever wants
@@ -27,5 +31,24 @@ export class OrderEventsService {
 
   on(kind: OrderEventKind, handler: (orderId: string) => void): void {
     this.emitter.on(kind, handler);
+  }
+
+  /**
+   * Publish the exact committed timeline row. Customer notifications listen
+   * here so two rapid updates cannot collapse into whichever row happens to
+   * be newest when an asynchronous listener reads the order.
+   */
+  publishTimeline(event: OrderTimelineEvent): void {
+    setImmediate(() => {
+      try {
+        this.emitter.emit('timeline', event);
+      } catch {
+        /* listeners are best-effort */
+      }
+    });
+  }
+
+  onTimeline(handler: (event: OrderTimelineEvent) => void): void {
+    this.emitter.on('timeline', handler);
   }
 }

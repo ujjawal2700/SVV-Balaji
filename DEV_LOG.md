@@ -16,6 +16,179 @@ how each side learns what the other did.
 
 ---
 
+## 2026-09-29 (latest) — Ujjawal — POS counters for company stores + Outlets saved in the database
+
+**Did:** The POS pages (New Sale, POS Orders, POS Reports) and Outlets had full UIs on hard-coded arrays and
+`localStorage`; they now run on the database. **Franchise module untouched** (client: future scope).
+- **New module `src/pos`** (`pos.logic.ts` pure, 12 tests):
+  - **Stores** (`PosOutlet`) are saved centrally, so they sync across devices. Registering a store also creates its own
+    stock location, a warehouse of the new kind **`STORE`**. Checkout routing, riders and the QA auto-inward select
+    `CENTRAL`/`OUTLET` explicitly, so a store never becomes a delivery node. Stock reaches a store through the existing
+    Finished Goods transfer.
+  - **Shifts:** a cashier opens a shift with opening cash, sells against it, and closes it by counting the drawer.
+    Expected cash (opening + cash sales - cash refunds) and the discrepancy are frozen at close.
+  - **Sales:** priced by the server from the B2C price list (terminal prices are rejected); the counter discount is
+    spread before GST (same calculator as checkout); stock is taken FEFO from QA-released ACTIVE unexpired batches under
+    the same row locks and online holds as checkout/allocation, so the counter and the website can never oversell each
+    other. The exact batches are stored per line (`PosSaleAllocation`), with a `STOCK_OUT` ledger row per batch.
+    Idempotent by `clientRequestId`. **A GST invoice is issued per sale** (place of supply = the store; B2B when the
+    buyer's GSTIN validates).
+  - **Refunds:** the whole bill is refunded; stock goes back to its batches (`STOCK_IN`), the invoice is cancelled, and
+    cash comes out of the refunding cashier's open drawer. Refused for a B2B IRN older than 24h (needs a credit note).
+  - **Reports:** over IST days - net sales (completed bills), refunds on the day the money went back, payment split,
+    daily, top items, by store. Store screen figures (today's takings, counter open/closed, stock, low stock,
+    valuation, last reconciliation) are all computed, never stored.
+- **Invoices** can now bill a POS sale: `Invoice.orderId` and `customerId` are nullable, `posSaleId` added, with a
+  DB CHECK that exactly one of order/sale is set. `issueForPosSale` + `onPosSale`; the sweep also covers POS sales.
+  Numbering/saving is shared (`persist`). Fixed: the invoice list's branch filter and search were both `OR` keys in one
+  object (search replaced branch scoping); now ANDed. The invoice date filter now uses IST days.
+- **Admin:** all four pages rewritten on the API, keeping their layout. Removed the fake GSTIN `10AAACS8812F1Z9` and
+  mock cashier/outlets from New Sale. The trace screen accepts `?batch=FG-…` (linked from sold batches). New shared
+  `toIsoDay` for day filters: `toIsoDate` returns a full UTC timestamp, which day-based endpoints reject.
+
+**Contract changes:**
+- Migration `20260929120000_pos_outlets_sales`: enum value `WarehouseKind.STORE`; enums `PosShiftStatus`,
+  `PosPaymentMode` (CASH/UPI/CARD), `PosSaleStatus`, `PosCustomerType`; tables `pos_outlets`, `pos_shifts`,
+  `pos_sales`, `pos_sale_lines`, `pos_sale_allocations`; `invoices.posSaleId`, `orderId`/`customerId` nullable,
+  CHECK `invoices_one_source_chk`.
+- Routes: `GET/POST /pos/outlets`, `GET/PATCH/DELETE /pos/outlets/:id`, `PATCH /pos/outlets/:id/status`,
+  `GET /pos/outlets/:id/catalogue`, `POST /pos/shifts`, `GET /pos/shifts/mine`, `GET /pos/shifts`,
+  `POST /pos/shifts/:id/close`, `POST/GET /pos/sales`, `GET /pos/sales/:id`, `POST /pos/sales/:id/refund`,
+  `GET /pos/reports`. Invoice list rows now also carry `posSale` and `buyer`; `order`/`customer` may be null.
+- Permissions: `posOutlets.view` (BM, ST, WM), `posOutlets.manage` (BM), `pos.sell` (BM, ST), `pos.view` (BM, ST),
+  `pos.refund` (BM), `pos.reconcile` (BM). The POS nav items used to use `orders.view` / `stock.view`.
+
+**Other developer needs to know:**
+- **Deploy:** `prisma migrate deploy && prisma generate`, API restart. Old localStorage outlets were mock data;
+  nothing to migrate.
+- **"Store credit" was removed from the counter** (CASH/UPI/CARD only): credit needs to tie into Receivables, which
+  are order-based. Decide with the client before adding it back.
+- A store in a different state from the company GSTIN will invoice IGST; legally that store needs its own state
+  registration - raise with the client if they open stores outside the GSTIN state.
+- `pages/finance/EarningsFinancePage.tsx` still has the fake GSTIN `10AAACS9981P1Z5` (not touched).
+
+**Verified:** backend `tsc` clean; unit tests 677/678 in the full run - the one failure was `storefront-auth` timing
+out under load, and it passes alone (36/36). New `e2e-pos-flow.py` passes against a live API on a throwaway DB,
+including 3 concurrent sales racing for the last packs (exactly one wins, stock ends at 0). Stock ledger rows were
+checked in SQL. Real headless-Chrome walkthrough of Outlets, the store drawer, open shift, a cash sale (UI estimate
+= server total, GST invoice issued), POS Orders, the sale drawer, Reports and Invoices: no API errors, figures
+reconcile across screens. Admin `tsc` 0 errors, `vite build` ok.
+**Test DB left in place:** `svv_pos_e2e` (local Postgres), safe to drop.
+
+**Next:** credit notes (POS refunds of old B2B IRNs, order returns), GSTR-1 export.
+
+---
+
+## 2026-09-29 — Ujjawal — Customer order lifecycle push notifications
+
+**Did:**
+- Connected committed `OrderEvent` rows to the customer notification inbox and Firebase Cloud Messaging. Customer
+  alerts now cover placement, seller acceptance, packing, rider assignment, courier booking/updates, dispatch,
+  out-for-delivery, rider arrival, delivery failure, return-to-store, re-attempt, delivery, cancellation and returns.
+  Internal scan/OTP noise remains silent.
+- Notifications deep-link to the real order tracking page. An inbox row is written before FCM, so signed-out/offline
+  customers see it later; push delivery remains limited to devices with a live customer session.
+- Delivery is idempotent per order-event and restart-safe: `AppNotification.orderEventId` prevents duplicate alerts,
+  while `OrderEvent.customerNotificationHandledAt` plus a 30-second recovery sweep retries events missed during a
+  process restart. Existing timeline rows are marked handled by the migration to avoid sending historical alerts.
+- Customer foreground and service-worker notifications request the browser/OS default sound (`silent: false`), with
+  background vibration where supported. Web Push cannot select or force an audio file; device settings remain final.
+- Hardened customer FCM token persistence after tracing it end-to-end: the storefront now uses its own
+  `svv.customer.pushToken` localStorage key (the old generic key collided with admin/field on the shared production
+  origin), automatically retries a transient registration failure after 30 seconds, and the API transaction removes a
+  superseded token for the same customer session when FCM rotates it. Sign-out still removes the local and database row.
+- Extended `e2e-rider-flow.py` to assert the customer inbox through a successful rider trip, delivery failure and
+  cancellation, plus a live token register/unregister round-trip (`removed: 1`) proving PostgreSQL persistence. Also
+  corrected stale rider-name fixtures and made earnings checks coexist with configured default rules.
+
+**Contract changes:** no new HTTP routes or DTO changes. Additive schema migrations
+`20260929140000_customer_order_notifications` (`app_notifications.orderEventId`) and
+`20260929143000_customer_notification_outbox` (`order_events.customerNotificationHandledAt` + retry index).
+
+**Other developer needs to know:** deploy both migrations, generate Prisma Client and restart the API. Real system push
+also requires one backend secret: `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_PATH`. Neither is set
+on this machine, so the live test verified the durable inbox/event bridge but not remote FCM delivery.
+
+**Verified:** migrations applied to local Postgres (59/59); backend build; 51 suites / 678 tests; admin `tsc`; customer
+26 tests, `tsc` + production build; full live rider/order API flow (`ALL PASSED`) including customer FCM database
+round-trip and accepted/rider/failure/cancel customer notifications; `git diff --check`.
+
+**Next:** configure/rotate the production Firebase service-account credential and verify one real Android/Chrome device;
+iOS web push requires an installed Home Screen app on iOS 16.4+.
+
+---
+
+## 2026-09-29 — Ujjawal — GST tax invoicing (WS4.4) + two failing tests fixed
+
+**Did:**
+- **Tests green again: 604/604 → 645/645.** Two real failures on `main`: (1) `delivery/zones/zone.logic.ts` - an
+  address with no map pin matched a quick-delivery zone by pincode even when the zone had a radius cap that could not
+  be checked; the code now refuses it, as its own doc comment always said. (2) `fulfillment.service.spec.ts` was built
+  with 3 constructor args after `DispatchService` became the 4th (spec drift, stubbed). Separately, anyone seeing ~20
+  suites fail locally: run `npx prisma generate` and `npm install` - the generated client and three deps
+  (`firebase-admin`, `socket.io`, `@nestjs/websockets`) were stale, not the code.
+- **New module `src/invoices`** - GST tax invoices, issued automatically **at dispatch** (time of supply for goods):
+  - `gst.logic.ts` (pure, 20 tests): GSTIN validation incl. mod-36 check digit, state codes, place of supply
+    (delivery state -> customer state -> buyer GSTIN -> seller state *flagged as assumed*), CGST+SGST vs IGST split,
+    FY series, invoice build from the order's **frozen** line figures (never re-priced), HSN summary, NIC e-invoice
+    schema 1.1 payload + pre-submission checks.
+  - The GST-inclusive delivery fee becomes a service line (SAC 996812, 18% by default, both settings); tax is carved
+    *out* of it so the customer total never changes. Any gap to `order.total` is shown as round-off, never hidden.
+  - Numbering `PREFIX/YYYY-NNNNNN` (e.g. `INV/2627-000001`), restarts each April, max 16 chars (Rule 46).
+  - B2B = buyer has a valid GSTIN. **E-invoice (IRN) for B2B only**, never inside a request: issue marks it PENDING,
+    a 5-minute sweep (also the retry queue, exponential backoff up to 6h) submits through `EInvoiceProvider`.
+    Data problems (missing HSN, bad GSTIN) park it as FAILED with the reason until staff retry; an HSN added to the
+    product later is picked up on retry. `EINVOICE_PROVIDER=mock|none` - **the real GSP adapter is one class in
+    `einvoice-provider.ts` once A-11 names the vendor.**
+  - Cancel with reason; an IRN only within 24h (after that: credit note - not built yet). Cancelled numbers are never
+    reused; the order can then be invoiced again.
+  - Automatic issue starts only from the moment GST Settings are first complete (`invoicingStartsAt`) - turning it on
+    never mass-invoices old orders. Older dispatched orders: "Issue tax invoice" on the order.
+  - `invoices.service.spec.ts` (20 tests): issue/idempotency/refusals, dispatch hook never throws, sweep, IRN success,
+    HSN hold + retry, GSP outage backoff, permanent rejection, cancel windows, storefront isolation.
+- **Admin:** new **Tax Invoices** (`/invoices`, CRM & Accounts) with filters, detail drawer, print, retry IRN, cancel;
+  new **GST Settings** (`/settings/gst`); new **TAX INVOICE** tab on the order page. **Customer app:** "Download GST
+  invoice" on the order page once dispatched. Printing is shared (`shared/utils/taxInvoicePrint.ts`), all values
+  HTML-escaped, IRN QR rendered by the API as a data URL (no new frontend deps).
+- **Removed fake tax-invoice output.** The admin "Bill"/"Print" buttons printed a "TAX INVOICE" with a hardcoded
+  GSTIN `10AAACS9981P1Z5`, FSSAI `1042100000129`, number `INV-<order>` and invented fallbacks (Patna, +91 98765 43210,
+  AWB EXP-9921). Those are now an honestly-labelled **Order Summary - not a tax invoice** (`utils/invoiceGenerator.ts`,
+  both order preview modals, POS receipt). Nothing is removed from any screen.
+
+**Contract changes (WS1.5 touched - Raunak's):**
+- `SalesService` gains a 7th constructor dependency `InvoicesService`; `advanceCore` calls `invoices.onDispatched()`
+  after a successful DISPATCHED transaction (best-effort, never throws). `SalesModule` imports `InvoicesModule`.
+- Schema (migration `20260929100000_gst_invoicing`, additive): enums `InvoiceStatus`, `InvoiceSupplyType`,
+  `EInvoiceStatus`; tables `gst_settings`, `invoices`, `invoice_lines`; back-relations on `User`, `Customer`, `Order`.
+  **Applied later the same day to a fresh local Postgres 16 (Homebrew): all 56 migrations clean, zero drift, API boots
+  and the invoice routes answer. Not yet applied to any shared/hosted DB (the Render DB is suspended).**
+- New routes: `GET/PATCH /invoices/settings`, `GET /invoices` (page/limit, A-12 envelope), `GET /invoices/:id`,
+  `GET /invoices/order/:orderId`, `POST /invoices/order/:orderId`, `POST /invoices/:id/einvoice/retry`,
+  `POST /invoices/:id/cancel`; storefront `GET /storefront/orders/:orderNumber/invoice`.
+- New permissions: `invoices.view` (BM, ST), `invoices.issue` (BM), `invoices.cancel` (SA only),
+  `gstSettings.view` (BM), `gstSettings.manage` (SA only) - backfilled to configured roles by A-14's mechanism.
+- New env `EINVOICE_PROVIDER` (in `.env.example`).
+
+**Other developer needs to know:**
+- **Deploy:** `prisma migrate deploy && prisma generate`, restart API, then Super Admin fills **GST Settings** (legal
+  name, GSTIN, address, city, pincode). Until then no invoices are issued and both screens say so.
+- **Products need `hsnCode`** for B2B e-invoicing; invoices print without it but the IRN is held. Worth a data pass.
+- Still claimed to customers and not built: nothing here - "GST invoices" on the storefront is now true once settings
+  are filled. `pages/finance/EarningsFinancePage.tsx` still shows the fake GSTIN `10AAACS9981P1Z5` (mock MIS page,
+  not touched - yours).
+- Client/CA to confirm: GST rate/SAC on the delivery fee (setting, default 18% / 996812); whether invoices for orders
+  dispatched before go-live should be issued.
+
+**Not verified:** against a live database or in a real browser session (no Docker/Postgres here). Verified: backend
+`tsc` clean, 645/645 tests; admin + customer `tsc` (admin's 7 pre-existing errors in HomeSections/Outlets/
+WarehouseForm unchanged) and `vite build`; customer vitest 25/25; printed B2B (IGST + IRN/QR) and B2C (CGST+SGST)
+invoices rendered through the real print code and checked in headless Chrome.
+
+**Next:** credit notes (returns + IRN-expired corrections), GSTR-1 export (B2B/B2CS/HSN tables), then the real GSP
+adapter when A-11 lands.
+
+---
+
 ## 2026-09-26 — Raunak — Delivery App test data cleanup script
 
 **Did:** Created `prisma/clear-delivery-test-data.ts` and added `npm run delivery:clean` script to `svv-balaji-backend`. Wiped all transactional delivery tasks, rider profiles, rider sessions/otps/cash entries/earnings, test orders, and order allocations.

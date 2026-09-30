@@ -72,7 +72,7 @@ export function WarehouseFormModal({ open, warehouse, onClose }: WarehouseFormMo
 
   const isEdit = Boolean(warehouse);
 
-  const initialValues = useMemo(() => {
+  const initialValues = useMemo<Partial<CreateWarehouseInput>>(() => {
     if (!warehouse) return { kind: 'CENTRAL' };
     return {
       name: warehouse.name,

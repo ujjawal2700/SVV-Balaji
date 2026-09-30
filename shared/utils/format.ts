@@ -65,4 +65,13 @@ export function toIsoDate(value: Dayjs | null | undefined): string | undefined {
   return value ? value.toISOString() : undefined;
 }
 
+/**
+ * A calendar day as "YYYY-MM-DD", in the picker's own (local) date. For
+ * filters and reports that ask for a day, not an instant - toIsoDate would turn
+ * local midnight into the previous day in UTC.
+ */
+export function toIsoDay(value: Dayjs | null | undefined): string | undefined {
+  return value ? value.format('YYYY-MM-DD') : undefined;
+}
+
 export const EM_DASH = DASH;

@@ -35,6 +35,10 @@ function show(data) {
     badge: LOGO,
     tag: data.tag || 'svv-broadcast',
     renotify: true,
+    // Use the device/browser's normal notification sound. The Web
+    // Notifications API intentionally does not allow a site-selected sound.
+    silent: false,
+    vibrate: [200, 100, 200],
     data: { link: data.link || '' },
   };
   if (data.imageUrl) options.image = data.imageUrl;

@@ -12,7 +12,7 @@ export interface InboxItem {
 
 export const INBOX_KEY = ['storefront', 'notifications'] as const;
 
-/** Messages from Desi Tokri (Super Admin broadcasts) + this device's push registration. */
+/** Desi Tokri broadcasts and transactional order updates + device registration. */
 export const notificationsApi = {
   async inbox() {
     return (await api.get<{ items: InboxItem[]; unread: number }>('/storefront/notifications')).data;

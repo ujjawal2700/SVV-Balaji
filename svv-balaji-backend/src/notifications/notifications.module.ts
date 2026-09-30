@@ -20,6 +20,7 @@ import {
   UnregisterDeviceDto,
 } from './notifications.dto';
 import { NotificationsService } from './notifications.service';
+import { CustomerOrderNotificationsService } from './customer-order-notifications.service';
 
 /** Super Admin's Push Notifications screen. */
 @ApiTags('push-notifications')
@@ -151,7 +152,7 @@ export class RiderDeviceController {
 
 @Module({
   controllers: [BroadcastsController, StaffInboxController, DeviceController, StorefrontInboxController, RiderDeviceController],
-  providers: [FcmService, NotificationsService],
+  providers: [FcmService, NotificationsService, CustomerOrderNotificationsService],
   exports: [NotificationsService],
 })
 export class NotificationsModule {}

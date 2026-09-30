@@ -37,6 +37,7 @@ import { apiErrorMessage } from '../../api/client';
 import type { CreateHomeSectionInput, HomeSection } from '@shared/api/types';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
+import { useCan } from '@shared/auth/useCan';
 import {
   useCreateHomeSection,
   useDeleteHomeSection,
@@ -211,6 +212,7 @@ function HomeSectionFormDrawer({
 
 export function HomeSectionsPage() {
   const { message } = AntApp.useApp();
+  const canEditSections = useCan('HOME_SECTION_MANAGE');
   const { data, isLoading, isError } = useHomeSections(true);
   const sections: HomeSection[] = data?.data ?? (Array.isArray(data) ? data : []);
 
@@ -345,17 +347,13 @@ export function HomeSectionsPage() {
       key: 'isActive',
       width: 120,
       render: (isActive: boolean, sec) => (
-        <Can I="homeSections.edit">
-          {(allowed) => (
-            <Switch
-              checked={isActive}
-              disabled={!allowed || setActiveMutation.isPending}
-              onChange={(checked) => handleToggleActive(sec, checked)}
-              checkedChildren="Active"
-              unCheckedChildren="Hidden"
-            />
-          )}
-        </Can>
+        <Switch
+          checked={isActive}
+          disabled={!canEditSections || setActiveMutation.isPending}
+          onChange={(checked) => handleToggleActive(sec, checked)}
+          checkedChildren="Active"
+          unCheckedChildren="Hidden"
+        />
       ),
     },
     {
@@ -364,7 +362,7 @@ export function HomeSectionsPage() {
       width: 120,
       render: (_, sec) => (
         <Space size="small">
-          <Can I="homeSections.edit">
+          <Can do="HOME_SECTION_MANAGE">
             <Tooltip title="Edit section">
               <Button
                 type="text"
@@ -373,7 +371,7 @@ export function HomeSectionsPage() {
               />
             </Tooltip>
           </Can>
-          <Can I="homeSections.delete">
+          <Can do="HOME_SECTION_DELETE">
             <Popconfirm
               title="Delete Section"
               description="Are you sure you want to delete this homepage section?"
@@ -398,7 +396,7 @@ export function HomeSectionsPage() {
         title="Homepage Sections Management"
         subtitle="Create and organize dynamic product sections for the customer homepage (e.g. Best of the Basics, Trending Staples, Festive Offers)."
         extra={
-          <Can I="homeSections.create">
+          <Can do="HOME_SECTION_CREATE">
             <Button
               type="primary"
               icon={<PlusOutlined />}

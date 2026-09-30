@@ -74,6 +74,12 @@ const RiderDetailPage = lazy(() => import('./pages/delivery/riders/RiderDetailPa
 const LiveRidersPage = lazy(() => import('./pages/delivery/riders/LiveRidersPage').then((m) => ({ default: m.LiveRidersPage })));
 const RiderEarningsPage = lazy(() => import('./pages/delivery/riders/RiderEarningsPage').then((m) => ({ default: m.RiderEarningsPage })));
 const RiderCashPage = lazy(() => import('./pages/delivery/riders/RiderCashPage').then((m) => ({ default: m.RiderCashPage })));
+const InvoicesPage = lazy(() =>
+  import('./pages/invoices/InvoicesPage').then((m) => ({ default: m.InvoicesPage })),
+);
+const GstSettingsPage = lazy(() =>
+  import('./pages/invoices/GstSettingsPage').then((m) => ({ default: m.GstSettingsPage })),
+);
 const ReceivablesPage = lazy(() =>
   import('./pages/receivables/ReceivablesPage').then((m) => ({ default: m.ReceivablesPage })),
 );
@@ -320,6 +326,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/seed-distribution': <SeedDistributionPage />,
   '/seed-stock': <SeedStockPage />,
   '/receivables': <ReceivablesPage />,
+  '/invoices': <InvoicesPage />,
   '/delivery-zones': <DeliveryZonesPage />,
   '/riders': <RidersPage />,
   '/riders/pending': <PendingRidersPage />,
@@ -384,6 +391,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/loyalty': <LoyaltySettingsPage />,
   '/settings/support': <SupportSettingsPage />,
   '/settings/checkout': <CheckoutSettingsPage />,
+  '/settings/gst': <GstSettingsPage />,
   '/legal-policies': <LegalPoliciesPage />,
   '/settings/legal': <LegalPoliciesPage />,
   '/coupons': <CouponsPage />,

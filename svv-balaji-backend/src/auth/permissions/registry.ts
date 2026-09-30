@@ -1366,6 +1366,112 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       },
     ],
   },
+  {
+    // WS4.4 GST tax invoices, raised at dispatch; e-invoice (IRN) for B2B.
+    key: 'invoices',
+    label: 'Tax Invoices',
+    path: '/invoices',
+    viewKey: 'invoices.view',
+    permissions: [
+      {
+        key: 'invoices.view',
+        label: 'View tax invoices',
+        description: 'GST invoices, their tax split, HSN summary and e-invoice (IRN) status.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'invoices.issue',
+        label: 'Issue invoices and retry e-invoicing',
+        description:
+          'Raise the invoice for a dispatched order that has none (e.g. dispatched before invoicing was ' +
+          'set up), and resubmit a B2B invoice to the GSP after fixing what it refused.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'invoices.cancel',
+        label: 'Cancel invoices',
+        description:
+          'Cancel a wrong invoice so the order can be invoiced again. An IRN can only be cancelled within ' +
+          '24 hours. Super Admin only by default.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    // Company-owned stores with POS counters. Franchise outlets are future scope.
+    key: 'posOutlets',
+    label: 'Stores & POS Outlets',
+    path: '/outlets',
+    viewKey: 'posOutlets.view',
+    permissions: [
+      {
+        key: 'posOutlets.view',
+        label: 'View stores',
+        description: "Company stores with today's counter sales, open shifts, stock and last reconciliation.",
+        defaultRoles: [BM, ST, WM],
+      },
+      {
+        key: 'posOutlets.manage',
+        label: 'Register and edit stores',
+        description: 'Create, edit, deactivate or delete a store. Creating one also creates its stock location.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    key: 'pos',
+    label: 'POS Counter',
+    path: '/pos-sale',
+    viewKey: 'pos.view',
+    permissions: [
+      {
+        key: 'pos.sell',
+        label: 'Bill at the counter',
+        description: 'Open and close your own shift and ring up counter sales. Stock leaves the store with each sale.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'pos.view',
+        label: 'View counter sales and reports',
+        description: 'POS orders, shift reconciliations and sales reports.',
+        defaultRoles: [BM, ST],
+      },
+      {
+        key: 'pos.refund',
+        label: 'Refund counter sales',
+        description: 'Refund a whole bill: stock returns to its batches, the invoice is cancelled, cash leaves your drawer.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'pos.reconcile',
+        label: "Close anyone's shift",
+        description: "Count and close a shift opened by another cashier (e.g. one who left without closing).",
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    key: 'gstSettings',
+    label: 'GST Settings',
+    path: '/settings/gst',
+    viewKey: 'gstSettings.view',
+    permissions: [
+      {
+        key: 'gstSettings.view',
+        label: 'View GST settings',
+        description: 'Company GSTIN, legal name and address as printed on invoices, and invoice numbering.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'gstSettings.manage',
+        label: 'Change GST settings',
+        description:
+          'What every new invoice prints, and the e-invoicing switch. Automatic invoicing starts once the ' +
+          'seller details are complete. Super Admin only by default.',
+        defaultRoles: [],
+      },
+    ],
+  },
   // --- Storefront -------------------------------------------------------------
   {
     key: 'customerAccounts',

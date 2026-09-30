@@ -16,7 +16,7 @@ function when(iso: string) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-/** Messages from Desi Tokri - including those sent while this shopper was signed out. */
+/** Order updates and Desi Tokri messages, including those created while signed out. */
 export function NotificationsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -69,8 +69,8 @@ export function NotificationsPage() {
           <BellOutlined style={{ fontSize: 22, color: '#059669' }} />
           <div style={{ flex: 1, fontSize: 13, color: '#065f46' }}>
             {permission === 'denied'
-              ? 'Notifications are blocked. Allow them in your browser settings to get offers and updates instantly.'
-              : 'Turn on notifications to get offers and updates instantly, even when the app is closed.'}
+              ? 'Notifications are blocked. Allow them in your browser settings to get order updates and offers instantly.'
+              : 'Turn on notifications to get order updates and offers instantly, even when the app is closed.'}
           </div>
           {permission === 'default' ? (
             <Button type="primary" style={{ background: '#059669', borderColor: '#059669' }} onClick={() => void turnOn()}>

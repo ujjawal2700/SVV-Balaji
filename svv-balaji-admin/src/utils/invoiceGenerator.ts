@@ -1,16 +1,20 @@
 import type { Order } from '../api/types';
-import type { PosOrderRecord } from '../pages/pos/PosOrdersPage';
+import type { PosSale } from '@shared/api/pos';
 import type { ExtendedOrder } from '../pages/sales/OrdersPage';
 import { formatCurrency, formatDate, formatDateTime } from './format';
 
 /**
- * Open a styled, print-ready Bill / Tax Invoice window and trigger print / PDF save.
+ * Open a styled, print-ready order summary / receipt window and trigger print / PDF save.
+ *
+ * These are NOT tax invoices: the GST tax invoice is issued by the server at
+ * dispatch (backend `src/invoices`, printed by `@shared/utils/taxInvoicePrint`).
+ * Nothing here may print a GSTIN, an invoice number or a "Tax Invoice" heading.
  */
-function openPrintWindow(title: string, htmlContent: string) {
+function openPrintWindow(title: string, htmlContent: string): boolean {
   const printWindow = window.open('', '_blank', 'width=850,height=900');
   if (!printWindow) {
     alert('Please allow pop-ups to download and print the bill.');
-    return;
+    return false;
   }
 
   printWindow.document.open();
@@ -51,7 +55,7 @@ function openPrintWindow(title: string, htmlContent: string) {
       </head>
       <body>
         <div class="no-print-bar">
-          <span style="font-size: 13px; color: #64748b;">Tax Invoice Document</span>
+          <span style="font-size: 13px; color: #64748b;">Order summary — not a tax invoice</span>
           <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
         </div>
         <div class="invoice-box">
@@ -68,6 +72,7 @@ function openPrintWindow(title: string, htmlContent: string) {
     </html>
   `);
   printWindow.document.close();
+  return true;
 }
 
 /**
@@ -77,8 +82,8 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
   const orderNo = order.orderNumber || order.id;
   const orderDate = order.orderDate ? formatDate(order.orderDate) : new Date().toLocaleDateString('en-IN');
   const customerName = order.customer?.name || order.customerName || 'Retail Customer';
-  const customerPhone = order.customerMobile || order.customer?.phone || '+91 98765 43210';
-  const address = order.deliveryAddress || `${order.deliveryCity || 'Patna'}, Bihar, India`;
+  const customerPhone = order.customerMobile || order.customer?.phone || '—';
+  const address = order.deliveryAddress || order.deliveryCity || '—';
   const subtotal = Number(order.subtotal || order.total || 0);
   const tax = Number(order.taxTotal || 0);
   const total = Number(order.total || subtotal + tax);
@@ -88,9 +93,9 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
     : [
         {
           id: 'item-1',
-          product: { name: order.primaryProductName || order.itemsSummary || 'SVV Pure Sharbati Atta 10kg' },
+          product: { name: order.primaryProductName || order.itemsSummary || 'Order items' },
           quantity: order.totalItemCount || 1,
-          unitPrice: subtotal > 0 ? (subtotal / (order.totalItemCount || 1)).toFixed(2) : '450.00',
+          unitPrice: (subtotal / (order.totalItemCount || 1)).toFixed(2),
           lineTotal: subtotal.toFixed(2),
         },
       ];
@@ -114,13 +119,12 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
       <div>
         <div class="company-name">SVV BALAJI AGRO PRODUCER CO.</div>
         <div class="company-sub">Farm-Traceable Pure Staples & Direct Mandi Distribution</div>
-        <div class="company-sub">GSTIN: 10AAACS9981P1Z5 · FSSAI: 1042100000129</div>
       </div>
       <div style="text-align: right;">
-        <span class="tax-badge">TAX INVOICE</span>
-        <div style="font-size: 14px; font-weight: 800; color: #1e293b; margin-top: 6px;">INV-${orderNo}</div>
+        <span class="tax-badge">ORDER SUMMARY</span>
+        <div style="font-size: 14px; font-weight: 800; color: #1e293b; margin-top: 6px;">${orderNo}</div>
         <div style="font-size: 11px; color: #64748b;">Date: ${orderDate}</div>
-        <div style="font-size: 11px; color: #059669; font-weight: 600;">Status: ${order.paymentStatus || 'PAID'}</div>
+        <div style="font-size: 11px; color: #059669; font-weight: 600;">Payment: ${order.paymentStatus || '—'}</div>
       </div>
     </div>
 
@@ -137,10 +141,10 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
       <div class="meta-card">
         <div class="meta-title">Dispatch & Fulfillment Details</div>
         <div class="meta-content">
-          Fulfillment Hub: <strong>${order.warehouse?.name || order.assignedNodeName || 'Patna Central Processing Hub'}</strong><br />
-          Payment Mode: <strong>${order.paymentMethod || order.paymentTerms || 'Prepaid Online'}</strong><br />
-          Logistics / AWB: ${order.logisticsPartner || 'SVV Express'} (${order.awbNumber || 'EXP-9921'})<br />
-          Order Status: <span style="color: #059669; font-weight: 700;">${order.status || 'CONFIRMED'}</span>
+          Fulfillment Hub: <strong>${order.warehouse?.name || order.assignedNodeName || '—'}</strong><br />
+          Payment Mode: <strong>${order.paymentMethod || order.paymentMode || order.paymentTerms || '—'}</strong><br />
+          Logistics / AWB: ${order.logisticsPartner || order.shipment?.courier || '—'}${order.awbNumber || order.shipment?.awb ? ` (${order.awbNumber || order.shipment?.awb})` : ''}<br />
+          Order Status: <span style="color: #059669; font-weight: 700;">${order.status || '—'}</span>
         </div>
       </div>
     </div>
@@ -167,12 +171,12 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
           <td style="text-align: right; font-weight: 600;">₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         </tr>
         <tr>
-          <td>Taxes (GST 5%):</td>
+          <td>GST:</td>
           <td style="text-align: right;">₹${tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         </tr>
         <tr>
           <td>Delivery Charge:</td>
-          <td style="text-align: right; color: #059669; font-weight: 600;">FREE</td>
+          <td style="text-align: right; font-weight: 600;">${Number(order.deliveryFee || 0) > 0 ? `₹${Number(order.deliveryFee).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'FREE'}</td>
         </tr>
         <tr class="grand-total">
           <td>Grand Total:</td>
@@ -183,105 +187,86 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
 
     <div class="footer">
       <div>Thank you for choosing SVV Balaji! Direct Mandi to Customer Traceable Quality.</div>
-      <div style="margin-top: 4px;">This is a computer-generated tax invoice. No signature required.</div>
+      <div style="margin-top: 4px;">Order summary only — not a tax invoice. The GST invoice is issued when the order is dispatched.</div>
     </div>
   `;
 
-  openPrintWindow(`Tax-Invoice-${orderNo}`, html);
+  openPrintWindow(`Order-Summary-${orderNo}`, html);
 }
 
+const esc = (v: unknown) =>
+  String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const rs = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 /**
- * Generate and download POS counter receipt / bill.
+ * A counter receipt from a real POS sale, used only when no GST invoice exists
+ * yet (GST Settings incomplete). It says so, and prints no GSTIN of its own.
  */
-export function downloadPosBill(posOrder: PosOrderRecord) {
-  const itemsSummary = posOrder.itemsSummary || 'General Grocery Items';
-  const subtotal = posOrder.subtotal;
-  const tax = posOrder.tax;
-  const discount = posOrder.discount;
-  const netTotal = posOrder.netTotal;
+export function downloadPosReceipt(sale: PosSale): boolean {
+  const rows = sale.lines
+    .map(
+      (l) => `
+      <tr>
+        <td><strong>${esc(l.nameSnapshot)}</strong><div style="font-size: 11px; color: #64748b;">${esc(l.skuSnapshot ?? '')}</div></td>
+        <td style="text-align: right;">${l.quantity}</td>
+        <td style="text-align: right;">${rs(l.unitPrice)}</td>
+        <td style="text-align: right; font-weight: 600;">${rs(l.lineTotal)}</td>
+      </tr>`,
+    )
+    .join('');
 
   const html = `
     <div class="header">
       <div>
-        <div class="company-name">SVV BALAJI STORE</div>
-        <div class="company-sub">${posOrder.outletName}</div>
-        <div class="company-sub">Cashier: ${posOrder.cashierName} · POS Terminal #01</div>
-        <div class="company-sub">FSSAI Lic: 1042100000129 · GSTIN: 10AAACS9981P1Z5</div>
+        <div class="company-name">${esc(sale.outlet.name)}</div>
+        <div class="company-sub">${esc(sale.outlet.address)}, ${esc(sale.outlet.city)}</div>
+        <div class="company-sub">Cashier: ${esc(sale.cashier.fullName)} · Shift ${esc(sale.shift.shiftNumber)}</div>
       </div>
       <div style="text-align: right;">
-        <span class="tax-badge" style="background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;">POS COUNTER RECEIPT</span>
-        <div style="font-size: 14px; font-weight: 800; color: #1e293b; margin-top: 6px;">${posOrder.orderId}</div>
-        <div style="font-size: 11px; color: #64748b;">${posOrder.createdAt}</div>
+        <span class="tax-badge" style="background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;">COUNTER RECEIPT</span>
+        <div style="font-size: 14px; font-weight: 800; color: #1e293b; margin-top: 6px;">${esc(sale.saleNumber)}</div>
+        <div style="font-size: 11px; color: #64748b;">${esc(formatDateTime(sale.createdAt))}</div>
       </div>
     </div>
 
     <div class="meta-grid">
       <div class="meta-card">
-        <div class="meta-title">Customer Information</div>
+        <div class="meta-title">Customer</div>
         <div class="meta-content">
-          <strong>${posOrder.customerName}</strong><br />
-          Mobile: +91 ${posOrder.customerMobile}<br />
-          Type: <span style="font-weight: 600;">${posOrder.customerType}</span><br />
-          ${posOrder.customerGst ? `GSTIN: <strong>${posOrder.customerGst}</strong>` : ''}
+          <strong>${esc(sale.customerName)}</strong><br />
+          ${sale.customerPhone ? `Mobile: ${esc(sale.customerPhone)}<br />` : ''}
+          ${sale.customerGstin ? `GSTIN: <strong>${esc(sale.customerGstin)}</strong>` : ''}
         </div>
       </div>
       <div class="meta-card">
-        <div class="meta-title">Billing & Payment Mode</div>
+        <div class="meta-title">Payment</div>
         <div class="meta-content">
-          Payment Mode: <strong style="color: #059669; font-size: 14px;">${posOrder.paymentMode}</strong><br />
-          Status: <strong style="color: #059669;">${posOrder.status}</strong><br />
-          Total Items: <strong>${posOrder.itemCount} Units</strong>
+          Mode: <strong>${esc(sale.paymentMode)}</strong><br />
+          ${sale.amountTendered !== null ? `Tendered: ${rs(sale.amountTendered)} · Change: ${rs(sale.changeDue ?? 0)}<br />` : ''}
+          ${sale.paymentReference ? `Ref: ${esc(sale.paymentReference)}<br />` : ''}
+          Status: <strong>${esc(sale.status)}</strong>
         </div>
       </div>
     </div>
 
     <table class="items-table">
-      <thead>
-        <tr>
-          <th>Particulars / Items</th>
-          <th style="text-align: right;">Qty</th>
-          <th style="text-align: right;">Amount (₹)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            <strong>${itemsSummary}</strong>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Over-the-counter verified batch distribution</div>
-          </td>
-          <td style="text-align: right; font-weight: 600;">${posOrder.itemCount}</td>
-          <td style="text-align: right; font-weight: 600;">₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>
-      </tbody>
+      <thead><tr><th>Item</th><th style="text-align: right;">Qty</th><th style="text-align: right;">Rate (ex-GST)</th><th style="text-align: right;">Amount</th></tr></thead>
+      <tbody>${rows}</tbody>
     </table>
 
     <div class="totals-area">
       <table class="totals-table">
-        <tr>
-          <td>Subtotal:</td>
-          <td style="text-align: right; font-weight: 600;">₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>
-        <tr>
-          <td>GST Tax:</td>
-          <td style="text-align: right;">₹${tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>
-        ${discount > 0 ? `
-        <tr>
-          <td style="color: #059669;">Special Discount:</td>
-          <td style="text-align: right; color: #059669; font-weight: 600;">-₹${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>` : ''}
-        <tr class="grand-total">
-          <td>Net Paid:</td>
-          <td style="text-align: right;">₹${netTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>
+        <tr><td>Subtotal:</td><td style="text-align: right;">${rs(sale.subtotal)}</td></tr>
+        ${sale.discountTotal > 0 ? `<tr><td>Discount:</td><td style="text-align: right;">-${rs(sale.discountTotal)}</td></tr>` : ''}
+        <tr><td>GST:</td><td style="text-align: right;">${rs(sale.taxTotal)}</td></tr>
+        <tr class="grand-total"><td>Total:</td><td style="text-align: right;">${rs(sale.total)}</td></tr>
       </table>
     </div>
 
     <div class="footer">
-      <div>*** Thank You! Please Visit Again ***</div>
-      <div style="margin-top: 4px;">For returns or inquiries, please present this bill within 7 days.</div>
+      <div>Receipt only — not a tax invoice. The GST invoice for this sale is issued by the system.</div>
     </div>
   `;
 
-  openPrintWindow(`POS-Receipt-${posOrder.orderId}`, html);
+  return openPrintWindow(`Receipt-${sale.saleNumber}`, html);
 }

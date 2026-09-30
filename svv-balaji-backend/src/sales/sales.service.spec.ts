@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
+import { InvoicesService } from '../invoices/invoices.service';
 
 /**
  * Phase 4 is where the traceability chain either survives into the sales half
@@ -29,6 +30,7 @@ describe('SalesService', () => {
   let loyalty: { creditForDeliveredOrder: jest.Mock; reverseForReturn: jest.Mock; refundRedemptionForOrder: jest.Mock };
   let wallet: { refundRedemptionForOrder: jest.Mock };
   let events: { publish: jest.Mock };
+  let invoices: { onDispatched: jest.Mock };
   let referrals: any[];
   let referralSettings: any;
   let coinTransactions: any[];
@@ -79,6 +81,7 @@ describe('SalesService', () => {
       refundRedemptionForOrder: jest.fn(async () => ({ loyaltyRefunded: 0, referralRefunded: 0 })),
     };
     events = { publish: jest.fn() };
+    invoices = { onDispatched: jest.fn(async () => undefined) };
     referrals = [];
     referralSettings = null;
     coinTransactions = [];
@@ -355,6 +358,7 @@ describe('SalesService', () => {
       loyalty as unknown as LoyaltyService,
       wallet as unknown as WalletService,
       events as unknown as OrderEventsService,
+      invoices as unknown as InvoicesService,
     );
   });
 
@@ -699,6 +703,15 @@ describe('SalesService', () => {
 
       expect(row.quantity).toBe(25);
       expect(row.reservedQuantity).toBe(0);
+      // Dispatch is the time of supply: the tax invoice is raised here, once.
+      expect(invoices.onDispatched).toHaveBeenCalledTimes(1);
+      expect(invoices.onDispatched).toHaveBeenCalledWith(order.id, 'user-1');
+    });
+
+    it('does not raise an invoice for a dispatch that was refused', async () => {
+      const order: any = await placeOrder('cust-b2b');
+      await expect(service.advance(order.id, 'DISPATCHED' as any, 'user-1')).rejects.toThrow();
+      expect(invoices.onDispatched).not.toHaveBeenCalled();
     });
 
     it('refuses to skip a step in the lifecycle', async () => {

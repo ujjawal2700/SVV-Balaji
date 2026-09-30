@@ -1,12 +1,18 @@
-import { useEffect, useRef } from 'react';
-import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
-import { app, VAPID_KEY } from './firebase';
+import { useEffect, useRef } from "react";
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+} from "firebase/messaging";
+import { app, VAPID_KEY } from "./firebase";
+import { customerPushTokenStorage as storage } from "./pushTokenStorage";
 
 /**
  * Push notifications (Firebase Cloud Messaging) for this app.
  *
- * - Signed in  -> this device's token is registered with the API, so Super Admin broadcasts
- *                 arrive as system notifications with the Desi Tokri logo, even with the app closed.
+ * - Signed in  -> this device's token is registered with the API, so order updates and Super
+ *                 Admin broadcasts arrive with the Desi Tokri logo, even with the app closed.
  * - Signed out -> the token is unregistered, so nothing pops up; messages still wait in the
  *                 in-app inbox for the next sign-in. The API independently refuses to push to a
  *                 device whose login session has ended, in case the sign-out call never landed.
@@ -17,9 +23,8 @@ const BASE = import.meta.env.BASE_URL;
 const SCOPE = `${BASE}firebase-cloud-messaging-push-scope`;
 /** Storefront brand - customers and retailers see Desi Tokri, not SVV Balaji. */
 const LOGO = `${BASE}images/desi-tokri-emblem.png`;
-const TOKEN_KEY = 'svv.push.token';
 
-export type PushState = 'granted' | 'denied' | 'default' | 'unsupported';
+export type PushState = "granted" | "denied" | "default" | "unsupported";
 
 export interface PushPayload {
   title?: string;
@@ -29,30 +34,17 @@ export interface PushPayload {
   tag?: string;
 }
 
-const storage = {
-  get: () => {
-    try {
-      return localStorage.getItem(TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  },
-  set: (v: string | null) => {
-    try {
-      if (v) localStorage.setItem(TOKEN_KEY, v);
-      else localStorage.removeItem(TOKEN_KEY);
-    } catch {
-      /* private mode - the server-side session check still protects signed-out devices */
-    }
-  },
-};
-
 async function supported(): Promise<boolean> {
-  return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'Notification' in window && (await isSupported().catch(() => false));
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "Notification" in window &&
+    (await isSupported().catch(() => false))
+  );
 }
 
 export async function pushPermission(): Promise<PushState> {
-  if (!(await supported())) return 'unsupported';
+  if (!(await supported())) return "unsupported";
   return Notification.permission as PushState;
 }
 
@@ -60,24 +52,38 @@ export async function pushPermission(): Promise<PushState> {
  * Ask for permission (if not yet decided), get this device's token and hand it to `register`.
  * `interactive` = called from a button tap; some browsers (Safari) only show the prompt then.
  */
-export async function enablePush(register: (token: string) => Promise<unknown>, interactive = false): Promise<PushState> {
-  if (!(await supported())) return 'unsupported';
+export async function enablePush(
+  register: (token: string) => Promise<unknown>,
+  interactive = false,
+): Promise<PushState> {
+  if (!(await supported())) return "unsupported";
   let permission = Notification.permission as PushState;
-  if (permission === 'default' && (interactive || !/^((?!chrome|android).)*safari/i.test(navigator.userAgent))) {
+  if (
+    permission === "default" &&
+    (interactive || !/^((?!chrome|android).)*safari/i.test(navigator.userAgent))
+  ) {
     permission = (await Notification.requestPermission()) as PushState;
   }
-  if (permission !== 'granted') return permission;
+  if (permission !== "granted") return permission;
 
-  const registration = await navigator.serviceWorker.register(`${BASE}firebase-messaging-sw.js`, { scope: SCOPE });
-  const token = await getToken(getMessaging(app), { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-  if (!token) return 'default';
+  const registration = await navigator.serviceWorker.register(
+    `${BASE}firebase-messaging-sw.js`,
+    { scope: SCOPE },
+  );
+  const token = await getToken(getMessaging(app), {
+    vapidKey: VAPID_KEY,
+    serviceWorkerRegistration: registration,
+  });
+  if (!token) return "default";
   await register(token);
   storage.set(token);
-  return 'granted';
+  return "granted";
 }
 
 /** Sign-out: forget this device server-side. Safe to call when nothing was registered. */
-export async function disablePush(unregister: (token: string) => Promise<unknown>) {
+export async function disablePush(
+  unregister: (token: string) => Promise<unknown>,
+) {
   const token = storage.get();
   if (!token) return;
   storage.set(null);
@@ -85,23 +91,32 @@ export async function disablePush(unregister: (token: string) => Promise<unknown
 }
 
 /** While the app is open Firebase hands the message to the page instead of the worker - draw it anyway. */
-async function listenForeground(onPush: (p: PushPayload) => void): Promise<() => void> {
+async function listenForeground(
+  onPush: (p: PushPayload) => void,
+): Promise<() => void> {
   if (!(await supported())) return () => undefined;
   return onMessage(getMessaging(app), async (payload) => {
     const d = (payload.data ?? {}) as PushPayload;
     onPush(d);
-    if (Notification.permission !== 'granted') return;
+    if (Notification.permission !== "granted") return;
     const reg = await navigator.serviceWorker.getRegistration(SCOPE);
-    const options: NotificationOptions & { image?: string; renotify?: boolean } = {
-      body: d.body ?? '',
+    const options: NotificationOptions & {
+      image?: string;
+      renotify?: boolean;
+    } = {
+      body: d.body ?? "",
       icon: LOGO,
       badge: LOGO,
-      tag: d.tag ?? 'svv-broadcast',
+      tag: d.tag ?? "svv-broadcast",
       renotify: true,
-      data: { link: d.link ?? '' },
+      // Explicitly allow the browser/OS default notification sound. Web Push
+      // cannot choose an audio file; the user's device notification settings
+      // remain authoritative.
+      silent: false,
+      data: { link: d.link ?? "" },
     };
     if (d.imageUrl) options.image = d.imageUrl;
-    await reg?.showNotification(d.title ?? 'Desi Tokri', options);
+    await reg?.showNotification(d.title ?? "Desi Tokri", options);
   });
 }
 
@@ -124,8 +139,26 @@ export function usePushRegistration(opts: {
 
   useEffect(() => {
     if (signedIn === undefined) return;
-    if (signedIn) void enablePush(register).catch(() => undefined);
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    const sync = async () => {
+      try {
+        await enablePush(register);
+      } catch {
+        // A temporary API/FCM failure must not leave this signed-in device
+        // unregistered until the next page load.
+        if (!cancelled) retry = setTimeout(() => void sync(), 30_000);
+      }
+    };
+
+    if (signedIn) void sync();
     else void disablePush(unregister);
+
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
     // register/unregister are stable API functions; identity is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, identity]);

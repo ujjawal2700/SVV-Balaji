@@ -898,7 +898,7 @@ export interface Warehouse {
   capacity: string | null;
   isActive: boolean;
   /** CENTRAL ships by courier; OUTLET is a franchise store delivering locally. */
-  kind?: 'CENTRAL' | 'OUTLET';
+  kind?: 'CENTRAL' | 'OUTLET' | 'STORE';
   city?: string | null;
   state?: string | null;
   pincode?: string | null;
@@ -1238,7 +1238,7 @@ export interface CreateWarehouseInput {
   location: string;
   branchId: string;
   capacity?: number;
-  kind?: 'CENTRAL' | 'OUTLET';
+  kind?: 'CENTRAL' | 'OUTLET' | 'STORE';
   city?: string;
   state?: string;
   pincode?: string;

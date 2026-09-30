@@ -15,6 +15,7 @@ import {
   Typography,
 } from 'antd';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { apiErrorMessage } from '../../api/client';
 import type { FinishedGoodsTrace, TraceFarmer } from '../../api/types';
@@ -31,7 +32,9 @@ import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
  * quality check it passed, and the farmers whose grain is in the bag.
  */
 export function TracePage() {
-  const [submitted, setSubmitted] = useState<string | undefined>();
+  // ?batch=FG-... opens straight on that batch (linked from POS sales).
+  const [params] = useSearchParams();
+  const [submitted, setSubmitted] = useState<string | undefined>(params.get('batch') ?? undefined);
   const trace = useFinishedGoodsTrace(submitted);
 
   const notFound =
@@ -48,6 +51,7 @@ export function TracePage() {
         <Input.Search
           size="large"
           allowClear
+          defaultValue={submitted}
           placeholder="FG-20260807-001"
           enterButton={
             <>

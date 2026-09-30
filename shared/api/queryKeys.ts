@@ -266,6 +266,26 @@ export const queryKeys = {
 
   // --- Zone 4 ---------------------------------------------------------------
 
+  pos: {
+    all: ['pos'] as const,
+    outlets: (query: Record<string, unknown>) => [...queryKeys.pos.all, 'outlets', query] as const,
+    outlet: (id: string) => [...queryKeys.pos.all, 'outlet', id] as const,
+    catalogue: (outletId: string) => [...queryKeys.pos.all, 'catalogue', outletId] as const,
+    myShift: (outletId: string) => [...queryKeys.pos.all, 'my-shift', outletId] as const,
+    shifts: (query: Record<string, unknown>) => [...queryKeys.pos.all, 'shifts', query] as const,
+    sales: (query: Record<string, unknown>) => [...queryKeys.pos.all, 'sales', query] as const,
+    sale: (id: string) => [...queryKeys.pos.all, 'sale', id] as const,
+    report: (query: Record<string, unknown>) => [...queryKeys.pos.all, 'report', query] as const,
+  },
+
+  invoices: {
+    all: ['invoices'] as const,
+    list: (query: Record<string, unknown>) => [...queryKeys.invoices.all, 'list', query] as const,
+    detail: (id: string) => [...queryKeys.invoices.all, 'detail', id] as const,
+    forOrder: (orderId: string) => [...queryKeys.invoices.all, 'order', orderId] as const,
+    settings: () => [...queryKeys.invoices.all, 'settings'] as const,
+  },
+
   receivables: {
     all: ['receivables'] as const,
     list: (query: Record<string, unknown>) => [...queryKeys.receivables.all, 'list', query] as const,

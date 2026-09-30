@@ -4,6 +4,7 @@ import {
   CheckCircleFilled,
   CopyOutlined,
   CustomerServiceOutlined,
+  FileTextOutlined,
   PhoneOutlined,
   RightOutlined,
   SafetyCertificateOutlined,
@@ -17,6 +18,7 @@ import { checkoutApi, checkoutError, type OrderDetail } from '../api/checkout';
 import type { SupportTicketCategory } from '../api/supportTickets';
 import { useCreateSupportTicket } from '../hooks/useSupportTickets';
 import { formatInr } from '../utils/money';
+import { printTaxInvoice } from '@shared/utils/taxInvoicePrint';
 import { progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
 import { useReorder } from './useReorder';
 
@@ -126,6 +128,21 @@ export function OrderTrackingPage() {
   });
   const o = order.data;
   const delivered = o?.status === 'DELIVERED';
+  // The GST invoice is issued at dispatch, so there is nothing to download before it.
+  const shipped = o?.status === 'DISPATCHED' || delivered;
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const openInvoice = async () => {
+    if (!o) return;
+    setInvoiceLoading(true);
+    try {
+      const inv = await checkoutApi.invoice(o.orderNumber);
+      if (!printTaxInvoice(inv)) message.warning('Please allow pop-ups to view your invoice');
+    } catch {
+      message.info('Your invoice is being prepared - please check again in a few minutes');
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
 
   const copyOrderId = () => {
     if (!o) return;
@@ -264,9 +281,16 @@ export function OrderTrackingPage() {
               </Detail>
               <Detail label="Order placed">placed on {placedOn(o.placedAt)}</Detail>
               {delivered && o.deliveredAt ? <Detail label="Delivered">on {placedOn(o.deliveredAt)}</Detail> : null}
-              <Detail label="Delivery" last>
+              <Detail label="Delivery" last={!shipped}>
                 {o.fulfillment.method === 'LOCAL' ? 'Express local delivery' : 'Standard courier delivery'}
               </Detail>
+              {shipped ? (
+                <Detail label="Tax invoice" last>
+                  <Button icon={<FileTextOutlined />} loading={invoiceLoading} onClick={() => void openInvoice()} style={{ borderRadius: 10 }}>
+                    Download GST invoice
+                  </Button>
+                </Detail>
+              ) : null}
             </Card>
 
             {!delivered && o.timeline.length > 0 ? (

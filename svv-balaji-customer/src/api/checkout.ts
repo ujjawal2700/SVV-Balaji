@@ -1,3 +1,4 @@
+import type { Invoice } from '@shared/api/invoices';
 import { api } from './client';
 
 /**
@@ -195,6 +196,8 @@ export const checkoutApi = {
   coupons: () => api.get<OfferCoupon[]>('/storefront/coupons').then((r) => r.data),
   orders: () => api.get<OrderSummaryRow[]>('/storefront/orders').then((r) => r.data),
   order: (orderNumber: string) => api.get<OrderDetail>(`/storefront/orders/${encodeURIComponent(orderNumber)}`).then((r) => r.data),
+  /** The GST tax invoice, issued when the order is dispatched. 404 until then. */
+  invoice: (orderNumber: string) => api.get<Invoice>(`/storefront/orders/${encodeURIComponent(orderNumber)}/invoice`).then((r) => r.data),
   reviewProduct: (orderNumber: string, body: { productId: string; rating: number; comment?: string }) =>
     api
       .post<{ productId: string } & ProductReview>(`/storefront/orders/${encodeURIComponent(orderNumber)}/reviews`, body)

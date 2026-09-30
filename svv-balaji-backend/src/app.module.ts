@@ -37,6 +37,8 @@ import { RecallModule } from './recall/recall.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { ReceivablesModule } from './receivables/receivables.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { PosModule } from './pos/pos.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -102,6 +104,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     CheckoutModule, // storefront checkout, stock holds, fulfilment pipeline
     DeliveryModule, // zones & Quick Delivery (riders, tasks, COD, earnings to follow)
     ReceivablesModule, // B2B credit: due dates, ageing, payments received, statement of account
+    InvoicesModule, // GST tax invoices at dispatch, CGST/SGST vs IGST, e-invoice (IRN) queue via the GSP adapter
+    PosModule, // company-store POS counters: outlets, shifts, FIFO counter sales with batch traceability, refunds, reports
     RecallModule, // forward/backward trace + batch freeze/recall (Super Admin & QA)
     CategoriesModule,
     ReferralSettingsModule,

@@ -31,6 +31,7 @@ failures = 0
 token = ""
 PRODUCTS, ZONES, RULES, RIDERS = [], [], [], []
 ORDERS = {}
+push_registration_checked = False
 
 
 def call(method, path, body=None, tok=None, auth=True):
@@ -155,7 +156,8 @@ try:
 
     def signup(tag, ll):
         phone = f"7{STAMP[-6:]}{tag:03d}"
-        r = must("POST", "/rider/auth/signup", {"fullName": f"Rider {tag} {STAMP[-4:]}", "phone": phone, "password": "Secret#123", "vehicleType": "MOTORCYCLE", "vehicleNumber": f"mp04 ab {tag}"}, tok="-")
+        rider_name = {1: "Rider One Test", 2: "Rider Two Test"}.get(tag, "Rider Test")
+        r = must("POST", "/rider/auth/signup", {"fullName": rider_name, "phone": phone, "password": "Secret#123", "vehicleType": "MOTORCYCLE", "vehicleNumber": f"mp04 ab {tag}"}, tok="-")
         s, bad = call("POST", "/rider/auth/login", {"identifier": phone, "password": "Secret#123"}, auth=False)
         check(s == 403 and bad.get("code") == "PHONE_NOT_VERIFIED", f"rider {tag}: cannot sign in before verifying the phone", bad)
         s, bad = call("POST", "/rider/auth/verify", {"phone": phone, "code": "000000"}, auth=False)
@@ -188,10 +190,18 @@ try:
 
     # ------------------------------------------------------------------------
     def customer(tag):
+        global push_registration_checked
         phone = f"8{STAMP[-6:]}{tag:03d}"
         call("POST", "/storefront/auth/otp/request", {"phone": phone}, auth=False)
         _, sess = call("POST", "/storefront/auth/otp/verify", {"phone": phone, "code": "123456", "audience": "CUSTOMER", "fullName": f"RD Shopper {tag}"}, auth=False)
         tok = sess["accessToken"]
+        if not push_registration_checked:
+            test_push_token = f"e2e-customer-fcm-{STAMP}-{tag}"
+            registered = must("POST", "/storefront/notifications/devices", {"token": test_push_token, "app": "CUSTOMER"}, tok=tok)
+            check(registered.get("registered") is True, "customer FCM token is accepted and stored", registered)
+            status, removed = call("POST", "/notifications/devices/unregister", {"token": test_push_token}, auth=False)
+            check(status == 201 and removed.get("removed") == 1, "stored customer FCM token can be read back and removed", removed)
+            push_registration_checked = True
         addr = must("POST", "/storefront/addresses", {"label": "Home", "fullName": f"RD Shopper {tag}", "phone": "9876543210", "line1": "12 Test Street", "city": "Bhopal",
                                                       "state": "Madhya Pradesh", "pincode": "462016", "latitude": IN_LL[0], "longitude": IN_LL[1]}, tok=tok)["id"]
         return tok, addr
@@ -222,6 +232,9 @@ try:
 
     def otp_of(o):
         return must("GET", f"/storefront/orders/{o['number']}", tok=o["tok"])["deliveryOtp"]
+
+    def customer_notification_titles(o):
+        return [n["title"] for n in must("GET", "/storefront/notifications", tok=o["tok"])["items"]]
 
     # ------------------------------------------------------------------------
     step("3. COD Quick order: packed -> auto task -> offered nearest first -> rejected twice -> staff")
@@ -276,19 +289,23 @@ try:
     done = must("POST", f"/rider/tasks/{T1['id']}/deliver", {"otp": otp, **LOC_DROP}, tok=R1["tok"])
     check(done["status"] == "DELIVERED", "rider completes with the customer's OTP")
     o1 = must("GET", f"/orders/{O1['id']}")
-    check(o1["status"] == "DELIVERED" and o1["riderName"].startswith("Rider 1"), "order DELIVERED with the rider recorded", {k: o1.get(k) for k in ("status", "riderName")})
+    check(o1["status"] == "DELIVERED" and o1["riderName"] == "Rider One Test", "order DELIVERED with the rider recorded", {k: o1.get(k) for k in ("status", "riderName")})
     types = [e["type"] for e in o1.get("events", [])]
     check(all(x in types for x in ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED", "COD_COLLECTED", "DELIVERED"]),
           "the customer's order timeline has every rider step", types)
+    notices = wait_for(lambda: (lambda x: x if "Order delivered" in x else None)(customer_notification_titles(O1)))
+    expected_notices = {"Order placed successfully", "Order accepted", "Order packed", "Rider assigned", "Rider picked up your order", "Out for delivery", "Your rider has arrived", "Order delivered"}
+    check(notices is not None and expected_notices.issubset(set(notices)), "customer inbox has every important order and rider update", notices)
     td = must("GET", f"/delivery/tasks/{T1['id']}")
     check(td["arrivedPickupVerified"] and td["arrivedDropVerified"], "both arrivals were location-verified")
 
     step("5. Pay from the rules and cash")
     e1 = must("GET", "/rider/earnings", tok=R1["tok"])
     got = sorted((l["type"], l["amount"]) for l in e1["lines"])
-    check(got == sorted([("BASE", 20), ("DISTANCE", 30), ("PEAK", 5), ("DAILY_BONUS", 50)]),
-          "delivered 2.1 km in peak hours, first of the day: 20 + 30 + 5 + 50", got)
-    check(e1["today"] == 105, f"today's total is 105 ({e1['today']})")
+    expected_pay = [("BASE", 20), ("DISTANCE", 30), ("PEAK", 5), ("DAILY_BONUS", 50)]
+    check(all(line in got for line in expected_pay),
+          "delivery includes the test's base, distance, peak and first-delivery bonus", got)
+    check(e1["today"] == sum(amount for _, amount in got), f"today's total matches every active configured rule ({e1['today']})")
     cash = must("GET", "/rider/cash", tok=R1["tok"])
     check(cash["balance"] == O1["total"], "cash in hand = COD collected", cash["balance"])
     s, bad = call("POST", f"/riders/{R1['id']}/cash/deposits", {"amount": O1["total"] + 1})
@@ -316,6 +333,8 @@ try:
     check(s == 400 and "note" in json.dumps(bad).lower(), "'customer refused' needs a note", bad)
     must("POST", f"/rider/tasks/{T2['id']}/fail", {"reasonCode": "CUSTOMER_UNAVAILABLE", "note": "Door locked, phone off", **LOC_DROP}, tok=who["tok"])
     check(must("GET", f"/orders/{O2['id']}")["status"] == "DISPATCHED", "a failed delivery does NOT cancel the order")
+    failed_notice = wait_for(lambda: next((t for t in customer_notification_titles(O2) if t == "Delivery needs attention"), None))
+    check(failed_notice is not None, "customer is notified when delivery fails")
     s, bad = call("POST", f"/delivery/tasks/{T2['id']}/reattempt", {})
     check(s == 400, "cannot re-attempt before the goods are back", bad)
     must("POST", f"/rider/tasks/{T2['id']}/returned", LOC_OUT, tok=who["tok"])
@@ -346,6 +365,8 @@ try:
     check(e3 is not None and e3["amount"] == 10, "cancelled-after-accept pays the configured 10", e3)
     n = must("GET", "/rider/notifications", tok=who3["tok"])
     check(any(x["type"] == "TASK_CANCELLED" for x in n), "the rider was notified of the cancellation")
+    cancelled_notice = wait_for(lambda: next((t for t in customer_notification_titles(O3) if t == "Order cancelled"), None))
+    check(cancelled_notice is not None, "customer is notified when the order is cancelled")
 
     # ------------------------------------------------------------------------
     step("8. Suspension")

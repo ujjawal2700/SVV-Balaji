@@ -1,5 +1,6 @@
 import {
   ArrowLeftOutlined,
+  AuditOutlined,
   CheckCircleFilled,
   CheckCircleOutlined,
   CopyOutlined,
@@ -64,6 +65,7 @@ import { InfoRow, StatCard } from '../customers/detailPageParts';
 import { CANCELLABLE, NEXT_STEP, ORDER_STATUS_LABEL } from './orderStatus';
 import { OrderFulfillmentPanel } from './OrderFulfillmentPanel';
 import { OrderLoyaltyPanel } from './OrderLoyaltyPanel';
+import { OrderInvoicePanel } from '../invoices/OrderInvoicePanel';
 import {
   AuditTimeline,
   LogisticsBlocks,
@@ -107,6 +109,7 @@ export function OrderDetailPage() {
   const cancel = useCancelOrder();
 
   const canCancel = useCan('ORDER_CANCEL');
+  const canViewInvoices = useCan('INVOICES_VIEW');
   const data = order.data as any;
   const step = data ? NEXT_STEP[data.status] : undefined;
   const listPath = data?.channel === 'B2B' ? '/b2b-orders' : '/b2c-orders';
@@ -681,6 +684,19 @@ export function OrderDetailPage() {
                           },
                         ]
                       : []),
+                    ...(canViewInvoices
+                      ? [
+                          {
+                            key: 'invoice',
+                            label: tabLabel('TAX INVOICE', <AuditOutlined />),
+                            children: (
+                              <div style={{ paddingTop: 8 }}>
+                                <OrderInvoicePanel orderId={data.id} status={data.status} />
+                              </div>
+                            ),
+                          },
+                        ]
+                      : []),
                     {
                       key: 'loyalty',
                       label: tabLabel('REWARDS & RETURNS', <WalletOutlined />),
@@ -698,10 +714,10 @@ export function OrderDetailPage() {
         </Row>
       </Space>
 
-      {/* Print GST Invoice Modal */}
+      {/* Order summary preview. The real GST tax invoice is issued by the server at dispatch - see OrderInvoicePanel. */}
       <Modal
         open={printInvoiceModalOpen}
-        title={`Tax Invoice Preview — #${data.orderNumber}`}
+        title={`Order Summary — #${data.orderNumber}`}
         onCancel={() => setPrintInvoiceModalOpen(false)}
         footer={[
           <Button key="close" onClick={() => setPrintInvoiceModalOpen(false)}>
@@ -714,7 +730,7 @@ export function OrderDetailPage() {
             style={{ background: '#059669', borderColor: '#059669' }}
             onClick={() => downloadOrderBill(data)}
           >
-            Download &amp; Print Bill
+            Download &amp; Print Summary
           </Button>,
         ]}
         width={650}
@@ -726,7 +742,7 @@ export function OrderDetailPage() {
                 SVV BALAJI AGRO PRODUCER CO.
               </Title>
               <Text type="secondary" style={{ fontSize: 11 }}>
-                GSTIN: 10AAACS9981P1Z5 · FSSAI: 1042100000129
+                Not a tax invoice — the GST invoice is issued at dispatch (Tax Invoices)
               </Text>
               <div>
                 <Text style={{ fontSize: 11 }}>Mandis to Doorstep Direct Distribution Hub</Text>
@@ -734,10 +750,10 @@ export function OrderDetailPage() {
             </Col>
             <Col span={10} style={{ textAlign: 'right' }}>
               <Tag color="purple" style={{ fontSize: 12, fontWeight: 700 }}>
-                TAX INVOICE
+                ORDER SUMMARY
               </Tag>
               <div style={{ fontSize: 12, marginTop: 4 }}>
-                <Text strong>Invoice No:</Text> INV-{data.orderNumber}
+                <Text strong>Order No:</Text> {data.orderNumber}
               </div>
               <div style={{ fontSize: 11 }}>
                 <Text type="secondary">Date:</Text> {formatDate(data.orderDate)}

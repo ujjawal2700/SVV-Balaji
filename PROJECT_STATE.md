@@ -1,7 +1,7 @@
 # SVV Balaji — Project State
 
-**Last updated:** 28 September 2026 · **Updated by:** Raunak
-**Programme week:** 8 of 18 (Week 1 commenced 4 Aug 2026)
+**Last updated:** 29 September 2026 · **Updated by:** Ujjawal
+**Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
 > first. Keep it current; a stale state file is worse than none.
@@ -15,6 +15,35 @@
 ---
 
 ## 0. Since 16 August — what changed, most recent first
+
+**29 Sep (latest) — POS counters for company stores, on the database.** New Sale, POS Orders, POS Reports and
+Outlets were UI-only (mock arrays, outlets in browser localStorage); they now use the API. Stores sync across devices, each
+with its own STORE stock location. Cashier shifts with drawer reconciliation. Sales are server-priced, FEFO from
+QA-released batches with batch traceability, and each gets a GST invoice. Whole-bill refunds put stock back and cancel
+the invoice. Reports cover any IST date range. Franchise module untouched (future scope). Store credit is not offered at
+the counter until it is tied into Receivables. **Deploy:** `prisma migrate deploy` (`20260929120000_pos_outlets_sales`) +
+generate + API restart. See `DEV_LOG.md` (2026-09-29, POS).
+
+**29 Sep (latest) — Customer order push notifications complete.** Order placement, seller acceptance, packing, rider
+assignment and movement, courier updates, delivery failure/re-attempt, delivery, cancellation and returns now create a
+durable customer inbox item and push to signed-in devices. Delivery is deduplicated per timeline event and has a
+restart-recovery sweep. Customer notifications opt into the browser/OS default sound; Web Push cannot override the
+device's sound settings. The customer FCM token is kept under its own `svv.customer.pushToken` browser key and upserted
+against the owning account/session in `push_devices`; registration retries and FCM token rotation removes the stale row.
+Live token database round-trip and order/rider/inbox E2E passed, but remote FCM was not testable locally because the backend
+Firebase service-account secret is absent. **Deploy:** migrations `20260929140000_customer_order_notifications` and
+`20260929143000_customer_notification_outbox`, Prisma generate, API restart, and set `FIREBASE_SERVICE_ACCOUNT_JSON`
+or `FIREBASE_SERVICE_ACCOUNT_PATH`.
+
+**29 Sep (latest) — GST tax invoicing (WS4.4) built; tests green (645/645).** Invoices are issued automatically at
+dispatch from the order's frozen figures: CGST+SGST or IGST by place of supply, HSN summary, `INV/2627-000001`
+numbering per financial year, delivery fee as an inclusive service line. B2B e-invoicing (IRN) runs off the request
+path through a GSP adapter - **mock until A-11 delivers the vendor and credentials**. New admin **Tax Invoices** +
+**GST Settings** screens, a Tax Invoice tab on orders, and "Download GST invoice" for customers. The old admin "Bill"
+that printed a fake GSTIN as a "TAX INVOICE" is now an honest order summary. **Deploy:** `prisma migrate deploy`
+(`20260929100000_gst_invoicing`, verified on a fresh local Postgres 16; the hosted Render DB is suspended) + generate + API restart, then Super Admin completes
+GST Settings - no invoices are issued until then. Credit notes and GSTR-1 export are not built yet. See `DEV_LOG.md`
+(2026-09-29).
 
 **28 Sep (latest) — Push notifications from Super Admin.** New admin screen **Push Notifications** sends instant
 messages to Everyone / Customers / Retailers / Riders / staff roles (e.g. Sales Executives) / specific people, with
@@ -515,9 +544,8 @@ must not be read as "nearly ready".
 
 1. ~~**WS1.5 order intake + WS1.6 pricing engine**~~ — ✅ **done 11 Aug.** Customers, dated
    per-channel price lists, orders, batch-wise allocation and the fulfilment lifecycle are in.
-2. **GST invoice generation — next.** Build the invoice layer now, structured so the GSP call slots
-   in without a refactor when credentials arrive. B2C invoice format differs from B2B (no
-   counterparty GSTIN) — handle both from the start.
+2. ~~**GST invoice generation**~~ — ✅ **done 29 Sep** (Ujjawal). B2B + B2C, IRN queue behind a GSP
+   adapter. Still open: credit notes, GSTR-1 export, the real GSP adapter (A-11).
 3. **Dispatch & delivery modules** — vehicle, driver, route, OTP and photo proof of delivery.
    The order lifecycle already has DISPATCHED and DELIVERED states waiting for them.
 4. **WS4.4 GST e-invoicing — unblocked pending credentials (A-11).** Build against the GSP
@@ -580,7 +608,7 @@ must not be read as "nearly ready".
 | A-08 | Confirm hosting upgrade path | Joint | 21 Aug | Open |
 | A-09 | Staging environment for client access | Appzeto | 21 Aug | Open |
 | **A-10** | **Agree cost & timeline for added B2C scope, in writing** | Ravi / SVV Balaji | **18 Aug** | **Open — Critical** |
-| **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical** |
+| **A-11** | **Confirm GSP vendor, GSTIN and API credentials** | SVV Balaji (Finance) | **18 Aug** | **Open — Critical.** Invoicing is built and waiting: the company GSTIN goes into GST Settings; the GSP is one adapter class (29 Sep) |
 | **A-12** | **Agree a pagination convention for list endpoints** | Raunak | **13 Aug** | **Open — target date reached.** 22 panel screens now built against the unpaginated shape; the envelope adapter absorbs it, so nothing is blocked, but the movement ledger, production and quality lists grow monotonically |
 | A-13 | Decide: order `DRAFT` state, finished-goods movement ledger, allocation history on cancel | Raunak | 15 Aug | Open — shapes WS2.5 screens |
 | A-14 | Fix permission seeding so a new key added to an already-configured role's defaults actually grants | Raunak | — | ✅ **Closed 21 Sep** — `permission_key_state` + `PermissionsService.backfillNewPermissions()`; new keys reach configured roles on boot, revocations stick. See `DEV_LOG.md` (2026-09-21) |
