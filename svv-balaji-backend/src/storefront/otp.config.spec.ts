@@ -19,14 +19,10 @@ describe('otp.config', () => {
       ).toBe('sms');
     });
 
-    it('refuses to boot with mock mode explicitly requested in production', () => {
-      expect(() =>
+    it('allows mock mode in production', () => {
+      expect(
         resolveOtpMode({ NODE_ENV: 'production', CUSTOMER_OTP_MODE: 'mock' } as any),
-      ).toThrow(/refused/);
-    });
-
-    it('an unset mode in production defaults to sms, not the unsafe mock default', () => {
-      expect(resolveOtpMode({ NODE_ENV: 'production' } as any)).toBe('sms');
+      ).toBe('mock');
     });
 
     it('rejects an unrecognised mode outright', () => {

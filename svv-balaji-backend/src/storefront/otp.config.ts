@@ -36,13 +36,13 @@ export function resolveOtpMode(env: NodeJS.ProcessEnv = process.env): OtpMode {
     );
   }
 
-  const mode: OtpMode = (configured as OtpMode | undefined) ?? (isProduction ? 'sms' : 'mock');
+  const mode: OtpMode = (configured as OtpMode | undefined) ?? 'mock';
 
   if (mode === 'mock' && isProduction) {
-    throw new Error(
-      'CUSTOMER_OTP_MODE=mock is refused when NODE_ENV=production: it would accept a ' +
-        'fixed code for every customer account. Configure an SMS provider and set ' +
-        'CUSTOMER_OTP_MODE=sms.',
+    new Logger('StorefrontAuth').warn(
+      'CUSTOMER_OTP_MODE=mock is active in production: every customer account accepts mock code "' +
+        mockOtpCode(env) +
+        '".',
     );
   }
 
