@@ -90,6 +90,7 @@ export function LoginPage() {
 
       if (outcome.status === 'pending') {
         message.info(outcome.message);
+        navigate('/retailers/under-review', { replace: true });
         return;
       }
 
@@ -100,7 +101,7 @@ export function LoginPage() {
             ? 'Welcome! Your account is ready.'
             : 'Welcome back!',
       );
-      const fallback = outcome.channel === 'B2B' ? '/profile' : '/';
+      const fallback = outcome.channel === 'B2B' ? '/retailers/under-review' : '/';
       navigate(destination || fallback, { replace: true });
     } catch (error) {
       message.error(apiErrorMessage(error, 'Invalid code. Please try again.'));

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { RequireAccount } from './auth/RequireAccount';
+import { useCustomerAuth } from './auth/CustomerAuthContext';
 import { StoreShell } from './layout/StoreShell';
 
 /**
@@ -73,11 +74,24 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default:
 const RegisterPage = lazy(() =>
   import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
 );
+const UnderReviewPage = lazy(() =>
+  import('./pages/UnderReviewPage').then((m) => ({ default: m.UnderReviewPage })),
+);
 const NotFoundPage = lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
 );
 
 export function App() {
+  const { role, retailerProfile, initialising } = useCustomerAuth();
+
+  if (!initialising && role === 'RETAILER' && retailerProfile?.kycStatus === 'PENDING') {
+    return (
+      <Suspense fallback={<div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+        <UnderReviewPage />
+      </Suspense>
+    );
+  }
+
   return (
     <Suspense fallback={<div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
       <Routes>
@@ -151,6 +165,7 @@ export function App() {
         <Route path="login" element={<LoginPage />} />
         <Route path="retailers/login" element={<LoginPage />} />
         <Route path="retailers/register" element={<RegisterPage />} />
+        <Route path="retailers/under-review" element={<UnderReviewPage />} />
       </Routes>
     </Suspense>
   );

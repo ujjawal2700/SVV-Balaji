@@ -164,20 +164,38 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
           <Table<PickPlanRow>
             size="small"
             style={{ marginTop: 8 }}
+            scroll={{ x: 680 }}
             rowKey="allocationId"
             pagination={false}
             loading={plan.isLoading}
             dataSource={plan.data ?? []}
             columns={[
-              { title: 'Product', dataIndex: 'product' },
+              {
+                title: 'Product',
+                dataIndex: 'product',
+                width: 220,
+                render: (v: string) => <Text strong style={{ fontSize: 13, color: '#1e293b' }}>{v}</Text>,
+              },
               {
                 title: 'Batch to pull',
                 dataIndex: 'fgBatchNumber',
+                width: 280,
                 render: (v: string, row: PickPlanRow) => (
-                  <Space size={8}>
+                  <Space size={8} align="center" style={{ whiteSpace: 'nowrap' }}>
                     <Text
                       code
-                      style={{ cursor: 'pointer', color: '#1677ff', fontWeight: 600 }}
+                      style={{
+                        cursor: 'pointer',
+                        color: '#2563eb',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        background: '#eff6ff',
+                        borderColor: '#bfdbfe',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 12.5,
+                        display: 'inline-block',
+                      }}
                       title="Click to fill into scan input"
                       onClick={() => setScanCode(v)}
                     >
@@ -188,7 +206,7 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
                         size="small"
                         type="primary"
                         onClick={() => void handleScanBatch(v)}
-                        style={{ fontSize: 11, borderRadius: 4, height: 22, padding: '0 8px', backgroundColor: '#2563eb' }}
+                        style={{ fontSize: 11, borderRadius: 6, height: 24, padding: '0 10px', backgroundColor: '#2563eb', fontWeight: 600 }}
                       >
                         Verify Batch
                       </Button>
@@ -196,9 +214,34 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
                   </Space>
                 ),
               },
-              { title: 'Expires', dataIndex: 'expiryDate', render: (v: string | null) => (v ? new Date(v).toLocaleDateString('en-IN') : '—') },
-              { title: 'Packs', dataIndex: 'quantity', align: 'right' },
-              { title: 'Scanned', dataIndex: 'scanned', render: (v: boolean) => (v ? <Tag color="green">✓ Scanned</Tag> : <Tag color="orange">Pending Verification</Tag>) },
+              {
+                title: 'Expires',
+                dataIndex: 'expiryDate',
+                width: 110,
+                align: 'center',
+                render: (v: string | null) => (
+                  <span style={{ whiteSpace: 'nowrap', fontSize: 12.5, color: '#475569' }}>
+                    {v ? new Date(v).toLocaleDateString('en-IN') : '—'}
+                  </span>
+                ),
+              },
+              {
+                title: 'Packs',
+                dataIndex: 'quantity',
+                width: 80,
+                align: 'right',
+                render: (v: number) => <strong style={{ fontSize: 13, color: '#0f172a' }}>{v}</strong>,
+              },
+              {
+                title: 'Scanned',
+                dataIndex: 'scanned',
+                width: 150,
+                align: 'center',
+                render: (v: boolean) => (
+                  v ? <Tag color="green" style={{ margin: 0, padding: '2px 10px', fontWeight: 600, borderRadius: 6 }}>✓ Scanned</Tag>
+                    : <Tag color="orange" style={{ margin: 0, padding: '2px 10px', fontWeight: 600, borderRadius: 6 }}>Pending Verification</Tag>
+                ),
+              },
             ]}
           />
         </div>

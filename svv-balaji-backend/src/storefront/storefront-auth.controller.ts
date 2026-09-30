@@ -105,8 +105,12 @@ export class StorefrontAuthController {
       'Requires an OTP already requested for this number. Creates a PENDING_APPROVAL account, ' +
       'not a session - staff review the GSTIN before it can sign in and order.',
   })
-  registerRetailer(@Body() dto: RegisterRetailerDto & { code: string }) {
-    return this.service.registerRetailer(dto);
+  registerRetailer(
+    @Body() dto: RegisterRetailerDto & { code: string },
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.service.registerRetailer(dto, { ipAddress: ip, userAgent });
   }
 
   @Post('refresh')

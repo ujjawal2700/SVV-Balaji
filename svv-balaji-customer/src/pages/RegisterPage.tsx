@@ -144,8 +144,8 @@ export function RegisterPage() {
         referralCode: referralCode.trim() || undefined,
       });
 
-      setIsCompleted(true);
-      message.success(response.message);
+      message.success('Registration submitted! You are logged in while your account is reviewed.');
+      navigate('/retailers/under-review', { replace: true });
     } catch (error) {
       message.error(apiErrorMessage(error, 'Registration could not be submitted. Please try again.'));
     } finally {

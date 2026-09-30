@@ -21,7 +21,7 @@ import {
   RiderVerifyDto,
   type RiderJwtPayload,
 } from './riders/rider-auth';
-import { AvailabilityDto, RidersService } from './riders/riders.service';
+import { AvailabilityDto, CreateCashSettlementOrderDto, RidersService, VerifyCashSettlementDto } from './riders/riders.service';
 
 class RejectOfferDto {
   @IsOptional() @IsString() @MaxLength(200) reason?: string;
@@ -337,6 +337,22 @@ export class RiderAppController {
   @ApiBearerAuth()
   cash(@CurrentRider() r: RiderJwtPayload) {
     return this.riders.cashLedger(r.sub);
+  }
+
+  @Post('cash/settle-order')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create Razorpay order to self-settle cash in hand' })
+  createCashSettlementOrder(@CurrentRider() r: RiderJwtPayload, @Body() dto: CreateCashSettlementOrderDto) {
+    return this.riders.createCashSettlementOrder(r.sub, dto.amount);
+  }
+
+  @Post('cash/settle-verify')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify Razorpay payment and settle rider cash' })
+  verifyCashSettlement(@CurrentRider() r: RiderJwtPayload, @Body() dto: VerifyCashSettlementDto) {
+    return this.riders.verifyCashSettlement(r.sub, dto);
   }
 
   @Get('notifications')

@@ -19,7 +19,7 @@ import type { SupportTicketCategory } from '../api/supportTickets';
 import { useCreateSupportTicket } from '../hooks/useSupportTickets';
 import { formatInr } from '../utils/money';
 import { printTaxInvoice } from '@shared/utils/taxInvoicePrint';
-import { progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
+import { getProgressSteps, progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
 import { useReorder } from './useReorder';
 
 type Item = OrderDetail['items'][number];
@@ -216,13 +216,24 @@ export function OrderTrackingPage() {
             ) : (
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Tag color={statusColor(o.status)} style={{ fontSize: 13, padding: '2px 10px' }}>{statusLabel(o.status, o.fulfillment.method)}</Tag>
+                  <Tag color={statusColor(o.status)} style={{ fontSize: 13, padding: '2px 10px' }}>{statusLabel(o.status, o.fulfillment.method, o.shipment?.status)}</Tag>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>Placed {at(o.placedAt)}</Typography.Text>
                 </div>
                 {o.status === 'CANCELLED' ? (
                   <Alert type="error" showIcon message="This order was cancelled" />
                 ) : (
-                  <Steps size="small" current={progressIndex(o.status)} items={progressSteps(o.fulfillment.method).map((s) => ({ title: s.label }))} />
+                  <Steps
+                    size="small"
+                    style={{ marginTop: 12 }}
+                    current={progressIndex(
+                      o.status,
+                      o.fulfillment.method,
+                      Boolean(o.rider?.name),
+                      o.shipment?.status,
+                      (o.timeline ?? []).map((t) => t.type),
+                    )}
+                    items={getProgressSteps(o.fulfillment.method).map((s) => ({ title: s.label }))}
+                  />
                 )}
                 {o.status !== 'CANCELLED' && o.fulfillment.etaLabel ? (
                   <Typography.Text style={{ display: 'block', marginTop: 12 }}>

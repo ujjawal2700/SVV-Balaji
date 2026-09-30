@@ -242,7 +242,7 @@ export class StorefrontAuthService {
    * then stores the business details as PENDING_APPROVAL - no session, no
    * Customer row, no credit terms, until staff review the GSTIN and approve.
    */
-  async registerRetailer(dto: RegisterRetailerDto & { code: string }) {
+  async registerRetailer(dto: RegisterRetailerDto & { code: string }, meta: SessionMeta = {}) {
     const phone = normalisePhone(dto.phone);
     await this.consumeChallenge(phone, dto.code);
 
@@ -283,7 +283,7 @@ export class StorefrontAuthService {
 
     const data = {
       phone,
-      email: undefined,
+      email: dto.email?.trim() || undefined,
       fullName: dto.fullName,
       channel: SalesChannel.B2B,
       status: CustomerAccountStatus.PENDING_APPROVAL,
@@ -305,10 +305,7 @@ export class StorefrontAuthService {
 
     this.logger.log(`Retailer registration submitted: ${account.businessName} (${maskPhone(phone)})`);
 
-    return {
-      status: account.status,
-      message: 'Registration submitted. You can sign in once it has been reviewed.',
-    };
+    return this.sessionFor(account, meta, { touchLogin: true });
   }
 
   private async consumeChallenge(phone: string, code: string) {
@@ -442,13 +439,6 @@ export class StorefrontAuthService {
     meta: SessionMeta,
     opts: { touchLogin?: boolean; reuseSessionId?: string } = {},
   ) {
-    if (account.status === CustomerAccountStatus.PENDING_APPROVAL) {
-      return {
-        pending: true as const,
-        status: account.status,
-        message: 'Your registration is awaiting approval. You will be able to sign in once it is reviewed.',
-      };
-    }
     if (account.status === CustomerAccountStatus.REJECTED) {
       throw new ForbiddenException(
         account.rejectionReason
@@ -456,7 +446,7 @@ export class StorefrontAuthService {
           : 'Registration was not approved.',
       );
     }
-    if (account.status !== CustomerAccountStatus.ACTIVE) {
+    if (account.status !== CustomerAccountStatus.ACTIVE && account.status !== CustomerAccountStatus.PENDING_APPROVAL) {
       throw new ForbiddenException('This account has been suspended.');
     }
 

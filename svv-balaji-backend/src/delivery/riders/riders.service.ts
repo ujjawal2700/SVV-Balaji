@@ -5,6 +5,7 @@ import { Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { SequenceService } from '../../common/sequence.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { createPaymentGateway } from '../../checkout/payment/payment-gateway';
 import { DispatchService, HELD_STATUSES, stripPhone } from '../dispatch/dispatch.service';
 import { TaskFlowService } from '../dispatch/task-flow.service';
 
@@ -29,6 +30,17 @@ export class CashDepositDto {
   @ApiProperty() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) amount!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) reference?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) note?: string;
+}
+
+export class CreateCashSettlementOrderDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) amount?: number;
+}
+
+export class VerifyCashSettlementDto {
+  @ApiProperty() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) amount!: number;
+  @ApiProperty() @IsString() gatewayOrderId!: string;
+  @ApiProperty() @IsString() paymentId!: string;
+  @ApiProperty() @IsString() signature!: string;
 }
 
 export class AvailabilityDto {
@@ -192,6 +204,79 @@ export class RidersService {
       return tx.riderCashEntry.create({
         data: { riderId: id, type: 'DEPOSITED', amount: -dto.amount, reference: dto.reference?.trim() || null, note: dto.note?.trim() || null, recordedById: userId },
       });
+    });
+  }
+
+  /** Rider self-settles cash in hand via Razorpay online payment directly to Super Admin. */
+  async createCashSettlementOrder(riderId: string, requestedAmount?: number) {
+    const balMap = await this.cashBalances([riderId]);
+    const balance = balMap.get(riderId) ?? 0;
+    if (balance <= 0) {
+      throw new BadRequestException('You have no cash-in-hand balance to settle');
+    }
+    const amount = requestedAmount ? Math.min(requestedAmount, balance) : balance;
+    if (amount <= 0) {
+      throw new BadRequestException('Settlement amount must be greater than ₹0');
+    }
+
+    const gateway = createPaymentGateway();
+    const order = await gateway.createOrder({
+      amountRupees: amount,
+      receipt: `RDR-SETTLE-${riderId.slice(0, 8)}-${Date.now()}`,
+    });
+
+    return {
+      gatewayOrderId: order.gatewayOrderId,
+      clientConfig: order.clientConfig,
+      amount,
+      balance,
+    };
+  }
+
+  /** Verify Razorpay payment and record DEPOSITED entry on rider's cash ledger. */
+  async verifyCashSettlement(riderId: string, dto: VerifyCashSettlementDto) {
+    const gateway = createPaymentGateway();
+    const valid = gateway.verifyPayment({
+      gatewayOrderId: dto.gatewayOrderId,
+      paymentId: dto.paymentId,
+      signature: dto.signature,
+    });
+
+    if (!valid) {
+      throw new BadRequestException('Payment verification failed (invalid signature)');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM riders WHERE id = ${riderId} FOR UPDATE`;
+      const bal = Number(
+        (await tx.riderCashEntry.aggregate({ where: { riderId }, _sum: { amount: true } }))._sum.amount ?? 0,
+      );
+
+      const settleAmount = Math.min(dto.amount, bal);
+      if (settleAmount <= 0) {
+        throw new BadRequestException('No remaining cash balance to settle');
+      }
+
+      const entry = await tx.riderCashEntry.create({
+        data: {
+          riderId,
+          type: 'DEPOSITED',
+          amount: -settleAmount,
+          reference: dto.paymentId,
+          note: 'Online Razorpay settlement to Super Admin',
+        },
+      });
+
+      const newBal = Number(
+        (await tx.riderCashEntry.aggregate({ where: { riderId }, _sum: { amount: true } }))._sum.amount ?? 0,
+      );
+
+      return {
+        success: true,
+        settledAmount: settleAmount,
+        newBalance: newBal,
+        entry,
+      };
     });
   }
 

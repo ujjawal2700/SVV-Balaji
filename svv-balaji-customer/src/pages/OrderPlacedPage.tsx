@@ -1,10 +1,9 @@
 import {
-  CheckCircleFilled,
   CopyOutlined,
   HomeOutlined,
   ShoppingOutlined,
 } from '@ant-design/icons';
-import { Button, Card, Divider, Tag, Typography, message } from 'antd';
+import { Button, Divider, Tag, Typography, message } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { checkoutApi } from '../api/checkout';
@@ -25,7 +24,7 @@ export function OrderPlacedPage() {
   const copyOrderNumber = () => {
     if (orderNumber) {
       navigator.clipboard.writeText(orderNumber);
-      message.success('Order number copied to clipboard!');
+      message.success('Order ID copied to clipboard!');
     }
   };
 
@@ -44,171 +43,146 @@ export function OrderPlacedPage() {
     <div
       style={{
         minHeight: '100vh',
-        background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 50%)',
+        background: 'rgba(25, 20, 15, 0.45)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        padding: '36px 16px 60px',
+        justifyContent: 'center',
+        padding: '24px 16px',
       }}
     >
-      <div style={{ maxWidth: 440, width: '100%', textAlign: 'center' }}>
-        {/* Top Header */}
-        <Typography.Title level={2} style={{ margin: '0 0 10px', color: '#0f172a', fontWeight: 800, fontSize: 26 }}>
-          Your order is placed
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" style={{ fontSize: 15, margin: '0 0 4px', color: '#475569' }}>
-          Thank you for shopping with us
-        </Typography.Paragraph>
-        <Typography.Text style={{ fontSize: 14, color: '#059669', fontWeight: 600, display: 'block', marginBottom: 24 }}>
-          Your order will reach you on {etaText}.
-        </Typography.Text>
-
-        {/* Central Illustration (Phone with Green Checkmark matching reference layout) */}
-        <div style={{ position: 'relative', margin: '20px auto 32px', width: 220, height: 260 }}>
-          {/* Soft Blur Background */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '10%',
-              left: '5%',
-              width: '90%',
-              height: '80%',
-              background: '#dcfce7',
-              borderRadius: '40% 60% 70% 30% / 50% 60% 40% 50%',
-              filter: 'blur(10px)',
-              zIndex: 1,
-            }}
-          />
-
-          {/* Smartphone Graphic */}
-          <div
-            style={{
-              position: 'relative',
-              zIndex: 2,
-              width: 165,
-              height: 245,
-              margin: '0 auto',
-              background: '#0f766e',
-              borderRadius: 32,
-              padding: 6,
-              boxShadow: '0 20px 35px -10px rgba(15, 118, 110, 0.35)',
-              border: '3px solid #115e59',
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                background: '#0d9488',
-                borderRadius: 26,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Speaker Notch */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 8,
-                  width: 44,
-                  height: 5,
-                  background: '#0f766e',
-                  borderRadius: 3,
-                }}
-              />
-
-              {/* Big Checkmark Circle */}
-              <div
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: '50%',
-                  background: '#22c55e',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 8px 24px rgba(34, 197, 94, 0.45)',
-                }}
-              >
-                <CheckCircleFilled style={{ fontSize: 46, color: '#ffffff' }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Floating leaf accents */}
-          <div style={{ position: 'absolute', top: 15, right: 10, zIndex: 3, fontSize: 24 }}>🍃</div>
-          <div style={{ position: 'absolute', bottom: 25, left: 5, zIndex: 3, fontSize: 20 }}>🌱</div>
+      {/* Central Modal Card matching reference design */}
+      <div
+        style={{
+          maxWidth: 380,
+          width: '100%',
+          background: '#fdfbf7',
+          borderRadius: 32,
+          padding: '32px 24px 28px',
+          textAlign: 'center',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.25)',
+          border: '1px solid #efe8db',
+        }}
+      >
+        {/* Circle Badge with Party Popper / Confetti Icon */}
+        <div
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: '50%',
+            background: '#0d3b42',
+            margin: '0 auto 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 12px 28px rgba(13, 59, 66, 0.35)',
+            position: 'relative',
+          }}
+        >
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#52c41a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5.8 11.3 2 22l10.7-3.8Z" fill="#ffc107" stroke="#ffc107" />
+            <path d="M4 3h.01M20 3h.01M12 2h.01M17 7h.01M7 7h.01M12 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+            <circle cx="18" cy="11" r="2" fill="#40a9ff" stroke="none" />
+            <circle cx="6" cy="7" r="1.5" fill="#ff7875" stroke="none" />
+            <circle cx="15" cy="4" r="1.5" fill="#52c41a" stroke="none" />
+            <path d="m11 13 8-8" stroke="#ff4d4f" strokeWidth="2.5" />
+            <path d="M14 17l6 2" stroke="#ff9c6e" strokeWidth="2" />
+          </svg>
         </div>
 
-        {/* Order Details Snippet Card */}
-        {orderNumber && (
-          <Card
-            style={{
-              borderRadius: 16,
-              borderColor: '#e2e8f0',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-              textAlign: 'left',
-              marginBottom: 28,
-            }}
-            bodyStyle={{ padding: '16px 20px' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                  Order Number
-                </Typography.Text>
-                <Typography.Text strong style={{ fontSize: 15, color: '#0f172a', letterSpacing: 0.5 }}>
-                  #{orderNumber}
-                </Typography.Text>
-              </div>
-              <Button type="text" icon={<CopyOutlined />} onClick={copyOrderNumber} size="small" style={{ color: '#059669' }}>
-                Copy
-              </Button>
-            </div>
+        {/* Title & Subtitle */}
+        <Typography.Title
+          level={3}
+          style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800, fontSize: 23 }}
+        >
+          Payment Successful
+        </Typography.Title>
+        <Typography.Paragraph
+          type="secondary"
+          style={{ fontSize: 13.5, margin: '0 0 18px', color: '#64748b' }}
+        >
+          Thanks for your order.
+        </Typography.Paragraph>
 
-            {order && (
-              <>
-                <Divider style={{ margin: '12px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                  <span style={{ color: '#64748b' }}>Items ({order.items.length})</span>
-                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{formatInr(order.totals.total)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginTop: 6 }}>
-                  <span style={{ color: '#64748b' }}>Fulfillment</span>
-                  <Tag color="green" style={{ margin: 0, fontWeight: 600 }}>
-                    {order.fulfillment.method === 'LOCAL' ? '⚡ Quick Delivery' : '📦 Standard Shipping'}
-                  </Tag>
-                </div>
-              </>
-            )}
-          </Card>
+        {/* Order ID Pill */}
+        {orderNumber && (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              background: '#f2ece0',
+              padding: '6px 14px',
+              borderRadius: 20,
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#334155',
+              marginBottom: 20,
+            }}
+          >
+            <span>Order ID : <strong style={{ color: '#0f172a' }}>{orderNumber}</strong></span>
+            <CopyOutlined onClick={copyOrderNumber} style={{ cursor: 'pointer', color: '#0f766e' }} />
+          </div>
         )}
 
-        {/* Action Buttons: Track Order & Home */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Order Details Snippet Box */}
+        {order && (
+          <div
+            style={{
+              background: '#f4efe4',
+              borderRadius: 18,
+              padding: '14px 16px',
+              textAlign: 'left',
+              marginBottom: 24,
+              fontSize: 13,
+              border: '1px solid #e7dfd0',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ color: '#64748b' }}>Total Paid</span>
+              <strong style={{ fontSize: 17, color: '#0d3b42' }}>{formatInr(order.totals.total)}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ color: '#64748b' }}>Items</span>
+              <span style={{ fontWeight: 600, color: '#1e293b' }}>{order.items.length} Product{order.items.length === 1 ? '' : 's'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#64748b' }}>Fulfillment</span>
+              <Tag color="green" style={{ margin: 0, fontWeight: 600, borderRadius: 8 }}>
+                {order.fulfillment.method === 'LOCAL' ? '⚡ Quick Delivery' : '📦 Standard Courier'}
+              </Tag>
+            </div>
+            <Divider style={{ margin: '10px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+              <span style={{ color: '#64748b' }}>Estimated Delivery</span>
+              <span style={{ fontWeight: 600, color: '#047857' }}>{etaText}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons: Pill-style matching reference layout */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Button
             type="primary"
             size="large"
             block
             onClick={() => navigate(`/orders/${orderNumber || ''}`)}
             style={{
-              background: '#f97316',
-              borderColor: '#f97316',
-              height: 52,
-              borderRadius: 14,
+              background: '#0d3b42',
+              borderColor: '#0d3b42',
+              height: 50,
+              borderRadius: 999,
               fontWeight: 700,
-              fontSize: 16,
-              boxShadow: '0 4px 14px rgba(249,115,22,0.35)',
+              fontSize: 15,
+              boxShadow: '0 6px 18px rgba(13,59,66,0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
             }}
           >
-            <ShoppingOutlined style={{ fontSize: 18 }} />
+            <ShoppingOutlined style={{ fontSize: 17 }} />
             Track Order
           </Button>
 
@@ -217,13 +191,13 @@ export function OrderPlacedPage() {
             block
             onClick={() => navigate('/')}
             style={{
-              height: 50,
-              borderRadius: 14,
+              height: 48,
+              borderRadius: 999,
               fontWeight: 600,
-              fontSize: 15,
-              borderColor: '#86efac',
-              background: '#ecfdf5',
-              color: '#047857',
+              fontSize: 14.5,
+              borderColor: '#e2ddd0',
+              background: '#f2ece1',
+              color: '#334155',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -231,10 +205,11 @@ export function OrderPlacedPage() {
             }}
           >
             <HomeOutlined />
-            Go to Home
+            Back to Home
           </Button>
         </div>
       </div>
     </div>
   );
 }
+

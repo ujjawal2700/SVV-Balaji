@@ -394,7 +394,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/gst': <GstSettingsPage />,
   '/legal-policies': <LegalPoliciesPage />,
   '/settings/legal': <LegalPoliciesPage />,
-  '/coupons': <CouponsPage />,
+  '/coupons': <Navigate to="/schemes" replace />,
   '/referrals': <ReferralsPage />,
   '/profile': <ProfilePage />,
 };

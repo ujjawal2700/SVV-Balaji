@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { errorMessage } from '../api/client';
 import { riderApi, type VehicleType } from '../api/rider';
 import { useAuth } from '../auth/AuthContext';
@@ -325,9 +325,122 @@ export function EarningsScreen() {
   );
 }
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+interface SuccessData {
+  amount: number;
+  paymentId: string;
+}
+
 export function CashScreen() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['cash'], queryFn: riderApi.cash });
+  const meQ = useQuery({ queryKey: ['me'], queryFn: riderApi.me });
+  const toast = useToast();
+
+  const [showModal, setShowModal] = useState(false);
+  const [customAmount, setCustomAmount] = useState<string>('');
+  const [settling, setSettling] = useState(false);
+  const [successData, setSuccessData] = useState<SuccessData | null>(null);
+
   const c = q.data;
+
+  const handleSettle = async () => {
+    if (!c) return;
+    const amountNum = customAmount ? parseFloat(customAmount) : c.balance;
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast('Enter a valid settlement amount', 'error');
+      return;
+    }
+    if (amountNum > c.balance) {
+      toast(`Amount cannot exceed holding balance ₹${c.balance}`, 'error');
+      return;
+    }
+
+    setSettling(true);
+    try {
+      const order = await riderApi.createSettlementOrder(amountNum);
+      const cfg = order.clientConfig || {};
+
+      if (cfg.provider === 'mock') {
+        const mockPayId = `mockpay_${Date.now()}`;
+        await riderApi.verifyCashSettlement({
+          amount: order.amount,
+          gatewayOrderId: order.gatewayOrderId,
+          paymentId: mockPayId,
+          signature: 'mock_signature',
+        });
+        setShowModal(false);
+        setCustomAmount('');
+        setSettling(false);
+        setSuccessData({ amount: order.amount, paymentId: mockPayId });
+        qc.invalidateQueries({ queryKey: ['cash'] });
+        qc.invalidateQueries({ queryKey: ['dashboard'] });
+      } else {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          toast('Failed to load Razorpay gateway. Check internet connection.', 'error');
+          setSettling(false);
+          return;
+        }
+
+        const options = {
+          key: cfg.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+          amount: cfg.amount,
+          currency: cfg.currency || 'INR',
+          name: 'SVV Balaji Super Admin',
+          description: `Rider Cash Settlement (₹${order.amount})`,
+          order_id: order.gatewayOrderId,
+          prefill: {
+            name: meQ.data?.fullName,
+            contact: meQ.data?.phone,
+            email: meQ.data?.email,
+          },
+          handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+            try {
+              await riderApi.verifyCashSettlement({
+                amount: order.amount,
+                gatewayOrderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+              });
+              setShowModal(false);
+              setCustomAmount('');
+              setSuccessData({ amount: order.amount, paymentId: response.razorpay_payment_id });
+              qc.invalidateQueries({ queryKey: ['cash'] });
+              qc.invalidateQueries({ queryKey: ['dashboard'] });
+            } catch (err) {
+              toast(errorMessage(err, 'Settlement verification failed'), 'error');
+            } finally {
+              setSettling(false);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setSettling(false);
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      }
+    } catch (err) {
+      toast(errorMessage(err, 'Failed to start Razorpay payment'), 'error');
+      setSettling(false);
+    }
+  };
+
   return (
     <div className="app">
       <TopBar title="Cash in Hand" back />
@@ -337,15 +450,68 @@ export function CashScreen() {
             <div className="card" style={{ textAlign: 'center', padding: '24px 16px' }}>
               <div className="muted" style={{ fontSize: 14 }}>You are holding</div>
               <div style={{ fontSize: 38, fontWeight: 700, color: 'var(--ink)' }}>{inr(c.balance)}</div>
-              <div className="muted" style={{ fontSize: 13 }}>Hand this to your store. It is recorded there.</div>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Hand this to store or pay Super Admin directly via Razorpay.</div>
+              {c.balance > 0 ? (
+                <button
+                  className="btn primary"
+                  style={{ width: '100%', padding: '12px 16px', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  onClick={() => {
+                    setCustomAmount(String(c.balance));
+                    setShowModal(true);
+                  }}
+                >
+                  <Wallet size={18} /> Pay Administrator (Razorpay)
+                </button>
+              ) : null}
             </div>
+
+            {showModal ? (
+              <div className="card" style={{ border: '2px solid var(--orange)', background: '#fff', padding: 16, marginBottom: 16 }}>
+                <b style={{ fontSize: 16, color: 'var(--ink)', display: 'block', marginBottom: 8 }}>Settle Cash via Razorpay</b>
+                <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+                  Pay Super Admin directly via UPI/Netbanking/Card to clear your cash-in-hand collection.
+                </p>
+
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>Amount to Pay (₹)</label>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder={`Max ₹${c.balance}`}
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                  style={{ marginTop: 4, marginBottom: 12, width: '100%', fontSize: 16 }}
+                />
+
+                <div className="between" style={{ gap: 8 }}>
+                  <button
+                    className="btn secondary"
+                    style={{ flex: 1 }}
+                    disabled={settling}
+                    onClick={() => setShowModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn primary"
+                    style={{ flex: 1 }}
+                    disabled={settling}
+                    onClick={handleSettle}
+                  >
+                    {settling ? 'Opening Gateway...' : 'Pay via Razorpay'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="section-title">Activity</div>
             {c.entries.length === 0 ? <div className="card empty"><Cash size={40} /><div>No cash collected yet.</div></div> : (
               <div className="card" style={{ padding: '4px 16px' }}>
                 {c.entries.map((x, k) => (
                   <div key={x.id} className="between" style={{ padding: '12px 0', borderTop: k ? '1px solid var(--line)' : 'none' }}>
                     <div>
-                      <div style={{ fontSize: 14, color: 'var(--ink)' }}>{x.type === 'COD_COLLECTED' ? 'COD collected' : x.type === 'DEPOSITED' ? 'Handed to store' : 'Adjustment'}</div>
+                      <div style={{ fontSize: 14, color: 'var(--ink)' }}>
+                        {x.type === 'COD_COLLECTED' ? 'COD collected' : x.type === 'DEPOSITED' ? (x.note?.includes('Razorpay') ? 'Online Razorpay settlement' : 'Handed to store') : 'Adjustment'}
+                      </div>
                       <div className="muted" style={{ fontSize: 12 }}>{x.reference ?? ''} {date(x.createdAt)} {time(x.createdAt)}</div>
                     </div>
                     <b style={{ color: x.amount >= 0 ? 'var(--ink)' : 'var(--green)' }}>{x.amount >= 0 ? '+' : '−'}{inr(Math.abs(x.amount))}</b>
@@ -356,6 +522,113 @@ export function CashScreen() {
           </>
         )}
       </div>
+
+      {successData ? (
+        <div className="overlay" style={{ zIndex: 999, background: 'rgba(20, 20, 25, 0.55)', backdropFilter: 'blur(5px)' }}>
+          <div
+            className="modal"
+            style={{
+              maxWidth: 360,
+              borderRadius: 28,
+              padding: '28px 20px 24px',
+              textAlign: 'center',
+              background: '#fdfbf7',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              border: '1px solid #efe9dc',
+            }}
+          >
+            {/* Dark Circle Badge with Party Popper / Confetti Icon */}
+            <div
+              style={{
+                width: 90,
+                height: 90,
+                borderRadius: '50%',
+                background: '#0e3a40',
+                margin: '0 auto 20px',
+                display: 'grid',
+                placeItems: 'center',
+                boxShadow: '0 10px 25px rgba(14,58,64,0.3)',
+              }}
+            >
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#52c41a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5.8 11.3 2 22l10.7-3.8Z" fill="#ffc107" stroke="#ffc107" />
+                <path d="M4 3h.01M20 3h.01M12 2h.01M17 7h.01M7 7h.01M12 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+                <circle cx="18" cy="11" r="2" fill="#40a9ff" stroke="none" />
+                <circle cx="6" cy="7" r="1.5" fill="#ff7875" stroke="none" />
+                <circle cx="15" cy="4" r="1.5" fill="#52c41a" stroke="none" />
+                <path d="m11 13 8-8" stroke="#ff4d4f" strokeWidth="2.5" />
+                <path d="M14 17l6 2" stroke="#ff9c6e" strokeWidth="2" />
+              </svg>
+            </div>
+
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', margin: '0 0 6px' }}>
+              Payment Successful
+            </h2>
+            <p className="muted" style={{ fontSize: 13, margin: '0 0 18px' }}>
+              Thanks for your settlement.
+            </p>
+
+            <div
+              style={{
+                background: '#f3efe6',
+                borderRadius: 16,
+                padding: '14px 16px',
+                marginBottom: 22,
+                fontSize: 13,
+                textAlign: 'left',
+              }}
+            >
+              <div className="between" style={{ marginBottom: 6 }}>
+                <span className="muted">Amount Settled</span>
+                <b style={{ fontSize: 18, color: 'var(--green-dark)' }}>{inr(successData.amount)}</b>
+              </div>
+              <div className="between">
+                <span className="muted">Payment Ref ID</span>
+                <b style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--ink)' }}>{successData.paymentId}</b>
+              </div>
+            </div>
+
+            {/* Pill Buttons */}
+            <button
+              className="btn primary"
+              style={{
+                width: '100%',
+                padding: '14px',
+                fontSize: 15,
+                fontWeight: 600,
+                borderRadius: 999,
+                background: '#0e3a40',
+                borderColor: '#0e3a40',
+                marginBottom: 10,
+                color: '#fff',
+              }}
+              onClick={() => setSuccessData(null)}
+            >
+              View Cash History
+            </button>
+
+            <button
+              className="btn secondary"
+              style={{
+                width: '100%',
+                padding: '14px',
+                fontSize: 15,
+                fontWeight: 600,
+                borderRadius: 999,
+                background: '#f2ece1',
+                color: '#222',
+                border: '1px solid #e0d8c8',
+              }}
+              onClick={() => {
+                setSuccessData(null);
+                navigate('/');
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

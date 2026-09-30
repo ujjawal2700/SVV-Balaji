@@ -188,6 +188,8 @@ export const riderApi = {
 
   earnings: (from?: string, to?: string) => d<Earnings>(api.get('/rider/earnings', { params: { from, to } })),
   cash: () => d<{ balance: number; entries: Array<{ id: string; type: string; amount: number; reference: string | null; note: string | null; createdAt: string }> }>(api.get('/rider/cash')),
+  createSettlementOrder: (amount?: number) => d<{ gatewayOrderId: string; clientConfig: any; amount: number; balance: number }>(api.post('/rider/cash/settle-order', { amount })),
+  verifyCashSettlement: (input: { amount: number; gatewayOrderId: string; paymentId: string; signature: string }) => d<{ success: boolean; settledAmount: number; newBalance: number }>(api.post('/rider/cash/settle-verify', input)),
   notifications: () => d<Notification[]>(api.get('/rider/notifications')),
   markRead: (ids?: string[]) => d(api.patch('/rider/notifications/read', { ids })),
   registerPushDevice: (token: string) => d(api.post('/rider/push-devices', { token, app: 'RIDER' })),

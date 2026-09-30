@@ -952,16 +952,6 @@ export const NAV_SECTIONS: NavSection[] = [
         endpoints: ['GET /legal-policies', 'PUT /legal-policies'],
         workstream: 'WS2.5',
       },
-      {
-        key: 'coupons',
-        path: '/coupons',
-        label: 'Coupons',
-        permission: 'COUPONS_VIEW',
-        description: 'Coupon codes validated by the server at checkout.',
-        endpoints: ['GET /coupons', 'POST /coupons', 'PATCH /coupons/:id'],
-        workstream: 'WS2.5',
-        zone: 'commerce',
-      },
     ],
   },
 ];

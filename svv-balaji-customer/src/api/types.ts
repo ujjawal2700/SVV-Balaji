@@ -67,9 +67,9 @@ export interface StorefrontPending {
 export type VerifyOtpResponse = StorefrontSession | StorefrontPending;
 
 export function isStorefrontSession(
-  response: VerifyOtpResponse,
+  response: unknown,
 ): response is StorefrontSession {
-  return 'accessToken' in response;
+  return typeof response === 'object' && response !== null && 'accessToken' in response;
 }
 
 export interface RegisterRetailerPayload {
@@ -89,10 +89,7 @@ export interface RegisterRetailerPayload {
   referralCode?: string;
 }
 
-export interface RegisterRetailerResponse {
-  status: StorefrontAccountStatus;
-  message: string;
-}
+export type RegisterRetailerResponse = StorefrontSession | { status: StorefrontAccountStatus; message: string };
 
 export interface UpdateStorefrontProfilePayload {
   fullName?: string;

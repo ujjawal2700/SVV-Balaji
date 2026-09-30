@@ -64,6 +64,7 @@ export interface CustomerAuthContextType {
   requestOtp: (phone: string, audience?: AuthAudience) => Promise<RequestOtpResponse>;
   verifyOtp: (phone: string, code: string, audience: AuthAudience, fullName?: string, referralCode?: string) => Promise<VerifyOtpOutcome>;
   registerRetailer: (payload: RegisterRetailerPayload) => Promise<RegisterRetailerResponse>;
+  refreshProfile: () => Promise<void>;
   logout: () => void;
 }
 
@@ -153,6 +154,27 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     setRetailerProfile(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!tokenStore.getAccessToken()) return;
+    try {
+      const account = await storefrontAuthApi.me();
+      applyAccount(account);
+    } catch {
+      // ignore
+    }
+  }, [applyAccount]);
+
+  // Polling for live status updates while retailer is PENDING approval
+  useEffect(() => {
+    if (role !== 'RETAILER' || retailerProfile?.kycStatus !== 'PENDING') return;
+
+    const timer = setInterval(() => {
+      void refreshProfile();
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [role, retailerProfile?.kycStatus, refreshProfile]);
+
   // Boot-time session restore — mirrors @shared/auth/AuthProvider's pattern,
   // against the storefront's own refresh token instead of the staff one.
   useEffect(() => {
@@ -208,8 +230,15 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   );
 
   const registerRetailer = useCallback(
-    (payload: RegisterRetailerPayload) => storefrontAuthApi.registerRetailer(payload),
-    [],
+    async (payload: RegisterRetailerPayload) => {
+      const response = await storefrontAuthApi.registerRetailer(payload);
+      if (isStorefrontSession(response)) {
+        tokenStore.set({ accessToken: response.accessToken, refreshToken: response.refreshToken });
+        applyAccount(response.account);
+      }
+      return response;
+    },
+    [applyAccount],
   );
 
   const logout = useCallback(() => {
@@ -233,9 +262,10 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       requestOtp,
       verifyOtp,
       registerRetailer,
+      refreshProfile,
       logout,
     }),
-    [role, initialising, customerProfile, retailerProfile, requestOtp, verifyOtp, registerRetailer, logout],
+    [role, initialising, customerProfile, retailerProfile, requestOtp, verifyOtp, registerRetailer, refreshProfile, logout],
   );
 
   return <CustomerAuthContext.Provider value={value}>{children}</CustomerAuthContext.Provider>;

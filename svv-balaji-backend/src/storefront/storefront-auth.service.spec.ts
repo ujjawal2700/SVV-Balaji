@@ -324,11 +324,13 @@ describe('StorefrontAuthService', () => {
       ...over,
     });
 
-    it('creates a PENDING_APPROVAL account, not a session, and no Customer yet', async () => {
+    it('creates a PENDING_APPROVAL account and returns a session with account.status=PENDING_APPROVAL', async () => {
       const code = await requestAndGetCode('9000011111');
-      const result = await service.registerRetailer({ ...registerDto(), code } as any);
+      const result: any = await service.registerRetailer({ ...registerDto(), code } as any);
 
-      expect(result.status).toBe('PENDING_APPROVAL');
+      // Now returns a session so the retailer stays logged in on the Under Review page.
+      expect(result.accessToken).toBeDefined();
+      expect(result.account.status).toBe('PENDING_APPROVAL');
       expect(accounts).toHaveLength(1);
       expect(accounts[0].customerId).toBeUndefined();
       expect(customers).toHaveLength(0);
