@@ -3028,5 +3028,7 @@ added to the home screen, iOS 16.4+, for web push at all).
 **Later 28 Sep — storefront notifications use the Desi Tokri logo.** Customer/retailer app push (service worker + in-app
 pop-up) and its Notifications page now use `public/images/desi-tokri-emblem.png` (the round "dt" badge - the full
 `desi-tokri.png` is mostly whitespace and unreadable at icon size); fallback title "Desi Tokri". Removed the
-`svv-balaji.png` copy added to the customer app earlier. Admin Push Notifications preview shows the Desi Tokri brand when
-the audience is Customers/Retailers. Riders, field and admin keep the SVV Balaji logo.
+`svv-balaji.png` copy added to the customer app earlier. 
+## 2026-09-30 — Delivery Vercel Config (Raunak, via agent)
+
+- **Vercel deployment config added**: Created `svv-balaji-rider/vercel.json` with SPA rewrite rule `/(.*)` -> `/index.html` matching `svv-balaji-admin` and `svv-balaji-field` pattern.
