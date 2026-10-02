@@ -73,12 +73,14 @@ export class WalletService {
   async getBalance(customerId: string) {
     const customer = await this.prisma.customer.findUniqueOrThrow({
       where: { id: customerId },
-      select: { referralCoinBalance: true, loyaltyCoinBalance: true, coinBalance: true },
+      select: { referralCoinBalance: true, loyaltyCoinBalance: true, coinBalance: true, refundWalletBalance: true },
     });
     return {
       referralBalance: customer.referralCoinBalance,
       loyaltyBalance: customer.loyaltyCoinBalance,
       totalBalance: customer.coinBalance,
+      /** Rupees, not coins - see RefundWalletService. */
+      refundWalletBalance: Number(customer.refundWalletBalance),
     };
   }
 

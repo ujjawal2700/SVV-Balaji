@@ -1,5 +1,6 @@
 import { OrderEventsService } from '../realtime/order-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { RefundWalletService } from '../wallet/refund-wallet.service';
 import { WalletService } from '../wallet/wallet.service';
 import { BadRequestException } from '@nestjs/common';
 import { SalesService } from './sales.service';
@@ -359,6 +360,7 @@ describe('SalesService', () => {
       wallet as unknown as WalletService,
       events as unknown as OrderEventsService,
       invoices as unknown as InvoicesService,
+      { reverseOrderSpend: jest.fn(async () => 0) } as unknown as RefundWalletService,
     );
   });
 

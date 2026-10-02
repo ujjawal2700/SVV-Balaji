@@ -61,7 +61,7 @@ export class TaskFlowService {
     private readonly earnings: EarningsService,
   ) {}
 
-  private async mine(riderId: string, taskId: string, allowed: DeliveryTaskStatus[]) {
+  private async mine(riderId: string, taskId: string, allowed: DeliveryTaskStatus[], anyKind = false) {
     const rider = await this.prisma.rider.findUnique({ where: { id: riderId }, select: { status: true, fullName: true, phone: true } });
     if (rider?.status !== 'ACTIVE') throw new ForbiddenException('Your rider account is not active');
     const task = await this.prisma.deliveryTask.findUnique({
@@ -69,6 +69,10 @@ export class TaskFlowService {
       include: { warehouse: { select: { latitude: true, longitude: true, name: true } } },
     });
     if (!task || task.riderId !== riderId) throw new NotFoundException('Task not found');
+    // Return pickups and exchange replacements have their own steps (stock, codes) - /rider/return-tasks.
+    if (!anyKind && task.kind !== 'ORDER_DELIVERY') {
+      throw new ConflictException({ code: 'USE_RETURN_TASK_ACTIONS', message: 'This is a return / exchange trip - use its own actions' });
+    }
     if (!allowed.includes(task.status)) {
       throw new ConflictException({ code: 'WRONG_STATE', message: `This delivery is ${task.status.replace(/_/g, ' ').toLowerCase()}`, status: task.status });
     }
@@ -228,7 +232,7 @@ export class TaskFlowService {
 
   /** Before pickup, a rider can hand a task back (it is dispatched to someone else). No pay. */
   async release(riderId: string, taskId: string, dto: ReleaseDto) {
-    const { task } = await this.mine(riderId, taskId, ['ASSIGNED', 'AT_PICKUP']);
+    const { task } = await this.mine(riderId, taskId, ['ASSIGNED', 'AT_PICKUP'], true);
     const updated = await this.prisma.deliveryTask.update({
       where: { id: taskId }, data: { status: 'READY_FOR_PICKUP', riderId: null, assignedAt: null, arrivedPickupAt: null, arrivedPickupVerified: false },
     });

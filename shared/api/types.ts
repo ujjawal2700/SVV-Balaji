@@ -1166,7 +1166,7 @@ export interface RawMaterialBatch {
   updatedAt: string;
 }
 
-export const MOVEMENT_TYPES = ['PRODUCTION_INWARD', 'STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT'] as const;
+export const MOVEMENT_TYPES = ['PRODUCTION_INWARD', 'STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT', 'RETURN_INWARD', 'RETURN_DAMAGED'] as const;
 export type StockMovementType = (typeof MOVEMENT_TYPES)[number];
 
 export interface StockMovement {
@@ -1750,6 +1750,8 @@ export interface StorefrontProductCard {
   badge: string | null;
   rating: number | null;
   reviewCount: number | null;
+  moqB2B?: number | null;
+  minOrderQuantity?: number | null;
 }
 
 export interface StorefrontVariant {

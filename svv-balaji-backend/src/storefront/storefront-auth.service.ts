@@ -246,8 +246,9 @@ export class StorefrontAuthService {
     const phone = normalisePhone(dto.phone);
     await this.consumeChallenge(phone, dto.code);
 
-    const gstin = dto.gstin.trim().toUpperCase();
-    if (!GSTIN_PATTERN.test(gstin)) {
+    // GSTIN is optional — validate format and uniqueness only when provided.
+    const gstin = dto.gstin?.trim().toUpperCase() ?? null;
+    if (gstin && !GSTIN_PATTERN.test(gstin)) {
       throw new BadRequestException(
         `"${gstin}" is not a valid GSTIN - expected 15 characters, e.g. 29ABCDE1234F1Z5`,
       );
@@ -262,11 +263,13 @@ export class StorefrontAuthService {
       );
     }
 
-    const gstinClash = await this.prisma.customerAccount.findFirst({
-      where: { gstin, status: { not: CustomerAccountStatus.REJECTED } },
-    });
-    if (gstinClash) {
-      throw new BadRequestException(`GSTIN ${gstin} is already registered.`);
+    if (gstin) {
+      const gstinClash = await this.prisma.customerAccount.findFirst({
+        where: { gstin, status: { not: CustomerAccountStatus.REJECTED } },
+      });
+      if (gstinClash) {
+        throw new BadRequestException(`GSTIN ${gstin} is already registered.`);
+      }
     }
 
     // Validated now, immediately, so a typo is caught while the applicant is
@@ -289,8 +292,10 @@ export class StorefrontAuthService {
       status: CustomerAccountStatus.PENDING_APPROVAL,
       phoneVerifiedAt: new Date(),
       businessName: dto.businessName,
-      gstin,
+      gstin: gstin ?? undefined,
+      udyamRegistration: dto.udyamRegistration?.trim().toUpperCase(),
       pan: dto.pan?.trim().toUpperCase(),
+      aadhaar: dto.aadhaar?.trim(),
       addressLine: dto.addressLine,
       city: dto.city,
       district: dto.district,
@@ -698,17 +703,19 @@ export class StorefrontAuthService {
     if (account.status !== CustomerAccountStatus.PENDING_APPROVAL) {
       throw new BadRequestException(`Only a pending registration can be approved - this one is ${account.status}`);
     }
-    if (!account.gstin || !account.businessName || !account.addressLine) {
-      throw new BadRequestException('Registration is missing required business details');
+    if ((!account.gstin && !account.udyamRegistration) || !account.businessName || !account.addressLine) {
+      throw new BadRequestException('Registration is missing required business details (GSTIN or Udyam Registration)');
     }
 
-    const gstinClash = await this.prisma.customer.findFirst({
-      where: { gstin: account.gstin, status: { not: CustomerStatus.INACTIVE } },
-    });
-    if (gstinClash) {
-      throw new BadRequestException(
-        `GSTIN ${account.gstin} is already registered to ${gstinClash.name} (${gstinClash.customerCode})`,
-      );
+    if (account.gstin) {
+      const gstinClash = await this.prisma.customer.findFirst({
+        where: { gstin: account.gstin, status: { not: CustomerStatus.INACTIVE } },
+      });
+      if (gstinClash) {
+        throw new BadRequestException(
+          `GSTIN ${account.gstin} is already registered to ${gstinClash.name} (${gstinClash.customerCode})`,
+        );
+      }
     }
 
     const { updated, referred } = await this.prisma.$transaction(async (tx) => {
@@ -726,6 +733,9 @@ export class StorefrontAuthService {
           phone: account.phone,
           email: account.email,
           gstin: account.gstin,
+          udyamRegistration: account.udyamRegistration,
+          pan: account.pan,
+          aadhaar: account.aadhaar,
           billingAddress: account.addressLine!,
           city: account.city,
           district: account.district,

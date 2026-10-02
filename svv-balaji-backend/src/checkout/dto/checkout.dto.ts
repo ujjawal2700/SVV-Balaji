@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMode } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 
 export class CheckoutItemDto {
@@ -35,6 +35,12 @@ export class CheckoutDto {
   })
   @IsOptional() @IsInt() @Min(0) redeemReferralPoints?: number;
   @ApiPropertyOptional({ enum: PaymentMode }) @IsOptional() @IsEnum(PaymentMode) paymentMode?: PaymentMode;
+  @ApiPropertyOptional({
+    description:
+      'Pay as much as possible from the rupee Refund Wallet (never more than the order total). ' +
+      'The rest is paid ONLINE or COD; not combinable with CREDIT terms. The server decides the amount.',
+  })
+  @IsOptional() @IsBoolean() useRefundWallet?: boolean;
   @ApiPropertyOptional({
     enum: ['STANDARD', 'QUICK'],
     description: 'QUICK only when the quote offered it as available; otherwise 409 QUICK_UNAVAILABLE. Default STANDARD.',

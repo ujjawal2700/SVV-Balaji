@@ -33,6 +33,6 @@ import { DeliveryZonesModule } from './zones/zones.module';
     EarningsService, DispatchService, TaskFlowService,
     RiderAuthService, RiderJwtStrategy, RidersService, RiderGateway,
   ],
-  exports: [DispatchService],
+  exports: [DispatchService, EarningsService, DeliverySettingsService, FailureReasonsService],
 })
 export class DeliveryModule {}

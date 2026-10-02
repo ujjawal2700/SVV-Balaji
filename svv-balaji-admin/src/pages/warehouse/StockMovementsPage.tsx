@@ -14,6 +14,8 @@ const MOVEMENT_COLOURS: Record<StockMovementType, string> = {
   STOCK_OUT: 'red',
   TRANSFER: 'blue',
   ADJUSTMENT: 'gold',
+  RETURN_INWARD: 'green',
+  RETURN_DAMAGED: 'red',
 };
 
 const label = (value: string) =>

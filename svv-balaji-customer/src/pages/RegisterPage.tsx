@@ -35,7 +35,9 @@ export function RegisterPage() {
   const [phone, setPhone] = useState((location.state as { phone?: string })?.phone ?? '');
   const [email, setEmail] = useState('');
   const [gstin, setGstin] = useState('');
+  const [udyam, setUdyam] = useState('');
   const [panNumber, setPanNumber] = useState('');
+  const [aadhaar, setAadhaar] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [district, setDistrict] = useState('');
@@ -100,12 +102,25 @@ export function RegisterPage() {
       }
     } else if (currentStep === 1) {
       const gstinValue = gstin.trim().toUpperCase();
-      if (!GSTIN_PATTERN.test(gstinValue)) {
+      if (gstinValue && !GSTIN_PATTERN.test(gstinValue)) {
         message.error('Enter a valid 15-character GSTIN, e.g. 29ABCDE1234F1Z5.');
+        return;
+      }
+      const udyamValue = udyam.trim().toUpperCase();
+      if (udyamValue && !/^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/.test(udyamValue)) {
+        message.error('Enter a valid Udyam Registration, e.g. UDYAM-MH-18-0000001.');
+        return;
+      }
+      if (!panNumber.trim() && !aadhaar.trim()) {
+        message.error('Please provide either PAN or Aadhaar number.');
         return;
       }
       if (panNumber.trim() && panNumber.trim().length !== 10) {
         message.error('PAN, if provided, must be 10 characters.');
+        return;
+      }
+      if (aadhaar.trim() && !/^\d{12}$/.test(aadhaar.trim())) {
+        message.error('Aadhaar, if provided, must be 12 digits.');
         return;
       }
     }
@@ -133,8 +148,10 @@ export function RegisterPage() {
         fullName: ownerName.trim(),
         businessName: storeName.trim(),
         email: email.trim() || undefined,
-        gstin: gstin.trim().toUpperCase(),
-        pan: panNumber.trim() || undefined,
+        gstin: gstin.trim().toUpperCase() || undefined,
+        udyamRegistration: udyam.trim().toUpperCase() || undefined,
+        pan: panNumber.trim().toUpperCase() || undefined,
+        aadhaar: aadhaar.trim() || undefined,
         addressLine: address.trim(),
         city: city.trim(),
         district: district.trim() || undefined,
@@ -354,12 +371,12 @@ export function RegisterPage() {
                   {currentStep === 1 && (
                     <div className="fade-in">
                       <Typography.Title level={4} style={{ marginBottom: 24, color: '#0f172a' }}>
-                        GSTIN & Tax Compliance
+                        Business & Compliance
                       </Typography.Title>
                       <Row gutter={[20, 20]}>
                         <Col xs={24} md={12}>
                           <Typography.Text strong style={{ display: 'block', marginBottom: 8, color: '#475569' }}>
-                            GSTIN Number (15-Digit) *
+                            GSTIN Number (Optional)
                           </Typography.Text>
                           <Input
                             size="large"
@@ -372,7 +389,20 @@ export function RegisterPage() {
                         </Col>
                         <Col xs={24} md={12}>
                           <Typography.Text strong style={{ display: 'block', marginBottom: 8, color: '#475569' }}>
-                            Business PAN (10-Digit)
+                            Udyam Registration (Optional)
+                          </Typography.Text>
+                          <Input
+                            size="large"
+                            placeholder="e.g. UDYAM-MH-18-0000001"
+                            value={udyam}
+                            onChange={(e) => setUdyam(e.target.value.toUpperCase().slice(0, 19))}
+                            maxLength={19}
+                            style={{ borderRadius: 12, height: 48 }}
+                          />
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Typography.Text strong style={{ display: 'block', marginBottom: 8, color: '#475569' }}>
+                            Business PAN *
                           </Typography.Text>
                           <Input
                             size="large"
@@ -382,6 +412,24 @@ export function RegisterPage() {
                             maxLength={10}
                             style={{ borderRadius: 12, height: 48 }}
                           />
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Typography.Text strong style={{ display: 'block', marginBottom: 8, color: '#475569' }}>
+                            Aadhaar Number *
+                          </Typography.Text>
+                          <Input
+                            size="large"
+                            placeholder="12-digit Aadhaar"
+                            value={aadhaar}
+                            onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                            maxLength={12}
+                            style={{ borderRadius: 12, height: 48 }}
+                          />
+                        </Col>
+                        <Col xs={24}>
+                           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                             * Please provide either your Business PAN or Aadhaar number. Both are not required.
+                           </Typography.Text>
                         </Col>
                         <Col xs={24} md={12}>
                           <Typography.Text strong style={{ display: 'block', marginBottom: 8, color: '#475569' }}>

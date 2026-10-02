@@ -85,6 +85,13 @@ export function CheckoutPage() {
   const cart = useCart();
   const { role } = useCustomerAuth();
 
+  const isRetailer = role === 'RETAILER';
+  const violatingLines = useMemo(
+    () => (isRetailer ? cart.lines.filter((l) => l.quantity < (l.moqB2B ?? 1)) : []),
+    [isRetailer, cart.lines],
+  );
+  const hasMoqViolation = violatingLines.length > 0;
+
   const [addressId, setAddressId] = useState<string | null>(null);
   const [addressModal, setAddressModal] = useState(false);
   const [couponInput, setCouponInput] = useState('');
@@ -92,6 +99,7 @@ export function CheckoutPage() {
   const [redeem, setRedeem] = useState(0);
   const [redeemReferral, setRedeemReferral] = useState(0);
   const [mode, setMode] = useState<PaymentMode | undefined>();
+  const [useWallet, setUseWallet] = useState(false);
   // Quick is pre-selected the first time the quote offers it; the customer can switch.
   const [speed, setSpeed] = useState<'STANDARD' | 'QUICK'>('STANDARD');
   const [speedTouched, setSpeedTouched] = useState(false);
@@ -120,9 +128,10 @@ export function CheckoutPage() {
             redeemReferralPoints: redeemReferral || undefined,
             paymentMode: mode,
             deliverySpeed: speed,
+            useRefundWallet: useWallet || undefined,
           }
         : null,
-    [addressId, cart.lines, couponCode, redeem, redeemReferral, mode, speed],
+    [addressId, cart.lines, couponCode, redeem, redeemReferral, mode, speed, useWallet],
   );
 
   const quoteQuery = useQuery({
@@ -225,6 +234,10 @@ export function CheckoutPage() {
   };
 
   const placeOrder = async () => {
+    if (hasMoqViolation) {
+      message.error('Some items in your cart do not meet the retailer minimum order quantity (MOQ).');
+      return;
+    }
     if (!request || !quote) return;
     setPlacing(true);
     try {
@@ -293,15 +306,13 @@ export function CheckoutPage() {
 
   return (
     <div className="checkout-page" style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 110 }}>
-      {/* Sticky Header */}
+      {/* Page Header */}
       <header
+        className="checkout-top-header"
         style={{
           background: '#fff',
           padding: '14px 20px',
           borderBottom: '1px solid #e2e8f0',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
         }}
       >
@@ -343,6 +354,21 @@ export function CheckoutPage() {
 
       {/* Main Content Area */}
       <main className="checkout-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
+        {hasMoqViolation && (
+          <div style={{ marginBottom: 20, padding: '14px 18px', background: '#fef2f2', borderRadius: 12, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <Typography.Text strong style={{ color: '#b91c1c', fontSize: 14, display: 'block' }}>
+                ⚠️ Cart Contains Items Below Retailer Minimum Order Quantity (MOQ)
+              </Typography.Text>
+              <div style={{ color: '#991b1b', fontSize: 13, marginTop: 4 }}>
+                {violatingLines.map((vl) => `${vl.productName} (Current: ${vl.quantity}, Minimum: ${vl.moqB2B ?? 1} pcs)`).join(' • ')}
+              </div>
+            </div>
+            <Button type="primary" danger onClick={() => navigate('/cart')} style={{ borderRadius: 8, fontWeight: 600 }}>
+              Return to Cart to Fix Quantities
+            </Button>
+          </div>
+        )}
         <AntRow gutter={[{ xs: 0, lg: 24 }, { xs: 8, lg: 24 }]}>
           {/* Left Column: Form Details (Address, Fulfillment, Coupons, Payment) */}
           <Col xs={24} lg={15} xl={16}>
@@ -804,6 +830,23 @@ export function CheckoutPage() {
                       green={quote.totals.deliveryFee === 0}
                     />
 
+                    {(quote.refundWallet?.balance ?? 0) > 0 ? (
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                          background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '8px 10px', marginTop: 4,
+                        }}
+                      >
+                        <span style={{ fontSize: 13, color: '#166534' }}>
+                          <WalletOutlined /> Use Refund Wallet ({formatInr(quote.refundWallet!.balance)})
+                        </span>
+                        <Switch size="small" checked={useWallet} onChange={setUseWallet} />
+                      </div>
+                    ) : null}
+                    {(quote.totals.refundWalletApplied ?? 0) > 0 ? (
+                      <PriceRow label="Paid from Refund Wallet" value={`− ${formatInr(quote.totals.refundWalletApplied!)}`} green />
+                    ) : null}
+
                     <Divider style={{ margin: '10px 0' }} />
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
@@ -816,7 +859,7 @@ export function CheckoutPage() {
                         </Typography.Text>
                       </div>
                       <Typography.Text strong style={{ fontSize: 22, color: '#0f172a' }}>
-                        {formatInr(quote.totals.totalPayable)}
+                        {formatInr(quote.totals.amountDue ?? quote.totals.totalPayable)}
                       </Typography.Text>
                     </div>
                   </div>
@@ -828,11 +871,11 @@ export function CheckoutPage() {
                       size="large"
                       block
                       loading={placing}
-                      disabled={!quote || placing}
+                      disabled={!quote || placing || hasMoqViolation}
                       onClick={() => void placeOrder()}
                       style={{
-                        background: '#f97316',
-                        borderColor: '#f97316',
+                        background: hasMoqViolation ? '#9ca3af' : '#f97316',
+                        borderColor: hasMoqViolation ? '#9ca3af' : '#f97316',
                         height: 50,
                         borderRadius: 12,
                         fontSize: 16,
@@ -841,13 +884,18 @@ export function CheckoutPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
-                        boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
+                        boxShadow: hasMoqViolation ? 'none' : '0 4px 14px rgba(249,115,22,0.3)',
+                        cursor: hasMoqViolation ? 'not-allowed' : 'pointer',
                       }}
                     >
                       <LockOutlined />
-                      {quote.payment.mode === 'ONLINE' && quote.totals.totalPayable > 0
-                        ? `Pay ${formatInr(quote.totals.totalPayable)}`
-                        : `Place Order · ${formatInr(quote.totals.totalPayable)}`}
+                      {hasMoqViolation
+                        ? 'Update Quantities to Order'
+                        : quote
+                          ? quote.payment.mode === 'ONLINE' && (quote.totals.amountDue ?? quote.totals.totalPayable) > 0
+                            ? `Pay ${formatInr(quote.totals.amountDue ?? quote.totals.totalPayable)}`
+                            : `Place Order · ${formatInr(quote.totals.amountDue ?? quote.totals.totalPayable)}`
+                          : 'Place Order'}
                     </Button>
                   </div>
                 </Card>
@@ -906,7 +954,7 @@ export function CheckoutPage() {
                 TOTAL PAYABLE
               </Typography.Text>
               <Typography.Text strong style={{ fontSize: 18, color: '#0f172a' }}>
-                {formatInr(quote.totals.totalPayable)}
+                {formatInr(quote.totals.amountDue ?? quote.totals.totalPayable)}
               </Typography.Text>
             </div>
           ) : (
@@ -919,11 +967,11 @@ export function CheckoutPage() {
             type="primary"
             size="large"
             loading={placing}
-            disabled={!quote || placing}
+            disabled={!quote || placing || hasMoqViolation}
             onClick={() => void placeOrder()}
             style={{
-              background: '#f97316',
-              borderColor: '#f97316',
+              background: hasMoqViolation ? '#9ca3af' : '#f97316',
+              borderColor: hasMoqViolation ? '#9ca3af' : '#f97316',
               height: 46,
               padding: '0 24px',
               borderRadius: 10,
@@ -931,9 +979,16 @@ export function CheckoutPage() {
               fontWeight: 700,
               flex: 1,
               maxWidth: 240,
+              cursor: hasMoqViolation ? 'not-allowed' : 'pointer',
             }}
           >
-            {quote ? (quote.payment.mode === 'ONLINE' && quote.totals.totalPayable > 0 ? 'Pay Now' : 'Place Order') : 'Place Order'}
+            {hasMoqViolation
+              ? 'Check MOQ'
+              : quote
+                ? quote.payment.mode === 'ONLINE' && (quote.totals.amountDue ?? quote.totals.totalPayable) > 0
+                  ? 'Pay Now'
+                  : 'Place Order'
+                : 'Place Order'}
           </Button>
         </div>
       </div>

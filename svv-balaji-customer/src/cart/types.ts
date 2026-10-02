@@ -43,6 +43,11 @@ export interface CartLine {
    * quantity rather than the quantity of the last add.
    */
   priceTiers?: CartPriceTier[] | null;
+
+  /** Minimum order quantity for B2B retailers. */
+  moqB2B?: number | null;
+  /** Minimum order quantity for B2C consumers. */
+  minOrderQuantity?: number | null;
 }
 
 export interface CartState {

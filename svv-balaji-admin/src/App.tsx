@@ -80,6 +80,9 @@ const InvoicesPage = lazy(() =>
 const GstSettingsPage = lazy(() =>
   import('./pages/invoices/GstSettingsPage').then((m) => ({ default: m.GstSettingsPage })),
 );
+const CustomerReturnsPage = lazy(() => import('./pages/returns/ReturnsQueuePage').then((m) => ({ default: m.CustomerReturnsPage })));
+const RetailerReturnsPage = lazy(() => import('./pages/returns/ReturnsQueuePage').then((m) => ({ default: m.RetailerReturnsPage })));
+const ReturnSettingsPage = lazy(() => import('./pages/returns/ReturnSettingsPage').then((m) => ({ default: m.ReturnSettingsPage })));
 const ReceivablesPage = lazy(() =>
   import('./pages/receivables/ReceivablesPage').then((m) => ({ default: m.ReceivablesPage })),
 );
@@ -326,6 +329,9 @@ const SCREENS: Record<string, ReactElement> = {
   '/seed-distribution': <SeedDistributionPage />,
   '/seed-stock': <SeedStockPage />,
   '/receivables': <ReceivablesPage />,
+  '/returns/customers': <CustomerReturnsPage />,
+  '/returns/retailers': <RetailerReturnsPage />,
+  '/settings/returns': <ReturnSettingsPage />,
   '/invoices': <InvoicesPage />,
   '/delivery-zones': <DeliveryZonesPage />,
   '/riders': <RidersPage />,

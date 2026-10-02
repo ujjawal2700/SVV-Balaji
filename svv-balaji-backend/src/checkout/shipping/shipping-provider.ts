@@ -23,10 +23,27 @@ export interface ShipmentResult {
   providerRef: string | null;
 }
 
-/** The 3PL that carries orders leaving the central warehouse. */
+/**
+ * A reverse pickup: the courier collects from the customer and brings it to
+ * our warehouse. `orderNumber` must be unique per booking (a re-booked pickup
+ * uses a suffixed number), so it is the return request number, not the order's.
+ */
+export interface ReturnShipmentRequest {
+  returnNumber: string;
+  orderDate: Date;
+  /** The customer - where the courier collects from. */
+  pickup: ShipmentRequest['address'];
+  items: ShipmentRequest['items'];
+  subtotal: number;
+  /** Shown to the courier as the QC/return reason. */
+  reason?: string;
+}
+
+/** The 3PL that carries orders leaving the central warehouse - and returns coming back to it. */
 export interface ShippingProvider {
   readonly provider: 'mock' | 'shiprocket';
   createShipment(req: ShipmentRequest): Promise<ShipmentResult>;
+  createReturnShipment(req: ReturnShipmentRequest): Promise<ShipmentResult>;
 }
 
 export const SHIPPING_PROVIDER = Symbol('SHIPPING_PROVIDER');
@@ -51,6 +68,18 @@ export class MockShippingProvider implements ShippingProvider {
       trackingUrl: `https://tracking.example.test/${awb}`,
       labelUrl: `https://tracking.example.test/label/${awb}.pdf`,
       providerRef: `mock-${req.orderNumber}`,
+    };
+  }
+
+  async createReturnShipment(req: ReturnShipmentRequest): Promise<ShipmentResult> {
+    const awb = `MOCKR${randomInt(10_000_000, 99_999_999)}`;
+    return {
+      provider: 'mock',
+      awb,
+      courier: 'Mock Reverse',
+      trackingUrl: `https://tracking.example.test/${awb}`,
+      labelUrl: null,
+      providerRef: `mock-${req.returnNumber}`,
     };
   }
 }
@@ -147,6 +176,50 @@ export class ShiprocketProvider implements ShippingProvider {
       courier: assigned.response?.data?.courier_name ?? 'Shiprocket',
       trackingUrl: `https://shiprocket.co/tracking/${awb}`,
       labelUrl,
+      providerRef: String(created.shipment_id),
+    };
+  }
+
+  /**
+   * Shiprocket "return order": POST /orders/create/return (pickup = customer,
+   * delivery = our pickup location), then an AWB with is_return = 1. Same
+   * caveat as createShipment - written to the documented contract, NOT yet run
+   * against a live account.
+   */
+  async createReturnShipment(req: ReturnShipmentRequest): Promise<ShipmentResult> {
+    const p = req.pickup;
+    const created = await this.call<{ order_id: number; shipment_id: number }>('/orders/create/return', {
+      order_id: req.returnNumber,
+      order_date: req.orderDate.toISOString().slice(0, 10),
+      pickup_customer_name: p.fullName,
+      pickup_address: p.line1,
+      pickup_address_2: p.line2 ?? '',
+      pickup_city: p.city,
+      pickup_state: p.state,
+      pickup_country: 'India',
+      pickup_pincode: p.pincode,
+      pickup_phone: p.phone,
+      shipping_customer_name: this.pickup,
+      // Shiprocket resolves the warehouse address from the named pickup location.
+      shipping_address: this.pickup,
+      shipping_city: '', shipping_state: '', shipping_country: 'India', shipping_pincode: '', shipping_phone: '',
+      order_items: req.items.map((i) => ({ name: i.name, sku: i.sku, units: i.units, selling_price: i.sellingPrice, qc_enable: false })),
+      payment_method: 'Prepaid',
+      sub_total: req.subtotal,
+      length: 20, breadth: 15, height: 10, weight: 1,
+    });
+    const assigned = await this.call<{ response?: { data?: { awb_code?: string; courier_name?: string } } }>(
+      '/courier/assign/awb',
+      { shipment_id: created.shipment_id, is_return: 1 },
+    );
+    const awb = assigned.response?.data?.awb_code;
+    if (!awb) throw new Error('Shiprocket did not assign a reverse-pickup AWB (pincode not serviceable for returns?)');
+    return {
+      provider: 'shiprocket',
+      awb,
+      courier: assigned.response?.data?.courier_name ?? 'Shiprocket',
+      trackingUrl: `https://shiprocket.co/tracking/${awb}`,
+      labelUrl: null,
       providerRef: String(created.shipment_id),
     };
   }

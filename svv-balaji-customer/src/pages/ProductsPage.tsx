@@ -13,6 +13,7 @@ import { Badge, Breadcrumb, Button, InputNumber, Spin, Tag, Typography } from 'a
 import { useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCart } from '../cart/useCart';
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCatalogueProducts } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { formatInr } from '../utils/money';
@@ -23,6 +24,8 @@ export function ProductsPage() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
   const cart = useCart();
+  const { role } = useCustomerAuth();
+  const isRetailer = role === 'RETAILER';
   const [searchParams, setSearchParams] = useSearchParams();
   const categories = useCategoryTree();
 
@@ -437,7 +440,14 @@ export function ProductsPage() {
                             size="small"
                             type="text"
                             icon={<MinusOutlined style={{ fontSize: 10 }} />}
-                            onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                            onClick={() => {
+                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                              if (cartLine.quantity <= moq) {
+                                cart.remove(product.id);
+                              } else {
+                                cart.setQuantity(product.id, cartLine.quantity - 1);
+                              }
+                            }}
                             style={{ width: 24, height: 24, padding: 0 }}
                           />
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#ea580c' }}>
@@ -457,7 +467,8 @@ export function ProductsPage() {
                           size="small"
                           disabled={!product.purchasable}
                           style={product.purchasable ? { background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 700, borderRadius: 8, height: 30, fontSize: 12 } : { borderRadius: 8, height: 30, fontSize: 12 }}
-                          onClick={() =>
+                          onClick={() => {
+                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                             cart.add({
                               productId: product.id,
                               productName: product.name,
@@ -465,8 +476,10 @@ export function ProductsPage() {
                               displayUnitPrice: product.price,
                               imageUrl: product.image,
                               mrp: product.mrp,
-                            })
-                          }
+                              moqB2B: (product as any).moqB2B ?? 1,
+                              minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                            }, moq);
+                          }}
                         >
                           {product.purchasable ? 'ADD' : product.price === null ? 'UNAVAILABLE' : 'OUT OF STOCK'}
                         </Button>
@@ -728,14 +741,24 @@ export function ProductsPage() {
                               size="small"
                               type="text"
                               icon={<MinusOutlined />}
-                              onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                              onClick={() => {
+                                const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                                if (cartLine.quantity <= moq) {
+                                  cart.remove(product.id);
+                                } else {
+                                  cart.setQuantity(product.id, cartLine.quantity - 1);
+                                }
+                              }}
                             />
                             <InputNumber
                               size="small"
-                              min={1}
+                              min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
                               value={cartLine.quantity}
                               controls={false}
-                              onChange={(value) => cart.setQuantity(product.id, value ?? 1)}
+                              onChange={(value) => {
+                                const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                                cart.setQuantity(product.id, Math.max(moq, value ?? moq));
+                              }}
                               style={{ width: 44, textAlign: 'center' }}
                             />
                             <Button
@@ -750,7 +773,8 @@ export function ProductsPage() {
                             block
                             disabled={!product.purchasable}
                             style={product.purchasable ? { background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10 } : { borderRadius: 10 }}
-                            onClick={() =>
+                            onClick={() => {
+                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                               cart.add({
                                 productId: product.id,
                                 productName: product.name,
@@ -758,8 +782,10 @@ export function ProductsPage() {
                                 displayUnitPrice: product.price,
                                 imageUrl: product.image,
                                 mrp: product.mrp,
-                              })
-                            }
+                                moqB2B: (product as any).moqB2B ?? 1,
+                                minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                              }, moq);
+                            }}
                           >
                             {product.purchasable ? 'Add to Cart' : product.price === null ? 'Unavailable' : 'Out of stock'}
                           </Button>

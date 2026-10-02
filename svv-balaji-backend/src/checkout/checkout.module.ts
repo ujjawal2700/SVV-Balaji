@@ -39,6 +39,6 @@ import { StorefrontOrdersService } from './storefront-orders.service';
     { provide: PAYMENT_GATEWAY, useFactory: createPaymentGateway },
     { provide: SHIPPING_PROVIDER, useFactory: createShippingProvider },
   ],
-  exports: [CheckoutService, StockReservationService, FulfillmentService],
+  exports: [CheckoutService, StockReservationService, FulfillmentService, PAYMENT_GATEWAY, SHIPPING_PROVIDER],
 })
 export class CheckoutModule {}

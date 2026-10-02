@@ -535,7 +535,7 @@ if pend:
     check(status == 400 and "minimum" in msg(bad).lower(), "B2B minimum order quantity (MOQ 10) enforced", msg(bad))
     qb2b = must("POST", "/storefront/checkout/quote", {"addressId": B_addr, "items": items((P1, 12))}, tok=BT)
     fb = qb2b["fulfillment"]
-    check(fb["method"] == "SHIPROCKET" and fb["nodeId"] == WH_C, "B2B ships from the central depot even to a local address", fb)
+    check(fb["method"] == "LOCAL" and fb["nodeId"] == WH_O, "B2B to a local address is routed like B2C: nearby outlet with stock -> LOCAL", fb)
     check(qb2b["totals"]["subtotal"] == 960 and qb2b["totals"]["deliveryFee"] == 150, "B2B tier price (Rs 80 x 12 = 960) and the B2B delivery fee", qb2b["totals"])
     check("CREDIT" in qb2b["payment"]["allowedModes"], "credit terms are offered while within the limit", qb2b["payment"])
     sb = must("POST", "/storefront/checkout/sessions", {"addressId": B_addr, "items": items((P1, 12)), "paymentMode": "CREDIT"}, tok=BT)

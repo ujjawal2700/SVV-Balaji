@@ -115,6 +115,11 @@ enum StockMovementType {
   STOCK_OUT
   TRANSFER
   ADJUSTMENT
+  /// A customer/retailer return that passed QC, back into sellable stock.
+  RETURN_INWARD
+  /// A returned pack that failed QC (or arrived damaged) - into the damaged
+  /// bucket (`FinishedGoodsStock.damagedQuantity`), never into sellable stock.
+  RETURN_DAMAGED
 }
 
 // --- Phase 3: Processing, QA & Packaging ---------------------------------
@@ -1456,6 +1461,9 @@ model FinishedGoodsBatch {
   allocations    OrderAllocation[]
   /// The same link for counter (POS) sales.
   posAllocations PosSaleAllocation[]
+  /// Packs that came back on a return/exchange, and packs sent out as replacements.
+  returnBatchLines        ReturnBatchLine[]
+  replacementAllocations  ReturnReplacementAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1504,6 +1512,9 @@ model FinishedGoodsStock {
 
   quantity         Int
   reservedQuantity Int @default(0)
+  /// Returned packs that failed QC / arrived damaged. Never sellable and never
+  /// part of `quantity`, so no availability calculation has to know about it.
+  damagedQuantity  Int @default(0)
 
   storageLocation String?
 
@@ -1647,6 +1658,7 @@ model Product {
 
   // Phase 4
   priceLists   PriceList[]
+  replacementRequests ReturnRequest[] @relation("ReturnReplacementProduct")
   orderItems   OrderItem[]
   posSaleLines PosSaleLine[]
 
@@ -1827,6 +1839,8 @@ model Warehouse {
   // Phase 4
   orders           Order[]
   orderAllocations OrderAllocation[]
+  returnRequests             ReturnRequest[]               @relation("ReturnReceivingWarehouse")
+  returnReplacementAllocations ReturnReplacementAllocation[]
 
   /// Runs drawing raw material from here (FRD 17.2 reservation).
   productionBatches ProductionBatch[]
@@ -1930,7 +1944,10 @@ model Customer {
 
   /// Required for B2B (needed on the tax invoice), never required for B2C.
   /// Enforced in CustomersService, not by the database, so the rule is testable.
-  gstin String?
+  gstin             String?
+  udyamRegistration String?
+  pan               String?
+  aadhaar           String?
 
   billingAddress  String
   shippingAddress String?
@@ -1996,6 +2013,13 @@ model Customer {
   wishlistItems  CustomerWishlistItem[]
   supportTickets SupportTicket[]
   productReviews ProductReview[]
+
+  /// Rupee Refund Wallet - money, unlike the coin pools above. Denormalised
+  /// running total; RefundWalletTransaction is the ledger and the truth, and the
+  /// two are only ever written together (RefundWalletService).
+  refundWalletBalance      Decimal                   @default(0) @db.Decimal(14, 2)
+  refundWalletTransactions RefundWalletTransaction[]
+  returnRequests           ReturnRequest[]
 
   @@index([channel])
   @@index([status])
@@ -2373,6 +2397,7 @@ model Order {
   updatedAt   DateTime          @updatedAt
   loyaltyEarn LoyaltyOrderEarn?
   returns     OrderReturn[]
+  returnRequests ReturnRequest[]
 
   // ---- Storefront checkout (all null/default for staff-placed orders) ----
   source            OrderSource        @default(STAFF)
@@ -2404,6 +2429,10 @@ model Order {
   loyaltyRedeemedInr     Decimal @default(0) @db.Decimal(14, 2)
   referralRedeemedPoints Int     @default(0)
   referralRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
+  /// Paid from the customer's Refund Wallet. A payment, not a discount: `total`
+  /// (the invoice value) is unchanged; cash/gateway/COD due = total - this.
+  refundWalletPaidInr    Decimal @default(0) @db.Decimal(14, 2)
+  refundWalletTransactions RefundWalletTransaction[]
 
   riderName  String?
   riderPhone String?
@@ -2473,6 +2502,7 @@ model OrderItem {
 
   loyaltyLine LoyaltyOrderEarnLine?
   returns     OrderReturn[]
+  returnRequests ReturnRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2924,9 +2954,11 @@ model CustomerAccount {
 
   // --- B2B registration details, captured at signup, before a Customer exists
   businessName String?
-  gstin        String?
-  pan          String?
-  addressLine  String?
+  gstin             String?
+  udyamRegistration String?
+  pan               String?
+  aadhaar           String?
+  addressLine       String?
   city         String?
   district     String?
   state        String?
@@ -3236,6 +3268,11 @@ model OrderReturn {
 
   recordedById String
   recordedBy   User   @relation("OrderReturnsRecorded", fields: [recordedById], references: [id])
+
+  /// Set when the return/exchange workflow wrote this row (the goods came back
+  /// on that request). Null = recorded directly by staff (legacy recordReturn).
+  returnRequestId String?        @unique
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -4049,8 +4086,11 @@ model RiderOtp {
 
 enum DeliveryTaskKind {
   ORDER_DELIVERY
-  /// Reserved for return / exchange pickups (same machinery, reverse direction).
+  /// Rider collects a returned / exchanged item from the customer and brings it
+  /// to the outlet (`warehouseId`). Same offer/assign machinery, reverse trip.
   RETURN_PICKUP
+  /// Rider takes an exchange's replacement from the outlet to the customer.
+  REPLACEMENT_DELIVERY
 }
 
 enum DeliveryTaskStatus {
@@ -4081,6 +4121,11 @@ model DeliveryTask {
 
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id])
+
+  /// Set (and `orderId` left null) for RETURN_PICKUP / REPLACEMENT_DELIVERY, so
+  /// none of the order-delivery hooks ever fire for a reverse-logistics trip.
+  returnRequestId String?
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id])
 
   /// Pickup point.
   warehouseId String
@@ -4140,6 +4185,7 @@ model DeliveryTask {
   @@index([riderId, status])
   @@index([warehouseId, status])
   @@index([orderId])
+  @@index([returnRequestId])
   @@map("delivery_tasks")
 }
 
@@ -4908,4 +4954,463 @@ model PosSaleAllocation {
 
   @@index([fgBatchId])
   @@map("pos_sale_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Returns & Exchanges (src/returns) and the rupee Refund Wallet (src/wallet)
+//
+// Handled per ORDER ITEM, never per order: a request names one line and a
+// quantity of it. Two logistics paths, decided from how the order was
+// delivered, never chosen by the customer:
+//
+//   QUICK_DELIVERY  in-house rider: RETURN_PICKUP task to collect, and a
+//                   REPLACEMENT_DELIVERY task to take an exchange's replacement.
+//   SHIPROCKET      courier: a reverse (return) shipment to collect, and a
+//                   forward shipment for the replacement.
+//
+// The courier's own status lives on ReturnShipment.externalStatus and is never
+// the request's status: ReturnRequest.status is OUR workflow, and only moves on
+// the events the workflow recognises.
+// ---------------------------------------------------------------------------
+
+enum ReturnRequestType {
+  RETURN
+  EXCHANGE
+}
+
+/// QUICK_DELIVERY = local rider flow (order.fulfillmentMethod LOCAL);
+/// SHIPROCKET = courier flow (order.fulfillmentMethod SHIPROCKET).
+enum ReturnLogistics {
+  QUICK_DELIVERY
+  SHIPROCKET
+}
+
+/// Return:   REQUESTED -> APPROVED -> PICKUP_SCHEDULED -> PICKED_UP -> QC -> REFUND_INITIATED -> COMPLETED
+/// Exchange: REQUESTED -> APPROVED -> PICKUP_SCHEDULED -> PICKED_UP -> QC -> REPLACEMENT_PROCESSING
+///           -> SHIPPED -> DELIVERED -> COMPLETED
+/// QC means "received at the warehouse, inspection pending".
+enum ReturnRequestStatus {
+  REQUESTED
+  APPROVED
+  PICKUP_SCHEDULED
+  PICKED_UP
+  QC
+  REFUND_INITIATED
+  REPLACEMENT_PROCESSING
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  REJECTED
+  /// Rider/courier could not collect. Staff reschedule (back to PICKUP_SCHEDULED) or cancel.
+  PICKUP_FAILED
+  /// Claim rejected at inspection - no refund / no replacement.
+  QC_FAILED
+  /// Replacement could not be delivered. Staff re-dispatch it or convert to a refund.
+  DELIVERY_FAILED
+  CANCELLED
+}
+
+enum RefundMethod {
+  /// Rupee Refund Wallet - credited instantly, spendable at checkout.
+  WALLET
+  /// Paid by staff outside the system to the customer's UPI id; reference recorded.
+  UPI
+  /// Paid by staff outside the system by bank transfer; reference recorded.
+  BANK
+  /// B2B credit-terms order: reduces what the retailer owes (a receipt applied
+  /// to the order through Receivables). Any excess goes to the Refund Wallet.
+  CREDIT_NOTE
+}
+
+enum ReturnShippingPayer {
+  COMPANY
+  CUSTOMER
+}
+
+/// What happens when an exchange's replacement is worth less than what was paid.
+enum ExchangeLowerPriceAction {
+  REFUND_TO_WALLET
+  NO_REFUND
+}
+
+enum ExchangeDifferenceStatus {
+  NONE
+  /// Customer owes `priceDifference`; the replacement does not ship until paid.
+  PENDING
+  PAID
+  /// Replacement cheaper: the difference was credited to the Refund Wallet.
+  CREDITED
+  WAIVED
+}
+
+enum QcDecision {
+  /// Claim accepted - refund / replacement proceeds (whatever the pack condition).
+  ACCEPT
+  /// Claim rejected - QC_FAILED, nothing refunded or replaced.
+  REJECT
+}
+
+enum ReturnStockDisposition {
+  GOOD
+  DAMAGED
+}
+
+enum ReturnShipmentDirection {
+  /// Customer -> warehouse (Shiprocket "return order").
+  REVERSE
+  /// Warehouse -> customer (an exchange's replacement).
+  FORWARD
+}
+
+/// One row per channel (B2C customers, B2B retailers): the two are configured
+/// and handled separately. Lazily created with these defaults on first read.
+model ReturnSettings {
+  id      String       @id @default(uuid())
+  channel SalesChannel @unique
+
+  returnEnabled       Boolean @default(true)
+  exchangeEnabled     Boolean @default(true)
+  /// Counted from the order's actual `deliveredAt`, never from placement.
+  returnWindowHours   Int     @default(168)
+  exchangeWindowHours Int     @default(168)
+
+  /// Photos/videos must be attached to every request (a reason can also demand them).
+  mediaRequired Boolean @default(false)
+  minMediaCount Int     @default(1)
+  maxMediaCount Int     @default(6)
+
+  /// Off = receipt at the warehouse counts as a passed inspection.
+  qcRequired  Boolean @default(true)
+  /// New requests go straight to APPROVED (replacement stock still has to reserve).
+  autoApprove Boolean @default(false)
+
+  allowedRefundMethods RefundMethod[] @default([WALLET, UPI, BANK])
+  defaultRefundMethod  RefundMethod   @default(WALLET)
+
+  /// Who bears return pickup cost. CUSTOMER deducts `returnShippingFee` from the
+  /// refund, except when the reason is the company's fault.
+  returnShippingPayer  ReturnShippingPayer @default(COMPANY)
+  returnShippingFee    Decimal             @default(0) @db.Decimal(10, 2)
+  /// Percentage of the refund kept on non-fault returns (0 = none).
+  restockingFeePercent Decimal             @default(0) @db.Decimal(5, 2)
+
+  exchangeSameProductOnly  Boolean                  @default(true)
+  exchangeSameCategoryOnly Boolean                  @default(false)
+  exchangeLowerPriceAction ExchangeLowerPriceAction @default(REFUND_TO_WALLET)
+
+  /// Inventory rule: QC-passed packs go back to sellable stock. Off = every
+  /// returned pack goes to the damaged bucket regardless of condition.
+  restockOnQcPass Boolean @default(true)
+
+  /// Eligibility: anything listed here cannot be returned / exchanged.
+  nonReturnableCategoryIds   String[] @default([])
+  nonReturnableProductIds    String[] @default([])
+  nonExchangeableCategoryIds String[] @default([])
+  nonExchangeableProductIds  String[] @default([])
+
+  /// Shown to the customer on the request form.
+  policyText String?
+
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("return_settings")
+}
+
+/// Super Admin-managed reasons a customer/retailer can pick.
+model ReturnReason {
+  id    String @id @default(uuid())
+  code  String @unique
+  label String
+
+  forReturn   Boolean       @default(true)
+  forExchange Boolean       @default(true)
+  /// Null = both channels.
+  channel     SalesChannel?
+
+  /// Damaged / wrong / defective - the company's fault: no shipping or
+  /// restocking deduction.
+  companyFault  Boolean @default(false)
+  requiresMedia Boolean @default(false)
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  requests ReturnRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("return_reasons")
+}
+
+model ReturnRequest {
+  id String @id @default(uuid())
+
+  /// RET-YYYYMMDD-NNN or EXC-YYYYMMDD-NNN
+  requestNumber String @unique
+
+  type      ReturnRequestType
+  status    ReturnRequestStatus @default(REQUESTED)
+  /// Frozen from the order: decides which admin queue (customers vs retailers) and policy.
+  channel   SalesChannel
+  logistics ReturnLogistics
+
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id])
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id])
+
+  quantity Int
+
+  reasonId     String?
+  reason       ReturnReason? @relation(fields: [reasonId], references: [id])
+  /// Snapshots: a later edit to the reason list never rewrites a request.
+  reasonLabel  String
+  companyFault Boolean       @default(false)
+  description  String?
+  mediaUrls    String[]      @default([])
+
+  /// "STOREFRONT" (customer/retailer) or "STAFF" (raised by staff on their behalf).
+  raisedBy   String  @default("STOREFRONT")
+  raisedById String?
+
+  // --- Money (frozen at request time from the order line) -----------------
+  /// What was actually paid per unit after coupon/coin discounts, incl. GST.
+  unitPaid                Decimal @db.Decimal(14, 2)
+  /// unitPaid x quantity.
+  itemValue               Decimal @db.Decimal(14, 2)
+  shippingFee             Decimal @default(0) @db.Decimal(14, 2)
+  restockingFee           Decimal @default(0) @db.Decimal(14, 2)
+  /// RETURN: itemValue - deductions. EXCHANGE: only set when the replacement is cheaper.
+  refundAmount            Decimal @default(0) @db.Decimal(14, 2)
+  /// Coins redeemed on the order, pro-rated to this line and quantity - given
+  /// back when a RETURN completes.
+  loyaltyPointsToRestore  Int     @default(0)
+  referralPointsToRestore Int     @default(0)
+
+  refundMethod        RefundMethod?
+  refundUpiId         String?
+  refundAccountName   String?
+  refundAccountNumber String?
+  refundIfsc          String?
+  refundBankName      String?
+  refundReference     String?
+  refundNote          String?
+  refundedAt          DateTime?
+  refundedById        String?
+
+  // --- Exchange -------------------------------------------------------------
+  replacementProductId       String?
+  replacementProduct         Product?                 @relation("ReturnReplacementProduct", fields: [replacementProductId], references: [id])
+  replacementName            String?
+  replacementUnitPrice       Decimal?                 @db.Decimal(14, 2)
+  replacementGstRate         Decimal?                 @db.Decimal(5, 2)
+  replacementTotal           Decimal?                 @db.Decimal(14, 2)
+  /// replacementTotal - itemValue. Positive = customer pays; negative = cheaper.
+  priceDifference            Decimal                  @default(0) @db.Decimal(14, 2)
+  differenceStatus           ExchangeDifferenceStatus @default(NONE)
+  differencePaidWallet       Decimal                  @default(0) @db.Decimal(14, 2)
+  differenceGatewayOrderId   String?
+  differenceGatewayPaymentId String?                  @unique
+  differenceReference        String?
+  /// Set when the replacement stock was atomically reserved (at approval).
+  replacementReservedAt      DateTime?
+  replacementShippedAt       DateTime?
+  replacementDeliveredAt     DateTime?
+  /// Doorstep code the customer reads to the rider for a quick replacement.
+  replacementOtp             String?
+  replacementOtpAttempts     Int                      @default(0)
+
+  /// Code the customer reads to the rider when handing the item over.
+  pickupOtp         String?
+  pickupOtpAttempts Int     @default(0)
+
+  /// Where the goods come back to (and, for an exchange, where the replacement leaves from).
+  warehouseId String
+  warehouse   Warehouse @relation("ReturnReceivingWarehouse", fields: [warehouseId], references: [id])
+
+  // --- QC ---------------------------------------------------------------------
+  qcDecision        QcDecision?
+  qcGoodQuantity    Int?
+  qcDamagedQuantity Int?
+  qcNotes           String?
+  qcAt              DateTime?
+  qcById            String?
+  /// Reverse shipment lost/damaged in transit: staff may settle without receipt.
+  lostInTransit     Boolean     @default(false)
+
+  // --- Lifecycle stamps ---------------------------------------------------------
+  approvedAt        DateTime?
+  approvedById      String?
+  rejectedReason    String?
+  pickupScheduledAt DateTime?
+  pickedUpAt        DateTime?
+  receivedAt        DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  failureReason     String?
+  adminNote         String?
+
+  /// Client-supplied Idempotency-Key, so a double-tap cannot raise two requests.
+  idempotencyKey String?
+
+  events                 ReturnRequestEvent[]
+  shipments              ReturnShipment[]
+  deliveryTasks          DeliveryTask[]
+  batchLines             ReturnBatchLine[]
+  replacementAllocations ReturnReplacementAllocation[]
+  walletTransactions     RefundWalletTransaction[]
+  /// The loyalty-reversal record, once the goods are back (or lost in transit).
+  orderReturn            OrderReturn?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([customerId, idempotencyKey])
+  @@index([channel, status])
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([customerId])
+  @@map("return_requests")
+}
+
+/// Append-only timeline of a request.
+model ReturnRequestEvent {
+  id        String        @id @default(uuid())
+  requestId String
+  request   ReturnRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  type       String
+  fromStatus ReturnRequestStatus?
+  toStatus   ReturnRequestStatus?
+  note       String?
+  /// STAFF | CUSTOMER | RIDER | COURIER | SYSTEM
+  actorKind  String
+  actorId    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId, createdAt])
+  @@map("return_request_events")
+}
+
+/// A Shiprocket (or mock) shipment for a request. `externalStatus` is the
+/// courier's word, kept apart from ReturnRequest.status on purpose.
+model ReturnShipment {
+  id        String                  @id @default(uuid())
+  requestId String
+  request   ReturnRequest           @relation(fields: [requestId], references: [id])
+  direction ReturnShipmentDirection
+
+  provider       String
+  awb            String?
+  courier        String?
+  trackingUrl    String?
+  labelUrl       String?
+  providerRef    String?
+  externalStatus String    @default("CREATED")
+  events         Json      @default("[]")
+  lastEventAt    DateTime?
+  /// False once superseded by a re-booked shipment (pickup failed / RTO).
+  isActive       Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([awb])
+  @@index([requestId])
+  @@map("return_shipments")
+}
+
+/// Which finished-goods batch each returned pack belonged to, and where it went.
+/// Keeps traceability alive in reverse: pack -> batch -> farmer still resolves.
+model ReturnBatchLine {
+  id          String                 @id @default(uuid())
+  requestId   String
+  request     ReturnRequest          @relation(fields: [requestId], references: [id])
+  fgBatchId   String
+  fgBatch     FinishedGoodsBatch     @relation(fields: [fgBatchId], references: [id])
+  quantity    Int
+  disposition ReturnStockDisposition
+  createdAt   DateTime               @default(now())
+
+  @@index([requestId])
+  @@index([fgBatchId])
+  @@map("return_batch_lines")
+}
+
+/// Replacement packs reserved for an exchange (FIFO, QA-released, ACTIVE) -
+/// the exchange's equivalent of OrderAllocation. Reserving bumps
+/// FinishedGoodsStock.reservedQuantity under a row lock, so the same unit can
+/// never be promised to two exchanges (or to an exchange and an order).
+model ReturnReplacementAllocation {
+  id             String             @id @default(uuid())
+  requestId      String
+  request        ReturnRequest      @relation(fields: [requestId], references: [id])
+  fgBatchId      String
+  fgBatch        FinishedGoodsBatch @relation(fields: [fgBatchId], references: [id])
+  warehouseId    String
+  warehouse      Warehouse          @relation(fields: [warehouseId], references: [id])
+  quantity       Int
+  /// Stock physically left (quantity and reservation both decremented).
+  dispatchedAt   DateTime?
+  /// Reservation given back (cancelled / rejected / converted). Never deleted.
+  releasedAt     DateTime?
+  releasedReason String?
+  createdAt      DateTime           @default(now())
+
+  @@index([requestId])
+  @@index([fgBatchId])
+  @@map("return_replacement_allocations")
+}
+
+enum RefundWalletReason {
+  /// + Refund for a completed return.
+  RETURN_REFUND
+  /// + An exchange's replacement was cheaper.
+  EXCHANGE_DIFFERENCE_CREDIT
+  /// - Spent on an order at checkout.
+  ORDER_PAYMENT
+  /// + Spent on an order that was then cancelled - given back.
+  ORDER_PAYMENT_REVERSAL
+  /// - Spent on an exchange's price difference.
+  EXCHANGE_DIFFERENCE_PAYMENT
+  /// + Exchange cancelled after its difference was paid from the wallet.
+  EXCHANGE_DIFFERENCE_REVERSAL
+  /// +/- Super Admin correction; note required.
+  MANUAL_ADJUSTMENT
+}
+
+/// Ledger of the rupee Refund Wallet. Same invariant as the coin and stock
+/// ledgers: Customer.refundWalletBalance never moves without a row here,
+/// written in the same transaction.
+model RefundWalletTransaction {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  /// Signed: + credit, - debit.
+  amount       Decimal            @db.Decimal(14, 2)
+  balanceAfter Decimal            @db.Decimal(14, 2)
+  reason       RefundWalletReason
+  note         String?
+
+  orderId         String?
+  order           Order?         @relation(fields: [orderId], references: [id])
+  returnRequestId String?
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id])
+
+  performedById String?
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([orderId])
+  @@index([returnRequestId])
+  @@map("refund_wallet_transactions")
 }

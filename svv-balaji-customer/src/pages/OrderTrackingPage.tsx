@@ -21,6 +21,7 @@ import { formatInr } from '../utils/money';
 import { printTaxInvoice } from '@shared/utils/taxInvoicePrint';
 import { getProgressSteps, progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
 import { useReorder } from './useReorder';
+import { OrderReturnsCard } from '../components/OrderReturnsCard';
 
 type Item = OrderDetail['items'][number];
 
@@ -271,6 +272,8 @@ export function OrderTrackingPage() {
             {/* Products, with prices - and, once delivered, their ratings */}
             <ItemsCard order={o} delivered={delivered} focusRating={focusRating} />
 
+            {delivered ? <OrderReturnsCard orderNumber={o.orderNumber} /> : null}
+
             <BillCard order={o} />
 
             {/* Order details */}
@@ -495,6 +498,12 @@ function BillCard({ order: o }: { order: OrderDetail }) {
       <Typography.Text type="secondary" style={{ fontSize: 11.5, display: 'block', marginTop: 4 }}>
         Includes {formatInr(o.totals.tax)} GST
       </Typography.Text>
+      {(o.totals.refundWalletPaid ?? 0) > 0 ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 8, color: '#15803d' }}>
+          <span>Paid from Refund Wallet</span>
+          <span>{formatInr(o.totals.refundWalletPaid!)}</span>
+        </div>
+      ) : null}
       {bill.savings > 0 ? (
         <div style={{ marginTop: 12, background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#15803d', borderRadius: 10, padding: '8px 12px', fontSize: 13, fontWeight: 600 }}>
           🎉 You saved {formatInr(rupees(bill.savings))} on this order

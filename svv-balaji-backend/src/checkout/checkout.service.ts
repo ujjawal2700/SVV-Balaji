@@ -24,6 +24,7 @@ import {
 import { randomInt } from 'node:crypto';
 import { SequenceService } from '../common/sequence.service';
 import { WalletService } from '../wallet/wallet.service';
+import { RefundWalletService } from '../wallet/refund-wallet.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEventsService } from '../realtime/order-events.service';
@@ -73,7 +74,12 @@ export interface StoredQuote {
   totals: {
     subtotal: number; couponDiscount: number; loyaltyDiscount: number; referralDiscount: number; discount: number;
     taxable: number; tax: number; deliveryFee: number; totalPayable: number;
+    /** Paid from the rupee Refund Wallet - a payment, so `totalPayable` (the invoice value) is unchanged. */
+    refundWalletApplied?: number;
+    /** What is left to pay online / in cash: totalPayable - refundWalletApplied. */
+    amountDue?: number;
   };
+  refundWallet?: { balance: number; applied: number };
   coupon: { code: string; discount: number } | null;
   loyalty: {
     enabled: boolean; balance: number; pointValueInr: number;
@@ -100,6 +106,8 @@ export interface StoredQuote {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Cash/gateway/COD still due. Quotes frozen before the Refund Wallet existed have no amountDue. */
+export const amountDueOf = (q: StoredQuote) => q.totals.amountDue ?? q.totals.totalPayable;
 const MAX_LINES = 50;
 const LOCAL_RETRIES = 3;
 
@@ -126,6 +134,7 @@ export class CheckoutService {
     private readonly addresses: AddressesService,
     private readonly coupons: CouponsService,
     private readonly wallet: WalletService,
+    private readonly refundWallet: RefundWalletService,
     private readonly reservations: StockReservationService,
     private readonly sales: SalesService,
     private readonly events: OrderEventsService,
@@ -144,8 +153,8 @@ export class CheckoutService {
     const channel = customer.channel;
     const b2b = channel === SalesChannel.B2B;
 
-    if (b2b && !customer.gstin) {
-      throw new BadRequestException('A GSTIN is required on your business account before placing bulk orders');
+    if (b2b && !customer.gstin && !(customer as any).udyamRegistration && !(customer as any).pan) {
+      throw new BadRequestException('A business registration (GSTIN, Udyam, or PAN) is required before placing bulk orders');
     }
 
     // 1. Items: merge duplicates, enforce shape.
@@ -167,28 +176,28 @@ export class CheckoutService {
     for (const i of items) {
       const p = byId.get(i.productId);
       if (!p || !p.isActive || !p.showOnStorefront) throw new BadRequestException('An item in your cart is no longer available');
-      const [min, max] = b2b ? [p.moqB2B, p.maxOrderQuantityB2B] : [p.minOrderQuantity, p.maxOrderQuantity];
-      if (min && i.quantity < min) throw new BadRequestException(`${p.name}: minimum order is ${min}`);
+      const min = b2b ? (p.moqB2B ?? 1) : (p.minOrderQuantity ?? 1);
+      const max = b2b ? p.maxOrderQuantityB2B : p.maxOrderQuantity;
+      if (min && i.quantity < min) throw new BadRequestException(`${p.name}: minimum order is ${min} for business orders`);
       if (max && i.quantity > max) throw new BadRequestException(`${p.name}: maximum order is ${max}`);
     }
 
     // 3. Address (provably the customer's), then WHERE and HOW it ships.
     const address = await this.addresses.mine(customer.id, dto.addressId);
     const snapshot = this.addresses.toSnapshot(address);
-    // Quick Delivery is decided by the customer's zone (src/delivery); the
+    // Quick Delivery is decided by the address's zone (src/delivery); the
     // normal routing below stays the answer whenever Quick is not chosen or
-    // not possible. B2B bulk never goes Quick.
-    const quick: QuickDecision | null = b2b
-      ? null
-      : await this.zones.quickDecision(this.prisma, {
-          address: { latitude: snapshot.latitude, longitude: snapshot.longitude, pincode: snapshot.pincode },
-          items,
-          goodsTotal: null,
-          excludeNodeIds: opts.excludeNodeIds,
-        });
+    // not possible. Customers and retailers are routed the same way: zone and
+    // outlet stock decide, never the channel.
+    const quick: QuickDecision | null = await this.zones.quickDecision(this.prisma, {
+      address: { latitude: snapshot.latitude, longitude: snapshot.longitude, pincode: snapshot.pincode },
+      items,
+      goodsTotal: null,
+      excludeNodeIds: opts.excludeNodeIds,
+    });
     const wantQuick = dto.deliverySpeed === 'QUICK';
     if (wantQuick && !quick?.available) {
-      throw new ConflictException({ code: 'QUICK_UNAVAILABLE', message: quick?.reason ?? 'Quick Delivery is not available for business orders' });
+      throw new ConflictException({ code: 'QUICK_UNAVAILABLE', message: quick?.reason ?? 'Quick Delivery is not available at this address' });
     }
     const standardRoute = await this.router.resolve(
       this.prisma,
@@ -275,9 +284,20 @@ export class CheckoutService {
     const fee = wantQuick ? quickFeeValue! : standardFee;
     const cart = priceCart(lineInputs, couponDiscount + walletDiscount, fee);
 
-    // 8. Which payment modes may be used, and which is selected.
-    const payment = await this.paymentOptions(customer, cart.totalPayable, settings);
-    const mode = dto.paymentMode ?? payment.defaultMode;
+    // 8. Refund Wallet (rupees) - a payment instrument applied after every discount and fee.
+    const walletBalance = await this.refundWallet.balance(customer.id);
+    const walletApplied = dto.useRefundWallet ? round2(Math.min(walletBalance, cart.totalPayable)) : 0;
+    const amountDue = round2(cart.totalPayable - walletApplied);
+
+    // 9. Which payment modes may be used (judged on what is still due), and which is selected.
+    const payment = await this.paymentOptions(customer, walletApplied > 0 ? amountDue : cart.totalPayable, settings);
+    // Fully covered by the wallet = already paid: there is nothing to collect on delivery.
+    const mode = walletApplied > 0 && amountDue === 0
+      ? PaymentMode.ONLINE
+      : dto.paymentMode ?? (walletApplied > 0 && payment.defaultMode === PaymentMode.CREDIT ? PaymentMode.ONLINE : payment.defaultMode);
+    if (walletApplied > 0 && mode === PaymentMode.CREDIT) {
+      throw new BadRequestException('The Refund Wallet cannot be combined with credit terms - pay online or switch it off');
+    }
     if (!payment.allowedModes.includes(mode)) {
       const why = mode === PaymentMode.COD ? payment.codUnavailableReason : mode === PaymentMode.CREDIT ? payment.creditUnavailableReason : null;
       throw new BadRequestException(why ?? `${mode} is not available for this order`);
@@ -322,7 +342,9 @@ export class CheckoutService {
       totals: {
         subtotal: cart.subtotal, couponDiscount, loyaltyDiscount, referralDiscount, discount: cart.discount,
         taxable: cart.taxable, tax: cart.tax, deliveryFee: cart.deliveryFee, totalPayable: cart.totalPayable,
+        refundWalletApplied: walletApplied, amountDue,
       },
+      refundWallet: { balance: walletBalance, applied: walletApplied },
       coupon: coupon ? { code: coupon.code, discount: coupon.discount } : null,
       loyalty: {
         enabled: loyaltyPool.enabled, balance: loyaltyPool.balance, pointValueInr: loyaltyPool.pointValueInr,
@@ -464,7 +486,7 @@ export class CheckoutService {
   private reopenPayment(session: { id: string; expiresAt: Date; quote: unknown; paymentMode: PaymentMode; gatewayOrderId: string | null }) {
     const quote = session.quote as unknown as StoredQuote;
     const mode = session.paymentMode;
-    const amount = quote.totals.totalPayable;
+    const amount = amountDueOf(quote);
     const requiresPayment = mode === PaymentMode.ONLINE && amount > 0;
     const gatewayConfig = requiresPayment && session.gatewayOrderId ? this.gateway.clientConfigFor(session.gatewayOrderId, amount) : null;
     return {
@@ -478,7 +500,7 @@ export class CheckoutService {
   private async openPayment(sessionId: string, quote: StoredQuote) {
     const session = await this.prisma.checkoutSession.findUniqueOrThrow({ where: { id: sessionId } });
     const mode = quote.payment.mode;
-    const amount = quote.totals.totalPayable;
+    const amount = amountDueOf(quote);
     let gateway: { gatewayOrderId: string; clientConfig: Record<string, unknown> } | null = null;
 
     if (mode === PaymentMode.ONLINE && amount > 0) {
@@ -551,7 +573,7 @@ export class CheckoutService {
 
     const quote = session.quote as unknown as StoredQuote;
     const mode = session.paymentMode;
-    const online = mode === PaymentMode.ONLINE && quote.totals.totalPayable > 0;
+    const online = mode === PaymentMode.ONLINE && amountDueOf(quote) > 0;
 
     if (online) {
       if (!dto.gatewayPaymentId || (!dto.signature && !opts.gatewayVerified) || !session.gatewayOrderId) {
@@ -669,7 +691,9 @@ export class CheckoutService {
         referralRedeemedPoints: quote.referral.redeemPoints,
         referralRedeemedInr: t.referralDiscount,
         paymentMode: mode,
+        // ONLINE is paid by now (gateway verified, or fully covered by the Refund Wallet).
         paymentStatus: online ? PaymentStatus.PAID : PaymentStatus.PENDING,
+        refundWalletPaidInr: t.refundWalletApplied ?? 0,
         paymentTerms: quote.channel === SalesChannel.B2C ? PaymentTerms.PREPAID : customer.paymentTerms,
         gatewayOrderId: session.gatewayOrderId,
         gatewayPaymentId: paymentId,
@@ -708,6 +732,13 @@ export class CheckoutService {
       const applied = await this.coupons.validate(tx, { code: quote.coupon.code, customerId: customer.id, channel: quote.channel, subtotal: t.subtotal, now });
       const row = await tx.coupon.findUniqueOrThrow({ where: { id: applied.id } });
       await this.coupons.redeem(tx, { coupon: { ...applied, discount: quote.coupon.discount }, customerId: customer.id, orderId: order.id, limit: row.usageLimit });
+    }
+    if ((t.refundWalletApplied ?? 0) > 0) {
+      // Conditional debit: if the balance moved since the quote, the whole order rolls back.
+      await this.refundWallet.debit(tx, {
+        customerId: customer.id, amount: t.refundWalletApplied!, reason: 'ORDER_PAYMENT', orderId: order.id,
+        note: `Paid towards order ${order.orderNumber}`,
+      });
     }
     if (quote.loyalty.redeemPoints > 0 || quote.referral.redeemPoints > 0) {
       await this.wallet.redeemForOrder(tx, {

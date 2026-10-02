@@ -157,6 +157,7 @@ export class StorefrontOrdersService {
         loyaltyRedeemedInr: Number(o.loyaltyRedeemedInr),
         referralRedeemedPoints: o.referralRedeemedPoints,
         referralRedeemedInr: Number(o.referralRedeemedInr),
+        refundWalletPaid: Number(o.refundWalletPaidInr),
         tax: Number(o.taxTotal),
         deliveryFee: Number(o.deliveryFee),
         total: Number(o.total),
@@ -172,7 +173,7 @@ export class StorefrontOrdersService {
         .map((e) => ({
           type: e.type,
           at: e.createdAt,
-          note: ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED'].includes(e.type)
+          note: ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED', 'RETURN_UPDATE'].includes(e.type)
             ? cleanShopperNote(e.type, e.note)
             : null,
         })),

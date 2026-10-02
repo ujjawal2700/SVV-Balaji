@@ -1578,9 +1578,97 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         defaultRoles: [BM, ST],
       },
       {
+        key: 'refundWallet.adjust',
+        label: "Adjust a customer's Refund Wallet",
+        description: 'Manual rupee credit or debit with a required note. Super Admin only by default.',
+        defaultRoles: [],
+      },
+      {
         key: 'wallet.manage',
         label: 'Configure wallet redemption mode',
         description: 'Whether referral coins and loyalty coins redeem separately or as one combined balance at checkout.',
+        defaultRoles: [],
+      },
+    ],
+  },
+
+  // --- Returns & exchanges ---------------------------------------------------
+  // Customers (B2C) and retailers (B2B) are separate queues with separate keys,
+  // so the two can be handled by different teams.
+  {
+    key: 'customerReturns',
+    label: 'Customer Returns & Exchanges',
+    path: '/returns/customers',
+    viewKey: 'returns.b2c.view',
+    permissions: [
+      {
+        key: 'returns.b2c.view',
+        label: 'View customer return / exchange requests',
+        description: 'The B2C queue: requests, photos, pickup and courier tracking, timeline.',
+        defaultRoles: [BM, ST, WM, QA],
+      },
+      {
+        key: 'returns.b2c.manage',
+        label: 'Process customer returns / exchanges',
+        description: 'Approve or reject, schedule pickups, dispatch replacements, record or waive a price difference, cancel.',
+        defaultRoles: [BM, ST],
+      },
+    ],
+  },
+  {
+    key: 'retailerReturns',
+    label: 'Retailer Returns & Exchanges',
+    path: '/returns/retailers',
+    viewKey: 'returns.b2b.view',
+    permissions: [
+      {
+        key: 'returns.b2b.view',
+        label: 'View retailer return / exchange requests',
+        description: 'The B2B queue, separate from customers.',
+        defaultRoles: [BM, ST, WM, QA],
+      },
+      {
+        key: 'returns.b2b.manage',
+        label: 'Process retailer returns / exchanges',
+        description: 'Approve or reject, schedule pickups, dispatch replacements, record or waive a price difference, cancel.',
+        defaultRoles: [BM, ST],
+      },
+    ],
+  },
+  {
+    key: 'returnsOps',
+    label: 'Returns - QC & Refunds',
+    permissions: [
+      {
+        key: 'returns.qc',
+        label: 'Receive returned goods and record QC',
+        description: 'Moves stock: good packs back into sellable stock, damaged ones into the damaged bucket. Either channel.',
+        defaultRoles: [WM, QA],
+      },
+      {
+        key: 'returns.refund',
+        label: 'Pay return refunds',
+        description: 'Credits the Refund Wallet, records manual UPI / bank refunds with their reference, or issues a B2B credit note. Either channel.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
+    key: 'returnSettings',
+    label: 'Return & Exchange Settings',
+    path: '/settings/returns',
+    viewKey: 'returnSettings.view',
+    permissions: [
+      {
+        key: 'returnSettings.view',
+        label: 'View return & exchange policy',
+        description: 'Windows, eligibility, reasons, QC and refund rules for customers and retailers.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'returnSettings.manage',
+        label: 'Change return & exchange policy',
+        description: 'Super Admin only by default - it changes what customers are promised.',
         defaultRoles: [],
       },
     ],

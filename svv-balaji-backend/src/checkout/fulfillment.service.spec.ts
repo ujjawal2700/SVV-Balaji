@@ -26,7 +26,7 @@ function make(order: any, allocations: any[] = []) {
     record: async (_id: string, type: string) => void state.events.push(type),
     advance: async (_id: string, to: string) => void state.advanced.push(to),
   };
-  return { svc: new FulfillmentService(prisma, sales, {} as any, {} as any), state };
+  return { svc: new FulfillmentService(prisma, sales, {} as any, {} as any, { route: async () => false } as any), state };
 }
 
 const alloc = (id: string, batch: string) => ({

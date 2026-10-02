@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { WalletRedemptionMode } from '@prisma/client';
 
 export class UpdateWalletSettingsDto {
@@ -12,4 +14,17 @@ export class UpdateWalletSettingsDto {
   @IsOptional()
   @IsEnum(WalletRedemptionMode)
   redemptionMode?: WalletRedemptionMode;
+}
+
+export class AdjustRefundWalletDto {
+  @ApiProperty({ description: 'Rupees. Positive credits, negative debits.', example: 150 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  amount!: number;
+
+  @ApiProperty({ description: 'Why - required, shown in the ledger.' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  note!: string;
 }

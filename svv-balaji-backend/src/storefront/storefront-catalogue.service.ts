@@ -225,6 +225,10 @@ export class StorefrontCatalogueService {
       // From real customer reviews only - never the old staff-entered figure.
       rating: ratings.average,
       reviewCount: ratings.count,
+      // MOQ fields needed on the card: listing grids must enforce minimum order
+      // quantity at the add-to-cart step, not only on the detail page.
+      moqB2B: product.moqB2B ?? 1,
+      minOrderQuantity: product.minOrderQuantity ?? 1,
     };
 
     if (!opts.detailed) return card;

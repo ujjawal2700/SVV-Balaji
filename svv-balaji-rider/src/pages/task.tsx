@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { errorCode, errorMessage } from '../api/client';
-import { riderApi, type FailureReason, type TaskDetail } from '../api/rider';
+import { riderApi, type FailureReason, type TaskDetail, type TaskKind } from '../api/rider';
 import { currentPosition } from '../live/geo';
 import { Alert, Camera, Cash, Check, Navigate as NavIcon, Phone, Pin, Store } from '../ui/icons';
 import { Field, Modal, OtpInput, Spinner, TextInput, TopBar, inr, time, useToast } from '../ui/kit';
@@ -18,6 +18,17 @@ function TaskItemImage({ src }: { src: string | null | undefined }) {
   return <img src={imgUrl} alt="" className="thumb" style={{ width: 44, height: 44, objectFit: 'cover' }} onError={() => setError(true)} />;
 }
 
+/** A return pickup runs the other way: customer first, then the store. */
+const PICKUP_FLOW: Array<{ key: string; label: string; statuses: string[] }> = [
+  { key: 'assigned', label: 'Accepted', statuses: ['ASSIGNED', 'OUT_FOR_DELIVERY', 'AT_DROP', 'PICKED_UP', 'DELIVERED'] },
+  { key: 'out', label: 'Heading to customer', statuses: ['OUT_FOR_DELIVERY', 'AT_DROP', 'PICKED_UP', 'DELIVERED'] },
+  { key: 'drop', label: 'At the customer', statuses: ['AT_DROP', 'PICKED_UP', 'DELIVERED'] },
+  { key: 'picked', label: 'Item collected', statuses: ['PICKED_UP', 'DELIVERED'] },
+  { key: 'done', label: 'Handed in at store', statuses: ['DELIVERED'] },
+];
+
+const isReverse = (kind?: TaskKind) => kind === 'RETURN_PICKUP' || kind === 'REPLACEMENT_DELIVERY';
+
 const FLOW: Array<{ key: string; label: string; statuses: string[] }> = [
   { key: 'assigned', label: 'Accepted', statuses: ['ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'DELIVERED'] },
   { key: 'store', label: 'At the store', statuses: ['AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'DELIVERED'] },
@@ -31,11 +42,16 @@ function useTask(id: string) {
   return useQuery({ queryKey: ['task', id], queryFn: () => riderApi.task(id), refetchInterval: 20_000 });
 }
 
-function useStep(id: string) {
+type StepAction = 'arrived-pickup' | 'picked-up' | 'start' | 'arrived' | 'returned' | 'hand-in';
+
+function useStep(id: string, kind?: TaskKind) {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: async (action: 'arrived-pickup' | 'picked-up' | 'start' | 'arrived' | 'returned') => riderApi.step(id, action, (await currentPosition(6_000)) ?? {}),
+    mutationFn: async (action: StepAction) => {
+      const loc = (await currentPosition(6_000)) ?? {};
+      return isReverse(kind) ? riderApi.returnStep(id, action, loc) : riderApi.step(id, action as Exclude<StepAction, 'hand-in'>, loc);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['task', id] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -48,7 +64,7 @@ export function TaskScreen() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const q = useTask(id);
-  const step = useStep(id);
+  const step = useStep(id, q.data?.kind);
   const toast = useToast();
   const qc = useQueryClient();
   const [release, setRelease] = useState(false);
@@ -71,13 +87,20 @@ export function TaskScreen() {
   const points: MapPoint[] = [];
   if (t.pickup.latitude !== null && t.pickup.longitude !== null) points.push({ lat: t.pickup.latitude, lng: t.pickup.longitude, kind: 'store' });
   if (t.drop.latitude !== null && t.drop.longitude !== null) points.push({ lat: t.drop.latitude, lng: t.drop.longitude, kind: 'drop' });
-  const toStore = ['ASSIGNED', 'AT_PICKUP', 'FAILED'].includes(t.status);
+  const pickupTrip = t.kind === 'RETURN_PICKUP';
+  const toStore = pickupTrip ? t.status === 'PICKED_UP' : ['ASSIGNED', 'AT_PICKUP', 'FAILED'].includes(t.status);
   const cod = t.payment.codAmount;
   const collected = Boolean(t.payment.collected);
   const finished = ['DELIVERED', 'RETURNED_TO_STORE', 'CANCELLED'].includes(t.status);
+  const flow = pickupTrip ? PICKUP_FLOW : FLOW;
 
   let primary: { label: string; onClick: () => void; icon?: React.ReactNode } | null = null;
-  if (t.status === 'ASSIGNED') primary = { label: "I've arrived at the store", onClick: () => step.mutate('arrived-pickup'), icon: <Store size={18} /> };
+  if (pickupTrip) {
+    if (t.status === 'ASSIGNED') primary = { label: 'Start trip to the customer', onClick: () => step.mutate('start'), icon: <NavIcon size={18} /> };
+    else if (t.status === 'OUT_FOR_DELIVERY') primary = { label: "I've arrived at the customer", onClick: () => step.mutate('arrived'), icon: <Pin size={18} /> };
+    else if (t.status === 'AT_DROP') primary = { label: 'Collect item - enter pickup code', onClick: () => navigate(`/task/${id}/deliver`), icon: <Check size={18} /> };
+    else if (t.status === 'PICKED_UP') primary = { label: 'Hand in at the store', onClick: () => step.mutate('hand-in'), icon: <Store size={18} /> };
+  } else if (t.status === 'ASSIGNED') primary = { label: "I've arrived at the store", onClick: () => step.mutate('arrived-pickup'), icon: <Store size={18} /> };
   else if (t.status === 'AT_PICKUP') primary = { label: 'Confirm pickup', onClick: () => step.mutate('picked-up'), icon: <Check size={18} /> };
   else if (t.status === 'PICKED_UP') primary = { label: 'Start delivery', onClick: () => step.mutate('start'), icon: <NavIcon size={18} /> };
   else if (t.status === 'OUT_FOR_DELIVERY') primary = { label: "I've arrived", onClick: () => step.mutate('arrived'), icon: <Pin size={18} /> };
@@ -114,6 +137,17 @@ export function TaskScreen() {
           </div>
         </div>
 
+        {isReverse(t.kind) ? (
+          <div className="card" style={{ background: 'var(--orange-soft)', display: 'flex', gap: 10 }}>
+            <Alert size={20} />
+            <div style={{ fontSize: 14 }}>
+              {pickupTrip ? <>Return pickup <b>{t.returnRequest?.requestNumber}</b>: collect the item below from the customer and bring it to <b>{t.pickup.name}</b>. Check it matches before taking the code.</>
+                : <>Exchange replacement <b>{t.returnRequest?.requestNumber}</b>: deliver the item below. The customer gives you their delivery code.</>}
+              {t.returnRequest?.reason ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Reason: {t.returnRequest.reason}</div> : null}
+            </div>
+          </div>
+        ) : null}
+
         {t.status === 'FAILED' ? (
           <div className="card" style={{ background: 'var(--red-soft)', color: '#b3264a', display: 'flex', gap: 10 }}>
             <Alert size={20} /> <div style={{ fontSize: 14 }}>Delivery could not be completed. Bring the order back to <b>{t.pickup.name}</b> and mark it returned.</div>
@@ -121,7 +155,7 @@ export function TaskScreen() {
         ) : null}
 
         {/* Payment */}
-        <div className="card">
+        <div className="card" style={isReverse(t.kind) ? { display: 'none' } : undefined}>
           <div className="between">
             <div>
               <div className="kv-title" style={{ marginTop: 0 }}>Payment</div>
@@ -153,9 +187,9 @@ export function TaskScreen() {
           <div className="card">
             <div className="kv-title" style={{ marginTop: 0 }}>Progress</div>
             <div className="steps">
-              {FLOW.map((f, k) => {
+              {flow.map((f, k) => {
                 const done = f.statuses.includes(t.status);
-                const nextIdx = FLOW.findIndex((x) => !x.statuses.includes(t.status));
+                const nextIdx = flow.findIndex((x) => !x.statuses.includes(t.status));
                 return <div key={f.key} className={`stepi${done ? ' done' : k === nextIdx ? ' now' : ''}`}>{f.label}</div>;
               })}
             </div>
@@ -170,10 +204,13 @@ export function TaskScreen() {
           </div>
         ) : null}
 
-        {['PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'].includes(t.status) && !collected ? (
-          <button className="btn block" style={{ marginTop: 14, background: 'none', color: 'var(--red)' }} onClick={() => navigate(`/task/${id}/fail`)}>Can't deliver this order</button>
+        {(pickupTrip ? ['OUT_FOR_DELIVERY', 'AT_DROP'] : ['PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP']).includes(t.status) && !collected
+          && !(t.kind === 'REPLACEMENT_DELIVERY' && t.status === 'PICKED_UP') ? (
+          <button className="btn block" style={{ marginTop: 14, background: 'none', color: 'var(--red)' }} onClick={() => navigate(`/task/${id}/fail`)}>
+            {pickupTrip ? "Can't collect this item" : "Can't deliver this order"}
+          </button>
         ) : null}
-        {['ASSIGNED', 'AT_PICKUP'].includes(t.status) ? (
+        {(pickupTrip ? ['ASSIGNED'] : ['ASSIGNED', 'AT_PICKUP']).includes(t.status) ? (
           <button className="btn block" style={{ marginTop: 14, background: 'none', color: 'var(--muted)' }} onClick={() => setRelease(true)}>I can't take this delivery</button>
         ) : null}
       </div>
@@ -261,10 +298,16 @@ export function DeliverOtp() {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const kind = q.data?.kind;
   const m = useMutation({
-    mutationFn: async () => riderApi.deliver(id, code, (await currentPosition(5_000)) ?? {}),
+    mutationFn: async () => {
+      const loc = (await currentPosition(5_000)) ?? {};
+      if (kind === 'RETURN_PICKUP') return riderApi.returnCode(id, 'collect', code, loc);
+      if (kind === 'REPLACEMENT_DELIVERY') return riderApi.returnCode(id, 'deliver', code, loc);
+      return riderApi.deliver(id, code, loc);
+    },
     onSuccess: () => {
-      toast('Delivered - great job!', 'success');
+      toast(kind === 'RETURN_PICKUP' ? 'Item collected - take it to the store' : 'Delivered - great job!', 'success');
       void qc.invalidateQueries();
       navigate(`/task/${id}`, { replace: true });
     },
@@ -282,11 +325,11 @@ export function DeliverOtp() {
       <TopBar title="Delivery OTP" back />
       <div className="page" style={{ paddingTop: 22 }}>
         <h2 className="auth-title" style={{ marginTop: 0 }}>Enter The Code</h2>
-        <p className="auth-sub">Ask {t?.drop.name ?? 'the customer'} for the delivery code shown in their app</p>
+        <p className="auth-sub">Ask {t?.drop.name ?? 'the customer'} for the {kind === 'RETURN_PICKUP' ? 'pickup' : 'delivery'} code shown in their app</p>
         <OtpInput value={code} length={t?.otpLength ?? 4} error={Boolean(error)} onChange={(v) => { setError(null); setCode(v); }} />
         {error ? <p style={{ textAlign: 'center', color: 'var(--red)', fontSize: 13, marginTop: 12 }}>{error}</p> : null}
         <button className="btn primary block" style={{ marginTop: 20 }} disabled={code.length < (t?.otpLength ?? 4) || m.isPending} onClick={() => m.mutate()}>
-          {m.isPending ? 'Checking…' : 'Complete Delivery'}
+          {m.isPending ? 'Checking…' : kind === 'RETURN_PICKUP' ? 'Confirm Collection' : 'Complete Delivery'}
         </button>
       </div>
     </div>
@@ -320,9 +363,12 @@ export function FailDelivery() {
   };
 
   const m = useMutation({
-    mutationFn: async () => riderApi.fail(id, { reasonCode: pick!.code, note: note.trim() || undefined, photoUrl: photo ?? undefined, ...((await currentPosition(5_000)) ?? {}) }),
+    mutationFn: async () => {
+      const body = { reasonCode: pick!.code, note: note.trim() || undefined, photoUrl: photo ?? undefined, ...((await currentPosition(5_000)) ?? {}) };
+      return isReverse(q.data?.kind) ? riderApi.returnFail(id, body) : riderApi.fail(id, body);
+    },
     onSuccess: () => {
-      toast('Recorded. Please return the order to the store.', 'info');
+      toast(q.data?.kind === 'RETURN_PICKUP' ? 'Recorded. The store will reschedule the pickup.' : 'Recorded. Please return the order to the store.', 'info');
       void qc.invalidateQueries();
       navigate(`/task/${id}`, { replace: true });
     },

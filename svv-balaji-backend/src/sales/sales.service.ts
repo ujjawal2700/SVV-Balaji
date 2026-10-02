@@ -16,6 +16,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { WalletService } from '../wallet/wallet.service';
+import { RefundWalletService } from '../wallet/refund-wallet.service';
 import { refundCouponForOrder } from '../checkout/coupons.service';
 import { heldByOthers, lockStockRows } from '../checkout/stock-holds';
 import { OrderEventsService } from '../realtime/order-events.service';
@@ -68,6 +69,7 @@ export class SalesService {
     private readonly wallet: WalletService,
     private readonly events: OrderEventsService,
     private readonly invoices: InvoicesService,
+    private readonly refundWallet: RefundWalletService,
   ) {}
 
   async create(dto: CreateOrderDto, placedById: string | null) {
@@ -731,7 +733,7 @@ export class SalesService {
         /** True when every line was filled in full. */
         complete: shortfalls.length === 0,
       };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
   }
 
   /**
@@ -870,7 +872,7 @@ export class SalesService {
         where: { id },
         data: { status: OrderStatus.DISPATCHED, ...this.stampFor(OrderStatus.DISPATCHED) },
       });
-    }).then(async (dispatched) => {
+    }, { maxWait: 10000, timeout: 30000 }).then(async (dispatched) => {
       // Dispatch is the time of supply, so the tax invoice is raised now.
       // Best-effort (onDispatched never throws): an invoicing problem must not
       // un-dispatch goods that have left, and InvoicesService's sweep retries.
@@ -1125,6 +1127,7 @@ export class SalesService {
       // transaction, so a half-cancelled order cannot exist.
       await tx.stockReservation.updateMany({ where: { orderId: id, status: 'COMMITTED' }, data: { status: 'RELEASED' } });
       await this.wallet.refundRedemptionForOrder(tx, id);
+      await this.refundWallet.reverseOrderSpend(tx, id);
       await refundCouponForOrder(tx, id);
 
       return tx.order.update({
@@ -1280,7 +1283,7 @@ function startOfDay(d: Date): Date {
 }
 
 /** First expiry, first out. Batches with no expiry sort last. */
-function byFirstExpiryFirstOut(
+export function byFirstExpiryFirstOut(
   a: { fgBatch: { expiryDate: Date | null; fgBatchNumber: string } },
   b: { fgBatch: { expiryDate: Date | null; fgBatchNumber: string } },
 ): number {

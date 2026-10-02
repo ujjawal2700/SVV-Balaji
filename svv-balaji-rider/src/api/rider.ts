@@ -43,8 +43,19 @@ export interface ItemPreview {
   image: string | null;
 }
 
+/** ORDER_DELIVERY = normal delivery; RETURN_PICKUP = collect a returned item from the customer;
+ * REPLACEMENT_DELIVERY = take an exchange's replacement to the customer. */
+export type TaskKind = 'ORDER_DELIVERY' | 'RETURN_PICKUP' | 'REPLACEMENT_DELIVERY';
+export interface ReturnRef {
+  requestNumber: string;
+  type: 'RETURN' | 'EXCHANGE';
+  reason?: string;
+}
+
 export interface Offer {
   offerId: string;
+  kind?: TaskKind;
+  returnRequest?: ReturnRef | null;
   expiresAt: string;
   taskId: string;
   taskNumber: string;
@@ -63,6 +74,8 @@ export interface Offer {
 export interface TaskSummary {
   id: string;
   taskNumber: string;
+  kind?: TaskKind;
+  returnRequest?: ReturnRef | null;
   status: TaskStatus;
   speed: 'QUICK' | 'STANDARD';
   orderNumber: string | null;
@@ -83,6 +96,8 @@ export interface TaskSummary {
 export interface TaskDetail {
   id: string;
   taskNumber: string;
+  kind?: TaskKind;
+  returnRequest?: ReturnRef | null;
   status: TaskStatus;
   speed: 'QUICK' | 'STANDARD';
   attempt: number;
@@ -179,6 +194,12 @@ export const riderApi = {
   deliver: (id: string, otp: string, loc: Loc) => d(api.post(`/rider/tasks/${id}/deliver`, { otp, ...loc })),
   fail: (id: string, body: { reasonCode: string; note?: string; photoUrl?: string } & Loc) => d(api.post(`/rider/tasks/${id}/fail`, body)),
   release: (id: string, reason: string) => d(api.post(`/rider/tasks/${id}/release`, { reason })),
+
+  // Return pickups / exchange replacements have their own steps (stock, customer codes).
+  returnStep: (id: string, action: 'arrived-pickup' | 'picked-up' | 'start' | 'arrived' | 'returned' | 'hand-in', loc: Loc) =>
+    d(api.post(`/rider/return-tasks/${id}/${action}`, loc)),
+  returnCode: (id: string, action: 'collect' | 'deliver', otp: string, loc: Loc) => d(api.post(`/rider/return-tasks/${id}/${action}`, { otp, ...loc })),
+  returnFail: (id: string, body: { reasonCode: string; note?: string; photoUrl?: string } & Loc) => d(api.post(`/rider/return-tasks/${id}/fail`, body)),
   uploadProof: (file: File) => {
     const f = new FormData();
     f.append('file', file);

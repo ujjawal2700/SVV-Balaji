@@ -123,6 +123,12 @@ export function customerOrderMessage(
           ? `Order ${orderNumber} was cancelled: ${note}.`
           : `Order ${orderNumber} was cancelled.`,
       };
+    case 'RETURN_UPDATE':
+      return {
+        ...base,
+        title: 'Return / exchange update',
+        body: note ?? `There is an update on your return or exchange for order ${orderNumber}.`,
+      };
     case 'RETURN_RECORDED':
       return {
         ...base,

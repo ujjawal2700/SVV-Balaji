@@ -157,7 +157,10 @@ export function OfferModal({ offer, onClose, onAccept, onReject, busy }: { offer
             <span>Qty: <b style={{ color: 'var(--ink)' }}>{offer.itemCount}</b></span>
           </div>
           <div className="between muted" style={{ fontSize: 13, marginTop: 2 }}>
-            <span className="ellipsis">#{offer.orderNumber ?? offer.taskNumber}</span>
+            <span className="ellipsis">
+              {offer.kind === 'RETURN_PICKUP' ? <span className="chip orange" style={{ marginRight: 6 }}>Return pickup</span> : offer.kind === 'REPLACEMENT_DELIVERY' ? <span className="chip orange" style={{ marginRight: 6 }}>Exchange</span> : null}
+              #{offer.returnRequest?.requestNumber ?? offer.orderNumber ?? offer.taskNumber}
+            </span>
             <span style={{ whiteSpace: 'nowrap' }}>{date(offer.offeredAt)}</span>
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>

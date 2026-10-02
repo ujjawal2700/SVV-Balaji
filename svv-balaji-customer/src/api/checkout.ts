@@ -54,6 +54,8 @@ export interface CheckoutRequest {
   deliverySpeed?: 'STANDARD' | 'QUICK';
   /** The total the customer was shown - the server only compares it to notice a price change. */
   expectedTotal?: number;
+  /** Pay as much as possible from the rupee Refund Wallet; the server decides the amount. */
+  useRefundWallet?: boolean;
 }
 
 export interface Quote {
@@ -84,7 +86,12 @@ export interface Quote {
   totals: {
     subtotal: number; couponDiscount: number; loyaltyDiscount: number; referralDiscount: number; discount: number;
     taxable: number; tax: number; deliveryFee: number; totalPayable: number;
+    /** Paid from the Refund Wallet (a payment - totalPayable, the invoice value, is unchanged). */
+    refundWalletApplied?: number;
+    /** Left to pay online / in cash. */
+    amountDue?: number;
   };
+  refundWallet?: { balance: number; applied: number };
   coupon: { code: string; discount: number } | null;
   loyalty: { enabled: boolean; balance: number; pointValueInr: number; redeemPoints: number; maxPoints: number; minPoints: number };
   referral: { enabled: boolean; balance: number; pointValueInr: number; redeemPoints: number; maxPoints: number; minPoints: number };
@@ -172,6 +179,7 @@ export interface OrderDetail {
     subtotal: number; discount: number; couponCode: string | null;
     loyaltyRedeemedPoints: number; loyaltyRedeemedInr: number;
     referralRedeemedPoints: number; referralRedeemedInr: number;
+    refundWalletPaid?: number;
     tax: number; deliveryFee: number; total: number;
   };
   payment: { mode: PaymentMode | null; status: string; reference: string | null };

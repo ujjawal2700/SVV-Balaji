@@ -77,8 +77,10 @@ export interface RegisterRetailerPayload {
   fullName: string;
   businessName: string;
   email?: string;
-  gstin: string;
+  gstin?: string;
+  udyamRegistration?: string;
   pan?: string;
+  aadhaar?: string;
   addressLine: string;
   city: string;
   district?: string;

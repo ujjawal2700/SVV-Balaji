@@ -56,6 +56,13 @@ export function CartPage() {
   const toggleWishlist = useToggleWishlist();
   const qc = useQueryClient();
 
+  const isRetailer = role === 'RETAILER';
+  const violatingLines = useMemo(
+    () => (isRetailer ? cart.lines.filter((l) => l.quantity < (l.moqB2B ?? 1)) : []),
+    [isRetailer, cart.lines],
+  );
+  const hasMoqViolation = violatingLines.length > 0;
+
   // Coupons state. The offers are the SERVER's (active, in date, for this channel);
   // the amounts shown in the cart are only an estimate - checkout prices the coupon for real.
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -363,6 +370,11 @@ export function CartPage() {
                           <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 2, display: 'block' }}>
                             {line.unit} {line.packSize ? `(${line.packSize})` : ''}
                           </Typography.Text>
+                          {isRetailer && (line.moqB2B ?? 1) > 1 && (
+                            <Tag color={line.quantity < (line.moqB2B ?? 1) ? 'red' : 'green'} style={{ marginTop: 4, borderRadius: 4, fontWeight: 600, fontSize: 11 }}>
+                              MOQ: {line.moqB2B} pcs {line.quantity < (line.moqB2B ?? 1) ? '(Below Minimum)' : ''}
+                            </Tag>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 10 }}>
@@ -387,8 +399,16 @@ export function CartPage() {
                             <Button
                               type="text"
                               icon={<MinusOutlined style={{ fontSize: 11 }} />}
-                              onClick={() => cart.setQuantity(line.productId, line.quantity - 1)}
+                              onClick={() => {
+                                const lineMoq = isRetailer ? (line.moqB2B ?? 1) : 1;
+                                if (line.quantity <= lineMoq) {
+                                  cart.remove(line.productId);
+                                } else {
+                                  cart.setQuantity(line.productId, line.quantity - 1);
+                                }
+                              }}
                               style={{ width: 32, minWidth: 32, height: 32, padding: 0 }}
+                              title={line.quantity <= (isRetailer ? (line.moqB2B ?? 1) : 1) ? 'Remove item' : 'Decrease quantity'}
                             />
                             <Typography.Text strong style={{ width: 32, textAlign: 'center', fontSize: 14, background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 32 }}>
                               {line.quantity}
@@ -587,14 +607,33 @@ export function CartPage() {
               </div>
 
               {/* Checkout CTA Button (Visible on all devices) */}
-              <div style={{ marginTop: 20 }}>
+              {hasMoqViolation && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca' }}>
+                  <Typography.Text strong style={{ color: '#b91c1c', fontSize: 13, display: 'block', marginBottom: 4 }}>
+                    ⚠️ Below Minimum Order Quantity (MOQ)
+                  </Typography.Text>
+                  <Typography.Text style={{ color: '#991b1b', fontSize: 12, display: 'block' }}>
+                    As a verified retailer, each product line must meet its wholesale minimum:
+                  </Typography.Text>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#991b1b', fontSize: 12 }}>
+                    {violatingLines.map((vl) => (
+                      <li key={vl.productId}>
+                        <strong>{vl.productName}</strong>: {vl.quantity} in cart (Minimum: {vl.moqB2B ?? 1} pcs)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div style={{ marginTop: 16 }}>
                 <Button
                   type="primary"
                   size="large"
                   block
+                  disabled={hasMoqViolation}
                   style={{
-                    background: '#f97316',
-                    borderColor: '#f97316',
+                    background: hasMoqViolation ? '#9ca3af' : '#f97316',
+                    borderColor: hasMoqViolation ? '#9ca3af' : '#f97316',
                     fontWeight: 700,
                     height: 50,
                     borderRadius: 12,
@@ -603,11 +642,18 @@ export function CartPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8,
-                    boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
+                    boxShadow: hasMoqViolation ? 'none' : '0 4px 14px rgba(249,115,22,0.3)',
+                    cursor: hasMoqViolation ? 'not-allowed' : 'pointer',
                   }}
-                  onClick={() => navigate('/checkout')}
+                  onClick={() => {
+                    if (hasMoqViolation) {
+                      message.error('Some items do not meet the retailer minimum order quantity (MOQ).');
+                      return;
+                    }
+                    navigate('/checkout');
+                  }}
                 >
-                  Proceed to Checkout ({formatInr(grandTotal)}) &rarr;
+                  {hasMoqViolation ? 'Update Quantities to Checkout' : `Proceed to Checkout (${formatInr(grandTotal)}) →`}
                 </Button>
               </div>
 
@@ -645,18 +691,26 @@ export function CartPage() {
         <Button
           type="primary"
           size="large"
+          disabled={hasMoqViolation}
           style={{
-            background: '#f97316',
-            borderColor: '#f97316',
+            background: hasMoqViolation ? '#9ca3af' : '#f97316',
+            borderColor: hasMoqViolation ? '#9ca3af' : '#f97316',
             fontWeight: 700,
             padding: '0 20px',
             height: 42,
             borderRadius: 10,
             fontSize: 14,
+            cursor: hasMoqViolation ? 'not-allowed' : 'pointer',
           }}
-          onClick={() => navigate('/checkout')}
+          onClick={() => {
+            if (hasMoqViolation) {
+              message.error('Some items do not meet the minimum order quantity (MOQ).');
+              return;
+            }
+            navigate('/checkout');
+          }}
         >
-          Checkout &rarr;
+          {hasMoqViolation ? 'Check MOQ' : 'Checkout →'}
         </Button>
       </div>
 

@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 29 September 2026 · **Updated by:** Ujjawal
+**Last updated:** 2 October 2026 · **Updated by:** Raunak (via agent)
 **Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -16,7 +16,21 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**29 Sep (latest) — POS counters for company stores, on the database.** New Sale, POS Orders, POS Reports and
+**2 Oct (latest) — Retailer orders routed zone-wise.** B2B storefront orders now use the same Quick-zone / nearest-outlet
+/ depot routing as customers instead of always shipping from the depot by courier; LOCAL retailer orders go through the
+same FIFO allocation at the outlet, scan, rider and OTP. Verified by `e2e-retailer-routing-flow.py` (21/21). No migration.
+
+**2 Oct — Returns & Exchanges + rupee Refund Wallet.** Per order item and quantity, for customers and retailers
+separately (own queues, permissions, policies). Quick orders are collected/replaced by riders (customer reads a code);
+courier orders use Shiprocket reverse pickups with the courier status kept apart from ours. Eligibility from the actual
+delivery time; duplicates and races blocked; exchange replacement stock reserved atomically at approval; dearer
+replacement paid before it ships. QC puts good packs back on the same FG batch and damaged ones in a new damaged bucket
+(trace still resolves). Refunds: Refund Wallet (now spendable at checkout), manual UPI / bank with reference, or a B2B
+credit note through Receivables. Admin: Customer Returns, Retailer Returns, Return & Exchange Settings. `e2e-returns-flow.py`
+79/79 on a fresh DB; not click-tested in a browser; Shiprocket return API unverified live. **Deploy:** `prisma migrate deploy`
+(`20261002120000_returns_exchanges_refund_wallet`) + generate + API restart. See `DEV_LOG.md` (2026-10-02).
+
+**29 Sep — POS counters for company stores, on the database.** New Sale, POS Orders, POS Reports and
 Outlets were UI-only (mock arrays, outlets in browser localStorage); they now use the API. Stores sync across devices, each
 with its own STORE stock location. Cashier shifts with drawer reconciliation. Sales are server-priced, FEFO from
 QA-released batches with batch traceability, and each gets a GST invoice. Whole-bill refunds put stock back and cancel

@@ -18,6 +18,7 @@ import {
   ShopOutlined,
   GiftOutlined,
   TrophyOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import type { Permission } from '../auth/permissions';
@@ -671,6 +672,43 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'ORDER_VIEW',
         description: 'Toll-free helpline, WhatsApp desk, operating hours, and dynamic FAQs for Customer & Retailer apps.',
         endpoints: ['GET /support-settings', 'PATCH /support-settings'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+    ],
+  },
+  {
+    key: 'returns',
+    label: 'Returns & Exchanges',
+    icon: <RollbackOutlined />,
+    items: [
+      {
+        key: 'customer-returns',
+        path: '/returns/customers',
+        label: 'Customer Returns',
+        permission: 'RETURNS_B2C_VIEW',
+        description: 'Return and exchange requests from customers (B2C), per order item: approve, rider/Shiprocket pickup, QC, refund or replacement.',
+        endpoints: ['GET /returns/customers', 'GET /returns/customers/:id', 'POST /returns/customers/:id/approve', 'POST /returns/customers/:id/qc', 'POST /returns/customers/:id/refund'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'retailer-returns',
+        path: '/returns/retailers',
+        label: 'Retailer Returns',
+        permission: 'RETURNS_B2B_VIEW',
+        description: 'Return and exchange requests from retailers (B2B), handled separately from customers; credit-note refunds against their bills.',
+        endpoints: ['GET /returns/retailers', 'GET /returns/retailers/:id', 'POST /returns/retailers/:id/approve', 'POST /returns/retailers/:id/qc', 'POST /returns/retailers/:id/refund'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'return-settings',
+        path: '/settings/returns',
+        label: 'Return & Exchange Settings',
+        permission: 'RETURN_SETTINGS_VIEW',
+        description: 'Windows, eligibility, reasons, photo and QC rules, refund methods, fees and exchange rules - for customers and retailers separately.',
+        endpoints: ['GET /return-settings', 'PATCH /return-settings/:channel', 'GET /return-settings/reasons'],
         workstream: 'WS2.5',
         zone: 'commerce',
       },

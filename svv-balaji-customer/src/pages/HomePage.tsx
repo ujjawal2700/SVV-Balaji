@@ -958,7 +958,8 @@ export function HomePage() {
                               placeItems: 'center',
                               cursor: 'pointer',
                             }}
-                            onClick={() =>
+                            onClick={() => {
+                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                               cart.add({
                                 productId: product.id,
                                 productName: product.name,
@@ -966,8 +967,10 @@ export function HomePage() {
                                 displayUnitPrice: price,
                                 imageUrl: img,
                                 mrp: product.mrp,
-                              })
-                            }
+                                moqB2B: (product as any).moqB2B ?? 1,
+                                minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                              }, moq);
+                            }}
                           >
                             <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
                           </button>
@@ -1055,14 +1058,24 @@ export function HomePage() {
                                 size="small"
                                 type="text"
                                 icon={<MinusOutlined />}
-                                onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                                onClick={() => {
+                                  const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                                  if (cartLine.quantity <= moq) {
+                                    cart.remove(product.id);
+                                  } else {
+                                    cart.setQuantity(product.id, cartLine.quantity - 1);
+                                  }
+                                }}
                               />
                               <InputNumber
                                 size="small"
-                                min={1}
+                                min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
                                 value={cartLine.quantity}
                                 controls={false}
-                                onChange={(val) => cart.setQuantity(product.id, val || 1)}
+                                onChange={(val) => {
+                                  const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                                  cart.setQuantity(product.id, Math.max(moq, val || moq));
+                                }}
                                 style={{ width: 44, textAlign: 'center', background: 'transparent', border: 'none' }}
                               />
                               <Button
@@ -1082,7 +1095,8 @@ export function HomePage() {
                                 color: '#ffffff',
                                 fontWeight: 700,
                               }}
-                              onClick={() =>
+                              onClick={() => {
+                                const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                                 cart.add({
                                   productId: product.id,
                                   productName: product.name,
@@ -1090,8 +1104,10 @@ export function HomePage() {
                                   displayUnitPrice: price,
                                   imageUrl: img,
                                   mrp: product.mrp,
-                                })
-                              }
+                                  moqB2B: (product as any).moqB2B ?? 1,
+                                  minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                                }, moq);
+                              }}
                             >
                               Add to Cart
                             </Button>
@@ -1174,7 +1190,7 @@ export function HomePage() {
                           displayUnitPrice: product.price,
                           imageUrl: product.image,
                           mrp: product.mrp,
-                        })
+                        }, isRetailer ? ((product as any).moqB2B ?? 1) : 1)
                       }
                     >
                       <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
@@ -1259,14 +1275,24 @@ export function HomePage() {
                             size="small"
                             type="text"
                             icon={<MinusOutlined />}
-                            onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                            onClick={() => {
+                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                              if (cartLine.quantity <= moq) {
+                                cart.remove(product.id);
+                              } else {
+                                cart.setQuantity(product.id, cartLine.quantity - 1);
+                              }
+                            }}
                           />
                           <InputNumber
                             size="small"
-                            min={1}
+                            min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
                             value={cartLine.quantity}
                             controls={false}
-                            onChange={(value) => cart.setQuantity(product.id, value ?? 1)}
+                            onChange={(value) => {
+                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                              cart.setQuantity(product.id, Math.max(moq, value ?? moq));
+                            }}
                             style={{ width: 36, textAlign: 'center' }}
                           />
                           <Button
@@ -1280,7 +1306,8 @@ export function HomePage() {
                         <Button
                           block
                           style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 8 }}
-                          onClick={() =>
+                          onClick={() => {
+                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                             cart.add({
                               productId: product.id,
                               productName: product.name,
@@ -1288,8 +1315,10 @@ export function HomePage() {
                               displayUnitPrice: product.price,
                               imageUrl: product.image,
                               mrp: product.mrp,
-                            })
-                          }
+                              moqB2B: (product as any).moqB2B ?? 1,
+                              minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                            }, moq);
+                          }}
                         >
                           Add to Cart
                         </Button>
@@ -1429,14 +1458,24 @@ export function HomePage() {
                           size="small"
                           type="text"
                           icon={<MinusOutlined />}
-                          onClick={() => cart.setQuantity(product.id, cartLine.quantity - 1)}
+                          onClick={() => {
+                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                            if (cartLine.quantity <= moq) {
+                              cart.remove(product.id);
+                            } else {
+                              cart.setQuantity(product.id, cartLine.quantity - 1);
+                            }
+                          }}
                         />
                         <InputNumber
                           size="small"
-                          min={1}
+                          min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
                           value={cartLine.quantity}
                           controls={false}
-                          onChange={(value) => cart.setQuantity(product.id, value ?? 1)}
+                          onChange={(value) => {
+                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                            cart.setQuantity(product.id, Math.max(moq, value ?? moq));
+                          }}
                           style={{ width: 44, textAlign: 'center' }}
                         />
                         <Button
@@ -1450,7 +1489,8 @@ export function HomePage() {
                       <Button
                         block
                         style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10, height: 40 }}
-                        onClick={() =>
+                        onClick={() => {
+                          const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                           cart.add({
                             productId: product.id,
                             productName: product.name,
@@ -1458,8 +1498,10 @@ export function HomePage() {
                             displayUnitPrice: product.price,
                             imageUrl: product.image,
                             mrp: product.mrp,
-                          })
-                        }
+                            moqB2B: (product as any).moqB2B ?? 1,
+                            minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                          }, moq);
+                        }}
                       >
                         Add to Cart
                       </Button>
@@ -1524,7 +1566,8 @@ export function HomePage() {
                   <Button
                     type="primary"
                     style={{ background: '#f97316', borderColor: '#f97316', borderRadius: 8, fontWeight: 600 }}
-                    onClick={() =>
+                    onClick={() => {
+                      const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
                       cart.add(
                         {
                           productId: product.id,
@@ -1533,10 +1576,12 @@ export function HomePage() {
                           displayUnitPrice: product.price,
                           imageUrl: product.image,
                           mrp: product.mrp,
+                          moqB2B: (product as any).moqB2B ?? 1,
+                          minOrderQuantity: (product as any).minOrderQuantity ?? 1,
                         },
-                        cartLine ? 0 : 1,
-                      )
-                    }
+                        cartLine ? 0 : moq,
+                      );
+                    }}
                     disabled={Boolean(cartLine)}
                   >
                     {cartLine ? 'Added' : 'Reorder'}

@@ -61,6 +61,23 @@ const ITEM_PREVIEW_SELECT = { quantity: true, product: { select: { name: true, i
 const itemPreview = (items?: Array<{ quantity: number; product: { name: string; images: string[] } | null }>) =>
   (items ?? []).slice(0, 3).map((i) => ({ name: i.product?.name ?? 'Item', quantity: i.quantity, image: i.product?.images?.[0] ?? null }));
 
+/** A return pickup / exchange replacement trip: what the rider carries, from the request. */
+const RETURN_SELECT = {
+  requestNumber: true, type: true, quantity: true,
+  order: { select: { orderNumber: true } },
+  orderItem: { select: { nameSnapshot: true, product: { select: { name: true, images: true } } } },
+  replacementProduct: { select: { name: true, images: true } },
+} satisfies Prisma.ReturnRequestSelect;
+type ReturnBrief = Prisma.ReturnRequestGetPayload<{ select: typeof RETURN_SELECT }>;
+const returnItems = (kind: string, r: ReturnBrief | null) => {
+  if (!r) return [];
+  const product = kind === 'REPLACEMENT_DELIVERY' && r.replacementProduct
+    ? { name: r.replacementProduct.name, images: r.replacementProduct.images }
+    : { name: r.orderItem.nameSnapshot ?? r.orderItem.product.name, images: r.orderItem.product.images };
+  return [{ name: product.name, quantity: r.quantity, image: product.images?.[0] ?? null }];
+};
+const returnInfo = (r: ReturnBrief | null) => (r ? { requestNumber: r.requestNumber, type: r.type } : null);
+
 const mapsLink = (lat: unknown, lng: unknown, fallback: string) =>
   lat !== null && lng !== null && lat !== undefined && lng !== undefined
     ? `https://www.google.com/maps/dir/?api=1&destination=${Number(lat)},${Number(lng)}&travelmode=driving`
@@ -442,7 +459,9 @@ export class RidersService {
           select: {
             id: true, taskNumber: true, speed: true, dropAddress: true, distanceKm: true, codAmount: true, promisedBy: true,
             warehouse: { select: { name: true, location: true } },
+            kind: true,
             order: { select: { orderNumber: true, items: { select: ITEM_PREVIEW_SELECT } } },
+            returnRequest: { select: RETURN_SELECT },
           },
         },
       },
@@ -459,9 +478,11 @@ export class RidersService {
       dropArea: stripPhone(o.task.dropAddress),
       distanceKm: o.task.distanceKm === null ? null : Number(o.task.distanceKm),
       cod: Number(o.task.codAmount),
-      itemCount: o.task.order?.items.reduce((s, i) => s + i.quantity, 0) ?? 0,
-      items: itemPreview(o.task.order?.items),
-      orderNumber: o.task.order?.orderNumber ?? null,
+      kind: o.task.kind,
+      returnRequest: returnInfo(o.task.returnRequest),
+      itemCount: o.task.order?.items.reduce((s, i) => s + i.quantity, 0) ?? o.task.returnRequest?.quantity ?? 0,
+      items: o.task.order ? itemPreview(o.task.order.items) : returnItems(o.task.kind, o.task.returnRequest),
+      orderNumber: o.task.order?.orderNumber ?? o.task.returnRequest?.order.orderNumber ?? null,
       promisedBy: o.task.promisedBy,
       offeredAt: o.offeredAt,
     }));
@@ -470,7 +491,11 @@ export class RidersService {
   async tasksForRider(riderId: string, scope: 'active' | 'history', page = 1) {
     const rows = await this.prisma.deliveryTask.findMany({
       where: { riderId, status: scope === 'active' ? { in: HELD_STATUSES } : { in: ['DELIVERED', 'RETURNED_TO_STORE', 'CANCELLED'] } },
-      include: { warehouse: { select: { name: true } }, order: { select: { orderNumber: true, items: { select: ITEM_PREVIEW_SELECT } } } },
+      include: {
+        warehouse: { select: { name: true } },
+        order: { select: { orderNumber: true, items: { select: ITEM_PREVIEW_SELECT } } },
+        returnRequest: { select: RETURN_SELECT },
+      },
       orderBy: scope === 'active' ? { assignedAt: 'asc' } : { updatedAt: 'desc' },
       take: 30,
       skip: (Math.max(page, 1) - 1) * 30,
@@ -478,12 +503,13 @@ export class RidersService {
     const pay = await this.prisma.riderEarning.groupBy({ by: ['taskId'], where: { taskId: { in: rows.map((r) => r.id) } }, _sum: { amount: true } });
     const payBy = new Map(pay.map((p) => [p.taskId, Number(p._sum.amount ?? 0)]));
     return rows.map((t) => ({
-      id: t.id, taskNumber: t.taskNumber, status: t.status, speed: t.speed, orderNumber: t.order?.orderNumber ?? null,
+      id: t.id, taskNumber: t.taskNumber, kind: t.kind, returnRequest: returnInfo(t.returnRequest), status: t.status, speed: t.speed,
+      orderNumber: t.order?.orderNumber ?? t.returnRequest?.order.orderNumber ?? null,
       pickupName: t.warehouse.name, dropName: t.dropName, dropAddress: t.dropAddress, cod: Number(t.codAmount),
       distanceKm: t.distanceKm === null ? null : Number(t.distanceKm), promisedBy: t.promisedBy,
       assignedAt: t.assignedAt, deliveredAt: t.deliveredAt, updatedAt: t.updatedAt, earned: payBy.get(t.id) ?? 0,
-      itemCount: t.order?.items.reduce((s, i) => s + i.quantity, 0) ?? 0,
-      items: itemPreview(t.order?.items),
+      itemCount: t.order?.items.reduce((s, i) => s + i.quantity, 0) ?? t.returnRequest?.quantity ?? 0,
+      items: t.order ? itemPreview(t.order.items) : returnItems(t.kind, t.returnRequest),
     }));
   }
 
@@ -494,6 +520,7 @@ export class RidersService {
       include: {
         warehouse: { select: { name: true, location: true, latitude: true, longitude: true, contactPhone: true } },
         order: { select: { orderNumber: true, paymentMode: true, deliveryOtp: true, items: { select: { quantity: true, product: { select: { name: true, images: true } } } } } },
+        returnRequest: { select: { ...RETURN_SELECT, pickupOtp: true, replacementOtp: true, reasonLabel: true } },
         events: { orderBy: { createdAt: 'asc' }, select: { type: true, note: true, createdAt: true } },
         cod: true,
         earnings: { select: { type: true, amount: true } },
@@ -504,10 +531,13 @@ export class RidersService {
     return {
       id: t.id,
       taskNumber: t.taskNumber,
+      kind: t.kind,
+      // Reverse trips: what to collect / deliver and why. Never the codes themselves.
+      returnRequest: t.returnRequest ? { ...returnInfo(t.returnRequest), reason: t.returnRequest.reasonLabel } : null,
       status: t.status,
       speed: t.speed,
       attempt: t.attempt,
-      orderNumber: t.order?.orderNumber ?? null,
+      orderNumber: t.order?.orderNumber ?? t.returnRequest?.order.orderNumber ?? null,
       promisedBy: t.promisedBy,
       pickup: {
         name: t.warehouse.name, address: t.warehouse.location, phone: t.warehouse.contactPhone,
@@ -526,8 +556,11 @@ export class RidersService {
       },
       distanceKm: t.distanceKm === null ? null : Number(t.distanceKm),
       // How many digits the customer's code has - never the code itself.
-      otpLength: t.order?.deliveryOtp?.length ?? null,
-      items: (t.order?.items ?? []).map((i) => ({ name: i.product?.name ?? 'Item', quantity: i.quantity, image: i.product?.images?.[0] ?? null })),
+      otpLength: t.order?.deliveryOtp?.length
+        ?? (t.kind === 'RETURN_PICKUP' ? t.returnRequest?.pickupOtp?.length : t.returnRequest?.replacementOtp?.length) ?? null,
+      items: t.order
+        ? t.order.items.map((i) => ({ name: i.product?.name ?? 'Item', quantity: i.quantity, image: i.product?.images?.[0] ?? null }))
+        : returnItems(t.kind, t.returnRequest),
       payment: {
         mode: t.order?.paymentMode ?? null,
         codAmount: Number(t.codAmount),

@@ -52,6 +52,7 @@ import { HomeSectionsModule } from './home-sections/home-sections.module';
 import { SupportSettingsModule } from './support-settings/support-settings.module';
 import { LegalPoliciesModule } from './legal-policies/legal-policies.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ReturnsModule } from './returns/returns.module';
 
 @Module({
   imports: [
@@ -118,6 +119,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     SupportSettingsModule,
     LegalPoliciesModule,
     NotificationsModule, // Super Admin push broadcasts (FCM), device registry, in-app inbox
+    ReturnsModule, // order-item returns & exchanges (customers and retailers separately), rider/Shiprocket reverse logistics, refund wallet
   ],
 })
 export class AppModule {}

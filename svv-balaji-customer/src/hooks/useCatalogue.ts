@@ -40,6 +40,8 @@ export interface ShelfProduct {
   unit: string;
   rating: number | null;
   reviewCount: number | null;
+  moqB2B?: number | null;
+  minOrderQuantity?: number | null;
 }
 
 const PLACEHOLDER_IMAGE = '/images/cat_namkeen.jpg';
@@ -63,6 +65,8 @@ export function toShelfProduct(card: StorefrontProductCard): ShelfProduct {
     unit: card.unit,
     rating: card.rating,
     reviewCount: card.reviewCount,
+    moqB2B: card.moqB2B ?? 1,
+    minOrderQuantity: card.minOrderQuantity ?? 1,
   };
 }
 

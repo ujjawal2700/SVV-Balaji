@@ -16,7 +16,126 @@ how each side learns what the other did.
 
 ---
 
-## 2026-09-29 (latest) — Ujjawal — POS counters for company stores + Outlets saved in the database
+## 2026-10-02 (latest) — Raunak (via agent) — Retailer (B2B) orders routed zone-wise, like customers
+
+**Did:** Retailer checkout used to skip zones entirely and always route to the central depot by Shiprocket, so a
+retailer next to an outlet was quoted the courier "3-6 days" window. Now customers and retailers use the same routing:
+Quick zone check -> nearest outlet within radius that can supply every item -> LOCAL (rider), otherwise depot ->
+SHIPROCKET. Changes are in `checkout.service.ts` (zone `quickDecision` for both channels) and
+`fulfillment-router.service.ts` (the outlet branch no longer excludes B2B). B2B pricing, MOQ, credit terms/limit and
+B2B delivery fees are unchanged; Quick uses the zone's fee as for customers. A bulk quantity an outlet cannot cover still
+falls through to the depot. No admin change was needed: the existing Pack & Deliver panel already follows the order's
+route, so a LOCAL retailer order is FIFO-allocated at the outlet, scanned, auto-offered to the outlet's riders and closed
+with the doorstep OTP, and stock/reservations/allocations sync exactly as for customers.
+
+**Verified:** new `e2e-retailer-routing-flow.py` 21/21 (local -> LOCAL with minutes ETA, Quick offered and selectable,
+bulk beyond outlet stock -> depot/courier, far -> courier, credit order at the outlet, held stock steers the next
+order to the depot, FIFO across two outlet batches, reservations, rider + OTP delivery, outlet stock -20 with matching
+STOCK_OUT rows, depot untouched, traceability). quick-delivery, rider and returns e2e pass; checkout/delivery unit tests
+58/58. Not click-tested in a browser.
+
+**Contract changes:** none in shape. Behaviour: B2B quotes can now return `method: LOCAL` and a `deliveryOptions.quick`
+block. `e2e-checkout-flow.py` B2B assertion updated to expect LOCAL for a local address; the returns e2e retailer now
+uses a far address to keep covering the courier + credit-note path.
+
+**Other developer needs to know:** staff-placed B2B orders (source STAFF, Order form modal) are not routed - staff still
+pick the warehouse - unchanged here. Retailer LOCAL orders now appear on the Delivery Board and go to riders.
+
+**Next:** -
+
+---
+
+## 2026-10-02 — Raunak (via agent) — Returns & Exchanges (order-item level) + rupee Refund Wallet
+
+**Did:** Built the return/exchange workflow end to end — backend, admin, customer/retailer storefront and rider app.
+Customers (B2C) and retailers (B2B) have **separate queues, permissions and policies**.
+- **New module `src/returns`** (`returns.logic.ts` pure, 17 tests). Requests are per **order item + quantity** (partial
+  returns, several requests per line). Path comes from how the order was delivered, never chosen by the customer:
+  `QUICK_DELIVERY` (LOCAL → in-house rider) or `SHIPROCKET` (courier).
+  - Return: `REQUESTED → APPROVED → PICKUP_SCHEDULED → PICKED_UP → QC → REFUND_INITIATED → COMPLETED`
+    (+ `REJECTED`, `PICKUP_FAILED`, `QC_FAILED`, `CANCELLED`).
+  - Exchange: `… → QC → REPLACEMENT_PROCESSING → SHIPPED → DELIVERED → COMPLETED` (+ `DELIVERY_FAILED`).
+    `QC` = received at the warehouse, inspection pending. A transition table refuses skipped steps; every move is a
+    conditional update (`WHERE status = expected`), so concurrent staff actions get a 409, never a double move.
+  - **Eligibility** from the order's actual `deliveredAt`; cancelled / not-delivered orders refused; per-channel
+    return/exchange on-off, windows, non-returnable/non-exchangeable product + category lists; reasons (company-fault
+    reasons waive fees, some require photos). Duplicates blocked by locking the `order_items` row while checking the
+    remaining quantity, plus an `Idempotency-Key`.
+  - **Money** frozen at request from what was actually paid (`lineTotal`, i.e. after coupon/coin discounts, incl. GST);
+    optional return-shipping fee + restocking % on non-fault returns; redeemed coins pro-rated back on completion
+    (never more than spent minus already returned). Loyalty points earned are reversed through the **existing**
+    `OrderReturn` + `LoyaltyService.reverseForReturn` (OrderReturn gained `returnRequestId` so legacy staff returns and
+    requests are never double counted).
+  - **Refund methods:** Refund Wallet (instant), manual UPI / manual bank (UPI id / account + **reference required**),
+    and for B2B credit bills a **credit note** — a `CreditReceipt` (method OTHER, ref = request no.) applied to the
+    order through Receivables; excess goes to the wallet. An unpaid credit bill can only be refunded by credit note.
+  - **Exchange:** replacement stock is reserved **atomically at approval** (`lockStockRows` + `availableByProduct` +
+    FIFO batch pick into `ReturnReplacementAllocation`, bumping `reservedQuantity`), so the same unit cannot go to two
+    exchanges or to an exchange and an order. Same product = no price difference; a different product is priced today
+    vs what was paid. Dearer: customer pays (Refund Wallet and/or online gateway, or staff record/waive) **before** it
+    ships. Cheaper: credited to the wallet on delivery (or not, per policy). Failed replacement → back in stock (still
+    reserved) → re-send or **convert to refund**.
+  - **Inventory:** QC splits returned packs into good (back to sellable stock) and damaged (new
+    `FinishedGoodsStock.damagedQuantity`, never sellable), on the **same FG batches the line shipped** (`ReturnBatchLine`)
+    — traceability back to the farmer still resolves. New ledger types `RETURN_INWARD` / `RETURN_DAMAGED`.
+  - **Rider path:** new task kinds `RETURN_PICKUP` (customer → store; customer reads a pickup code) and
+    `REPLACEMENT_DELIVERY` (store → customer; stock leaves at pickup; customer reads a delivery code). Same offers,
+    pay rules and board as orders; tasks carry `returnRequestId` and `orderId = null`, so no order hook fires.
+    Rider actions at `/rider/return-tasks/:id/*`; the order-delivery actions now refuse these kinds (409).
+  - **Shiprocket path:** `ShippingProvider.createReturnShipment` (reverse pickup, `is_return: 1`); forward shipment for
+    replacements. Courier status is stored separately in `ReturnShipment.externalStatus` + event log; our status
+    only moves on recognised events. The single Shiprocket webhook routes non-order AWBs through a new
+    `ShipmentWebhookRouter` (CommonModule) — no CheckoutModule ↔ ReturnsModule cycle. Lost-in-transit settles without receipt.
+- **Rupee Refund Wallet** (`RefundWalletService`, `Customer.refundWalletBalance` + `RefundWalletTransaction` ledger,
+  conditional debit so it never goes negative). **Spendable at checkout** (`useRefundWallet`): a payment, not a
+  discount — invoice `total` unchanged, `Order.refundWalletPaidInr` recorded, gateway/COD collect only `amountDue`;
+  fully covered orders are paid ONLINE; not combinable with CREDIT; cancelling the order gives it back.
+- **Admin:** new menu group *Returns & Exchanges* — Customer Returns, Retailer Returns (same screen, separate data),
+  Return & Exchange Settings (per-channel policy tabs + reasons). Stock Movements shows the two new types.
+- **Customer app:** order detail shows per-item eligibility + "Return / Exchange"; request form (qty, reason,
+  photos/videos, replacement picker with live stock, refund method + UPI/bank); *My returns* with Refund Wallet
+  balance/history, request detail (codes, rider, courier tracking, cancel, pay difference); checkout wallet toggle.
+- **Rider app:** task screen, OTP screen, fail screen and offer cards are kind-aware.
+
+**Verified:** backend `tsc` clean; unit tests green (returns logic 17; sales/checkout/notifications/permissions suites
+pass — one auth `beforeEach` 5 s timeout under load, passes alone). **New `e2e-returns-flow.py`: 79/79 pass** against a
+real API + a throwaway local Postgres DB (all migrations applied fresh, then dropped): rider return with codes, QC
+good/damaged on the shipped batch + trace to farmer, wallet refund → spent at checkout → returned on cancel, race of two
+requests (one wins), race of two exchange approvals on the last 2 units (one reserves, other 409), difference paid
+online, rider replacement delivery, Shiprocket return with separate courier status + UPI refund needing a reference,
+pickup exception → rebook → cancel, Shiprocket exchange RTO → back in stock → convert to refund, retailer credit note
+reducing the bill, QC reject. Existing `e2e-rider-flow.py` and `e2e-quick-delivery-flow.py` still pass. Admin,
+customer, rider and field apps typecheck. **Not click-tested in a browser.** Shiprocket return API and Razorpay are
+still unverified against live accounts (mock providers only, same as before).
+
+**Contract changes:**
+- Migration `20261002120000_returns_exchanges_refund_wallet` (additive only).
+- New routes: `/storefront/returns/*`, `/returns/customers/*`, `/returns/retailers/*`, `/return-settings/*`,
+  `/rider/return-tasks/:id/*`, `GET /storefront/wallet/refund`, `GET /wallet/customers/:id/refund-wallet`,
+  `POST /wallet/customers/:id/refund-wallet/adjust`.
+- Checkout: request `useRefundWallet`; quote `totals.refundWalletApplied`, `totals.amountDue`, `refundWallet`;
+  storefront order `totals.refundWalletPaid`; `GET /storefront/wallet` adds `refundWalletBalance`.
+- Rider task/offer payloads add `kind` and `returnRequest`; `/rider/tasks/:id/<step>` returns 409
+  `USE_RETURN_TASK_ACTIONS` for return trips.
+- Enums: `StockMovementType` + `RETURN_INWARD`, `RETURN_DAMAGED`; `DeliveryTaskKind` + `REPLACEMENT_DELIVERY`.
+- Permission keys: `returns.b2c.view/manage`, `returns.b2b.view/manage`, `returns.qc`, `returns.refund`,
+  `returnSettings.view/manage`, `refundWallet.adjust`. Order event type `RETURN_UPDATE` (customer push copy added).
+
+**Other developer needs to know:**
+- **Deploy:** `prisma migrate deploy` + `prisma generate` + API restart. Default reasons are seeded on first boot; the
+  per-channel policy rows are created with defaults on first read (B2B defaults to credit-note refunds).
+- `e2e-checkout-flow.py` has 2 **pre-existing** failures unrelated to this work: since `ad83f3c` (28 Sep) the delivery
+  OTP is only shown while DISPATCHED, and an address with no pin can now route LOCAL — the script was never updated.
+- Pre-existing race seen while testing: staff "assign rider" to an *external* driver can run alongside the dispatcher
+  offering the same order to an app rider, leaving a stale PENDING offer that blocks that rider from new offers until
+  it expires. Not changed here.
+- Customer media uploads go to the new `return-media` Cloudinary folder.
+
+**Next:** browser click-through of the three apps; Shiprocket sandbox run for reverse pickups once credentials exist.
+
+---
+
+## 2026-09-29 — Ujjawal — POS counters for company stores + Outlets saved in the database
 
 **Did:** The POS pages (New Sale, POS Orders, POS Reports) and Outlets had full UIs on hard-coded arrays and
 `localStorage`; they now run on the database. **Franchise module untouched** (client: future scope).

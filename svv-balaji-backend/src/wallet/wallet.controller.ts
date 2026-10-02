@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -9,7 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CustomerJwtAuthGuard } from '../storefront/guards/customer-jwt-auth.guard';
 import { CurrentCustomer } from '../storefront/decorators/current-customer.decorator';
 import type { CustomerJwtPayload } from '../storefront/strategies/customer-jwt.strategy';
-import { UpdateWalletSettingsDto } from './dto/wallet.dto';
+import { AdjustRefundWalletDto, UpdateWalletSettingsDto } from './dto/wallet.dto';
+import { RefundWalletService } from './refund-wallet.service';
 import { WalletService } from './wallet.service';
 
 /** Staff side: configure whether the two coin pools redeem separately or together. */
@@ -21,6 +22,7 @@ export class WalletAdminController {
   constructor(
     private readonly wallet: WalletService,
     private readonly prisma: PrismaService,
+    private readonly refundWallet: RefundWalletService,
   ) {}
 
   @Get('settings')
@@ -43,6 +45,20 @@ export class WalletAdminController {
   balance(@Param('customerId') customerId: string) {
     return this.wallet.getBalance(customerId);
   }
+
+  @Get('customers/:customerId/refund-wallet')
+  @RequirePermission('wallet.view')
+  @ApiOperation({ summary: "A customer's rupee Refund Wallet: balance and ledger" })
+  async refundLedger(@Param('customerId') customerId: string) {
+    return { balance: await this.refundWallet.balance(customerId), transactions: await this.refundWallet.ledger(customerId) };
+  }
+
+  @Post('customers/:customerId/refund-wallet/adjust')
+  @RequirePermission('refundWallet.adjust')
+  @ApiOperation({ summary: 'Super Admin correction to a Refund Wallet (signed amount, note required)' })
+  adjustRefund(@Param('customerId') customerId: string, @Body() dto: AdjustRefundWalletDto, @CurrentUser() user: JwtPayload) {
+    return this.refundWallet.adjust(customerId, dto.amount, dto.note, user.sub);
+  }
 }
 
 /** Customer side: one combined balance view across both coin pools. */
@@ -52,7 +68,18 @@ export class StorefrontWalletController {
   constructor(
     private readonly wallet: WalletService,
     private readonly prisma: PrismaService,
+    private readonly refundWallet: RefundWalletService,
   ) {}
+
+  @Get('refund')
+  @ApiBearerAuth()
+  @UseGuards(CustomerJwtAuthGuard)
+  @ApiOperation({ summary: 'My rupee Refund Wallet: balance and recent transactions' })
+  async refund(@CurrentCustomer() session: CustomerJwtPayload) {
+    const account = await this.prisma.customerAccount.findUnique({ where: { id: session.sub }, select: { customerId: true } });
+    if (!account?.customerId) return { balance: 0, transactions: [] };
+    return { balance: await this.refundWallet.balance(account.customerId), transactions: await this.refundWallet.ledger(account.customerId, 50) };
+  }
 
   @Get()
   @ApiBearerAuth()
@@ -64,7 +91,7 @@ export class StorefrontWalletController {
       select: { customerId: true },
     });
     if (!account?.customerId) {
-      return { referralBalance: 0, loyaltyBalance: 0, totalBalance: 0 };
+      return { referralBalance: 0, loyaltyBalance: 0, totalBalance: 0, refundWalletBalance: 0 };
     }
     return this.wallet.getBalance(account.customerId);
   }

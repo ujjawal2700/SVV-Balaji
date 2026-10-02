@@ -140,10 +140,30 @@ export function RetailerDetailPage() {
   const handleApprove = () => {
     if (!account) return;
     modal.confirm({
-      title: `Approve Retailer Partner: ${account.businessName || account.fullName}?`,
-      content: `This activates the B2B account, creates a commercial customer record, and enables direct wholesale ordering under GSTIN ${account.gstin || 'N/A'}.`,
+      title: (
+        <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a' }}>
+          Approve Retailer Partner: {account.businessName || account.fullName}?
+        </div>
+      ),
+      content: (
+        <div style={{ marginTop: 8, color: '#475569', fontSize: 14, lineHeight: 1.5 }}>
+          This activates the B2B account, creates a commercial customer record, and enables direct wholesale ordering under GSTIN <Text strong>{account.gstin || 'N/A'}</Text>.
+        </div>
+      ),
+      icon: <CheckCircleFilled style={{ color: '#16a34a', fontSize: 24, marginTop: 4 }} />,
+      centered: true,
       okText: 'Approve & Activate',
-      okButtonProps: { type: 'primary', style: { background: '#16a34a', borderColor: '#16a34a' } },
+      okButtonProps: {
+        type: 'primary',
+        size: 'large',
+        style: { background: '#16a34a', borderColor: '#16a34a', borderRadius: 8, fontWeight: 600 }
+      },
+      cancelButtonProps: {
+        size: 'large',
+        style: { borderRadius: 8, fontWeight: 500 }
+      },
+      maskClosable: true,
+      width: 480,
       onOk: async () => {
         try {
           await approve.mutateAsync(account.id);

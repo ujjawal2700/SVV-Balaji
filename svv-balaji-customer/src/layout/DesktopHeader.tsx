@@ -11,6 +11,7 @@ import {
   PhoneOutlined,
   QrcodeOutlined,
   ReloadOutlined,
+  RightOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
   ShopOutlined,
@@ -21,11 +22,10 @@ import {
 } from '@ant-design/icons';
 import { Badge, Button, Dropdown, Input, type MenuProps, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { useCart } from '../cart/useCart';
-import { useCategoryTree } from '../hooks/useCategoryTree';
 import { useLoyalty } from '../loyalty/useLoyalty';
 
 import { formatInr } from '../utils/money';
@@ -39,7 +39,6 @@ export function DesktopHeader() {
   const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const unreadNotifications = useUnreadNotifications();
-  const categories = useCategoryTree();
   const [searchQuery, setSearchQuery] = useState('');
 
   const isRetailer = role === 'RETAILER';
@@ -177,16 +176,6 @@ export function DesktopHeader() {
       label: <span onClick={logout} style={{ color: '#dc2626' }}>Sign Out</span>,
     },
   ];
-
-  const categoriesMenu: MenuProps['items'] = categories.map((cat) => ({
-    key: cat.id,
-    label: (
-      <Link to={`/products/${cat.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
-        <img src={cat.image} alt={cat.name} style={{ width: 24, height: 24, objectFit: 'contain' }} />
-        <span>{cat.name}</span>
-      </Link>
-    ),
-  }));
 
   return (
     <header className="desktop-only" style={{ background: '#ffffff', borderBottom: '1px solid #e7e5e4', position: 'sticky', top: 0, zIndex: 100 }}>
@@ -434,95 +423,116 @@ export function DesktopHeader() {
 
             {/* Cart Button */}
             <Link to="/cart" style={{ textDecoration: 'none' }}>
-              <Button
-                type="primary"
-                size="large"
+              <div
                 style={{
-                  background: '#f97316',
-                  borderColor: '#f97316',
+                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
                   borderRadius: 12,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '0 16px',
-                  fontWeight: 700,
+                  gap: 10,
+                  padding: '0 14px 0 10px',
                   height: 42,
+                  boxShadow: '0 3px 10px rgba(234, 88, 12, 0.28)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  userSelect: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(234, 88, 12, 0.38)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 3px 10px rgba(234, 88, 12, 0.28)';
                 }}
               >
-                <Badge count={cart.count} size="small" offset={[2, -2]}>
-                  <ShoppingCartOutlined style={{ fontSize: 18, color: '#ffffff' }} />
-                </Badge>
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
-                  <span style={{ fontSize: 10, opacity: 0.9 }}>My Cart</span>
-                  <span style={{ fontSize: 13, fontWeight: 800 }}>
-                    {cart.indicativeTotal != null ? formatInr(cart.indicativeTotal) : '₹0'}
-                  </span>
-                </span>
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Category Strip & Quick Navigation */}
-      <div style={{ background: '#ffffff', padding: '6px 0', borderBottom: '1px solid #f0eee9' }}>
-        <div
-          className="store-container"
-          style={{
-            paddingTop: 0,
-            paddingBottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-          }}
-        >
-          {/* Categories Dropdown & Quick links */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
-            <Dropdown menu={{ items: categoriesMenu }} placement="bottomLeft">
-              <Button
-                type="default"
-                style={{
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  borderColor: '#d6d3d1',
-                  background: '#f5f5f4',
-                  color: '#1c1917',
-                  fontSize: 13,
-                  height: 32,
-                }}
-              >
-                <span>🛒 Categories</span>
-                <DownOutlined style={{ fontSize: 10 }} />
-              </Button>
-            </Dropdown>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, whiteSpace: 'nowrap' }}>
-              {categories.map((cat) => (
-                <NavLink
-                  key={cat.id}
-                  to={`/products/${cat.id}`}
-                  style={({ isActive }) => ({
-                    textDecoration: 'none',
-                    fontSize: 13,
-                    fontWeight: isActive ? 700 : 500,
-                    color: isActive ? '#ea580c' : '#4b5563',
-                    display: 'inline-flex',
+                {/* Cart Icon Container with crisp, non-overlapping floating Badge */}
+                <div
+                  style={{
+                    position: 'relative',
+                    width: 32,
+                    height: 32,
+                    borderRadius: 9,
+                    background: 'rgba(255, 255, 255, 0.22)',
+                    display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
-                    padding: '4px 0',
-                    borderBottom: isActive ? '2px solid #ea580c' : '2px solid transparent',
-                    whiteSpace: 'nowrap',
-                  })}
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
                 >
-                  <img src={cat.image} alt={cat.name} style={{ width: 16, height: 16, objectFit: 'contain' }} />
-                  <span>{cat.name}</span>
-                </NavLink>
-              ))}
-            </div>
+                  <ShoppingCartOutlined style={{ fontSize: 17, color: '#ffffff' }} />
+                  {cart.count > 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -5,
+                        right: -6,
+                        minWidth: 17,
+                        height: 17,
+                        padding: '0 4px',
+                        borderRadius: 999,
+                        background: '#ffffff',
+                        color: '#ea580c',
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {cart.count > 99 ? '99+' : cart.count}
+                    </span>
+                  )}
+                </div>
+
+                {/* Text Content */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    textAlign: 'left',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      color: 'rgba(255, 255, 255, 0.9)',
+                      letterSpacing: '0.02em',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    My Cart
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      letterSpacing: '-0.01em',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {cart.indicativeTotal != null && cart.indicativeTotal > 0
+                      ? formatInr(cart.indicativeTotal)
+                      : '₹0'}
+                  </span>
+                </div>
+
+                {/* Subtle Right Arrow */}
+                <RightOutlined
+                  style={{
+                    fontSize: 10,
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    marginLeft: 2,
+                  }}
+                />
+              </div>
+            </Link>
           </div>
         </div>
       </div>

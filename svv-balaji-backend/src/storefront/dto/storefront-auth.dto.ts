@@ -3,12 +3,14 @@ import {
   IsEmail,
   IsEnum,
   IsIn,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Length,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { SalesChannel } from '@prisma/client';
 import { OTP_LENGTH } from '../otp.config';
@@ -114,16 +116,33 @@ export class RegisterRetailerDto {
   @IsEmail()
   email?: string;
 
-  @ApiProperty({ example: '29ABCDE1234F1Z5', description: '15-character GSTIN' })
+  @ApiPropertyOptional({ example: '29ABCDE1234F1Z5', description: '15-character GSTIN' })
+  @IsOptional()
   @IsString()
   @Length(15, 15)
-  gstin!: string;
+  @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, { message: 'Invalid GSTIN format' })
+  gstin?: string;
+
+  @ApiPropertyOptional({ example: 'UDYAM-MH-18-0000001' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/, { message: 'Invalid Udyam Registration Number format' })
+  udyamRegistration?: string;
 
   @ApiPropertyOptional({ example: 'ABCDE1234F' })
-  @IsOptional()
+  @ValidateIf((o) => !o.aadhaar)
+  @IsNotEmpty({ message: 'Either PAN or Aadhaar is required' })
   @IsString()
   @Length(10, 10)
   pan?: string;
+
+  @ApiPropertyOptional({ example: '123456789012' })
+  @ValidateIf((o) => !o.pan)
+  @IsNotEmpty({ message: 'Either PAN or Aadhaar is required' })
+  @IsString()
+  @Length(12, 12)
+  @Matches(/^\d{12}$/, { message: 'Aadhaar must be 12 digits' })
+  aadhaar?: string;
 
   @ApiProperty({ example: '12 Market Road' })
   @IsString()

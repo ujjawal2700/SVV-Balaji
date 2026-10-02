@@ -126,14 +126,19 @@ export function SearchPage() {
   const inCart = (id: string) => cart.lines.find((l) => l.productId === id)?.quantity ?? 0;
 
   const addToCart = (p: ShelfProduct) =>
-    cart.add({
-      productId: p.id,
-      productName: p.name,
-      unit: p.variant || p.weight || p.unit,
-      displayUnitPrice: p.price,
-      imageUrl: p.image,
-      mrp: p.mrp,
-    });
+    cart.add(
+      {
+        productId: p.id,
+        productName: p.name,
+        unit: p.variant || p.weight || p.unit,
+        displayUnitPrice: p.price,
+        imageUrl: p.image,
+        mrp: p.mrp,
+        moqB2B: p.moqB2B ?? 1,
+        minOrderQuantity: p.minOrderQuantity ?? 1,
+      },
+      isRetailer ? (p.moqB2B ?? 1) : 1,
+    );
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 80 }}>
@@ -336,6 +341,11 @@ function ProductList({
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
                   {p.weight ? <span style={{ fontSize: 12, color: '#64748b' }}>{p.weight}</span> : null}
+                  {accent === '#059669' && (p.moqB2B ?? 1) > 1 ? (
+                    <span style={{ fontSize: 11, background: '#ecfdf5', color: '#059669', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                      MOQ: {p.moqB2B}
+                    </span>
+                  ) : null}
                   <RatingBadge rating={p.rating} count={p.reviewCount} />
                 </div>
                 <div style={{ marginTop: 3, display: 'flex', alignItems: 'baseline', gap: 6 }}>

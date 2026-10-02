@@ -15,6 +15,7 @@ import { SalesService } from '../sales/sales.service';
 import type { AddressSnapshot } from './addresses.service';
 import { SHIPPING_PROVIDER, type ShippingProvider } from './shipping/shipping-provider';
 import { DispatchService } from '../delivery/dispatch/dispatch.service';
+import { ShipmentWebhookRouter } from '../common/shipment-webhook-router';
 
 const MAX_OTP_ATTEMPTS = 5;
 const FG_NUMBER = /FG-[A-Z0-9_-]+/i;
@@ -39,6 +40,7 @@ export class FulfillmentService {
     private readonly sales: SalesService,
     @Inject(SHIPPING_PROVIDER) private readonly shipping: ShippingProvider,
     @Inject(forwardRef(() => DispatchService)) private readonly dispatch: DispatchService,
+    private readonly webhookRouter: ShipmentWebhookRouter,
   ) {}
 
   private async order(id: string) {
@@ -202,7 +204,7 @@ export class FulfillmentService {
       orderDate: o.orderDate,
       paymentMode: (o.paymentMode ?? 'ONLINE') as 'ONLINE' | 'COD' | 'CREDIT',
       subtotal: Number(o.subtotal) - Number(o.discountTotal),
-      totalPayable: Number(o.total),
+      totalPayable: Math.max(0, Number(o.total) - Number(o.refundWalletPaidInr)),
       address: a,
       items: items.map((i) => ({
         name: i.nameSnapshot ?? i.product.name,
@@ -265,10 +267,14 @@ export class FulfillmentService {
   async handleShiprocketWebhook(payload: Record<string, unknown>) {
     const awb = String(payload.awb ?? payload.awb_code ?? '');
     if (!awb) throw new BadRequestException('No AWB in webhook');
-    const shipment = await this.prisma.orderShipment.findFirst({ where: { awb } });
-    if (!shipment) return { ok: true, ignored: true }; // not ours (or not created yet): acknowledge so it is not retried forever
-
     const status = String(payload.current_status ?? payload.status ?? '').toUpperCase().replace(/\s+/g, '_');
+    const shipment = await this.prisma.orderShipment.findFirst({ where: { awb } });
+    if (!shipment) {
+      // A return pickup or an exchange replacement? (src/returns registers for those.)
+      if (await this.webhookRouter.route(awb, status, payload)) return { ok: true };
+      return { ok: true, ignored: true }; // not ours (or not created yet): acknowledge so it is not retried forever
+    }
+
     const at = new Date();
     const existing = (shipment.events as unknown as Array<{ status: string; at: string }>) ?? [];
     const duplicate = existing.some((e) => e.status === status && payload.current_timestamp && e.at === String(payload.current_timestamp));

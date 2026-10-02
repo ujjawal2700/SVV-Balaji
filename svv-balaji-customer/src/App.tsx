@@ -52,6 +52,9 @@ const OrderPlacedPage = lazy(() =>
 );
 const AddressesPage = lazy(() => import('./pages/AddressesPage').then((m) => ({ default: m.AddressesPage })));
 const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
+const ReturnRequestPage = lazy(() => import('./pages/ReturnRequestPage').then((m) => ({ default: m.ReturnRequestPage })));
+const ReturnsPage = lazy(() => import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnsPage })));
+const ReturnDetailPage = lazy(() => import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnDetailPage })));
 const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
 const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage').then((m) => ({ default: m.LoyaltyPage })));
 const ReferralPage = lazy(() =>
@@ -141,6 +144,9 @@ export function App() {
           <Route path="orders/:orderId/support" element={<OrderSupportPage />} />
           <Route path="order-support" element={<OrderSupportPage />} />
           <Route path="orders/:orderId" element={<OrderTrackingPage />} />
+          <Route path="orders/:orderId/return" element={<RequireAccount><ReturnRequestPage /></RequireAccount>} />
+          <Route path="returns" element={<RequireAccount><ReturnsPage /></RequireAccount>} />
+          <Route path="returns/:requestNumber" element={<RequireAccount><ReturnDetailPage /></RequireAccount>} />
           <Route path="order-placed/:orderNumber" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />
           <Route path="order-placed" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />
           <Route path="order-success/:orderNumber" element={<RequireAccount><OrderPlacedPage /></RequireAccount>} />

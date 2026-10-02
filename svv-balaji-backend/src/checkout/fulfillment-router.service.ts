@@ -34,9 +34,11 @@ export interface Route {
 /**
  * Decides HOW and FROM WHERE an order is fulfilled. The customer never picks.
  *
- *   - B2B (bulk) always ships from the central depot.
- *   - B2C: the nearest active franchise outlet whose delivery radius covers the
- *     address AND that can supply every item -> LOCAL (in-house rider).
+ *   - Customers (B2C) and retailers (B2B) alike: the nearest active franchise
+ *     outlet whose delivery radius covers the address AND that can supply every
+ *     item -> LOCAL (in-house rider). A bulk retailer order an outlet cannot
+ *     cover simply falls through to the depot.
+ *     (Until 2 Oct 2026 B2B always went to the depot, whatever the address.)
  *   - otherwise -> the central depot -> SHIPROCKET (3PL).
  *
  * An address with no coordinates has no distance, so it is never "local":
@@ -75,7 +77,7 @@ export class FulfillmentRouterService {
       ? { lat: input.address.latitude as number, lng: input.address.longitude as number }
       : null;
 
-    if (!input.b2b && !input.courierOnly) {
+    if (!input.courierOnly) {
       const outlets = await client.warehouse.findMany({
         where: {
           kind: WarehouseKind.OUTLET,
@@ -124,9 +126,7 @@ export class FulfillmentRouterService {
     // Central depot: everything else.
     const available = await availableByProduct(client as Prisma.TransactionClient, centralNode.id, ids);
     assertEnough(input.items, available); // throws OutOfStockException with what is short
-    const reason = input.b2b
-      ? 'Bulk orders ship from our central warehouse'
-      : input.courierOnly
+    const reason = input.courierOnly
         ? 'Shipped from our central warehouse'
         : !from
         ? 'Shipped from our central warehouse (pin your delivery location for faster local delivery)'

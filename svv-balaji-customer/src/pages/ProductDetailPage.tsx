@@ -340,6 +340,8 @@ export function ProductDetailPage() {
         priceTiers: isRetailer ? toCartTiers(activePack.priceTiers) : null,
         imageUrl: activeProduct.image,
         mrp,
+        moqB2B: detail.orderLimits.moqB2B ?? 1,
+        minOrderQuantity: detail.orderLimits.minOrderQuantity ?? 1,
       },
       // The quantity the shopper actually chose (in packs).
       qtyToAdd,
@@ -365,6 +367,8 @@ export function ProductDetailPage() {
             priceTiers: toCartTiers(pack.priceTiers),
             imageUrl: pack.images[0] ?? activeProduct.image,
             mrp: pack.mrp,
+            moqB2B: detail.orderLimits.moqB2B ?? 1,
+            minOrderQuantity: detail.orderLimits.minOrderQuantity ?? 1,
           },
           qty,
         );
@@ -1508,7 +1512,14 @@ export function ProductDetailPage() {
                           size="small"
                           type="text"
                           icon={<MinusOutlined style={{ fontSize: 9 }} />}
-                          onClick={() => cart.setQuantity(related.id, relatedCartLine.quantity - 1)}
+                          onClick={() => {
+                            const relatedMoq = isRetailer ? ((related as any).moqB2B ?? 1) : 1;
+                            if (relatedCartLine.quantity <= relatedMoq) {
+                              cart.remove(related.id);
+                            } else {
+                              cart.setQuantity(related.id, relatedCartLine.quantity - 1);
+                            }
+                          }}
                           style={{ width: 22, minWidth: 22, height: 22, padding: 0 }}
                         />
                         <Typography.Text strong style={{ width: 20, textAlign: 'center', fontSize: 11, color: '#ea580c' }}>
@@ -1526,17 +1537,23 @@ export function ProductDetailPage() {
                       <Button
                         size="small"
                         disabled={!related.purchasable}
-                        style={{ border: '1px solid #f97316', color: '#f97316', borderRadius: 6, padding: '0 8px', fontSize: 11, fontWeight: 600, height: 24 }}
-                        onClick={() =>
-                          cart.add({
-                            productId: related.id,
-                            productName: related.name,
-                            unit: related.variant || '1 pack',
-                            displayUnitPrice: relatedPrice,
-                            imageUrl: related.image,
-                            mrp: related.mrp,
-                          })
-                        }
+                        style={{ border: `1px solid ${isRetailer ? '#059669' : '#f97316'}`, color: isRetailer ? '#059669' : '#f97316', borderRadius: 6, padding: '0 8px', fontSize: 11, fontWeight: 600, height: 24 }}
+                        onClick={() => {
+                          const relatedMoq = isRetailer ? ((related as any).moqB2B ?? 1) : 1;
+                          cart.add(
+                            {
+                              productId: related.id,
+                              productName: related.name,
+                              unit: related.variant || '1 pack',
+                              displayUnitPrice: relatedPrice,
+                              imageUrl: related.image,
+                              mrp: related.mrp,
+                              moqB2B: (related as any).moqB2B ?? 1,
+                              minOrderQuantity: (related as any).minOrderQuantity ?? 1,
+                            },
+                            relatedMoq,
+                          );
+                        }}
                       >
                         ADD
                       </Button>

@@ -97,7 +97,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       where: { id: orderId },
       select: {
         id: true, orderNumber: true, status: true, fulfillmentMethod: true, warehouseId: true, deliveryZoneId: true, deliverySpeed: true,
-        addressSnapshot: true, deliveryAddress: true, distanceKm: true, total: true, paymentMode: true, paymentStatus: true, etaMax: true,
+        addressSnapshot: true, deliveryAddress: true, distanceKm: true, total: true, refundWalletPaidInr: true, paymentMode: true, paymentStatus: true, etaMax: true,
         riderName: true,
       },
     });
@@ -111,7 +111,8 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     const a = (order.addressSnapshot ?? {}) as Record<string, unknown>;
     const lat = typeof a.latitude === 'number' ? a.latitude : null;
     const lng = typeof a.longitude === 'number' ? a.longitude : null;
-    const cod = order.paymentMode === 'COD' && order.paymentStatus !== 'PAID' ? Number(order.total) : 0;
+    // Whatever the Refund Wallet already paid is not collected at the door.
+    const cod = order.paymentMode === 'COD' && order.paymentStatus !== 'PAID' ? Math.max(0, Number(order.total) - Number(order.refundWalletPaidInr)) : 0;
 
     const task = await this.prisma.$transaction(async (tx) => {
       // Serialise per order so two events cannot create two tasks.
@@ -423,7 +424,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       for (const o of packed) await this.ensureTaskForOrder(o.id);
 
       const autoBack = await this.prisma.deliveryTask.findMany({
-        where: { status: 'RETURNED_TO_STORE', failureReasonCode: { not: null } },
+        where: { status: 'RETURNED_TO_STORE', failureReasonCode: { not: null }, kind: 'ORDER_DELIVERY' },
         select: { id: true, orderId: true, failureReasonCode: true, returnedAt: true }, take: 20,
       });
       for (const t of autoBack) {

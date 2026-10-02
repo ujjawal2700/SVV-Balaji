@@ -110,6 +110,15 @@ export function ProfilePage() {
           route: '/orders',
         },
         {
+          key: 'returns',
+          icon: <SyncOutlined />,
+          iconBg: '#fef2f2',
+          iconColor: '#dc2626',
+          label: 'Returns & Refund Wallet',
+          subtitle: 'Return or exchange items, track refunds',
+          route: '/returns',
+        },
+        {
           key: 'loyalty',
           icon: <TrophyOutlined />,
           iconBg: '#fffbeb',
@@ -191,6 +200,15 @@ export function ProfilePage() {
           subtitle: 'Track active bulk consignments',
           badge: stats.orderCount,
           route: '/orders',
+        },
+        {
+          key: 'returns',
+          icon: <SyncOutlined />,
+          iconBg: '#fef2f2',
+          iconColor: '#dc2626',
+          label: 'Returns & Refund Wallet',
+          subtitle: 'Return or exchange items, track refunds',
+          route: '/returns',
         },
         {
           key: 'wallet',

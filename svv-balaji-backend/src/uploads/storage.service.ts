@@ -46,6 +46,7 @@ export const UPLOAD_FOLDERS = {
   banners: 'svv-balaji/banner-images',
   'delivery-proofs': 'svv-balaji/delivery-proofs',
   'rider-documents': 'svv-balaji/rider-documents',
+  'return-media': 'svv-balaji/return-media',
 } as const;
 
 export type UploadFolder = keyof typeof UPLOAD_FOLDERS;
