@@ -26,7 +26,13 @@ export interface PushPayload {
   imageUrl?: string;
   link?: string;
   tag?: string;
+  /** Set on delivery pushes: OFFER, TASK_ASSIGNED, ... */
+  kind?: string;
+  taskId?: string;
 }
+
+/** With the app open these are shown by the in-app pop-up (with its own sound), not as a system notification. */
+const IN_APP_KINDS = new Set(['OFFER', 'TASK_ASSIGNED']);
 
 const storage = {
   get: () => {
@@ -90,6 +96,7 @@ async function listenForeground(onPush: (p: PushPayload) => void): Promise<() =>
     const d = (payload.data ?? {}) as PushPayload;
     onPush(d);
     if (Notification.permission !== 'granted') return;
+    if (d.kind && IN_APP_KINDS.has(d.kind) && document.visibilityState === 'visible') return;
     const reg = await navigator.serviceWorker.getRegistration(SCOPE);
     const options: NotificationOptions & { image?: string; renotify?: boolean } = {
       body: d.body ?? '',

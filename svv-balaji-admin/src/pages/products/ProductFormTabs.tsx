@@ -171,6 +171,11 @@ export function BasicTab({ isEdit }: { isEdit: boolean }) {
               <Input placeholder="10kg Bag" />
             </Form.Item>
           </Col>
+          <Col xs={12} md={7}>
+            <Form.Item name="packWeightKg" label="Pack weight (for delivery)" extra="One pack with packaging. Decides which rider vehicles can carry an order.">
+              <InputNumber min={0.001} max={2000} precision={3} addonAfter="kg" placeholder="10.2" {...NUMBER_FULL} />
+            </Form.Item>
+          </Col>
         </Row>
       </Section>
 

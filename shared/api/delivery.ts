@@ -78,6 +78,10 @@ export interface DeliveryTaskRow {
   speed: 'QUICK' | 'STANDARD';
   attempt: number;
   needsManualAssignment: boolean;
+  /** Staff override: never auto-offered until resumed or assigned. */
+  autoDispatchPaused: boolean;
+  /** Goods weight (kg) from product pack weights; null = some item has no weight. */
+  weightKg: string | null;
   offerRound: number;
   dropName: string;
   dropAddress: string;
@@ -114,6 +118,44 @@ export interface DeliverySettings {
   requireCodBeforeDelivery: boolean;
   maxCashInHand: string | null;
   reattemptDelayMinutes: number;
+  /** Riders offered a delivery at the same time; first to accept gets it. */
+  broadcastSize: number;
+  maxPickupDistanceKm: string | null;
+  riderHeartbeatMinutes: number;
+  /** kg per vehicle type; a type not listed has no limit. */
+  vehicleMaxKg: Partial<Record<VehicleType, number>>;
+}
+
+export type VehicleType = 'BICYCLE' | 'MOTORCYCLE' | 'SCOOTER' | 'EV_SCOOTER' | 'OTHER';
+export const VEHICLE_LABEL: Record<VehicleType, string> = {
+  BICYCLE: 'Bicycle', MOTORCYCLE: 'Motorcycle', SCOOTER: 'Scooter', EV_SCOOTER: 'EV scooter', OTHER: 'Other / not recorded',
+};
+
+/** GET /delivery/tasks/:id/candidates - the outlet's riders, ranked as the dispatcher would offer the task. */
+export interface TaskCandidates {
+  taskId: string;
+  weightKg: number | null;
+  broadcastSize: number;
+  autoOffer: boolean;
+  autoDispatchPaused: boolean;
+  riders: Array<{
+    id: string; code: string | null; fullName: string; phone: string; vehicleType: VehicleType | null; vehicleNumber: string | null;
+    availability: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null; heldTasks: number; maxActiveTasks: number;
+    rank: number | null; eligible: boolean; km: number | null;
+    reasons: Array<{ code: string; label: string }>;
+  }>;
+}
+
+export type RiderState = 'AVAILABLE' | 'BUSY' | 'NOT_RESPONDING' | 'OFFLINE';
+/** GET /delivery/availability - rider headcount per outlet right now. */
+export interface RiderAvailability {
+  totals: { available: number; busy: number; notResponding: number; offline: number };
+  outlets: Array<{
+    warehouseId: string; name: string; available: number; busy: number; notResponding: number; offline: number;
+    riders: Array<{ id: string; fullName: string; state: RiderState; heldTasks: number; maxActiveTasks: number; lastSeenAt: string | null; reasons: string[] }>;
+  }>;
+  autoOffer: boolean;
+  broadcastSize: number;
 }
 
 export interface FailureReason {
@@ -224,6 +266,9 @@ export const deliveryApi = {
   assign: (id: string, riderId: string) => d(api.post(`/delivery/tasks/${id}/assign`, { riderId })),
   unassign: (id: string, reason: string) => d(api.post(`/delivery/tasks/${id}/unassign`, { reason })),
   redispatch: (id: string) => d(api.post(`/delivery/tasks/${id}/redispatch`)),
+  setAutoDispatch: (id: string, paused: boolean) => d(api.post(`/delivery/tasks/${id}/auto-dispatch`, { paused })),
+  candidates: (id: string) => d<TaskCandidates>(api.get(`/delivery/tasks/${id}/candidates`)),
+  availability: (warehouseId?: string) => d<RiderAvailability>(api.get('/delivery/availability', { params: { warehouseId } })),
   reattempt: (id: string) => d(api.post(`/delivery/tasks/${id}/reattempt`)),
 
   settings: () => d<DeliverySettings>(api.get('/delivery/settings')),

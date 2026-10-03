@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 2 October 2026 · **Updated by:** Raunak (via agent)
+**Last updated:** 3 October 2026 · **Updated by:** Raunak (via agent)
 **Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -15,6 +15,17 @@
 ---
 
 ## 0. Since 16 August — what changed, most recent first
+
+**3 Oct — Broadcast rider dispatch.** In-house deliveries are now offered to the nearest few riders at once
+(Super Admin sets how many; default 3), and the first to accept gets it. Only riders who are online, signed in, recently
+seen, at the outlet, under their order limit and cash limit, on a vehicle that can carry the order weight (new product
+pack weight) and within an optional distance are offered. Simultaneous accepts are atomic, verified with 5 races of 3
+riders: always exactly one winner. Staff can still assign by hand at any time, and can pause auto-offer per delivery.
+The Delivery Board shows riders available / busy / not responding / offline per outlet, and why each rider would or
+would not get a delivery. In the rider app, a new request pops up with a looping sound; an assignment pops up with a
+sound. `e2e-broadcast-dispatch-flow.py` 68/68; not click-tested; push to real phones untested (no Firebase key). **Deploy:**
+`prisma migrate deploy` (`20261003120000_broadcast_dispatch`) + generate + API restart + rider and admin apps. Existing
+installs switch to 3 riders at a time; set 1 to keep the old behaviour. See `DEV_LOG.md` (2026-10-03).
 
 **2 Oct (latest) — Retailer orders routed zone-wise.** B2B storefront orders now use the same Quick-zone / nearest-outlet
 / depot routing as customers instead of always shipping from the depot by courier; LOCAL retailer orders go through the

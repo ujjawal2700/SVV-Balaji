@@ -1592,6 +1592,8 @@ export interface Product {
   // --- Product detail page content ---------------------------------------
   brand: string | null;
   packLabel: string | null;
+  /** Shipping weight of one pack (kg), Decimal as string. Null = not recorded (no rider-vehicle limit). */
+  packWeightKg?: string | null;
   /** Decimal - serialised as a string by Prisma. */
   mrp: string | null;
   badge: string | null;
@@ -1670,6 +1672,7 @@ export interface CreateProductInput {
 
   brand?: string;
   packLabel?: string;
+  packWeightKg?: number | null;
   mrp?: number;
   badge?: string;
   hsnCode?: string;

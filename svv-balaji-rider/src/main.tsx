@@ -31,6 +31,9 @@ createRoot(document.getElementById('root')!).render(
 );
 
 import { initAnalytics } from './firebase';
+import { installSoundUnlock } from './live/alerts';
+
+installSoundUnlock();
 
 void initAnalytics();
 

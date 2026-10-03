@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { DeliverySettings, FailureCategory, FailureFollowUp, Prisma } from '@prisma/client';
+import { DeliverySettings, FailureCategory, FailureFollowUp, Prisma, VehicleType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, registerDecorator } from 'class-validator';
 import { EventEmitter } from 'node:events';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -17,6 +17,30 @@ export class UpdateDeliverySettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requireCodBeforeDelivery?: boolean;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) maxCashInHand?: number | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1440) reattemptDelayMinutes?: number;
+  @ApiPropertyOptional({ description: 'Riders offered a delivery at the same time; first to accept gets it. 1 = one at a time.' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(20) broadcastSize?: number;
+  @ApiPropertyOptional({ description: 'Riders farther than this from the pickup are not offered. Null = no limit.', nullable: true })
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.1) @Max(100) maxPickupDistanceKm?: number | null;
+  @ApiPropertyOptional({ description: 'An online rider whose app has not been seen for this long is skipped.' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(240) riderHeartbeatMinutes?: number;
+  @ApiPropertyOptional({ description: 'Heaviest delivery (kg) per vehicle type, e.g. { "BICYCLE": 5 }. A type not listed has no limit.', example: { BICYCLE: 5, SCOOTER: 20 } })
+  @IsOptional() @IsVehicleLimits() vehicleMaxKg?: Partial<Record<VehicleType, number>>;
+}
+
+/** { VEHICLE_TYPE: positive kg } with known vehicle types only. */
+function IsVehicleLimits(): PropertyDecorator {
+  return (target, propertyKey) =>
+    registerDecorator({
+      name: 'isVehicleLimits',
+      target: target.constructor,
+      propertyName: propertyKey as string,
+      options: { message: 'vehicleMaxKg must map vehicle types (BICYCLE, MOTORCYCLE, SCOOTER, EV_SCOOTER, OTHER) to a weight in kg above 0' },
+      validator: {
+        validate: (v: unknown) =>
+          !!v && typeof v === 'object' && !Array.isArray(v)
+          && Object.entries(v as Record<string, unknown>).every(([k, n]) => (Object.values(VehicleType) as string[]).includes(k) && typeof n === 'number' && Number.isFinite(n) && n > 0 && n <= 2000),
+      },
+    });
 }
 
 /** Single row, lazily created (same pattern as CheckoutSettings). */
@@ -31,7 +55,11 @@ export class DeliverySettingsService {
 
   async update(dto: UpdateDeliverySettingsDto, userId: string) {
     const current = await this.get();
-    return this.prisma.deliverySettings.update({ where: { id: current.id }, data: { ...dto, updatedById: userId } });
+    const { vehicleMaxKg, ...rest } = dto;
+    return this.prisma.deliverySettings.update({
+      where: { id: current.id },
+      data: { ...rest, ...(vehicleMaxKg !== undefined ? { vehicleMaxKg: vehicleMaxKg as Prisma.InputJsonValue } : {}), updatedById: userId },
+    });
   }
 }
 
@@ -104,6 +132,8 @@ export type DeliveryEvent =
   | { kind: 'offer:new'; riderId: string; offerId: string; taskId: string }
   | { kind: 'offer:closed'; riderId: string; offerId: string; taskId: string; status: string }
   | { kind: 'task:updated'; riderId: string | null; taskId: string; orderId: string | null; status: string }
+  /** A task is now this rider's - by their own accept or by staff. The app shows the "assigned" pop-up. */
+  | { kind: 'task:assigned'; riderId: string; taskId: string; by: 'ACCEPT' | 'STAFF' }
   | { kind: 'notification'; riderId: string; notificationId: string };
 
 /**

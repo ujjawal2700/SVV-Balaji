@@ -16,6 +16,86 @@ how each side learns what the other did.
 
 ---
 
+## 2026-10-03 — Raunak (via agent) — Broadcast rider dispatch (nearest riders at once, first accept wins)
+
+**Did:** In-house delivery used to offer a task to one rider at a time (timeout, then the next). It now offers each
+round to the best **N riders at once** (`DeliverySettings.broadcastSize`, default 3; 1 = old behaviour). The first to
+accept gets it; the others' offers close as the new `TAKEN` status. A round ends when every rider in it has answered or
+its timeout passes, then the next round goes out; after `maxOfferRounds` rounds the task waits for staff. Ranking is a
+pure, unit-tested function (`src/delivery/dispatch/rider-ranking.ts`), and the dispatcher and the admin screens share
+it, so staff see exactly the reasons the dispatcher used. A rider is offered work only if they are: ACTIVE, ONLINE, signed
+in (live session), seen recently (`lastSeenAt` within `riderHeartbeatMinutes`; the app beats every 30 s, with or
+without GPS), at the task's outlet, under their order limit (held tasks plus open offers < `maxActiveTasks`), under the
+cash limit, on a vehicle that can carry the order weight, and within `maxPickupDistanceKm` (optional). Order: nearest in
+0.5 km bands, then fewer orders in hand, then longest wait since their last assignment.
+- **Atomic accept:** lock the task row, then the rider row; the offer must still be PENDING; capacity is rechecked under
+  the rider lock; the task update is conditional on `riderId IS NULL`. Losers get 409 `OFFER_TAKEN`; a rider at their
+  limit gets 409 `AT_CAPACITY`. Offer expiry in the sweep takes the same task lock. Riders who rejected or let an offer
+  expire are not asked again; withdrawn (staff) and taken (someone faster) do not count against them.
+- **Staff override kept and extended:** manual assign still works with auto-offer on, off or paused, and withdraws open
+  offers. New per-task pause/resume (`POST /delivery/tasks/:id/auto-dispatch`); "Offer to riders again" also resumes.
+- **Vehicle vs weight:** new `Product.packWeightKg` (Add/Edit Product -> Basics). Task weight = sum of quantity x pack
+  weight, frozen on the task; if any item has no weight, no vehicle limit applies. Limits per vehicle type in Delivery
+  Settings (`vehicleMaxKg`).
+- **Notifications:** offers and assignments now also go to the rider's phone as an FCM push
+  (`NotificationsService.pushToRiders`, best-effort; it used to be inbox + socket only). New socket event
+  `task:assigned`.
+- **Rider app:** a global pop-up for a new request plays `public/sounds/new-order.wav` on a loop until the rider accepts,
+  rejects, closes it, it expires or another rider takes it ("Another rider accepted that order first"). A second pop-up,
+  "Order assigned to you", rings once when they accept or the store assigns them. Browsers block sound until the first
+  tap, so the first tap anywhere unlocks it. With the app in the background the phone's own notification sound plays
+  (web push cannot pick a sound); the notification stays on screen and vibrates.
+- **Admin:** the Delivery Board has a "Riders right now" panel (available / busy / not responding / offline per
+  outlet). The task drawer has an auto-offer switch and a ranked list of the outlet's riders with the reason each is
+  skipped, plus Assign per row; the Assign modal warns but does not block for a rider the dispatcher would skip. Delivery
+  Settings has the new fields.
+- **Race fixed:** the legacy order-screen "assign rider" to an outside driver could run alongside an app rider
+  accepting the same task, and both "won". It now goes through `DispatchService.handOverToExternalDriver` under the task
+  lock, and riders get `offer:closed` for the withdrawn offers.
+
+**Verified:** new `e2e-broadcast-dispatch-flow.py` **68/68** on a fresh local throwaway DB: 3 riders accept at the
+same instant x5 -> exactly one winner each time (winners varied), two 409 `OFFER_TAKEN`, offers ACCEPTED + 2 TAKEN; the
+bicycle, the 8 km rider and the offline rider skipped with the right reasons; rejections keep the round open; timeout
+moves to the next riders; pause withdraws offers and the sweep leaves the task; resume re-offers; an assignment the
+dispatcher would skip still works; order limit; outside driver vs app accept (one wins). `e2e-rider-flow.py` 64/64 (now
+pinned to `broadcastSize: 1` because it asserts the one-at-a-time order), `e2e-quick-delivery-flow.py` all pass. New
+ranking unit tests (20) pass; full jest 715/717. `tsc` is clean for backend/admin/rider/customer/field; rider and admin
+`vite build` OK. **Not click-tested in a browser; the sound/pop-up and FCM delivery to a real phone are untested**
+(no Firebase service account here).
+
+**Pre-existing failures, not from this work (checked against an untouched HEAD build):** `e2e-returns-flow.py` stops at
+C1 (`ORDER_NOT_ELIGIBLE` - the courier order never reaches DELIVERED); `storefront-auth.service.spec.ts` "a pending
+retailer cannot sign in" fails on assertion (`pending` undefined), not a timeout.
+
+**Contract changes:**
+- Migration `20261003120000_broadcast_dispatch` (additive): enum `DeliveryOfferStatus` + `TAKEN`; `products.packWeightKg`;
+  `riders.lastSeenAt`; `delivery_tasks.autoDispatchPaused`, `.weightKg`; `delivery_settings.broadcastSize` (default 3),
+  `.maxPickupDistanceKm`, `.riderHeartbeatMinutes` (default 30), `.vehicleMaxKg` (json, default `{}`).
+- New routes: `GET /delivery/availability`, `GET /delivery/tasks/:id/candidates`, `POST /delivery/tasks/:id/auto-dispatch`
+  `{ paused }`. `POST /delivery/tasks/:id/redispatch` now also clears a pause.
+- `PATCH /delivery/settings` accepts `broadcastSize`, `maxPickupDistanceKm`, `riderHeartbeatMinutes`, `vehicleMaxKg`.
+  Product create/update accepts `packWeightKg`.
+- `POST /rider/offers/:id/accept` can return 409 `OFFER_TAKEN` / `AT_CAPACITY`. Rider socket: new `task:assigned`
+  `{ taskId, by }`, `offer:closed` can carry `status: 'TAKEN'`, new client message `heartbeat`.
+- Rider FCM data adds `kind` (`OFFER`, `TASK_ASSIGNED`, ...) and `taskId`.
+
+**Other developer needs to know:**
+- **Deploy:** `prisma migrate deploy` + `prisma generate` + API restart, then redeploy the rider app (new sound file
+  and service worker) and admin. **The hosted Render DB was migrated on 2026-10-03** (`migrate status`: up to date);
+  the API build/restart and app redeploys are still to do. **Behaviour changes on deploy:** existing installs get `broadcastSize = 3`; set it to 1
+  in Delivery Settings to keep one-at-a-time.
+- Riders are now skipped if their app has been silent for 30 min while ONLINE (the app closed without going offline).
+  Tune with "Skip online riders not seen for".
+- Products have no pack weight until someone enters it, so vehicle limits only bite once weights are filled in.
+- Local dev: `prisma generate` hit a locked query-engine DLL (the running API). I renamed it to
+  `node_modules/.prisma/client/query_engine-windows.dll.node.locked-*` and regenerated. Safe to delete once the old API is
+  stopped. Throwaway DB `svv_broadcast_e2e` left on local Postgres; safe to drop.
+
+**Next:** browser and phone click-through of the pop-up, sound and push; decide with the client whether 3 riders at a
+time and 30 s or 120 s timeouts suit their outlets.
+
+---
+
 ## 2026-10-02 (latest) — Raunak (via agent) — Retailer (B2B) orders routed zone-wise, like customers
 
 **Did:** Retailer checkout used to skip zones entirely and always route to the central depot by Shiprocket, so a

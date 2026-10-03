@@ -167,23 +167,12 @@ export class FulfillmentService {
       }
     }
 
-    // Fallback: external manual driver (not on rider app)
-    const task = await this.prisma.deliveryTask.findFirst({
-      where: { orderId, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'] } },
-      select: { id: true, taskNumber: true, status: true },
-    });
-    if (task && task.status !== 'READY_FOR_PICKUP' && task.status !== 'OFFERED') {
-      throw new BadRequestException(`A rider-app rider already has this order (${task.taskNumber}) - reassign it on the delivery board`);
-    }
-    if (task) {
-      const taken = await this.prisma.deliveryTask.updateMany({
-        where: { id: task.id, status: { in: ['READY_FOR_PICKUP', 'OFFERED'] }, riderId: null },
-        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelStage: 'BEFORE_ASSIGNMENT', cancelReason: `Handed to ${rider.name} outside the rider app` },
-      });
-      if (taken.count === 1) {
-        await this.prisma.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
-        await this.prisma.deliveryTaskEvent.create({ data: { taskId: task.id, type: 'CANCELLED', actorUserId: userId, note: `Handed to ${rider.name} outside the rider app` } });
-      }
+    // Fallback: external manual driver (not on rider app). Atomic against a rider
+    // accepting the same task in the app at the same moment - one of them wins.
+    const handed = await this.dispatch.handOverToExternalDriver(orderId, rider.name, userId);
+    if (!handed) {
+      const task = await this.prisma.deliveryTask.findFirst({ where: { orderId, status: { notIn: ['CANCELLED', 'DELIVERED'] } }, orderBy: { createdAt: 'desc' }, select: { taskNumber: true } });
+      throw new BadRequestException(`A rider-app rider already has this order (${task?.taskNumber ?? 'delivery task'}) - reassign it on the delivery board`);
     }
     await this.prisma.order.update({ where: { id: orderId }, data: { riderName: rider.name, riderPhone: rider.phone } });
     await this.sales.record(orderId, 'RIDER_ASSIGNED', userId, `${rider.name} (${rider.phone})`);

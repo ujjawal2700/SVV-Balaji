@@ -31,6 +31,7 @@ export class RiderGateway implements OnGatewayConnection, OnModuleInit {
       if (e.kind === 'offer:new') this.server.to(room(e.riderId)).emit('offer:new', { offerId: e.offerId, taskId: e.taskId });
       else if (e.kind === 'offer:closed') this.server.to(room(e.riderId)).emit('offer:closed', { offerId: e.offerId, taskId: e.taskId, status: e.status });
       else if (e.kind === 'task:updated' && e.riderId) this.server.to(room(e.riderId)).emit('task:updated', { taskId: e.taskId, status: e.status });
+      else if (e.kind === 'task:assigned') this.server.to(room(e.riderId)).emit('task:assigned', { taskId: e.taskId, by: e.by });
       else if (e.kind === 'notification') this.server.to(room(e.riderId)).emit('notification', { id: e.notificationId });
     });
   }
@@ -45,6 +46,7 @@ export class RiderGateway implements OnGatewayConnection, OnModuleInit {
       if (!s || s.riderId !== p.sub || s.revokedAt || s.expiresAt <= new Date()) throw new Error('session ended');
       client.data.riderId = p.sub;
       await client.join(room(p.sub));
+      await this.prisma.rider.update({ where: { id: p.sub }, data: { lastSeenAt: new Date() } });
       client.emit('ready', { serverTime: new Date().toISOString() });
     } catch (e) {
       this.logger.debug(`Rejected rider socket ${client.id}: ${e instanceof Error ? e.message : String(e)}`);
@@ -57,8 +59,19 @@ export class RiderGateway implements OnGatewayConnection, OnModuleInit {
   @SubscribeMessage('location')
   async location(@ConnectedSocket() client: Socket, @MessageBody() body: { latitude?: number; longitude?: number }) {
     const riderId = client.data.riderId as string | undefined;
-    if (!riderId || typeof body?.latitude !== 'number' || typeof body?.longitude !== 'number') return;
-    if (Math.abs(body.latitude) > 90 || Math.abs(body.longitude) > 180) return;
-    await this.prisma.rider.update({ where: { id: riderId }, data: { lastLatitude: body.latitude, lastLongitude: body.longitude, lastLocationAt: new Date() } });
+    if (!riderId) return;
+    const valid = typeof body?.latitude === 'number' && typeof body?.longitude === 'number' && Math.abs(body.latitude) <= 90 && Math.abs(body.longitude) <= 180;
+    // Even without a GPS fix the beat proves the app is alive.
+    await this.prisma.rider.update({
+      where: { id: riderId },
+      data: { lastSeenAt: new Date(), ...(valid ? { lastLatitude: body.latitude, lastLongitude: body.longitude, lastLocationAt: new Date() } : {}) },
+    });
+  }
+
+  /** "Still here" with no position (location permission denied / no fix). */
+  @SubscribeMessage('heartbeat')
+  async heartbeat(@ConnectedSocket() client: Socket) {
+    const riderId = client.data.riderId as string | undefined;
+    if (riderId) await this.prisma.rider.update({ where: { id: riderId }, data: { lastSeenAt: new Date() } });
   }
 }

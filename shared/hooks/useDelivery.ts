@@ -16,6 +16,8 @@ export const DELIVERY_KEYS = {
   rider: (id: string) => ['delivery', 'rider', id] as const,
   earningsReport: (q: object) => ['delivery', 'earnings-report', q] as const,
   cashReport: (q: object) => ['delivery', 'cash-report', q] as const,
+  availability: ['delivery', 'availability'] as const,
+  candidates: (id: string) => ['delivery', 'candidates', id] as const,
 };
 
 export const useZones = () => useQuery({ queryKey: DELIVERY_KEYS.zones, queryFn: deliveryApi.zones });
@@ -26,6 +28,9 @@ export const useDeliveryTasks = (q: { status?: TaskStatus; warehouseId?: string;
   useQuery({ queryKey: DELIVERY_KEYS.tasks(q), queryFn: () => deliveryApi.tasks(q), refetchInterval: 10_000 });
 export const useDeliveryTask = (id: string | null) =>
   useQuery({ queryKey: DELIVERY_KEYS.task(id ?? ''), queryFn: () => deliveryApi.task(id!), enabled: Boolean(id), refetchInterval: 10_000 });
+export const useRiderAvailability = () => useQuery({ queryKey: DELIVERY_KEYS.availability, queryFn: () => deliveryApi.availability(), refetchInterval: 10_000 });
+export const useTaskCandidates = (id: string | null) =>
+  useQuery({ queryKey: DELIVERY_KEYS.candidates(id ?? ''), queryFn: () => deliveryApi.candidates(id!), enabled: Boolean(id), refetchInterval: 10_000 });
 export const useDeliverySettings = () => useQuery({ queryKey: DELIVERY_KEYS.settings, queryFn: deliveryApi.settings });
 export const useFailureReasons = () => useQuery({ queryKey: DELIVERY_KEYS.reasons, queryFn: deliveryApi.reasons });
 export const useEarningRules = () => useQuery({ queryKey: DELIVERY_KEYS.rules, queryFn: deliveryApi.rules });

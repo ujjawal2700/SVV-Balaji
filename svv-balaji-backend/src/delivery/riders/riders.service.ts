@@ -409,6 +409,7 @@ export class RidersService {
       data: {
         availability: dto.online ? 'ONLINE' : 'OFFLINE',
         availabilityChangedAt: new Date(),
+        lastSeenAt: new Date(),
         ...(dto.latitude !== undefined && dto.longitude !== undefined ? { lastLatitude: dto.latitude, lastLongitude: dto.longitude, lastLocationAt: new Date() } : {}),
       },
     });
