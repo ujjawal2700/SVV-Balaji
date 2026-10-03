@@ -32,6 +32,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -293,6 +294,13 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   packLabel?: string;
+
+  @ApiPropertyOptional({ description: 'Shipping weight of one pack in kg. Decides which rider vehicles may carry an order; empty = no vehicle limit.', nullable: true })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  @Max(2000)
+  packWeightKg?: number | null;
 
   @ApiPropertyOptional({ description: 'Struck-through reference price. The sell price is a PriceList rule.' })
   @IsOptional()

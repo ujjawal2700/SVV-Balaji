@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { refreshSession, tokens } from '../api/client';
 import { riderApi } from '../api/rider';
+import { riderEvents, type OfferClosed, type TaskAssigned } from './alerts';
 import { currentPosition } from './geo';
 
 /**
@@ -21,11 +22,16 @@ export function useLive(enabled: boolean, online: boolean) {
     socketRef.current = s;
     const refresh = (...keys: string[][]) => keys.forEach((k) => void qc.invalidateQueries({ queryKey: k }));
 
-    s.on('offer:new', () => {
-      navigator.vibrate?.([200, 100, 200]);
+    // The incoming-order pop-up (IncomingAlerts) rings when the refetched list has a new offer.
+    s.on('offer:new', () => refresh(['offers'], ['dashboard']));
+    s.on('offer:closed', (p: OfferClosed) => {
+      riderEvents.offerClosed(p);
       refresh(['offers'], ['dashboard']);
     });
-    s.on('offer:closed', () => refresh(['offers'], ['dashboard']));
+    s.on('task:assigned', (p: TaskAssigned) => {
+      riderEvents.assigned(p);
+      refresh(['dashboard'], ['tasks'], ['task', p.taskId]);
+    });
     s.on('task:updated', (p: { taskId: string }) => refresh(['dashboard'], ['tasks'], ['task', p.taskId]));
     s.on('notification', () => refresh(['notifications']));
     // Re-sync everything after a reconnect: events sent while offline are gone.
@@ -41,11 +47,11 @@ export function useLive(enabled: boolean, online: boolean) {
 
   useEffect(() => {
     if (!enabled || !online) return;
+    // Also the "still here" beat: the dispatcher skips online riders whose app has gone quiet.
     const send = async () => {
       const p = await currentPosition(8_000);
-      if (!p) return;
-      if (socketRef.current?.connected) socketRef.current.emit('location', p);
-      else await riderApi.location(p).catch(() => undefined);
+      if (socketRef.current?.connected) socketRef.current.emit(p ? 'location' : 'heartbeat', p ?? {});
+      else await riderApi.location(p ?? {}).catch(() => undefined);
     };
     void send();
     const t = setInterval(() => void send(), 30_000);

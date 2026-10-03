@@ -108,7 +108,8 @@ try:
     WH_O = must("POST", "/warehouses", {"name": f"RD Outlet {STAMP}", "location": "Arera Colony, Bhopal", "branchId": BR, "capacity": 5000, "kind": "OUTLET",
                                         "city": "Bhopal", "state": "Madhya Pradesh", "latitude": OUTLET_LL[0], "longitude": OUTLET_LL[1], "serviceRadiusKm": 5})["id"]
     must("PATCH", "/checkout-settings", {"centralWarehouseId": WH_C, "localRadiusKm": 5, "codEnabled": True, "codMaxAmount": 5000, "reservationTtlMinutes": 15})
-    must("PATCH", "/delivery/settings", {"autoOffer": True, "offerTimeoutSeconds": 120, "maxOfferRounds": 5, "geofenceMeters": 250,
+    # One rider at a time: this script checks the sequential order (nearest first, then the next). Broadcast is e2e-broadcast-dispatch-flow.py.
+    must("PATCH", "/delivery/settings", {"autoOffer": True, "broadcastSize": 1, "offerTimeoutSeconds": 120, "maxOfferRounds": 5, "geofenceMeters": 250,
                                          "requireCodBeforeDelivery": True, "maxCashInHand": None, "reattemptDelayMinutes": 0})
     farmer = must("POST", "/farmers", {
         "fullName": f"RD Farmer {STAMP}", "mobile": f"96{STAMP[-8:]}", "village": "Ashta", "district": "Sehore", "state": "Madhya Pradesh",
@@ -395,7 +396,7 @@ finally:
     if WH_O:
         call("PATCH", f"/warehouses/{WH_O}", {"isActive": False})
     call("PATCH", "/checkout-settings", {"centralWarehouseId": ORIG_CS["centralWarehouseId"], "codEnabled": ORIG_CS["codEnabled"]})
-    call("PATCH", "/delivery/settings", {k: ORIG_DS[k] for k in ("autoOffer", "offerTimeoutSeconds", "maxOfferRounds", "geofenceMeters", "requireCodBeforeDelivery", "reattemptDelayMinutes")})
+    call("PATCH", "/delivery/settings", {k: ORIG_DS[k] for k in ("autoOffer", "broadcastSize", "offerTimeoutSeconds", "maxOfferRounds", "geofenceMeters", "requireCodBeforeDelivery", "reattemptDelayMinutes")})
     print("  test riders suspended/rejected, pay rules removed/deactivated, zone removed, outlet deactivated, settings restored")
 
 print(f"\n{'ALL PASSED' if failures == 0 else f'{failures} FAILED'}")

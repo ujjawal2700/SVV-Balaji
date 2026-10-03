@@ -95,8 +95,11 @@ export class TaskFlowService {
   }
 
   async touchLocation(riderId: string, loc: Loc) {
-    if (loc.latitude === undefined || loc.longitude === undefined) return;
-    await this.prisma.rider.update({ where: { id: riderId }, data: { lastLatitude: loc.latitude, lastLongitude: loc.longitude, lastLocationAt: new Date() } });
+    if (loc.latitude === undefined || loc.longitude === undefined) {
+      await this.prisma.rider.update({ where: { id: riderId }, data: { lastSeenAt: new Date() } });
+      return;
+    }
+    await this.prisma.rider.update({ where: { id: riderId }, data: { lastLatitude: loc.latitude, lastLongitude: loc.longitude, lastLocationAt: new Date(), lastSeenAt: new Date() } });
   }
 
   async arrivedAtPickup(riderId: string, taskId: string, loc: Loc) {

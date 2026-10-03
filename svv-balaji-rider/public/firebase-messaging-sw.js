@@ -36,6 +36,12 @@ function show(data) {
     renotify: true,
     data: { link: data.link || '' },
   };
+  // A delivery request stays on screen and buzzes until the rider acts on it.
+  // (Web push cannot pick a custom sound - the phone's notification sound plays.)
+  if (data.kind === 'OFFER' || data.kind === 'TASK_ASSIGNED') {
+    options.requireInteraction = true;
+    options.vibrate = [400, 200, 400, 200, 400];
+  }
   if (data.imageUrl) options.image = data.imageUrl;
   return self.registration.showNotification(title, options);
 }

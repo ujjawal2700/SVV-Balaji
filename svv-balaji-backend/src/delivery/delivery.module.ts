@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { CheckoutModule } from '../checkout/checkout.module';
 import { CommonModule } from '../common/common.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SalesModule } from '../sales/sales.module';
 import { DeliveryEventsService, DeliverySettingsService, FailureReasonsService } from './core/delivery-core';
@@ -26,7 +27,7 @@ import { DeliveryZonesModule } from './zones/zones.module';
  * machinery can later carry return pickups and other delivery SLAs.
  */
 @Module({
-  imports: [DeliveryZonesModule, forwardRef(() => CheckoutModule), SalesModule, RealtimeModule, CommonModule, PassportModule, JwtModule.register({})],
+  imports: [DeliveryZonesModule, forwardRef(() => CheckoutModule), SalesModule, RealtimeModule, CommonModule, NotificationsModule, PassportModule, JwtModule.register({})],
   controllers: [RiderAppController, RidersAdminController, DeliveryAdminController],
   providers: [
     DeliverySettingsService, FailureReasonsService, DeliveryEventsService,

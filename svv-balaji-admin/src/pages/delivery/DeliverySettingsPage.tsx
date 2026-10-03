@@ -6,7 +6,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useState } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
-import { deliveryApi, type EarningRule, type EarningRuleKind, type FailureReason } from '@shared/api/delivery';
+import { deliveryApi, VEHICLE_LABEL, type EarningRule, type EarningRuleKind, type FailureReason, type VehicleType } from '@shared/api/delivery';
 import { useCan } from '@shared/auth/useCan';
 import { PageHeader } from '@shared/components/PageHeader';
 import { useDeliveryMutation, useDeliverySettings, useEarningRules, useFailureReasons, useZones } from '@shared/hooks/useDelivery';
@@ -317,20 +317,52 @@ function Dispatch() {
   const { message } = AntApp.useApp();
   const save = useDeliveryMutation((b: Record<string, unknown>) => deliveryApi.updateSettings(b));
   useEffect(() => {
-    if (s.data) form.setFieldsValue({ ...s.data, maxCashInHand: s.data.maxCashInHand === null ? null : Number(s.data.maxCashInHand) });
+    if (s.data) {
+      form.setFieldsValue({
+        ...s.data,
+        maxCashInHand: s.data.maxCashInHand === null ? null : Number(s.data.maxCashInHand),
+        maxPickupDistanceKm: s.data.maxPickupDistanceKm === null ? null : Number(s.data.maxPickupDistanceKm),
+      });
+    }
   }, [s.data, form]);
+  // Empty vehicle boxes mean "no limit" - leave them out rather than sending null.
+  const submit = (v: Record<string, unknown>) => {
+    const limits = Object.fromEntries(Object.entries((v.vehicleMaxKg ?? {}) as Record<string, number | null>).filter(([, n]) => typeof n === 'number' && n > 0));
+    save.mutate({ ...v, vehicleMaxKg: limits }, { onSuccess: () => message.success('Settings saved'), onError: (e) => message.error(apiErrorMessage(e)) });
+  };
   return (
     <Card size="small" style={{ borderRadius: 10 }} loading={s.isLoading}>
-      <Form form={form} layout="vertical" disabled={!canManage} onFinish={(v) => save.mutate(v, { onSuccess: () => message.success('Settings saved'), onError: (e) => message.error(apiErrorMessage(e)) })}>
+      <Form form={form} layout="vertical" disabled={!canManage} onFinish={submit}>
+        <Typography.Title level={5} style={{ marginTop: 0 }}>Offering deliveries</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Each round, a delivery is offered to the best few riders of its outlet at the same time - nearest first, then whoever has fewer orders in hand,
+          then whoever has waited longest. The first to accept gets it. If nobody does before the time runs out, the next riders are tried; after the last
+          round it waits on the Delivery Board for staff. Staff can always assign a rider by hand, which withdraws any open offers.
+        </Typography.Paragraph>
         <Row gutter={16}>
           <Col xs={24} md={8}><Form.Item name="autoOffer" label="Offer deliveries to riders automatically" valuePropName="checked" extra="Off = staff assign every delivery."><Switch /></Form.Item></Col>
-          <Col xs={12} md={8}><Form.Item name="offerTimeoutSeconds" label="Seconds a rider has to accept"><InputNumber min={10} max={600} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col xs={12} md={8}><Form.Item name="maxOfferRounds" label="Riders to try before staff"><InputNumber min={1} max={50} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="broadcastSize" label="Riders offered at the same time" extra="1 = one rider at a time."><InputNumber min={1} max={20} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="offerTimeoutSeconds" label="Seconds riders have to accept"><InputNumber min={10} max={600} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="maxOfferRounds" label="Rounds before handing to staff"><InputNumber min={1} max={50} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="maxPickupDistanceKm" label="Only riders within (km of the pickup)" extra="Empty = any distance; riders with no location go last."><InputNumber min={0.1} max={100} step={0.5} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="riderHeartbeatMinutes" label="Skip online riders not seen for (min)" extra="The app checks in every 30 s while open."><InputNumber min={2} max={240} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={12} md={8}><Form.Item name="locationFreshMinutes" label="Ignore rider locations older than (min)"><InputNumber min={1} max={120} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={12} md={8}><Form.Item name="geofenceMeters" label="Arrival counts within (metres)"><InputNumber min={20} max={5000} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={12} md={8}><Form.Item name="reattemptDelayMinutes" label="Auto re-attempt after (min)"><InputNumber min={0} max={1440} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="requireCodBeforeDelivery" label="COD must be collected before the OTP completes delivery" valuePropName="checked"><Switch /></Form.Item></Col>
           <Col xs={12} md={8}><Form.Item name="maxCashInHand" label="Stop offers to riders holding at least (₹)" extra="Empty = no limit"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+        </Row>
+        <Typography.Title level={5}>Heaviest order per vehicle</Typography.Title>
+        <Typography.Paragraph type="secondary">
+          Order weight comes from each product's pack weight (Add / Edit Product). Riders whose vehicle cannot carry an order are not offered it.
+          Empty = no limit. Orders with a product that has no pack weight are offered to every vehicle. A rider's order limit (orders at a time) is set on the rider.
+        </Typography.Paragraph>
+        <Row gutter={16}>
+          {(Object.keys(VEHICLE_LABEL) as VehicleType[]).map((v) => (
+            <Col key={v} xs={12} md={4}>
+              <Form.Item name={['vehicleMaxKg', v]} label={VEHICLE_LABEL[v]}><InputNumber min={0.1} max={2000} addonAfter="kg" style={{ width: '100%' }} /></Form.Item>
+            </Col>
+          ))}
         </Row>
         {canManage ? <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button> : <Typography.Text type="secondary">View only.</Typography.Text>}
       </Form>

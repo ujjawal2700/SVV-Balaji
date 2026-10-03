@@ -1458,12 +1458,12 @@ model FinishedGoodsBatch {
 
   // Phase 4 - every allocation is a traceability link from an order line to a
   // specific pack batch, and through it back to the farmer.
-  allocations    OrderAllocation[]
+  allocations            OrderAllocation[]
   /// The same link for counter (POS) sales.
-  posAllocations PosSaleAllocation[]
+  posAllocations         PosSaleAllocation[]
   /// Packs that came back on a return/exchange, and packs sent out as replacements.
-  returnBatchLines        ReturnBatchLine[]
-  replacementAllocations  ReturnReplacementAllocation[]
+  returnBatchLines       ReturnBatchLine[]
+  replacementAllocations ReturnReplacementAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1587,17 +1587,20 @@ model Product {
   // PriceList rules so historical invoices reproduce (see PriceList).
 
   /// Marketing brand, distinct from the manufacturer entity below.
-  brand     String?
+  brand        String?
   /// The pack descriptor a shopper reads under the name - "10kg Bag",
   /// "100g x 20". Not `unit`, which is the operational measure (KG/PACK).
-  packLabel String?
+  packLabel    String?
+  /// Shipping weight of one pack in kg (goods + packaging). Drives which rider
+  /// vehicle may carry a delivery; null = not recorded (no vehicle limit applied).
+  packWeightKg Decimal? @db.Decimal(10, 3)
   /// Struck-through reference price. The sell price is a PriceList rule;
   /// this is the "was" figure a discount is calculated against, and it is a
   /// property of the pack, not of a channel.
-  mrp       Decimal? @db.Decimal(12, 2)
+  mrp          Decimal? @db.Decimal(12, 2)
   /// Small overlay on the product card - "Buy 10 Get 1", "100% Sharbati".
-  badge     String?
-  hsnCode   String?
+  badge        String?
+  hsnCode      String?
 
   /// Display-only until a real review subsystem exists. Staff-entered, so a
   /// seeded catalogue does not show "0 ratings" on every card.
@@ -1657,10 +1660,10 @@ model Product {
   offers         ProductOffer[]
 
   // Phase 4
-  priceLists   PriceList[]
+  priceLists          PriceList[]
   replacementRequests ReturnRequest[] @relation("ReturnReplacementProduct")
-  orderItems   OrderItem[]
-  posSaleLines PosSaleLine[]
+  orderItems          OrderItem[]
+  posSaleLines        PosSaleLine[]
 
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
@@ -1837,9 +1840,9 @@ model Warehouse {
   posOutlet PosOutlet?
 
   // Phase 4
-  orders           Order[]
-  orderAllocations OrderAllocation[]
-  returnRequests             ReturnRequest[]               @relation("ReturnReceivingWarehouse")
+  orders                       Order[]
+  orderAllocations             OrderAllocation[]
+  returnRequests               ReturnRequest[]               @relation("ReturnReceivingWarehouse")
   returnReplacementAllocations ReturnReplacementAllocation[]
 
   /// Runs drawing raw material from here (FRD 17.2 reservation).
@@ -2393,10 +2396,10 @@ model Order {
   /// trigger paid out because of this specific order - see CoinTransaction.
   coinTransactions CoinTransaction[]
 
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  loyaltyEarn LoyaltyOrderEarn?
-  returns     OrderReturn[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  loyaltyEarn    LoyaltyOrderEarn?
+  returns        OrderReturn[]
   returnRequests ReturnRequest[]
 
   // ---- Storefront checkout (all null/default for staff-placed orders) ----
@@ -2422,16 +2425,16 @@ model Order {
   gatewayOrderId   String?
   gatewayPaymentId String?
 
-  discountTotal          Decimal @default(0) @db.Decimal(14, 2)
-  deliveryFee            Decimal @default(0) @db.Decimal(14, 2)
-  couponCode             String?
-  loyaltyRedeemedPoints  Int     @default(0)
-  loyaltyRedeemedInr     Decimal @default(0) @db.Decimal(14, 2)
-  referralRedeemedPoints Int     @default(0)
-  referralRedeemedInr    Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal            Decimal                   @default(0) @db.Decimal(14, 2)
+  deliveryFee              Decimal                   @default(0) @db.Decimal(14, 2)
+  couponCode               String?
+  loyaltyRedeemedPoints    Int                       @default(0)
+  loyaltyRedeemedInr       Decimal                   @default(0) @db.Decimal(14, 2)
+  referralRedeemedPoints   Int                       @default(0)
+  referralRedeemedInr      Decimal                   @default(0) @db.Decimal(14, 2)
   /// Paid from the customer's Refund Wallet. A payment, not a discount: `total`
   /// (the invoice value) is unchanged; cash/gateway/COD due = total - this.
-  refundWalletPaidInr    Decimal @default(0) @db.Decimal(14, 2)
+  refundWalletPaidInr      Decimal                   @default(0) @db.Decimal(14, 2)
   refundWalletTransactions RefundWalletTransaction[]
 
   riderName  String?
@@ -2500,8 +2503,8 @@ model OrderItem {
 
   allocations OrderAllocation[]
 
-  loyaltyLine LoyaltyOrderEarnLine?
-  returns     OrderReturn[]
+  loyaltyLine    LoyaltyOrderEarnLine?
+  returns        OrderReturn[]
   returnRequests ReturnRequest[]
 
   createdAt DateTime @default(now())
@@ -2953,16 +2956,16 @@ model CustomerAccount {
   customer   Customer? @relation(fields: [customerId], references: [id])
 
   // --- B2B registration details, captured at signup, before a Customer exists
-  businessName String?
+  businessName      String?
   gstin             String?
   udyamRegistration String?
   pan               String?
   aadhaar           String?
   addressLine       String?
-  city         String?
-  district     String?
-  state        String?
-  pincode      String?
+  city              String?
+  district          String?
+  state             String?
+  pincode           String?
 
   /// A referral code entered at signup, held here until there is a Customer
   /// row to attach it to. B2C resolves it immediately (the Customer is
@@ -4024,6 +4027,10 @@ model Rider {
   lastLatitude          Decimal?          @db.Decimal(9, 6)
   lastLongitude         Decimal?          @db.Decimal(9, 6)
   lastLocationAt        DateTime?
+  /// Last sign of life from the app (socket connect, location heartbeat, going
+  /// online). An ONLINE rider not seen for DeliverySettings.riderHeartbeatMinutes
+  /// is not offered work - the app was probably killed without going offline.
+  lastSeenAt            DateTime?
 
   reviewedById    String?
   reviewedBy      User?     @relation("RiderReviewedBy", fields: [reviewedById], references: [id])
@@ -4148,10 +4155,16 @@ model DeliveryTask {
   promisedBy DateTime?
 
   riderId               String?
-  rider                 Rider?  @relation(fields: [riderId], references: [id])
+  rider                 Rider?   @relation(fields: [riderId], references: [id])
   /// No rider accepted / auto-offer off: staff must assign.
-  needsManualAssignment Boolean @default(false)
-  offerRound            Int     @default(0)
+  needsManualAssignment Boolean  @default(false)
+  offerRound            Int      @default(0)
+  /// Staff took this task over: the dispatcher never offers it on its own until
+  /// staff resume auto-offer (or assign a rider).
+  autoDispatchPaused    Boolean  @default(false)
+  /// Total goods weight (kg), from product pack weights. Null = at least one
+  /// item has no recorded weight, so no vehicle limit is applied.
+  weightKg              Decimal? @db.Decimal(10, 3)
 
   readyAt               DateTime  @default(now())
   assignedAt            DateTime?
@@ -4212,6 +4225,8 @@ enum DeliveryOfferStatus {
   REJECTED
   EXPIRED
   WITHDRAWN
+  /// Broadcast: another rider in the same round accepted first.
+  TAKEN
 }
 
 model DeliveryOffer {
@@ -4336,6 +4351,17 @@ model DeliverySettings {
   maxCashInHand            Decimal? @db.Decimal(12, 2)
   /// Delay before an AUTO_REATTEMPT task is dispatched once goods are back.
   reattemptDelayMinutes    Int      @default(15)
+  /// Riders offered a task at the same time (one round). First to accept gets
+  /// it; the others' offers close as TAKEN. 1 = one rider at a time.
+  broadcastSize            Int      @default(3)
+  /// Riders farther than this from the pickup (by fresh location) are not
+  /// offered. Null = no limit, and riders with no fresh location rank last.
+  maxPickupDistanceKm      Decimal? @db.Decimal(6, 2)
+  /// An ONLINE rider whose app has not been seen for this long is skipped.
+  riderHeartbeatMinutes    Int      @default(30)
+  /// Heaviest delivery (kg) each vehicle may carry: { "BICYCLE": 5, ... }.
+  /// A vehicle type not listed has no limit.
+  vehicleMaxKg             Json     @default("{}")
   updatedById              String?
   updatedAt                DateTime @updatedAt
 

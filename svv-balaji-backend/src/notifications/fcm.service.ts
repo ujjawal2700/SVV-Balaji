@@ -13,6 +13,8 @@ export interface FcmMessage {
   /** Grouping tag - a newer message with the same tag replaces the older one on screen. */
   tag?: string;
   notificationId?: string;
+  /** Extra string fields the receiving app reads (e.g. `kind: 'OFFER'` keeps the alert on screen). */
+  extra?: Record<string, string>;
 }
 
 export interface FcmResult {
@@ -83,7 +85,7 @@ export class FcmService {
     const result: FcmResult = { sent: 0, failed: 0, deadTokens: [] };
     if (!this.messaging || tokens.length === 0) return result;
 
-    const data: Record<string, string> = { title: msg.title, body: msg.body, tag: msg.tag ?? 'svv-broadcast' };
+    const data: Record<string, string> = { ...msg.extra, title: msg.title, body: msg.body, tag: msg.tag ?? 'svv-broadcast' };
     if (msg.imageUrl) data.imageUrl = msg.imageUrl;
     if (msg.link) data.link = msg.link;
     if (msg.notificationId) data.notificationId = msg.notificationId;

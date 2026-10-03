@@ -11,7 +11,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { FcmService } from './fcm.service';
+import { FcmService, type FcmMessage } from './fcm.service';
 import {
   AudienceDto,
   BroadcastAudienceType,
@@ -366,6 +366,25 @@ export class NotificationsService {
         `${result.sent} sent, ${result.failed} failed`,
     );
     return { created: true, sent: result.sent, failed: result.failed };
+  }
+
+  /**
+   * System notification on riders' signed-in phones, for delivery work (offers,
+   * assignments). The rider inbox row is the caller's (RiderNotification); this
+   * only reaches a phone whose app is in the background or closed - an open app
+   * hears the same thing over its socket. Best-effort: never throws.
+   */
+  async pushToRiders(riderIds: string[], message: FcmMessage) {
+    if (!riderIds.length || !this.fcm.enabled) return { sent: 0, failed: 0 };
+    try {
+      const devices = await this.liveDevices({ staff: [], customers: [], riders: riderIds });
+      const result = await this.fcm.send(devices.map((d) => d.token), message);
+      if (result.deadTokens.length) await this.prisma.pushDevice.deleteMany({ where: { token: { in: result.deadTokens } } });
+      return { sent: result.sent, failed: result.failed };
+    } catch (error) {
+      this.logger.warn(`Rider push failed: ${error instanceof Error ? error.message : String(error)}`);
+      return { sent: 0, failed: riderIds.length };
+    }
   }
 
   async send(dto: SendBroadcastDto, actorId: string) {

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags, PartialType } from '@nestjs/swagger';
 import { DeliveryTaskStatus, RiderStatus } from '@prisma/client';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -14,6 +14,9 @@ import { ApproveRiderDto, CashDepositDto, ReasonDto, RidersService, UpdateRiderD
 
 class AssignDto {
   @IsString() riderId!: string;
+}
+class AutoDispatchDto {
+  @IsBoolean() paused!: boolean;
 }
 class NoteDto {
   @IsString() @MinLength(3) @MaxLength(300) reason!: string;
@@ -148,10 +151,31 @@ export class DeliveryAdminController {
     return this.riders.tasks({ status, warehouseId, needsAssignment: needsAssignment === 'true', riderId, orderId });
   }
 
+  @Get('availability')
+  @RequirePermission('deliveryTasks.view')
+  @ApiOperation({ summary: 'Riders per outlet right now: available (would be offered work), busy, not responding, offline' })
+  availability(@Query('warehouseId') warehouseId?: string) {
+    return this.dispatch.availability(warehouseId);
+  }
+
   @Get('tasks/:id')
   @RequirePermission('deliveryTasks.view')
   task(@Param('id') id: string) {
     return this.riders.task(id);
+  }
+
+  @Get('tasks/:id/candidates')
+  @RequirePermission('deliveryTasks.view')
+  @ApiOperation({ summary: "The outlet's riders ranked as the dispatcher would offer this task, with why anyone is skipped" })
+  candidates(@Param('id') id: string) {
+    return this.dispatch.candidates(id);
+  }
+
+  @Post('tasks/:id/auto-dispatch')
+  @RequirePermission('deliveryTasks.manage')
+  @ApiOperation({ summary: 'Override for one waiting task: paused = staff assign it (open offers withdrawn); resumed = offer to riders again' })
+  autoDispatch(@Param('id') id: string, @Body() dto: AutoDispatchDto, @CurrentUser() u: JwtPayload) {
+    return this.dispatch.setAutoDispatch(id, dto.paused, u.sub);
   }
 
   @Post('orders/:orderId/task')
@@ -175,9 +199,9 @@ export class DeliveryAdminController {
 
   @Post('tasks/:id/redispatch')
   @RequirePermission('deliveryTasks.manage')
-  @ApiOperation({ summary: 'Try auto-offer again for a task waiting on staff' })
-  async redispatch(@Param('id') id: string) {
-    return this.dispatch.dispatch(id, { ignoreRoundLimit: true });
+  @ApiOperation({ summary: 'Try auto-offer again for a task waiting on staff (also resumes a paused one)' })
+  async redispatch(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
+    return this.dispatch.setAutoDispatch(id, false, u.sub);
   }
 
   @Post('tasks/:id/reattempt')

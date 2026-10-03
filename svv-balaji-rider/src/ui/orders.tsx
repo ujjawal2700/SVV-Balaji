@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { errorMessage } from '../api/client';
+import { errorCode, errorMessage } from '../api/client';
 import { riderApi, type ItemPreview, type Offer, type TaskSummary } from '../api/rider';
+import { riderEvents } from '../live/alerts';
 import { Box, Clock, Pin, Send } from './icons';
 import { ScooterArt } from './illustrations';
 import { Modal, date, inr, time, useToast } from './kit';
@@ -64,11 +65,14 @@ function Countdown({ until }: { until: string }) {
   return <span className={`chip ${left <= 10 ? 'red' : 'orange'}`}><Clock size={13} /> {left}s</span>;
 }
 
-/** Accept / reject an offer, with the follow-up (open the task, refresh lists). */
+/**
+ * Accept / reject an offer, with the follow-up (refresh lists; an accept raises
+ * the "assigned to you" pop-up, which opens the task). Requests go to several
+ * riders at once, so "someone else was faster" is a normal outcome, not an error.
+ */
 export function useOfferResponse(onDone?: () => void) {
   const qc = useQueryClient();
   const toast = useToast();
-  const navigate = useNavigate();
   return useMutation({
     mutationFn: ({ offer, accept, reason }: { offer: Offer; accept: boolean; reason?: string }) =>
       accept ? riderApi.accept(offer.offerId) : riderApi.reject(offer.offerId, reason),
@@ -77,14 +81,15 @@ export function useOfferResponse(onDone?: () => void) {
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       if (v.accept && r && typeof r === 'object' && 'taskId' in r) {
-        toast('Accepted - head to the store', 'success');
-        navigate(`/task/${(r as { taskId: string }).taskId}`);
+        riderEvents.assigned({ taskId: (r as { taskId: string }).taskId, by: 'ACCEPT' });
       } else toast('Order rejected - it goes to another rider', 'info');
     },
     onError: (e) => {
       onDone?.();
-      toast(errorMessage(e), 'error');
+      const code = errorCode(e);
+      toast(errorMessage(e), code === 'OFFER_TAKEN' || code === 'OFFER_CLOSED' ? 'info' : 'error');
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['offers'] });
     },
   });
 }
@@ -141,10 +146,11 @@ export function TaskCard({ t }: { t: TaskSummary }) {
 }
 
 /** The "order details" pop-up from the design, for a request that has not been accepted yet. */
-export function OfferModal({ offer, onClose, onAccept, onReject, busy }: { offer: Offer | null; onClose: () => void; onAccept: () => void; onReject: () => void; busy: boolean }) {
+export function OfferModal({ offer, onClose, onAccept, onReject, busy, heading }: { offer: Offer | null; onClose: () => void; onAccept: () => void; onReject: () => void; busy: boolean; heading?: string }) {
   if (!offer) return null;
   return (
     <Modal open onClose={onClose}>
+      {heading ? <div className="between" style={{ marginBottom: 10 }}><b style={{ fontSize: 17, color: 'var(--orange-dark)' }}>{heading}</b><button className="icon-btn" aria-label="Close" onClick={onClose}>×</button></div> : null}
       <div className="block row" style={{ alignItems: 'flex-start' }}>
         <ItemThumb items={offer.items} size={72} />
         <div style={{ flex: 1, minWidth: 0 }}>

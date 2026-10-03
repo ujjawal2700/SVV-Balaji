@@ -11,6 +11,7 @@ import { LocationScreen, PendingScreen } from './pages/onboard';
 import { Orders } from './pages/orders';
 import { TrackScreen } from './pages/track';
 import { CollectCod, DeliverOtp, FailDelivery, TaskScreen } from './pages/task';
+import { IncomingAlerts } from './ui/IncomingAlerts';
 import { Clock, Home, Truck, User } from './ui/icons';
 import { Spinner } from './ui/kit';
 
@@ -99,32 +100,35 @@ export function App() {
   }
 
   return (
-    <Routes>
-      <Route element={<ActiveShell />}>
-        <Route index element={<Dashboard />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="deliveries" element={<Navigate to="/orders?tab=active" replace />} />
-        <Route path="history" element={<History />} />
-        <Route path="profile" element={<Profile />} />
-      </Route>
-      <Route element={<FlowShell />}>
-        <Route path="task/:id" element={<TaskScreen />} />
-        <Route path="task/:id/cod" element={<CollectCod />} />
-        <Route path="task/:id/deliver" element={<DeliverOtp />} />
-        <Route path="task/:id/fail" element={<FailDelivery />} />
-        <Route path="task/:id/track" element={<TrackScreen />} />
-        <Route path="earnings" element={<EarningsScreen />} />
-        <Route path="cash" element={<CashScreen />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="location" element={<LocationScreen />} />
-        <Route path="forgot" element={<Forgot />} />
-        <Route path="verify" element={<Verify />} />
-        <Route path="reset" element={<ResetPassword />} />
-        <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
-        <Route path="terms-and-conditions" element={<TermsPage />} />
-        <Route path="terms" element={<TermsPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <IncomingAlerts />
+      <Routes>
+        <Route element={<ActiveShell />}>
+          <Route index element={<Dashboard />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="deliveries" element={<Navigate to="/orders?tab=active" replace />} />
+          <Route path="history" element={<History />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
+        <Route element={<FlowShell />}>
+          <Route path="task/:id" element={<TaskScreen />} />
+          <Route path="task/:id/cod" element={<CollectCod />} />
+          <Route path="task/:id/deliver" element={<DeliverOtp />} />
+          <Route path="task/:id/fail" element={<FailDelivery />} />
+          <Route path="task/:id/track" element={<TrackScreen />} />
+          <Route path="earnings" element={<EarningsScreen />} />
+          <Route path="cash" element={<CashScreen />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="location" element={<LocationScreen />} />
+          <Route path="forgot" element={<Forgot />} />
+          <Route path="verify" element={<Verify />} />
+          <Route path="reset" element={<ResetPassword />} />
+          <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="terms-and-conditions" element={<TermsPage />} />
+          <Route path="terms" element={<TermsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
