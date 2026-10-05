@@ -1,14 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { errorMessage } from '../api/client';
 import { riderApi } from '../api/rider';
 import { useAuth } from '../auth/AuthContext';
 import { currentPosition, type Point } from '../live/geo';
-import { Camera, Check, Clock, Logout, X } from '../ui/icons';
+import { Check, Chevron, Clock, Logout, X } from '../ui/icons';
 import { MapArt } from '../ui/illustrations';
 import { Logo, TopBar, useToast } from '../ui/kit';
 import { MiniMap } from '../ui/MiniMap';
+import { useVerification } from './verification';
 
 /** "Add your current location" - asks for location permission, which the app needs to work. */
 export function LocationScreen() {
@@ -57,9 +58,9 @@ export function PendingScreen() {
   const { rider, reload, signOut } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
-  const file = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
+  const v = useVerification();
 
   if (!rider) return null;
   const rejected = rider.status === 'REJECTED';
@@ -70,6 +71,7 @@ export function PendingScreen() {
       const updated = await riderApi.me();
       await reload();
       void qc.invalidateQueries();
+      void v.refetch();
 
       if (updated.status === 'ACTIVE') {
         toast('Congratulations! Your application has been approved.', 'success');
@@ -85,20 +87,6 @@ export function PendingScreen() {
     }
   };
 
-  const upload = async (f: File) => {
-    setUploading(true);
-    try {
-      await riderApi.uploadDocument(f, 'document');
-      toast('Licence photo uploaded', 'success');
-      await reload();
-      void qc.invalidateQueries();
-    } catch (e) {
-      toast(errorMessage(e), 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <div className="plain" style={{ padding: 'calc(28px + env(safe-area-inset-top)) 22px 24px' }}>
       <Logo />
@@ -111,28 +99,28 @@ export function PendingScreen() {
       <p className="auth-sub" style={{ lineHeight: 1.6 }}>
         {rejected
           ? rider.rejectionReason ?? 'Contact your nearest SVV Balaji store for details.'
-          : 'Thanks, ' + rider.fullName.split(' ')[0] + '! Our team will check your details and assign you to a store. You can start taking orders once approved.'}
+          : 'Thanks, ' + rider.fullName.split(' ')[0] + '! Upload your documents and Police Clearance Certificate' + (v.data?.deposit.required ? ', pay the security deposit' : '') + ' - once our team has verified everything, they will assign you a store and you can start taking orders.'}
       </p>
 
       {!rejected ? (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="between">
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--ink)' }}>Driving licence photo</div>
-              <div className="muted" style={{ fontSize: 13 }}>Speeds up your approval</div>
+        <button type="button" className="card between" onClick={() => navigate('/verification')} style={{ marginTop: 24, width: '100%', textAlign: 'left', cursor: 'pointer', border: v.data && !v.data.eligible ? '1px solid #ffd49e' : undefined }}>
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--ink)' }}>Documents, PCC & deposit</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {!v.data ? 'Loading…' : v.data.eligible ? 'All done - waiting for approval' : `${v.data.missing.length} ${v.data.missing.length === 1 ? 'item' : 'items'} left: ${v.data.missing[0]}${v.data.missing.length > 1 ? '…' : ''}`}
             </div>
-            <button className="btn soft small" onClick={() => file.current?.click()} disabled={uploading}>
-              <Camera size={16} /> {uploading ? 'Uploading…' : 'Upload'}
-            </button>
           </div>
-          <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
-        </div>
+          <span className="row" style={{ gap: 6, color: 'var(--orange)', fontWeight: 600, fontSize: 14, flex: 'none' }}>{v.data?.eligible ? 'View' : 'Complete'} <Chevron size={18} /></span>
+        </button>
       ) : null}
 
       <div className="card" style={{ marginTop: 14 }}>
         {[
           ['Account created', true],
           ['Mobile number verified', true],
+          ['Documents approved', (v.data?.documents.every((d) => !d.mandatory || d.satisfied) ?? false)],
+          ['Police Clearance Certificate approved', v.data?.pcc?.satisfied ?? false],
+          ...(v.data?.deposit.required ? [['Security deposit paid', v.data.deposit.satisfied] as const] : []),
           ['Approved and store assigned', rider.status === 'ACTIVE'],
         ].map(([label, ok]) => (
           <div key={String(label)} className="row" style={{ padding: '8px 0', color: ok ? 'var(--ink)' : 'var(--muted)', fontSize: 14 }}>

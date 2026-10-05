@@ -345,6 +345,8 @@ export class RiderAuthService {
       warehouse: r.warehouse ?? null,
       maxActiveTasks: r.maxActiveTasks ?? 1,
       rejectionReason: r.status === RiderStatus.REJECTED ? r.rejectionReason : null,
+      /** Documents, PCC and deposit cleared - may go online / get orders. */
+      verified: r.isVerified && (!r.verifiedUntil || r.verifiedUntil > new Date()),
     };
   }
 }

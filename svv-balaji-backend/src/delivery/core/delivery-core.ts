@@ -25,6 +25,10 @@ export class UpdateDeliverySettingsDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(240) riderHeartbeatMinutes?: number;
   @ApiPropertyOptional({ description: 'Heaviest delivery (kg) per vehicle type, e.g. { "BICYCLE": 5 }. A type not listed has no limit.', example: { BICYCLE: 5, SCOOTER: 20 } })
   @IsOptional() @IsVehicleLimits() vehicleMaxKg?: Partial<Record<VehicleType, number>>;
+  @ApiPropertyOptional({ description: 'Riders must pay the security deposit before they can take orders' })
+  @IsOptional() @IsBoolean() securityDepositRequired?: boolean;
+  @ApiPropertyOptional({ description: 'Security deposit every rider owes (when required)' })
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100000) securityDepositAmount?: number;
 }
 
 /** { VEHICLE_TYPE: positive kg } with known vehicle types only. */

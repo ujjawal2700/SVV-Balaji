@@ -10,6 +10,7 @@ import { Dashboard } from './pages/dashboard';
 import { LocationScreen, PendingScreen } from './pages/onboard';
 import { Orders } from './pages/orders';
 import { TrackScreen } from './pages/track';
+import { DepositScreen, DocumentScreen, VerificationScreen } from './pages/verification';
 import { CollectCod, DeliverOtp, FailDelivery, TaskScreen } from './pages/task';
 import { IncomingAlerts } from './ui/IncomingAlerts';
 import { Clock, Home, Truck, User } from './ui/icons';
@@ -91,6 +92,9 @@ export function App() {
     return (
       <Routes>
         <Route path="/location" element={<LocationScreen />} />
+        <Route path="/verification" element={<VerificationScreen />} />
+        <Route path="/verification/doc/:typeId" element={<DocumentScreen />} />
+        <Route path="/deposit" element={<DepositScreen />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
         <Route path="/terms-and-conditions" element={<TermsPage />} />
         <Route path="/terms" element={<TermsPage />} />
@@ -118,6 +122,9 @@ export function App() {
           <Route path="task/:id/track" element={<TrackScreen />} />
           <Route path="earnings" element={<EarningsScreen />} />
           <Route path="cash" element={<CashScreen />} />
+          <Route path="verification" element={<VerificationScreen />} />
+          <Route path="verification/doc/:typeId" element={<DocumentScreen />} />
+          <Route path="deposit" element={<DepositScreen />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="location" element={<LocationScreen />} />
           <Route path="forgot" element={<Forgot />} />

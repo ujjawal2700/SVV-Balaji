@@ -325,7 +325,7 @@ export function EarningsScreen() {
   );
 }
 
-function loadRazorpayScript(): Promise<boolean> {
+export function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
     if ((window as any).Razorpay) return resolve(true);
     const script = document.createElement('script');

@@ -12,6 +12,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('pricing')
 @ApiBearerAuth()
@@ -37,16 +38,19 @@ export class PricingController {
   @RequirePermission('priceLists.view')
   @ApiQuery({ name: 'channel', enum: SalesChannel, required: false })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
+  @ApiPageQuery()
   findAll(
     @Query('productId') productId?: string,
     @Query('channel') channel?: SalesChannel,
     @Query('activeOnly') activeOnly?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.pricingService.findAll({
       productId,
       channel,
       activeOnly: activeOnly === 'true',
-    });
+    }, pageRequest(page, limit));
   }
 
   @Get('resolve')

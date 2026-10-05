@@ -20,6 +20,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('collection')
 @ApiBearerAuth()
@@ -45,12 +46,15 @@ export class CollectionController {
 
   @Get('collections')
   @RequirePermission('collections.view')
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('branchId') branchId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.collectionService.findAll(user, farmerId, branchId);
+    return this.collectionService.findAll(user, farmerId, branchId, pageRequest(page, limit));
   }
 
   @Get('collections/:id')
@@ -69,12 +73,15 @@ export class CollectionController {
 
   @Get('batches')
   @RequirePermission('batches.view')
+  @ApiPageQuery()
   findBatches(
     @Query('farmerId') farmerId?: string,
     @Query('status') status?: BatchStatus,
     @Query('warehouseId') warehouseId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.collectionService.findBatches({ farmerId, status, warehouseId });
+    return this.collectionService.findBatches({ farmerId, status, warehouseId }, pageRequest(page, limit));
   }
 
   @Get('batches/:batchNumber/trace')

@@ -8,7 +8,7 @@ const atKm = (km: number) => ({ lastLatitude: PICKUP.lat + km * 0.009, lastLongi
 
 const rider = (id: string, over: Partial<RiderFacts> = {}): RiderFacts => ({
   id, status: 'ACTIVE', availability: 'ONLINE', warehouseId: 'W1', vehicleType: 'SCOOTER', maxActiveTasks: 1,
-  heldTasks: 0, pendingOffers: 0, cashInHand: 0, hasLiveSession: true, lastSeenAt: ago(1),
+  heldTasks: 0, pendingOffers: 0, cashInHand: 0, hasLiveSession: true, verified: true, lastSeenAt: ago(1),
   ...atKm(1), lastAssignedAt: null, availabilityChangedAt: ago(60), ...over,
 });
 const rules = (over: Partial<RankingRules> = {}): RankingRules => ({
@@ -24,6 +24,7 @@ describe('assessRider - who may be offered', () => {
 
   it.each([
     ['NOT_ACTIVE', { status: 'SUSPENDED' as const }],
+    ['NOT_VERIFIED', { verified: false }],
     ['OFFLINE', { availability: 'OFFLINE' as const }],
     ['SIGNED_OUT', { hasLiveSession: false }],
     ['NOT_SEEN', { lastSeenAt: ago(31) }],

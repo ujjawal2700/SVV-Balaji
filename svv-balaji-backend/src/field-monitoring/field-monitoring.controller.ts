@@ -19,6 +19,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('field-monitoring')
 @ApiBearerAuth()
@@ -41,12 +42,15 @@ export class FieldMonitoringController {
     required: false,
     description: 'Visits logged by one executive. The field app\'s "Mine" filter uses this.',
   })
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('expertId') expertId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.fieldMonitoringService.findAll(user, farmerId, expertId);
+    return this.fieldMonitoringService.findAll(user, farmerId, expertId, pageRequest(page, limit));
   }
 
   @Get(':id')

@@ -84,6 +84,19 @@ def must(method, path, body=None, expect=(200, 201), tok=None, auth=True):
     return d
 
 
+def clear_verification(rtok, rid=None):
+    """Since 5 Oct a rider is only approved / offered orders once every mandatory
+    document (incl. the PCC) is approved - and the deposit paid, when required.
+    Upload each one as the rider and approve it as staff."""
+    for d in must("GET", "/rider/verification", tok=rtok)["documents"]:
+        if not d["mandatory"] or d["satisfied"]:
+            continue
+        body = {"typeId": d["type"]["id"], "fileUrls": ["https://example.com/doc.jpg"], "documentNumber": "DOC123",
+                "issuedBy": "Test Police Station", "issuedOn": "2026-01-01", "expiresOn": "2030-12-31"}
+        doc = must("POST", "/rider/verification/documents", body, tok=rtok)
+        must("POST", f"/riders/documents/{doc['id']}/approve", {})
+
+
 def rows(d):
     return d.get("data", d.get("rows", d)) if isinstance(d, dict) else d
 
@@ -190,6 +203,7 @@ rphone = f"7{STAMP[-6:]}501"
 r = must("POST", "/rider/auth/signup", {"fullName": "Return Rider", "phone": rphone, "password": "Secret#123", "vehicleType": "MOTORCYCLE", "vehicleNumber": "mp04 rt 1"}, auth=False)
 rs = must("POST", "/rider/auth/verify", {"phone": rphone, "code": r["devCode"]}, auth=False)
 RIDER = {"id": rs["rider"]["id"], "tok": rs["accessToken"]}
+clear_verification(RIDER["tok"])
 must("POST", f"/riders/{RIDER['id']}/approve", {"warehouseId": WH_O})
 must("POST", "/rider/availability", {"online": True, "latitude": OUTLET_LL[0], "longitude": OUTLET_LL[1]}, tok=RIDER["tok"])
 check(True, "rider approved at the outlet and online")

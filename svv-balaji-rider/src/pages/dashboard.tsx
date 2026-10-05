@@ -5,7 +5,7 @@ import { errorMessage } from '../api/client';
 import { riderApi, type Offer } from '../api/rider';
 import { useAuth } from '../auth/AuthContext';
 import { currentPosition } from '../live/geo';
-import { Bell, Box, CancelIco, Cash, Chevron, Clock, Deliver, Gift, Logout, Menu, Return, Truck, User, Wallet, X } from '../ui/icons';
+import { Alert, Bell, Box, CancelIco, Cash, Check, Chevron, Clock, Deliver, Gift, Logout, Menu, Return, Truck, User, Wallet, X } from '../ui/icons';
 import { Spinner, TopBar, inr, useToast } from '../ui/kit';
 import { OfferCard, OfferModal, RejectModal, TaskCard, useOfferResponse } from '../ui/orders';
 
@@ -43,6 +43,8 @@ function SideMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
     { to: '/orders', label: 'Orders', icon: <Truck /> },
     { to: '/earnings', label: 'Earnings', icon: <Wallet /> },
     { to: '/cash', label: 'Cash in hand', icon: <Cash /> },
+    { to: '/verification', label: 'Documents & verification', icon: <Check /> },
+    { to: '/deposit', label: 'Security deposit', icon: <Wallet /> },
     { to: '/history', label: 'Delivery history', icon: <Clock /> },
     { to: '/notifications', label: 'Notifications', icon: <Bell /> },
     { to: '/profile', label: 'Profile', icon: <User /> },
@@ -119,6 +121,15 @@ export function Dashboard() {
           <div className="card empty">{errorMessage(dash.error)}</div>
         ) : (
           <>
+            {d.rider.verified === false ? (
+              <Link to="/verification" className="card between" style={{ background: 'var(--orange-soft)', border: 'none', color: 'var(--ink)', marginBottom: 12, gap: 10 }}>
+                <span className="row" style={{ gap: 10 }}>
+                  <span style={{ color: 'var(--orange-dark)' }}><Alert size={22} /></span>
+                  <span><b>Verification incomplete</b><span className="muted" style={{ display: 'block', fontSize: 13 }}>Documents, PCC or security deposit pending - you won't get orders until it is done.</span></span>
+                </span>
+                <Chevron size={18} />
+              </Link>
+            ) : null}
             <div className="card" style={{ padding: 14 }}>
               <div className="stats">
                 <button type="button" className="stat mint" onClick={() => navigate('/orders?tab=delivered')} aria-label="View Complete Deliveries">

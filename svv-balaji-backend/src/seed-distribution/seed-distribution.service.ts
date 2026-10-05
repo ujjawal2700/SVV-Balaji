@@ -6,6 +6,7 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateSeedDistributionDto } from './dto/create-seed-distribution.dto';
 import { UpdateSeedDistributionDto } from './dto/update-seed-distribution.dto';
 import { assertIssuable, moveSeedStock } from '../seed-stock/seed-stock.ledger';
+import { listPage, type PageRequest } from '../common/pagination';
 
 const INCLUDE = {
   farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -102,13 +103,14 @@ export class SeedDistributionService {
   }
 
   /** `distributedById` answers "handouts I made". */
-  findAll(user: JwtPayload, farmerId?: string, distributedById?: string) {
-    return this.prisma.seedDistribution.findMany({
+  findAll(user: JwtPayload, farmerId?: string, distributedById?: string, page: PageRequest | null = null) {
+    const where: Prisma.SeedDistributionWhereInput = { farmerId, distributedById, ...scopedByFarmerBranch(user) };
+    return listPage(page, () => this.prisma.seedDistribution.count({ where }), (w) => this.prisma.seedDistribution.findMany({ ...w,
       // Scoped through the farmer - a distribution has no branch of its own.
-      where: { farmerId, distributedById, ...scopedByFarmerBranch(user) },
+      where,
       orderBy: { distributionDate: 'desc' },
       include: INCLUDE,
-    });
+    }));
   }
 
   async findOne(id: string) {

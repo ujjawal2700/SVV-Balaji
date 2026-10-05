@@ -54,4 +54,16 @@ export class QueryFarmerDto {
   @Min(0)
   @Max(100)
   minRating?: number;
+
+  // A-12 paging. Parsed (and range-checked) by pageRequest(); strings here so
+  // the bare-array response stays the default when they are absent.
+  @ApiPropertyOptional({ description: 'Page number from 1. Sending page or limit switches the response to { data, meta }.' })
+  @IsOptional()
+  @IsString()
+  page?: string;
+
+  @ApiPropertyOptional({ description: 'Rows per page, 1-100 (default 20).' })
+  @IsOptional()
+  @IsString()
+  limit?: string;
 }

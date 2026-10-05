@@ -78,6 +78,19 @@ def must(method, path, body=None, expect=(200, 201), tok=None):
     return d
 
 
+def clear_verification(rtok, rid=None):
+    """Since 5 Oct a rider is only approved / offered orders once every mandatory
+    document (incl. the PCC) is approved - and the deposit paid, when required.
+    Upload each one as the rider and approve it as staff."""
+    for d in must("GET", "/rider/verification", tok=rtok)["documents"]:
+        if not d["mandatory"] or d["satisfied"]:
+            continue
+        body = {"typeId": d["type"]["id"], "fileUrls": ["https://example.com/doc.jpg"], "documentNumber": "DOC123",
+                "issuedBy": "Test Police Station", "issuedOn": "2026-01-01", "expiresOn": "2030-12-31"}
+        doc = must("POST", "/rider/verification/documents", body, tok=rtok)
+        must("POST", f"/riders/documents/{doc['id']}/approve", {})
+
+
 def rows(d):
     return d["data"] if isinstance(d, dict) and "data" in d else d
 
@@ -150,6 +163,7 @@ def rider(tag, name, vehicle, ll, online=True, limit=5):
     r = must("POST", "/rider/auth/signup", {"fullName": name, "phone": phone, "password": "Secret#123", "vehicleType": vehicle, "vehicleNumber": f"mp04 bc {tag}"}, tok="-")
     sess = must("POST", "/rider/auth/verify", {"phone": phone, "code": r["devCode"]}, tok="-")
     rid = sess["rider"]["id"]
+    clear_verification(sess["accessToken"])
     must("POST", f"/riders/{rid}/approve", {"warehouseId": WH_O, "maxActiveTasks": limit})
     R = {"id": rid, "name": name, "tok": sess["accessToken"], "ll": ll}
     must("POST", "/rider/availability", {"online": True, "latitude": ll[0], "longitude": ll[1]}, tok=R["tok"])
@@ -354,16 +368,22 @@ check(r8 is not None and set(r8) == TOP3, "resumed: offered to the riders again 
 
 # ---------------------------------------------------------------- order limit
 step("9. A rider at their order limit is not offered more")
-held = len([t for t in rows(must("GET", f"/delivery/tasks?riderId={A['id']}")) if t["status"] in ("ASSIGNED", "AT_PICKUP", "PICKED_UP", "OUT_FOR_DELIVERY", "AT_DROP", "FAILED")])
-pending_a = 1 if rider_offer(A, T8["id"]) else 0
-must("PATCH", f"/riders/{A['id']}", {"maxActiveTasks": max(1, held)})
+# Use whichever of the round's riders holds the most deliveries: who won the
+# step-5 races is random, so a fixed rider may hold none (then nothing to test).
+HELD = ("ASSIGNED", "AT_PICKUP", "PICKED_UP", "OUT_FOR_DELIVERY", "AT_DROP", "FAILED")
+holding = {R["id"]: len([t for t in rows(must("GET", f"/delivery/tasks?riderId={R['id']}")) if t["status"] in HELD]) for R in (A, B, C)}
+X = max((A, B, C), key=lambda R: holding[R["id"]])
+held = holding[X["id"]]
+check(held >= 1, f"{X['name']} holds {held} deliveries from the earlier races", holding)
+pending_x = 1 if rider_offer(X, T8["id"]) else 0
+must("PATCH", f"/riders/{X['id']}", {"maxActiveTasks": held})
 cand8 = must("GET", f"/delivery/tasks/{T8['id']}/candidates")
-check(any(x["code"] == "AT_CAPACITY" for x in next(r for r in cand8["riders"] if r["id"] == A["id"])["reasons"]) if held >= 1 else True,
-      f"Asha holds {held} with a limit of {max(1, held)} -> AT_CAPACITY on the next order", next(r for r in cand8["riders"] if r["id"] == A["id"]))
-if pending_a:
-    s, b = call("POST", f"/rider/offers/{r8[A['id']]}/accept", tok=A["tok"])
+x_row = next(r for r in cand8["riders"] if r["id"] == X["id"])
+check(any(x["code"] == "AT_CAPACITY" for x in x_row["reasons"]), f"{X['name']} holds {held} with a limit of {held} -> AT_CAPACITY on the next order", x_row)
+if pending_x:
+    s, b = call("POST", f"/rider/offers/{r8[X['id']]}/accept", tok=X["tok"])
     check(s == 409 and b.get("code") == "AT_CAPACITY", "accepting while at the limit is refused (checked under the rider lock)", (s, b))
-must("PATCH", f"/riders/{A['id']}", {"maxActiveTasks": 5})
+must("PATCH", f"/riders/{X['id']}", {"maxActiveTasks": 5})
 
 # ---------------------------------------------------------------- outside driver vs app accept
 step("10. Legacy 'assign rider' to an outside driver racing an app accept: one wins")

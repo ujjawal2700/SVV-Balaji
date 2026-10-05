@@ -6,6 +6,7 @@ import {
   SetPriceListActiveDto,
   SupersedePriceDto,
 } from './dto/pricing.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 export interface ResolvedPrice {
   priceListId: string;
@@ -117,18 +118,18 @@ export class PricingService {
     productId?: string;
     channel?: SalesChannel;
     activeOnly?: boolean;
-  }) {
+  }, page: PageRequest | null = null) {
     const where: Prisma.PriceListWhereInput = {
       productId: filters.productId,
       channel: filters.channel,
     };
     if (filters.activeOnly) where.isActive = true;
 
-    return this.prisma.priceList.findMany({
+    return listPage(page, () => this.prisma.priceList.count({ where }), (w) => this.prisma.priceList.findMany({ ...w,
       where,
       orderBy: [{ channel: 'asc' }, { effectiveFrom: 'desc' }, { minQuantity: 'desc' }],
       include: { product: { select: { id: true, name: true, sku: true } } },
-    });
+    }));
   }
 
   /**

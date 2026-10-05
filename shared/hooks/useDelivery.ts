@@ -18,6 +18,10 @@ export const DELIVERY_KEYS = {
   cashReport: (q: object) => ['delivery', 'cash-report', q] as const,
   availability: ['delivery', 'availability'] as const,
   candidates: (id: string) => ['delivery', 'candidates', id] as const,
+  verification: (id: string) => ['delivery', 'rider-verification', id] as const,
+  verificationQueue: (q: object) => ['delivery', 'verification-queue', q] as const,
+  documentTypes: ['delivery', 'document-types'] as const,
+  riderDeposit: (id: string) => ['delivery', 'rider-deposit', id] as const,
 };
 
 export const useZones = () => useQuery({ queryKey: DELIVERY_KEYS.zones, queryFn: deliveryApi.zones });
@@ -37,6 +41,13 @@ export const useEarningRules = () => useQuery({ queryKey: DELIVERY_KEYS.rules, q
 export const useRiderCash = (id: string | null) => useQuery({ queryKey: DELIVERY_KEYS.riderCash(id ?? ''), queryFn: () => deliveryApi.riderCash(id!), enabled: Boolean(id) });
 export const useRiderEarnings = (id: string | null, q: { from?: string; to?: string } = {}) =>
   useQuery({ queryKey: DELIVERY_KEYS.riderEarnings(id ?? '', q), queryFn: () => deliveryApi.riderEarnings(id!, q), enabled: Boolean(id) });
+export const useRiderVerification = (id: string | null) =>
+  useQuery({ queryKey: DELIVERY_KEYS.verification(id ?? ''), queryFn: () => deliveryApi.riderVerification(id!), enabled: Boolean(id) });
+export const useVerificationQueue = (q: { type?: string; warehouseId?: string } = {}) =>
+  useQuery({ queryKey: DELIVERY_KEYS.verificationQueue(q), queryFn: () => deliveryApi.verificationQueue(q), refetchInterval: 30_000 });
+export const useDocumentTypes = () => useQuery({ queryKey: DELIVERY_KEYS.documentTypes, queryFn: deliveryApi.documentTypes });
+export const useRiderDeposit = (id: string | null) =>
+  useQuery({ queryKey: DELIVERY_KEYS.riderDeposit(id ?? ''), queryFn: () => deliveryApi.riderDeposit(id!), enabled: Boolean(id) });
 export const useRider = (id: string | undefined) =>
   useQuery({ queryKey: DELIVERY_KEYS.rider(id ?? ''), queryFn: () => deliveryApi.rider(id!), enabled: Boolean(id), refetchInterval: 20_000 });
 export const useRiderEarningsReport = (q: { from?: string; to?: string; warehouseId?: string }) =>

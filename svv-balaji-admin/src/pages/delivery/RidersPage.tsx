@@ -10,6 +10,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { useRiders } from '@shared/hooks/useDelivery';
 import { StatCard } from '../customers/detailPageParts';
 import { ApproveModal, OutletSelect, RIDER_STATUS, RiderCell, inr, useRiderActions, vehicleText } from './riders/riderParts';
+import { VerificationTag } from './riders/verificationParts';
 
 type Tab = 'ALL' | RiderStatus;
 const TABS: Tab[] = ['ALL', 'ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED', 'REJECTED', 'PENDING_VERIFICATION'];
@@ -36,6 +37,11 @@ export function RidersPage() {
   const columns: ColumnsType<RiderRow> = [
     { title: 'Rider', key: 'r', width: 250, render: (_, r) => <RiderCell rider={r} onOpen={() => open(r)} /> },
     { title: 'Status', key: 's', render: (_, r) => <Tag color={RIDER_STATUS[r.status].color}>{RIDER_STATUS[r.status].label}</Tag> },
+    {
+      title: 'Verification', key: 'ver',
+      render: (_, r) => (r.status === 'REJECTED' || r.status === 'PENDING_VERIFICATION' ? '—' : <VerificationTag verified={r.verified} toReview={r.documentsToReview} />),
+    },
+    { title: 'Deposit', key: 'dep', align: 'right', render: (_, r) => (r.depositPaid ? inr(r.depositPaid) : '—') },
     {
       title: 'Now', key: 'n',
       render: (_, r) => (r.status === 'ACTIVE' ? (

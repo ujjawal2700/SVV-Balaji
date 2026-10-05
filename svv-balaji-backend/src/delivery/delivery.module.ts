@@ -15,12 +15,14 @@ import { RiderAppController } from './rider-app.controller';
 import { RiderGateway } from './rider.gateway';
 import { RiderAuthService, RiderJwtStrategy } from './riders/rider-auth';
 import { RidersService } from './riders/riders.service';
+import { RiderVerificationService } from './verification/verification.service';
 import { DeliveryZonesModule } from './zones/zones.module';
 
 /**
  * Last-mile delivery for local / Quick orders: riders (self sign-up + staff
  * approval), delivery tasks with auto-offer, the rider app API and socket,
- * COD collection and cash settlement, failed deliveries, rider pay rules.
+ * COD collection and cash settlement, failed deliveries, rider pay rules,
+ * rider onboarding (documents incl. PCC, security deposit, verification gate).
  *
  * Depends on the order code (SalesModule / CheckoutModule) and listens to its
  * event bus; the order code never depends on this module, so the same
@@ -32,8 +34,8 @@ import { DeliveryZonesModule } from './zones/zones.module';
   providers: [
     DeliverySettingsService, FailureReasonsService, DeliveryEventsService,
     EarningsService, DispatchService, TaskFlowService,
-    RiderAuthService, RiderJwtStrategy, RidersService, RiderGateway,
+    RiderAuthService, RiderJwtStrategy, RidersService, RiderGateway, RiderVerificationService,
   ],
-  exports: [DispatchService, EarningsService, DeliverySettingsService, FailureReasonsService],
+  exports: [DispatchService, EarningsService, DeliverySettingsService, FailureReasonsService, RiderVerificationService],
 })
 export class DeliveryModule {}

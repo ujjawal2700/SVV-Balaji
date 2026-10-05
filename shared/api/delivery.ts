@@ -65,6 +65,12 @@ export interface RiderRow {
   warehouse: { id: string; name: string } | null;
   activeTasks?: number;
   cashInHand?: number;
+  /** Onboarding cleared: mandatory documents + PCC approved and in date, deposit paid if required. */
+  verified?: boolean;
+  verifiedUntil?: string | null;
+  /** Uploads waiting for staff review. */
+  documentsToReview?: number;
+  depositPaid?: number;
 }
 
 export type TaskStatus =
@@ -124,6 +130,9 @@ export interface DeliverySettings {
   riderHeartbeatMinutes: number;
   /** kg per vehicle type; a type not listed has no limit. */
   vehicleMaxKg: Partial<Record<VehicleType, number>>;
+  /** Riders must pay the security deposit before taking orders. */
+  securityDepositRequired: boolean;
+  securityDepositAmount: string;
 }
 
 export type VehicleType = 'BICYCLE' | 'MOTORCYCLE' | 'SCOOTER' | 'EV_SCOOTER' | 'OTHER';
@@ -235,6 +244,79 @@ export const EARNING_TYPE_LABEL: Record<string, string> = {
   WEEKLY_BONUS: 'Weekly target', WAITING: 'Waiting time', OUTCOME: 'Cancel / failed compensation', ADJUSTMENT: 'Adjustment',
 };
 
+// ------------------------------------------------------------------ rider onboarding
+
+export type DocState = 'NOT_UPLOADED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export interface RiderDocumentType {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isMandatory: boolean;
+  isActive: boolean;
+  requiresNumber: boolean;
+  requiresIssuer: boolean;
+  requiresIssueDate: boolean;
+  requiresExpiry: boolean;
+  /** Built in (the PCC): always mandatory, cannot be switched off. */
+  isSystem: boolean;
+  sortOrder: number;
+}
+export interface RiderDocUpload {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  fileUrls: string[];
+  documentNumber: string | null;
+  issuedBy: string | null;
+  issuedOn: string | null;
+  expiresOn: string | null;
+  rejectionReason: string | null;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  supersededAt: string | null;
+  uploadedAt: string;
+}
+export interface RiderDocItem {
+  type: Pick<RiderDocumentType, 'id' | 'code' | 'name' | 'description' | 'isSystem' | 'requiresNumber' | 'requiresIssuer' | 'requiresIssueDate' | 'requiresExpiry'>;
+  mandatory: boolean;
+  state: DocState;
+  satisfied: boolean;
+  validUntil: string | null;
+  canUpload: boolean;
+  current: RiderDocUpload | null;
+  approvedInForce: RiderDocUpload | null;
+}
+export type DepositStatus = 'NOT_REQUIRED' | 'NOT_PAID' | 'PARTIALLY_PAID' | 'PAID';
+export interface RiderDepositSummary {
+  required: boolean;
+  requiredAmount: number;
+  paid: number;
+  pending: number;
+  status: DepositStatus;
+  satisfied: boolean;
+}
+export interface RiderVerification {
+  riderId: string;
+  status: RiderStatus;
+  eligible: boolean;
+  missing: string[];
+  verifiedUntil: string | null;
+  documents: RiderDocItem[];
+  pcc: RiderDocItem | null;
+  deposit: RiderDepositSummary;
+  history: Array<RiderDocUpload & { type: { code: string; name: string } }>;
+}
+export type DepositEntryType = 'PAYMENT' | 'REFUND' | 'FORFEIT' | 'ADJUSTMENT';
+export type DepositMethod = 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'ONLINE' | 'EARNINGS_DEDUCTION' | 'OTHER';
+export interface RiderDepositLedger extends RiderDepositSummary {
+  entries: Array<{ id: string; type: DepositEntryType; amount: number; method: DepositMethod | null; reference: string | null; note: string | null; createdAt: string; recordedBy: string | null; online: boolean }>;
+}
+export interface VerificationQueueRow extends RiderDocUpload {
+  type: { id: string; code: string; name: string; isSystem: boolean; requiresExpiry: boolean };
+  rider: { id: string; code: string | null; fullName: string; phone: string; status: RiderStatus; photoUrl: string | null; isVerified: boolean; warehouse: { id: string; name: string } | null };
+}
+
 const d = <T>(p: Promise<{ data: T }>) => p.then((r) => r.data);
 
 export const deliveryApi = {
@@ -260,6 +342,17 @@ export const deliveryApi = {
   riderEarnings: (id: string, q: { from?: string; to?: string } = {}) => d<RiderEarnings>(api.get(`/riders/${id}/earnings`, { params: pruneEmpty(q) })),
   adjustEarnings: (id: string, b: { amount: number; note: string }) => d(api.post(`/riders/${id}/earnings/adjustments`, b)),
 
+  riderVerification: (id: string) => d<RiderVerification>(api.get(`/riders/${id}/verification`)),
+  verificationQueue: (q: { type?: string; warehouseId?: string } = {}) => d<VerificationQueueRow[]>(api.get('/riders/verification-queue', { params: pruneEmpty(q) })),
+  approveDocument: (docId: string, note?: string) => d(api.post(`/riders/documents/${docId}/approve`, { note })),
+  rejectDocument: (docId: string, b: { reason: string; note?: string }) => d(api.post(`/riders/documents/${docId}/reject`, b)),
+  documentTypes: () => d<RiderDocumentType[]>(api.get('/riders/document-types')),
+  createDocumentType: (b: Partial<RiderDocumentType>) => d<RiderDocumentType>(api.post('/riders/document-types', b)),
+  updateDocumentType: (id: string, b: Partial<RiderDocumentType>) => d<RiderDocumentType>(api.patch(`/riders/document-types/${id}`, b)),
+  riderDeposit: (id: string) => d<RiderDepositLedger>(api.get(`/riders/${id}/deposit`)),
+  recordDeposit: (id: string, b: { type: DepositEntryType; amount: number; method?: DepositMethod; reference?: string; note?: string }) =>
+    d<RiderDepositLedger>(api.post(`/riders/${id}/deposit/entries`, b)),
+
   tasks: (q: { status?: TaskStatus; warehouseId?: string; needsAssignment?: boolean; riderId?: string } = {}) =>
     d<DeliveryTaskRow[]>(api.get('/delivery/tasks', { params: pruneEmpty({ ...q, needsAssignment: q.needsAssignment ? 'true' : undefined }) })),
   task: (id: string) => d<DeliveryTaskDetail>(api.get(`/delivery/tasks/${id}`)),
@@ -272,7 +365,7 @@ export const deliveryApi = {
   reattempt: (id: string) => d(api.post(`/delivery/tasks/${id}/reattempt`)),
 
   settings: () => d<DeliverySettings>(api.get('/delivery/settings')),
-  updateSettings: (b: Partial<Omit<DeliverySettings, 'maxCashInHand'>> & { maxCashInHand?: number | null }) => d<DeliverySettings>(api.patch('/delivery/settings', b)),
+  updateSettings: (b: Partial<Omit<DeliverySettings, 'maxCashInHand' | 'securityDepositAmount'>> & { maxCashInHand?: number | null; securityDepositAmount?: number }) => d<DeliverySettings>(api.patch('/delivery/settings', b)),
   reasons: () => d<FailureReason[]>(api.get('/delivery/failure-reasons')),
   createReason: (b: Partial<FailureReason>) => d(api.post('/delivery/failure-reasons', b)),
   updateReason: (id: string, b: Partial<FailureReason>) => d(api.patch(`/delivery/failure-reasons/${id}`, b)),

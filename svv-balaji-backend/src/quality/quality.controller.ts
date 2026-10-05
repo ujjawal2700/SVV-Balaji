@@ -8,6 +8,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('quality')
 @ApiBearerAuth()
@@ -30,8 +31,9 @@ export class QualityController {
 
   @Get()
   @RequirePermission('quality.view')
-  findAll(@Query('stage') stage?: InspectionStage, @Query('result') result?: QualityResult) {
-    return this.qualityService.findAll({ stage, result });
+  @ApiPageQuery()
+  findAll(@Query('stage') stage?: InspectionStage, @Query('result') result?: QualityResult, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.qualityService.findAll({ stage, result }, pageRequest(page, limit));
   }
 
   @Get(':id')

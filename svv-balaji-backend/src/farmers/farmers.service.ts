@@ -10,6 +10,7 @@ import { VerifyFarmerDto } from './dto/verify-farmer.dto';
 import { QueryFarmerDto } from './dto/query-farmer.dto';
 import { FarmerPerformanceService } from './farmer-performance.service';
 import { assessRegistration, describeMissing } from './registration-completeness';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class FarmersService {
@@ -44,7 +45,7 @@ export class FarmersService {
     });
   }
 
-  async findAll(query: QueryFarmerDto, user: JwtPayload) {
+  async findAll(query: QueryFarmerDto, user: JwtPayload, page: PageRequest | null = null) {
     const where: Prisma.FarmerWhereInput = {
       fullName: query.fullName ? { contains: query.fullName, mode: 'insensitive' } : undefined,
       village: query.village ? { contains: query.village, mode: 'insensitive' } : undefined,
@@ -62,14 +63,14 @@ export class FarmersService {
       qualityRating: query.minRating === undefined ? undefined : { gte: query.minRating },
     };
 
-    return this.prisma.farmer.findMany({
+    return listPage(page, () => this.prisma.farmer.count({ where }), (w) => this.prisma.farmer.findMany({ ...w,
       where,
       orderBy: { createdAt: 'desc' },
       include: {
         branch: { select: { id: true, name: true } },
         createdBy: { select: { id: true, fullName: true, role: true, email: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

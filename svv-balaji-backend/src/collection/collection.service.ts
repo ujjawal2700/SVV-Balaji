@@ -7,6 +7,7 @@ import { SequenceService } from '../common/sequence.service';
 import { FarmerPerformanceService } from '../farmers/farmer-performance.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class CollectionService {
@@ -212,17 +213,18 @@ export class CollectionService {
     return Number(`${y}${m}${d}`);
   }
 
-  findAll(user: JwtPayload, farmerId?: string, branchId?: string) {
-    return this.prisma.rawMaterialCollection.findMany({
+  findAll(user: JwtPayload, farmerId?: string, branchId?: string, page: PageRequest | null = null) {
+    const where: Prisma.RawMaterialCollectionWhereInput = { farmerId, branchId: scopedBranchId(user, branchId) };
+    return listPage(page, () => this.prisma.rawMaterialCollection.count({ where }), (w) => this.prisma.rawMaterialCollection.findMany({ ...w,
       // FRD 5.2 - the caller's branch wins over whatever was asked for.
-      where: { farmerId, branchId: scopedBranchId(user, branchId) },
+      where,
       orderBy: { collectionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
         batch: { select: { id: true, batchNumber: true, status: true } },
         collectedBy: { select: { id: true, fullName: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {
@@ -261,9 +263,10 @@ export class CollectionService {
 
   // --- Batch queries (FRD 15.2 / 15.3) -------------------------------------
 
-  findBatches(filters: { farmerId?: string; status?: any; warehouseId?: string }) {
-    return this.prisma.rawMaterialBatch.findMany({
-      where: filters,
+  findBatches(filters: { farmerId?: string; status?: any; warehouseId?: string }, page: PageRequest | null = null) {
+    const where: Prisma.RawMaterialBatchWhereInput = filters;
+    return listPage(page, () => this.prisma.rawMaterialBatch.count({ where }), (w) => this.prisma.rawMaterialBatch.findMany({ ...w,
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -287,7 +290,7 @@ export class CollectionService {
           },
         },
       },
-    });
+    }));
   }
 
   /**

@@ -3235,3 +3235,69 @@ pop-up) and its Notifications page now use `public/images/desi-tokri-emblem.png`
 - **Mode-Specific Delivery Tracking Statuses added**: Updated `svv-balaji-customer/src/pages/orderStatus.ts` and `OrderTrackingPage.tsx` to differentiate tracking timelines by fulfillment mode:
   - **Standard E-Commerce Shipping (3PL / Shiprocket)**: Order Received $\rightarrow$ Ready to Ship / Manifested $\rightarrow$ Picked Up $\rightarrow$ In Transit $\rightarrow$ Arrived at Hub / Reached Destination $\rightarrow$ Out For Delivery $\rightarrow$ Delivered.
 - **Customer Vercel Deployment Config added**: Created `svv-balaji-customer/vercel.json` with SPA rewrite rule `/(.*)` -> `/index.html` so refreshing deep URLs like `/orders/SO-20260930-001` or `/order-placed` on Vercel serves `index.html` and avoids 404 NOT_FOUND errors.
+
+## 2026-10-05 — Rider onboarding: documents, Police Clearance Certificate, security deposit, verification gate (Raunak, via agent)
+
+**What.** A rider is only approved, offered orders, assigned by staff, or allowed online once every *mandatory* document
+(incl. the PCC) is approved and in date, and the security deposit is paid when Super Admin has that rule on.
+- **Backend** `src/delivery/verification/` — `verification.logic.ts` (pure, 20 unit tests) + `RiderVerificationService`.
+  Gate stored on `Rider.isVerified` + `verifiedUntil` (earliest expiry of a mandatory approval, so expiry needs no cron).
+  `recompute()` runs on every doc review / upload / deposit entry / rule change; a rider who stops qualifying is set
+  OFFLINE, loses open offers (deliveries in hand are left alone) and gets a `VERIFICATION` notification.
+- **Dispatch**: new skip reason `NOT_VERIFIED` ("Verification incomplete") in `rider-ranking.ts`; `riderFacts` loads it;
+  `respond` (accept) and `assignManually` refuse unverified riders. `RidersService.approve` and `setAvailability(online)`
+  throw `{ code: 'NOT_VERIFIED', missing: [...] }`.
+- **Documents**: Super Admin-managed `RiderDocumentType` list (seeded: Driving licence [mandatory, number+expiry],
+  Aadhaar/photo ID [mandatory, number], **PCC** [built-in `isSystem`, always mandatory, number + police station + issue
+  date], Vehicle RC [optional]). Each upload is a `RiderDocument` row; re-upload supersedes older pending/rejected rows; an
+  approved copy stays in force until a renewal is approved (renewal allowed within 30 days of expiry). Staff can reject
+  pending or withdraw an approval, with a reason shown to the rider. Files: photos or PDF, up to 4 pages.
+- **Deposit**: `DeliverySettings.securityDepositRequired/Amount` (default OFF). Ledger `RiderDepositEntry`
+  (PAYMENT / REFUND / FORFEIT / ADJUSTMENT, signed, never edited). Rider pays online (Razorpay/mock) via
+  `RiderDepositOrder` - the amount is fixed server-side and `gatewayPaymentId` is unique, so a replayed verify credits once.
+- **API (new)** rider: `GET /rider/verification`, `POST /rider/verification/files` (multipart), `POST /rider/verification/documents`,
+  `GET /rider/deposit`, `POST /rider/deposit/pay-order`, `POST /rider/deposit/pay-verify`. Staff: `GET /riders/verification-queue`,
+  `GET|POST /riders/document-types`, `PATCH /riders/document-types/:id`, `POST /riders/documents/:id/{approve,reject}`,
+  `GET /riders/:id/verification`, `GET /riders/:id/deposit`, `POST /riders/:id/deposit/entries`. `GET /riders` rows gain
+  `verified`, `documentsToReview`, `depositPaid`; rider `me`/dashboard gain `verified`. `PATCH /delivery/settings` takes the two deposit fields.
+- **Permissions (new)**: `riders.verify`, `riderDeposit.record` (default Branch Manager). Doc types + deposit amount use
+  `deliverySettings.manage` (Super Admin only).
+- **Migration** `20261005100000_rider_onboarding_verification`: 4 tables, 3 enums, rider/settings columns, seeds the doc
+  types, and turns every rider's sign-up `documentUrl` into a PENDING driving-licence submission.
+- **Rider app**: `/verification` checklist, `/verification/doc/:typeId` upload (status, rejection reason, re-upload),
+  `/deposit` (required/paid/pending/status, pay online in parts, ledger). Pending screen now shows the checklist;
+  dashboard banner when not verified; side menu entries. Old single "licence photo" upload removed from the UI (endpoint kept).
+- **Admin**: rider detail tabs "Documents & PCC" (approve/reject, upload history) and "Security deposit" (ledger, record
+  entry); new **Manage Riders → Document Verification** queue `/riders/verification`; Delivery Settings → **Rider
+  onboarding** tab (deposit rule, document list); verification/deposit columns on All Riders; Pending Approval cards show
+  progress and Approve is disabled until verified.
+
+**Verified** (throwaway local DB `svv_onboarding_e2e`, API on :3110): new `e2e-rider-onboarding-flow.py` 50/50 (incl. a
+real Cloudinary upload); `e2e-rider-flow.py` ALL PASSED; `e2e-retailer-routing-flow.py` ALL PASSED; `e2e-returns-flow.py`
+stops at the known pre-existing C1; `jest src/delivery` 75/75; backend/admin/rider `tsc` clean; admin + rider `vite build`
+OK; migration applies on a fresh DB with zero drift. The 4 existing rider e2e scripts now clear verification before
+approving (`clear_verification` helper). **Not click-tested in a browser.**
+
+**For whoever owns the uncommitted dispatch/pagination work in this tree:** `e2e-broadcast-dispatch-flow.py` fails 2 checks
+(66/68) with those uncommitted `dispatch.service.ts` changes, and passes 68/68 with HEAD's dispatch + only this session's
+edits. Cause: `handOverToExternalDriver` now locks `orders` then `delivery_tasks`, while `respond` locks `delivery_tasks`
+then updates `orders` -> Postgres deadlock (500) in the "outside driver vs app accept" race; the "accept while at limit"
+check also returned ACCEPTED. This session only added lines to that file (import, riderFacts select, two verified checks).
+
+**Deploy:** `prisma migrate deploy` + generate + API restart + rider and admin apps. **Behaviour change on deploy:** every
+existing ACTIVE rider starts *unverified* and stops getting orders until staff approve their documents and PCC (their
+sign-up photo is already waiting as a pending licence). Plan a review pass before/at deploy, or tell me to add a grace setting.
+
+## 2026-10-05 (later) — Broadcast dispatch: deadlock fixed + flaky e2e step made deterministic (Raunak, via agent)
+
+- **Deadlock (real bug, 500 on accept).** The uncommitted dispatch change made `handOverToExternalDriver` lock
+  `orders` -> `delivery_tasks`, while `respond` (rider accept) and `assignManually` (staff assign) locked
+  `delivery_tasks` -> `riders` and then wrote the `orders` row. An outside-driver hand-over racing an app accept
+  deadlocked (Postgres 40P01). Fix in `dispatch.service.ts`: new `lockOrderOf(tx, taskId)`; `respond` and
+  `assignManually` now lock the task's order row first. **Lock order for any delivery transaction: orders ->
+  delivery_tasks -> riders.** Keep to it in new code.
+- **"Accept while at the limit" failure was a flaky test, not a bug.** Step 9 assumed Asha won at least one of the
+  random step-5 races; when she won none (about 13% of runs) her limit was 1 with 0 held, so accepting was correct.
+  Step 9 now uses whichever round rider holds the most deliveries and asserts it holds at least one.
+- Verified: `e2e-broadcast-dispatch-flow.py` ALL PASSED 3/3 on fresh DBs (both race outcomes seen, no deadlocks in
+  the API log); `e2e-rider-flow.py` and `e2e-rider-onboarding-flow.py` pass; `jest src/delivery` 75/75; `tsc` clean.

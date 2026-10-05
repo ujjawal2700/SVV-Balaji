@@ -1294,6 +1294,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         description: 'Record COD cash a rider deposits at the outlet; lowers what the rider owes.',
         defaultRoles: [BM],
       },
+      {
+        key: 'riders.verify',
+        label: 'Verify rider documents and PCC',
+        description: 'Approve or reject the documents a rider uploads, including the Police Clearance Certificate. A rider gets no orders until every mandatory one is approved.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'riderDeposit.record',
+        label: 'Record rider security deposits',
+        description: 'Record a security deposit received, refunded or kept from a rider. The required amount is set by Super Admin in Delivery Settings.',
+        defaultRoles: [BM],
+      },
     ],
   },
   {

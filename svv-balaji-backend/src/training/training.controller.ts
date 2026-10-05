@@ -20,6 +20,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('training')
 @ApiBearerAuth()
@@ -43,13 +44,16 @@ export class TrainingController {
     required: false,
     description: 'FRD 11.4 - sessions this farmer attended. Used by the farmer profile.',
   })
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string,
     @Query('conductedById') conductedById?: string,
     @Query('farmerId') farmerId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.trainingService.findAll(user, branchId, conductedById, farmerId);
+    return this.trainingService.findAll(user, branchId, conductedById, farmerId, pageRequest(page, limit));
   }
 
   @Get(':id')

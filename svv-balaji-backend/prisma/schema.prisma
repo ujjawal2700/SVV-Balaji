@@ -225,6 +225,8 @@ model User {
   creditReceiptsRecorded    CreditReceipt[]         @relation("CreditReceiptRecordedBy")
   ridersReviewed            Rider[]                 @relation("RiderReviewedBy")
   riderCashRecorded         RiderCashEntry[]        @relation("RiderCashRecordedBy")
+  riderDocumentsReviewed    RiderDocument[]         @relation("RiderDocumentReviewedBy")
+  riderDepositsRecorded     RiderDepositEntry[]     @relation("RiderDepositRecordedBy")
   creditReceiptsVoided      CreditReceipt[]         @relation("CreditReceiptVoidedBy")
   invoicesIssued            Invoice[]               @relation("InvoiceIssuedBy")
   invoicesCancelled         Invoice[]               @relation("InvoiceCancelledBy")
@@ -4037,7 +4039,19 @@ model Rider {
   reviewedAt      DateTime?
   rejectionReason String?
 
+  /// Onboarding gate, kept by RiderVerificationService: every mandatory
+  /// document (incl. the PCC) approved and the security deposit paid when that
+  /// rule is on. Dispatch, going online and approval all require it.
+  isVerified            Boolean   @default(false)
+  /// The gate lapses here (earliest expiry among the approved mandatory
+  /// documents) without anyone recomputing it. Null = no expiry.
+  verifiedUntil         DateTime?
+  verificationCheckedAt DateTime?
+
   sessions       RiderSession[]
+  documents      RiderDocument[]
+  depositEntries RiderDepositEntry[]
+  depositOrders  RiderDepositOrder[]
   otps           RiderOtp[]
   tasks          DeliveryTask[]
   offers         DeliveryOffer[]
@@ -4271,6 +4285,134 @@ model CodCollection {
   @@map("cod_collections")
 }
 
+// ------------------------------------------------------------------ rider onboarding
+
+enum RiderDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// What riders must upload. Super Admin keeps the list; PCC is built in
+/// (isSystem) and always mandatory.
+model RiderDocumentType {
+  id                String  @id @default(uuid())
+  /// Stable key, e.g. DRIVING_LICENCE, PCC.
+  code              String  @unique
+  name              String
+  description       String?
+  isMandatory       Boolean @default(true)
+  isActive          Boolean @default(true)
+  /// Ask the rider for the document / certificate number.
+  requiresNumber    Boolean @default(false)
+  /// Ask who issued it (PCC: the police station / authority).
+  requiresIssuer    Boolean @default(false)
+  /// Ask for the issue date.
+  requiresIssueDate Boolean @default(false)
+  /// Ask for the expiry date; an expired approval no longer counts.
+  requiresExpiry    Boolean @default(false)
+  /// Built in: cannot be made optional, switched off or renamed in code.
+  isSystem          Boolean @default(false)
+  sortOrder         Int     @default(0)
+
+  documents RiderDocument[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rider_document_types")
+}
+
+/// One upload of one document. A re-upload is a new row; older PENDING /
+/// REJECTED rows are superseded, and an APPROVED row stays in force until the
+/// new one is approved (so renewing a licence never takes a rider off the road).
+model RiderDocument {
+  id              String              @id @default(uuid())
+  riderId         String
+  rider           Rider               @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  typeId          String
+  type            RiderDocumentType   @relation(fields: [typeId], references: [id])
+  /// Front / back photos or a PDF.
+  fileUrls        String[]
+  documentNumber  String?
+  issuedBy        String?
+  issuedOn        DateTime?           @db.Date
+  expiresOn       DateTime?           @db.Date
+  status          RiderDocumentStatus @default(PENDING)
+  /// Shown to the rider when REJECTED.
+  rejectionReason String?
+  /// Staff-only note on the check made (e.g. "verified with police station").
+  reviewNote      String?
+  reviewedById    String?
+  reviewedBy      User?               @relation("RiderDocumentReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  /// Replaced by a newer upload / approval of the same type. Kept for audit.
+  supersededAt    DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([riderId, typeId, createdAt])
+  @@index([status, supersededAt])
+  @@map("rider_documents")
+}
+
+enum RiderDepositEntryType {
+  /// Money received from the rider (+).
+  PAYMENT
+  /// Money returned to the rider, e.g. on leaving (-).
+  REFUND
+  /// Kept by the company against a loss or damage (-).
+  FORFEIT
+  /// Correction, either sign.
+  ADJUSTMENT
+}
+
+enum RiderDepositMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  ONLINE
+  EARNINGS_DEDUCTION
+  OTHER
+}
+
+/// Security deposit ledger. Paid = sum(amount). Never edited, only added to.
+model RiderDepositEntry {
+  id               String                @id @default(uuid())
+  riderId          String
+  rider            Rider                 @relation(fields: [riderId], references: [id])
+  type             RiderDepositEntryType
+  /// Signed: + payment, - refund / forfeit.
+  amount           Decimal               @db.Decimal(12, 2)
+  method           RiderDepositMethod?
+  reference        String?
+  note             String?
+  /// Online payments: the gateway payment id, so a replayed verify cannot pay twice.
+  gatewayPaymentId String?               @unique
+  recordedById     String?
+  recordedBy       User?                 @relation("RiderDepositRecordedBy", fields: [recordedById], references: [id])
+  createdAt        DateTime              @default(now())
+
+  @@index([riderId, createdAt])
+  @@map("rider_deposit_entries")
+}
+
+/// An online deposit payment the rider started. The amount is fixed here,
+/// server side, so the browser cannot change what gets credited.
+model RiderDepositOrder {
+  id             String    @id @default(uuid())
+  riderId        String
+  rider          Rider     @relation(fields: [riderId], references: [id])
+  gatewayOrderId String    @unique
+  amount         Decimal   @db.Decimal(12, 2)
+  paidAt         DateTime?
+  paymentId      String?
+  createdAt      DateTime  @default(now())
+
+  @@index([riderId])
+  @@map("rider_deposit_orders")
+}
+
 enum RiderCashEntryType {
   /// Cash taken at a door (+).
   COD_COLLECTED
@@ -4362,6 +4504,10 @@ model DeliverySettings {
   /// Heaviest delivery (kg) each vehicle may carry: { "BICYCLE": 5, ... }.
   /// A vehicle type not listed has no limit.
   vehicleMaxKg             Json     @default("{}")
+  /// Riders must pay a security deposit before they can take orders.
+  securityDepositRequired  Boolean  @default(false)
+  /// The deposit every rider owes when the rule is on.
+  securityDepositAmount    Decimal  @default(0) @db.Decimal(12, 2)
   updatedById              String?
   updatedAt                DateTime @updatedAt
 

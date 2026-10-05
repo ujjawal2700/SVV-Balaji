@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { createPaymentGateway } from '../../checkout/payment/payment-gateway';
 import { DispatchService, HELD_STATUSES, stripPhone } from '../dispatch/dispatch.service';
 import { TaskFlowService } from '../dispatch/task-flow.service';
+import { isVerifiedNow } from '../verification/verification.logic';
+import { RiderVerificationService } from '../verification/verification.service';
 
 export class ApproveRiderDto {
   @ApiProperty({ description: 'Home outlet: the rider is offered tasks picked up here' }) @IsString() warehouseId!: string;
@@ -53,6 +55,7 @@ const RIDER_LIST_SELECT = {
   id: true, code: true, fullName: true, phone: true, email: true, status: true, city: true, vehicleType: true, vehicleNumber: true,
   licenceNumber: true, documentUrl: true, photoUrl: true, availability: true, availabilityChangedAt: true, lastLocationAt: true,
   lastLatitude: true, lastLongitude: true, maxActiveTasks: true, createdAt: true, reviewedAt: true, rejectionReason: true,
+  isVerified: true, verifiedUntil: true,
   warehouse: { select: { id: true, name: true } },
 } satisfies Prisma.RiderSelect;
 
@@ -91,6 +94,7 @@ export class RidersService {
     private readonly sequence: SequenceService,
     private readonly dispatch: DispatchService,
     private readonly flow: TaskFlowService,
+    private readonly verification: RiderVerificationService,
   ) {}
 
   // ================================================================ staff
@@ -102,11 +106,17 @@ export class RidersService {
         warehouseId: filters.warehouseId,
         ...(filters.q ? { OR: [{ fullName: { contains: filters.q, mode: 'insensitive' } }, { phone: { contains: filters.q } }, { code: { contains: filters.q, mode: 'insensitive' } }] } : {}),
       },
-      select: { ...RIDER_LIST_SELECT, _count: { select: { tasks: { where: { status: { in: HELD_STATUSES } } } } } },
+      select: {
+        ...RIDER_LIST_SELECT,
+        _count: { select: { tasks: { where: { status: { in: HELD_STATUSES } } }, documents: { where: { status: 'PENDING', supersededAt: null } } } },
+      },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     });
-    const cash = await this.cashBalances(riders.map((r) => r.id));
-    return riders.map(({ _count, ...r }) => ({ ...r, activeTasks: _count.tasks, cashInHand: cash.get(r.id) ?? 0 }));
+    const ids = riders.map((r) => r.id);
+    const [cash, deposit] = await Promise.all([this.cashBalances(ids), this.verification.depositPaidBy(ids)]);
+    return riders.map(({ _count, ...r }) => ({
+      ...r, verified: isVerifiedNow(r), activeTasks: _count.tasks, documentsToReview: _count.documents, cashInHand: cash.get(r.id) ?? 0, depositPaid: deposit.get(r.id) ?? 0,
+    }));
   }
 
   private async cashBalances(ids: string[]) {
@@ -123,7 +133,7 @@ export class RidersService {
       this.prisma.deliveryTask.count({ where: { riderId: id, status: { in: ['FAILED', 'RETURNED_TO_STORE'] } } }),
       this.prisma.deliveryTask.findMany({ where: { riderId: id, status: { in: HELD_STATUSES } }, select: { id: true, taskNumber: true, status: true } }),
     ]);
-    return { ...r, cashInHand: cash.get(id) ?? 0, stats: { delivered, failed }, activeTasks: active };
+    return { ...r, verified: isVerifiedNow(r), cashInHand: cash.get(id) ?? 0, stats: { delivered, failed }, activeTasks: active };
   }
 
   async approve(id: string, dto: ApproveRiderDto, userId: string) {
@@ -131,6 +141,8 @@ export class RidersService {
     if (!r) throw new NotFoundException('Rider not found');
     if (r.status !== RiderStatus.PENDING_APPROVAL) throw new BadRequestException(`A ${r.status.toLowerCase().replace(/_/g, ' ')} rider cannot be approved`);
     await this.assertHomeOutlet(dto.warehouseId);
+    // A rider becomes ACTIVE only once documents, PCC and deposit are all cleared.
+    await this.verification.assertVerified(id, 'Cannot approve yet');
     return this.prisma.$transaction(async (tx) =>
       tx.rider.update({
         where: { id },
@@ -403,6 +415,7 @@ export class RidersService {
     if (dto.online) {
       if (r.status !== 'ACTIVE') throw new ForbiddenException(r.status === 'PENDING_APPROVAL' ? 'Your account is waiting for approval' : 'Your account is not active');
       if (!r.warehouseId) throw new ForbiddenException('You have not been assigned an outlet yet');
+      await this.verification.assertVerified(riderId, 'Finish your verification to go online', ForbiddenException);
     }
     const updated = await this.prisma.rider.update({
       where: { id: riderId },
@@ -430,7 +443,12 @@ export class RidersService {
 
   /** Home screen: the four counters, what is in hand, and requests waiting. */
   async dashboard(riderId: string) {
-    const r = await this.activeRider(riderId);
+    let r = await this.activeRider(riderId);
+    // The stored gate can lapse by date; refresh it (this also takes an expired rider offline).
+    if (r.isVerified !== isVerifiedNow(r) || (!r.isVerified && r.availability === 'ONLINE')) {
+      await this.verification.recompute([riderId]);
+      r = await this.activeRider(riderId);
+    }
     const since = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) + 'T00:00:00+05:30');
     const count = (where: Prisma.DeliveryTaskWhereInput) => this.prisma.deliveryTask.count({ where: { riderId, ...where } });
     const [completed, pending, cancelled, returned, offers, active, cash] = await Promise.all([
@@ -443,7 +461,7 @@ export class RidersService {
       this.cashBalances([riderId]),
     ]);
     return {
-      rider: { id: r.id, fullName: r.fullName, code: r.code, status: r.status, availability: r.availability, outlet: r.warehouse },
+      rider: { id: r.id, fullName: r.fullName, code: r.code, status: r.status, availability: r.availability, outlet: r.warehouse, verified: isVerifiedNow(r) },
       today: { completed, pending, cancelled, returned },
       cashInHand: cash.get(riderId) ?? 0,
       offers,
