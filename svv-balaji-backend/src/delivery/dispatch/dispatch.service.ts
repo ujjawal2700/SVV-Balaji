@@ -19,6 +19,7 @@ import { DeliveryEventsService, DeliverySettingsService } from '../core/delivery
 import { EarningsService } from '../earnings/earnings.service';
 import type { Outcome } from '../earnings/earning.logic';
 import { assessRider, rankRiders, SKIP_LABEL, vehicleLimits, type RankingRules, type RiderFacts, type TaskFacts } from './rider-ranking';
+import { isVerifiedNow } from '../verification/verification.logic';
 
 /** A task still in someone's hands (or waiting for someone). */
 export const LIVE_STATUSES: DeliveryTaskStatus[] = [
@@ -142,10 +143,13 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     const cod = order.paymentMode === 'COD' && order.paymentStatus !== 'PAID' ? Math.max(0, Number(order.total) - Number(order.refundWalletPaidInr)) : 0;
 
     const task = await this.prisma.$transaction(async (tx) => {
-      // Serialise per order so two events cannot create two tasks.
+      // Serialise per order so two events cannot create two tasks - and so a
+      // hand-over to an outside driver (same lock) is seen before creating one.
       await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
       const again = await tx.deliveryTask.findFirst({ where: { orderId, status: { in: [...LIVE_STATUSES, 'FAILED'] } } });
       if (again) return again;
+      const now = await tx.order.findUnique({ where: { id: orderId }, select: { riderName: true, status: true } });
+      if (!now || now.riderName || now.status !== OrderStatus.PACKED) return null;
       const created = await tx.deliveryTask.create({
         data: {
           taskNumber: await this.sequence.next(tx, 'DT', new Date()),
@@ -168,6 +172,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       await this.log(created.id, 'READY', { note: `Ready for pickup (attempt ${created.attempt})`, actorUserId }, tx);
       return created;
     });
+    if (!task) return null;
     await this.sales.record(orderId, 'READY_FOR_PICKUP', actorUserId, task.taskNumber);
     this.changed(task);
     await this.dispatch(task.id);
@@ -199,6 +204,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       select: {
         id: true, code: true, fullName: true, phone: true, status: true, availability: true, availabilityChangedAt: true, warehouseId: true,
         vehicleType: true, vehicleNumber: true, maxActiveTasks: true, lastSeenAt: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true,
+        isVerified: true, verifiedUntil: true,
         warehouse: { select: { id: true, name: true } },
         _count: {
           select: {
@@ -217,8 +223,9 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     ]);
     const cashBy = new Map(cash.map((g) => [g.riderId, Number(g._sum.amount ?? 0)]));
     const lastBy = new Map(lastTask.map((g) => [g.riderId!, g._max.assignedAt]));
-    return riders.map(({ _count, ...r }) => ({
+    return riders.map(({ _count, isVerified, verifiedUntil, ...r }) => ({
       ...r,
+      verified: isVerifiedNow({ isVerified, verifiedUntil }, now),
       lastLatitude: r.lastLatitude === null ? null : Number(r.lastLatitude),
       lastLongitude: r.lastLongitude === null ? null : Number(r.lastLongitude),
       heldTasks: _count.tasks,
@@ -335,17 +342,30 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
   /**
    * Rider accepts or rejects an offer made to them.
    *
-   * Accept is atomic: the task row and then the rider row are locked, the
+   * Accept is atomic: the order, the task row and then the rider row are locked, the
    * offer must still be PENDING, the task must still have no rider, and the
    * rider must still have room. Two riders tapping Accept at the same moment
    * queue on the task lock; the second finds their offer already TAKEN and
    * gets 409 OFFER_TAKEN. The task update is also conditional on riderId being
    * null, so even a code path that skipped the lock could not double-assign.
    */
+  /**
+   * Lock order for every transaction that touches a delivery: orders, then
+   * delivery_tasks, then riders. Accept and staff assign write the order row
+   * (rider name) after locking the task; the outside-driver hand-over and task
+   * creation lock the order first. Taking the order lock first here as well
+   * keeps the two from deadlocking (Postgres 40P01) when they race.
+   */
+  private async lockOrderOf(tx: Prisma.TransactionClient, taskId: string) {
+    const t = await tx.deliveryTask.findUnique({ where: { id: taskId }, select: { orderId: true } });
+    if (t?.orderId) await tx.$queryRaw`SELECT id FROM orders WHERE id = ${t.orderId} FOR UPDATE`;
+  }
+
   async respond(riderId: string, offerId: string, accept: boolean, reason?: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       const offer = await tx.deliveryOffer.findUnique({ where: { id: offerId } });
       if (!offer || offer.riderId !== riderId) throw new NotFoundException('Offer not found');
+      await this.lockOrderOf(tx, offer.taskId);
       await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${offer.taskId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${riderId} FOR UPDATE`;
       const fresh = await tx.deliveryOffer.findUnique({ where: { id: offerId } });
@@ -371,6 +391,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
 
       const rider = await tx.rider.findUnique({ where: { id: riderId } });
       if (!rider || rider.status !== 'ACTIVE') throw new BadRequestException('Your account is not active');
+      if (!isVerifiedNow(rider)) throw new BadRequestException({ code: 'NOT_VERIFIED', message: 'Finish your verification (documents, PCC, deposit) before taking orders' });
       const held = await tx.deliveryTask.count({ where: { riderId, status: { in: HELD_STATUSES } } });
       if (held >= rider.maxActiveTasks) {
         await close('REJECTED', 'At order limit');
@@ -410,10 +431,11 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
   /**
    * Staff assign (or reassign before pickup) a specific rider. This is the
    * override: it withdraws any open offers, and works whether auto-offer is
-   * on, off or paused for the task. Locks task then rider, like accept.
+   * on, off or paused for the task. Locks order, task then rider, like accept.
    */
   async assignManually(taskId: string, riderId: string, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.lockOrderOf(tx, taskId);
       await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${taskId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${riderId} FOR UPDATE`;
       const task = await tx.deliveryTask.findUnique({ where: { id: taskId } });
@@ -423,6 +445,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       }
       const rider = await tx.rider.findUnique({ where: { id: riderId } });
       if (!rider || rider.status !== 'ACTIVE') throw new BadRequestException('Choose an active rider');
+      if (!isVerifiedNow(rider)) throw new BadRequestException(`${rider.fullName} has not cleared verification (documents, PCC or security deposit) and cannot be given orders`);
       if (rider.warehouseId !== task.warehouseId) throw new BadRequestException("This rider belongs to a different outlet than the task's pickup");
       const withdrawn = await tx.deliveryOffer.findMany({ where: { taskId, status: 'PENDING' } });
       await tx.deliveryOffer.updateMany({ where: { taskId, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
@@ -475,25 +498,32 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The legacy "assign rider" on the order screen handed the order to a driver
-   * outside the rider app: close the task, unless an app rider got it first.
+   * The legacy "assign rider" on the order screen hands the order to a driver
+   * outside the rider app: close the task (unless an app rider got it first)
+   * and stamp the driver on the order, in ONE transaction under the order lock.
+   * Task creation takes the same lock and re-checks riderName, so the sweep can
+   * never slip a new task (and new offers) in between.
    * Returns false when a rider already holds it (the caller must not dispatch).
    */
-  async handOverToExternalDriver(orderId: string, driverName: string, userId: string): Promise<boolean> {
+  async handOverToExternalDriver(orderId: string, driver: { name: string; phone: string }, userId: string): Promise<boolean> {
     const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
       const task = await tx.deliveryTask.findFirst({ where: { orderId, status: { in: [...LIVE_STATUSES, 'FAILED'] } }, select: { id: true } });
-      if (!task) return { ok: true as const, withdrawn: [] as Array<{ id: string; riderId: string }>, taskId: null };
-      await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${task.id} FOR UPDATE`;
-      const note = `Handed to ${driverName} outside the rider app`;
-      const taken = await tx.deliveryTask.updateMany({
-        where: { id: task.id, status: { in: ['READY_FOR_PICKUP', 'OFFERED'] }, riderId: null },
-        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelStage: 'BEFORE_ASSIGNMENT', cancelReason: note },
-      });
-      if (taken.count !== 1) return { ok: false as const, withdrawn: [], taskId: task.id };
-      const withdrawn = await tx.deliveryOffer.findMany({ where: { taskId: task.id, status: 'PENDING' }, select: { id: true, riderId: true } });
-      await tx.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
-      await this.log(task.id, 'CANCELLED', { actorUserId: userId, note }, tx);
-      return { ok: true as const, withdrawn, taskId: task.id };
+      let withdrawn: Array<{ id: string; riderId: string }> = [];
+      if (task) {
+        await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${task.id} FOR UPDATE`;
+        const note = `Handed to ${driver.name} outside the rider app`;
+        const taken = await tx.deliveryTask.updateMany({
+          where: { id: task.id, status: { in: ['READY_FOR_PICKUP', 'OFFERED'] }, riderId: null },
+          data: { status: 'CANCELLED', cancelledAt: new Date(), cancelStage: 'BEFORE_ASSIGNMENT', cancelReason: note },
+        });
+        if (taken.count !== 1) return { ok: false as const, withdrawn, taskId: task.id };
+        withdrawn = await tx.deliveryOffer.findMany({ where: { taskId: task.id, status: 'PENDING' }, select: { id: true, riderId: true } });
+        await tx.deliveryOffer.updateMany({ where: { taskId: task.id, status: 'PENDING' }, data: { status: 'WITHDRAWN', respondedAt: new Date() } });
+        await this.log(task.id, 'CANCELLED', { actorUserId: userId, note }, tx);
+      }
+      await tx.order.update({ where: { id: orderId }, data: { riderName: driver.name, riderPhone: driver.phone } });
+      return { ok: true as const, withdrawn, taskId: task?.id ?? null };
     });
     if (result.taskId) {
       for (const w of result.withdrawn) this.events.publish({ kind: 'offer:closed', riderId: w.riderId, offerId: w.id, taskId: result.taskId, status: 'WITHDRAWN' });

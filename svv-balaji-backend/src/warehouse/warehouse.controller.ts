@@ -25,6 +25,7 @@ import { RequirePermission } from '../auth/decorators/require-permission.decorat
 import { SetActiveDto } from '../common/dto/set-active.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('warehouse')
 @ApiBearerAuth()
@@ -54,8 +55,9 @@ export class WarehouseController {
   @Get('stock')
   @RequirePermission('stock.view')
   @ApiOperation({ summary: 'Batch-wise stock across warehouses (FRD 16.7)' })
-  findStock(@Query('warehouseId') warehouseId?: string, @Query('batchId') batchId?: string) {
-    return this.warehouseService.findStock(warehouseId, batchId);
+  @ApiPageQuery()
+  findStock(@Query('warehouseId') warehouseId?: string, @Query('batchId') batchId?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.warehouseService.findStock(warehouseId, batchId, pageRequest(page, limit));
   }
 
   @Get('stock/low')
@@ -68,8 +70,9 @@ export class WarehouseController {
   @Get('movements')
   @RequirePermission('movements.view')
   @ApiOperation({ summary: 'Inventory movement audit trail (FRD 17.3/17.5)' })
-  findMovements(@Query('batchId') batchId?: string, @Query('warehouseId') warehouseId?: string) {
-    return this.warehouseService.findMovements(batchId, warehouseId);
+  @ApiPageQuery()
+  findMovements(@Query('batchId') batchId?: string, @Query('warehouseId') warehouseId?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.warehouseService.findMovements(batchId, warehouseId, pageRequest(page, limit));
   }
 
   @Get(':id/status')

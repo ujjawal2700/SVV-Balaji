@@ -8,7 +8,8 @@ import type { RiderRow } from '@shared/api/delivery';
 import { useCan } from '@shared/auth/useCan';
 import { PageHeader } from '@shared/components/PageHeader';
 import { useRiders } from '@shared/hooks/useDelivery';
-import { ApproveModal, useRiderActions, vehicleText } from './riderParts';
+import { ApproveModal, inr, useRiderActions, vehicleText } from './riderParts';
+import { VerificationTag } from './verificationParts';
 
 dayjs.extend(relativeTime);
 
@@ -30,7 +31,7 @@ export function PendingRidersPage() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <PageHeader
         title="Pending Approval"
-        subtitle="Riders who signed up in the rider app and verified their phone. Check the licence, then approve with a home outlet or reject with a reason."
+        subtitle="Riders who signed up in the rider app and verified their phone. Review their documents and PCC under Document Verification; once everything (and the deposit, if required) is cleared, approve with a home outlet - or reject with a reason."
         extra={<Input.Search allowClear placeholder="Name, phone" onSearch={setQ} style={{ width: 240 }} />}
       />
       {unverified.data?.length ? (
@@ -64,7 +65,12 @@ export function PendingRidersPage() {
                   <Detail label="City" value={r.city ?? '—'} />
                   <Detail label="Vehicle" value={vehicleText(r.vehicleType, r.vehicleNumber)} />
                   <Detail label="Email" value={r.email ?? '—'} />
-                  <Detail label="Licence no." value={r.licenceNumber ?? '—'} />
+                  <Detail label="Deposit paid" value={r.depositPaid ? inr(r.depositPaid) : '—'} />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <VerificationTag verified={r.verified} toReview={r.documentsToReview} />
+                  <a onClick={() => navigate(`/riders/${r.id}?tab=verification`)}>Review documents</a>
                 </div>
 
                 <div style={{ background: '#fafafa', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', gap: 12, minHeight: 92 }}>
@@ -74,13 +80,13 @@ export function PendingRidersPage() {
                     <div style={{ width: 110, height: 72, borderRadius: 8, border: '1px dashed #d9d9d9', display: 'grid', placeItems: 'center', color: '#bfbfbf' }}><IdcardOutlined style={{ fontSize: 26 }} /></div>
                   )}
                   <Typography.Text type={r.documentUrl ? 'secondary' : 'warning'} style={{ fontSize: 12 }}>
-                    {r.documentUrl ? 'Driving licence / ID. Click to enlarge.' : 'No licence photo uploaded yet. Approve only if you have checked it another way.'}
+                    {r.documentUrl ? 'Photo sent at sign-up. Click to enlarge.' : 'No photo at sign-up - documents are reviewed under Review documents.'}
                   </Typography.Text>
                 </div>
 
                 {canManage ? (
                   <Space style={{ marginTop: 'auto' }}>
-                    <Button type="primary" icon={<CheckOutlined />} onClick={() => setApprove(r)}>Approve</Button>
+                    <Button type="primary" icon={<CheckOutlined />} disabled={!r.verified} title={r.verified ? undefined : 'Documents, PCC and deposit must be cleared first'} onClick={() => setApprove(r)}>Approve</Button>
                     <Button danger icon={<CloseOutlined />} onClick={() => actions.reject(r)}>Reject</Button>
                     <Button type="link" onClick={() => navigate(`/riders/${r.id}`)}>View</Button>
                   </Space>

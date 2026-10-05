@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InspectionResult, ProcurementPlanStatus } from '@prisma/client';
+import { InspectionResult, Prisma, ProcurementPlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedByFarmerBranch } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -11,6 +11,7 @@ import {
   UpdateProcurementPlanDto,
 } from './dto/update-procurement.dto';
 import { assertDeletable } from '../common/dependants';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class ProcurementService {
@@ -208,10 +209,11 @@ export class ProcurementService {
     return inspection;
   }
 
-  findInspections(user: JwtPayload, farmerId?: string, result?: InspectionResult) {
-    return this.prisma.harvestInspection.findMany({
+  findInspections(user: JwtPayload, farmerId?: string, result?: InspectionResult, page: PageRequest | null = null) {
+    const where: Prisma.HarvestInspectionWhereInput = { farmerId, result, ...scopedByFarmerBranch(user) };
+    return listPage(page, () => this.prisma.harvestInspection.count({ where }), (w) => this.prisma.harvestInspection.findMany({ ...w,
       // Scoped through the farmer - an inspection has no branch column.
-      where: { farmerId, result, ...scopedByFarmerBranch(user) },
+      where,
       orderBy: { inspectionDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
@@ -219,7 +221,7 @@ export class ProcurementService {
         inspectedBy: { select: { id: true, fullName: true } },
         collection: { select: { id: true, receiptNumber: true } },
       },
-    });
+    }));
   }
 
   async findInspection(id: string) {

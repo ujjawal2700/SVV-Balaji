@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
@@ -7,6 +8,7 @@ import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { AddTrainingMaterialDto } from './dto/add-training-material.dto';
 import { assertDeletable } from '../common/dependants';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class TrainingService {
@@ -30,22 +32,23 @@ export class TrainingService {
   }
 
   /** `conductedById` answers "sessions I ran" without pulling the branch's. */
-  findAll(user: JwtPayload, branchId?: string, conductedById?: string, farmerId?: string) {
-    return this.prisma.trainingSession.findMany({
-      // FRD 5.2 - the caller's branch wins over whatever was asked for.
-      where: {
+  findAll(user: JwtPayload, branchId?: string, conductedById?: string, farmerId?: string, page: PageRequest | null = null) {
+    const where: Prisma.TrainingSessionWhereInput = {
         branchId: scopedBranchId(user, branchId),
         conductedById,
         // FRD 11.4 training history: sessions the farmer is marked present at.
         attendances: farmerId ? { some: { farmerId, attended: true } } : undefined,
-      },
+      };
+    return listPage(page, () => this.prisma.trainingSession.count({ where }), (w) => this.prisma.trainingSession.findMany({ ...w,
+      // FRD 5.2 - the caller's branch wins over whatever was asked for.
+      where,
       orderBy: { scheduledDate: 'desc' },
       include: {
         branch: { select: { id: true, name: true } },
         conductedBy: { select: { id: true, fullName: true } },
         _count: { select: { attendances: true, materials: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

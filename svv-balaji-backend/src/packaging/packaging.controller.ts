@@ -20,6 +20,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('packaging')
 @ApiBearerAuth()
@@ -42,14 +43,17 @@ export class PackagingController {
 
   @Get('finished-goods')
   @RequirePermission('finishedGoods.view')
+  @ApiPageQuery()
   findAll(
     @Query('productionBatchId') productionBatchId?: string,
     @Query('qaReleased') qaReleased?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.packagingService.findAll({
       productionBatchId,
       qaReleased: qaReleased === undefined ? undefined : qaReleased === 'true',
-    });
+    }, pageRequest(page, limit));
   }
 
   @Get('finished-goods/:id/label')
@@ -90,8 +94,9 @@ export class PackagingController {
 
   @Get('finished-goods-stock')
   @RequirePermission('finishedGoods.view')
-  findStock(@Query('warehouseId') warehouseId?: string) {
-    return this.packagingService.findStock(warehouseId);
+  @ApiPageQuery()
+  findStock(@Query('warehouseId') warehouseId?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.packagingService.findStock(warehouseId, pageRequest(page, limit));
   }
 
   @Get('trace/:fgBatchNumber')

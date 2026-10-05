@@ -726,8 +726,13 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         key: 'riders-pending', path: '/riders/pending', label: 'Pending Approval', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' }, count: 'pendingRiders',
-        description: 'Rider sign-ups waiting for review: licence photo, vehicle, approve with a home outlet or reject with a reason.',
+        description: 'Rider sign-ups waiting for review: documents, PCC and deposit progress, vehicle; approve with a home outlet once verified, or reject with a reason.',
         endpoints: ['GET /riders?status=PENDING_APPROVAL', 'POST /riders/:id/approve', 'POST /riders/:id/reject'], workstream: 'WS3.4', zone: 'commerce',
+      },
+      {
+        key: 'riders-verification', path: '/riders/verification', label: 'Document Verification', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },
+        description: 'Rider documents and Police Clearance Certificates waiting for a check: approve, or reject with a reason so the rider uploads again.',
+        endpoints: ['GET /riders/verification-queue', 'POST /riders/documents/:id/approve', 'POST /riders/documents/:id/reject'], workstream: 'WS3.4', zone: 'commerce',
       },
       {
         key: 'riders', path: '/riders', label: 'All Riders', permission: 'RIDERS_VIEW', group: { key: 'manage-riders', label: 'Manage Riders' },

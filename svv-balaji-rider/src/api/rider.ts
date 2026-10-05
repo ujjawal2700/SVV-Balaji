@@ -21,6 +21,8 @@ export interface Rider {
   warehouse: { id: string; name: string } | null;
   maxActiveTasks?: number;
   rejectionReason: string | null;
+  /** Documents, PCC and security deposit cleared - may go online and get orders. */
+  verified?: boolean;
 }
 
 export interface Session {
@@ -117,7 +119,7 @@ export interface TaskDetail {
 }
 
 export interface Dashboard {
-  rider: { id: string; fullName: string; code: string | null; status: RiderStatus; availability: 'ONLINE' | 'OFFLINE'; outlet: { id: string; name: string } | null };
+  rider: { id: string; fullName: string; code: string | null; status: RiderStatus; availability: 'ONLINE' | 'OFFLINE'; outlet: { id: string; name: string } | null; verified?: boolean };
   today: { completed: number; pending: number; cancelled: number; returned: number };
   cashInHand: number;
   offers: Offer[];
@@ -160,6 +162,55 @@ export interface Loc {
   longitude?: number;
 }
 
+/** Onboarding (GET /rider/verification): each required document incl. the PCC, and the security deposit. */
+export type DocState = 'NOT_UPLOADED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export interface DocUpload {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  fileUrls: string[];
+  documentNumber: string | null;
+  issuedBy: string | null;
+  issuedOn: string | null;
+  expiresOn: string | null;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  uploadedAt: string;
+}
+export interface DocItem {
+  type: {
+    id: string; code: string; name: string; description: string | null; isSystem: boolean;
+    requiresNumber: boolean; requiresIssuer: boolean; requiresIssueDate: boolean; requiresExpiry: boolean;
+  };
+  mandatory: boolean;
+  state: DocState;
+  satisfied: boolean;
+  validUntil: string | null;
+  canUpload: boolean;
+  current: DocUpload | null;
+  approvedInForce: DocUpload | null;
+}
+export type DepositStatus = 'NOT_REQUIRED' | 'NOT_PAID' | 'PARTIALLY_PAID' | 'PAID';
+export interface DepositSummary {
+  required: boolean;
+  requiredAmount: number;
+  paid: number;
+  pending: number;
+  status: DepositStatus;
+  satisfied: boolean;
+}
+export interface Verification {
+  status: RiderStatus;
+  eligible: boolean;
+  missing: string[];
+  verifiedUntil: string | null;
+  documents: DocItem[];
+  pcc: DocItem | null;
+  deposit: DepositSummary;
+}
+export interface DepositLedger extends DepositSummary {
+  entries: Array<{ id: string; type: 'PAYMENT' | 'REFUND' | 'FORFEIT' | 'ADJUSTMENT'; amount: number; method: string | null; reference: string | null; note: string | null; createdAt: string; online: boolean }>;
+}
+
 const d = <T>(p: Promise<{ data: T }>) => p.then((r) => r.data);
 
 export const riderApi = {
@@ -179,6 +230,19 @@ export const riderApi = {
     f.append('file', file);
     return d<{ url: string }>(api.post(`/rider/me/document?kind=${kind}`, f));
   },
+
+  verification: () => d<Verification>(api.get('/rider/verification')),
+  uploadVerificationFile: (file: File) => {
+    const f = new FormData();
+    f.append('file', file);
+    return d<{ url: string }>(api.post('/rider/verification/files', f));
+  },
+  submitDocument: (body: { typeId: string; fileUrls: string[]; documentNumber?: string; issuedBy?: string; issuedOn?: string; expiresOn?: string }) =>
+    d<DocUpload>(api.post('/rider/verification/documents', body)),
+  deposit: () => d<DepositLedger>(api.get('/rider/deposit')),
+  depositOrder: (amount?: number) => d<{ gatewayOrderId: string; clientConfig: any; amount: number; pending: number }>(api.post('/rider/deposit/pay-order', { amount })),
+  depositVerify: (input: { gatewayOrderId: string; paymentId: string; signature: string }) =>
+    d<{ amount: number; paymentId: string; duplicate: boolean; deposit: DepositLedger }>(api.post('/rider/deposit/pay-verify', input)),
 
   availability: (online: boolean, loc: Loc = {}) => d<{ availability: 'ONLINE' | 'OFFLINE' }>(api.post('/rider/availability', { online, ...loc })),
   location: (loc: Loc) => d(api.post('/rider/location', loc)),

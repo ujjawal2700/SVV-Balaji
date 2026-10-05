@@ -26,6 +26,7 @@ import {
   CreateOrderDto,
   UpdatePaymentStatusDto,
 } from './dto/order.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 /** Forward-only order lifecycle. Anything not listed here is refused. */
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -258,7 +259,7 @@ export class SalesService {
     warehouseId?: string;
     from?: Date;
     to?: Date;
-  }) {
+  }, page: PageRequest | null = null) {
     const where: Prisma.OrderWhereInput = {
       channel: filters.channel,
       status: filters.status,
@@ -271,7 +272,7 @@ export class SalesService {
       where.orderDate = { gte: filters.from, lte: filters.to };
     }
 
-    return this.prisma.order.findMany({
+    return listPage(page, () => this.prisma.order.count({ where }), (w) => this.prisma.order.findMany({ ...w,
       where,
       orderBy: { orderDate: 'desc' },
       include: {
@@ -285,7 +286,7 @@ export class SalesService {
         warehouse: { select: { name: true, kind: true } },
         shipment: { select: { awb: true, courier: true, trackingUrl: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

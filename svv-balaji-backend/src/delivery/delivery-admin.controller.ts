@@ -11,6 +11,7 @@ import { DeliverySettingsService, FailureReasonDto, FailureReasonsService, Updat
 import { DispatchService } from './dispatch/dispatch.service';
 import { EarningAdjustmentDto, EarningRuleDto, EarningsService } from './earnings/earnings.service';
 import { ApproveRiderDto, CashDepositDto, ReasonDto, RidersService, UpdateRiderDto } from './riders/riders.service';
+import { DocumentTypeDto, RecordDepositDto, RejectDocumentDto, ReviewDocumentDto, RiderVerificationService } from './verification/verification.service';
 
 class AssignDto {
   @IsString() riderId!: string;
@@ -23,6 +24,7 @@ class NoteDto {
 }
 class UpdateEarningRuleDto extends PartialType(EarningRuleDto) {}
 class UpdateFailureReasonDto extends PartialType(FailureReasonDto) {}
+class UpdateDocumentTypeDto extends PartialType(DocumentTypeDto) {}
 
 @ApiTags('riders')
 @ApiBearerAuth()
@@ -32,7 +34,50 @@ export class RidersAdminController {
   constructor(
     private readonly riders: RidersService,
     private readonly earnings: EarningsService,
+    private readonly verification: RiderVerificationService,
   ) {}
+
+  // ------------------------------------------------------------ verification (static paths before :id)
+
+  @Get('verification-queue')
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: 'Rider documents (incl. PCC) waiting for review, oldest first' })
+  verificationQueue(@Query('type') typeCode?: string, @Query('warehouseId') warehouseId?: string) {
+    return this.verification.queue({ typeCode, warehouseId });
+  }
+
+  @Get('document-types')
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: 'Documents riders must upload (PCC is built in and always mandatory)' })
+  documentTypes() {
+    return this.verification.listTypes();
+  }
+
+  @Post('document-types')
+  @RequirePermission('deliverySettings.manage')
+  createDocumentType(@Body() dto: DocumentTypeDto) {
+    return this.verification.createType(dto);
+  }
+
+  @Patch('document-types/:typeId')
+  @RequirePermission('deliverySettings.manage')
+  updateDocumentType(@Param('typeId') typeId: string, @Body() dto: UpdateDocumentTypeDto) {
+    return this.verification.updateType(typeId, dto);
+  }
+
+  @Post('documents/:docId/approve')
+  @RequirePermission('riders.verify')
+  @ApiOperation({ summary: "Approve one uploaded document; returns the rider's updated checklist" })
+  approveDocument(@Param('docId') docId: string, @Body() dto: ReviewDocumentDto, @CurrentUser() u: JwtPayload) {
+    return this.verification.approve(docId, dto, u.sub);
+  }
+
+  @Post('documents/:docId/reject')
+  @RequirePermission('riders.verify')
+  @ApiOperation({ summary: 'Reject an upload (or withdraw an approval) with a reason the rider sees; the rider re-uploads' })
+  rejectDocument(@Param('docId') docId: string, @Body() dto: RejectDocumentDto, @CurrentUser() u: JwtPayload) {
+    return this.verification.reject(docId, dto, u.sub);
+  }
 
   @Get()
   @RequirePermission('riders.view')
@@ -98,6 +143,27 @@ export class RidersAdminController {
     return this.riders.update(id, dto);
   }
 
+  @Get(':id/verification')
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: "The rider's checklist (documents, PCC, deposit) plus every upload ever made" })
+  async riderVerification(@Param('id') id: string) {
+    const [summary, history] = await Promise.all([this.verification.summary(id), this.verification.history(id)]);
+    return { ...summary, history };
+  }
+
+  @Get(':id/deposit')
+  @RequirePermission('riders.view')
+  riderDeposit(@Param('id') id: string) {
+    return this.verification.deposit(id);
+  }
+
+  @Post(':id/deposit/entries')
+  @RequirePermission('riderDeposit.record')
+  @ApiOperation({ summary: 'Record a security deposit payment, refund, forfeit or adjustment' })
+  recordDeposit(@Param('id') id: string, @Body() dto: RecordDepositDto, @CurrentUser() u: JwtPayload) {
+    return this.verification.recordDeposit(id, dto, u.sub);
+  }
+
   @Get(':id/cash')
   @RequirePermission('riders.view')
   cash(@Param('id') id: string) {
@@ -135,6 +201,7 @@ export class DeliveryAdminController {
     private readonly settings: DeliverySettingsService,
     private readonly reasons: FailureReasonsService,
     private readonly earnings: EarningsService,
+    private readonly verification: RiderVerificationService,
   ) {}
 
   // ------------------------------------------------------------ tasks
@@ -221,8 +288,14 @@ export class DeliveryAdminController {
 
   @Patch('settings')
   @RequirePermission('deliverySettings.manage')
-  updateSettings(@Body() dto: UpdateDeliverySettingsDto, @CurrentUser() u: JwtPayload) {
-    return this.settings.update(dto, u.sub);
+  async updateSettings(@Body() dto: UpdateDeliverySettingsDto, @CurrentUser() u: JwtPayload) {
+    const before = await this.settings.get();
+    const saved = await this.settings.update(dto, u.sub);
+    // The deposit rule decides who may take orders: re-check every rider when it moves.
+    if (before.securityDepositRequired !== saved.securityDepositRequired || !before.securityDepositAmount.equals(saved.securityDepositAmount)) {
+      await this.verification.recomputeAll('Security deposit rule changed');
+    }
+    return saved;
   }
 
   @Get('failure-reasons')

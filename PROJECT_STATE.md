@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 3 October 2026 · **Updated by:** Raunak (via agent)
+**Last updated:** 5 October 2026 · **Updated by:** Raunak (via agent)
 **Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -15,6 +15,9 @@
 ---
 
 ## 0. Since 16 August — what changed, most recent first
+
+**5 Oct — Rider onboarding: documents, PCC, security deposit.** Riders upload mandatory documents (licence, photo ID) and a Police Clearance Certificate (built in, always mandatory); staff approve or reject each with a reason, the rider re-uploads. Super Admin sets the document list and an optional security deposit (default off); riders pay online in parts or staff record cash, with a full ledger (payments, refunds, forfeits). A rider is approved, offered orders, assigned or allowed online only when all of it is cleared; lapses (rejection, expiry, refund, rule change) take the rider offline. `e2e-rider-onboarding-flow.py` 50/50; not click-tested. **Deploy:** `prisma migrate deploy` (`20261005100000_rider_onboarding_verification`) + generate + API restart + rider and admin apps. **Existing active riders get no orders until their documents and PCC are approved** - plan a review pass. See `DEV_LOG.md` (2026-10-05), which also notes a deadlock in uncommitted dispatch changes.
+
 
 **3 Oct — Broadcast rider dispatch.** In-house deliveries are now offered to the nearest few riders at once
 (Super Admin sets how many; default 3), and the first to accept gets it. Only riders who are online, signed in, recently

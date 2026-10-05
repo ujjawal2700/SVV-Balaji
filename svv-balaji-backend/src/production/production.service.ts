@@ -9,6 +9,7 @@ import {
   CreateCleaningGradingDto,
   CreateProductionBatchDto,
 } from './dto/production.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 /**
  * How far a blend may drift from its recipe before production is refused,
@@ -145,15 +146,16 @@ export class ProductionService {
     });
   }
 
-  findCleaningRecords(rawMaterialBatchId?: string) {
-    return this.prisma.cleaningGradingRecord.findMany({
-      where: { rawMaterialBatchId },
+  findCleaningRecords(rawMaterialBatchId?: string, page: PageRequest | null = null) {
+    const where: Prisma.CleaningGradingRecordWhereInput = { rawMaterialBatchId };
+    return listPage(page, () => this.prisma.cleaningGradingRecord.count({ where }), (w) => this.prisma.cleaningGradingRecord.findMany({ ...w,
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         rawMaterialBatch: { select: { id: true, batchNumber: true, cropName: true } },
         operator: { select: { id: true, fullName: true } },
       },
-    });
+    }));
   }
 
   // --- Production (FRD Section 20) -----------------------------------------
@@ -677,17 +679,19 @@ export class ProductionService {
   findAll(
     user: JwtPayload,
     filters: { status?: ProductionStatus; branchId?: string; productId?: string },
+    page: PageRequest | null = null,
   ) {
-    return this.prisma.productionBatch.findMany({
+    const where: Prisma.ProductionBatchWhereInput = { ...filters, branchId: scopedBranchId(user, filters.branchId) };
+    return listPage(page, () => this.prisma.productionBatch.count({ where }), (w) => this.prisma.productionBatch.findMany({ ...w,
       // FRD 5.2 - the caller's branch wins over whatever was asked for.
-      where: { ...filters, branchId: scopedBranchId(user, filters.branchId) },
+      where,
       orderBy: { productionDate: 'desc' },
       include: {
         product: { select: { id: true, name: true, sku: true } },
         recipe: { select: { recipeCode: true, version: true } },
         _count: { select: { consumptions: true, finishedGoodsBatches: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

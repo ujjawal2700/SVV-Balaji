@@ -18,6 +18,7 @@ import {
   UpdateCustomerDto,
   UpdateCustomerStatusDto,
 } from './dto/customer.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 /** Standard 15-character GSTIN: state code, PAN, entity number, Z, checksum. */
 const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -214,7 +215,7 @@ export class CustomersService {
     status?: CustomerStatus;
     branchId?: string;
     search?: string;
-  }) {
+  }, page: PageRequest | null = null) {
     const where: Prisma.CustomerWhereInput = {
       channel: filters.channel,
       type: filters.type,
@@ -232,7 +233,7 @@ export class CustomersService {
       ];
     }
 
-    return this.prisma.customer.findMany({
+    return listPage(page, () => this.prisma.customer.count({ where }), (w) => this.prisma.customer.findMany({ ...w,
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -240,7 +241,7 @@ export class CustomersService {
         assignedTo: { select: { id: true, fullName: true } },
         referredAs: { select: { referrer: { select: { id: true, name: true, customerCode: true, referralCode: true } } } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

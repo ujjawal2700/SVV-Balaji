@@ -14,6 +14,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 export class SetProductionStatusDto {
   @ApiProperty({ enum: ProductionStatus })
@@ -38,8 +39,9 @@ export class ProductionController {
 
   @Get('cleaning-grading')
   @RequirePermission('cleaning.view')
-  findCleaning(@Query('rawMaterialBatchId') rawMaterialBatchId?: string) {
-    return this.productionService.findCleaningRecords(rawMaterialBatchId);
+  @ApiPageQuery()
+  findCleaning(@Query('rawMaterialBatchId') rawMaterialBatchId?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.productionService.findCleaningRecords(rawMaterialBatchId, pageRequest(page, limit));
   }
 
   // --- Production Batches (FRD Section 20) ---------------------------------
@@ -59,13 +61,16 @@ export class ProductionController {
 
   @Get('production-batches')
   @RequirePermission('production.view')
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('status') status?: ProductionStatus,
     @Query('branchId') branchId?: string,
     @Query('productId') productId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.productionService.findAll(user, { status, branchId, productId });
+    return this.productionService.findAll(user, { status, branchId, productId }, pageRequest(page, limit));
   }
 
   @Get('production-batches/:id')

@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InspectionStage, QualityResult } from '@prisma/client';
+import { InspectionStage, Prisma, QualityResult } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateQualityInspectionDto } from './dto/quality.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class QualityService {
@@ -85,9 +86,10 @@ export class QualityService {
     }
   }
 
-  findAll(filters: { stage?: InspectionStage; result?: QualityResult }) {
-    return this.prisma.qualityInspection.findMany({
-      where: filters,
+  findAll(filters: { stage?: InspectionStage; result?: QualityResult }, page: PageRequest | null = null) {
+    const where: Prisma.QualityInspectionWhereInput = filters;
+    return listPage(page, () => this.prisma.qualityInspection.count({ where }), (w) => this.prisma.qualityInspection.findMany({ ...w,
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         inspectedBy: { select: { id: true, fullName: true } },
@@ -95,7 +97,7 @@ export class QualityService {
         productionBatch: { select: { id: true, productionBatchNumber: true } },
         finishedGoodsBatch: { select: { id: true, fgBatchNumber: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

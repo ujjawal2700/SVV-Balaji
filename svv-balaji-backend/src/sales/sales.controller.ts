@@ -14,6 +14,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('sales')
 @ApiBearerAuth()
@@ -43,6 +44,7 @@ export class SalesController {
   @ApiQuery({ name: 'status', enum: OrderStatus, required: false })
   @ApiQuery({ name: 'from', required: false, description: 'ISO date' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO date' })
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('channel') channel?: SalesChannel,
@@ -51,6 +53,8 @@ export class SalesController {
     @Query('warehouseId') warehouseId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.salesService.findAll(user, {
       channel,
@@ -59,7 +63,7 @@ export class SalesController {
       warehouseId,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
-    });
+    }, pageRequest(page, limit));
   }
 
   @Get(':id')

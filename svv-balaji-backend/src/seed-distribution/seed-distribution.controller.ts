@@ -18,6 +18,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('seed-distribution')
 @ApiBearerAuth()
@@ -37,12 +38,15 @@ export class SeedDistributionController {
   @RequirePermission('seed.view')
   @ApiQuery({ name: 'farmerId', required: false })
   @ApiQuery({ name: 'distributedById', required: false, description: 'Handouts made by one executive.' })
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('distributedById') distributedById?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.seedDistributionService.findAll(user, farmerId, distributedById);
+    return this.seedDistributionService.findAll(user, farmerId, distributedById, pageRequest(page, limit));
   }
 
   @Get(':id')

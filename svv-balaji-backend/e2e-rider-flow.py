@@ -75,6 +75,19 @@ def must(method, path, body=None, expect=(200, 201), tok=None):
     return d
 
 
+def clear_verification(rtok, rid=None):
+    """Since 5 Oct a rider is only approved / offered orders once every mandatory
+    document (incl. the PCC) is approved - and the deposit paid, when required.
+    Upload each one as the rider and approve it as staff."""
+    for d in must("GET", "/rider/verification", tok=rtok)["documents"]:
+        if not d["mandatory"] or d["satisfied"]:
+            continue
+        body = {"typeId": d["type"]["id"], "fileUrls": ["https://example.com/doc.jpg"], "documentNumber": "DOC123",
+                "issuedBy": "Test Police Station", "issuedOn": "2026-01-01", "expiresOn": "2030-12-31"}
+        doc = must("POST", "/rider/verification/documents", body, tok=rtok)
+        must("POST", f"/riders/documents/{doc['id']}/approve", {})
+
+
 def rows(d):
     return d["data"] if isinstance(d, dict) and "data" in d else d
 
@@ -176,7 +189,10 @@ try:
     check(s == 401, "wrong password refused")
     lg = must("POST", "/rider/auth/login", {"identifier": R1["phone"], "password": "Secret#123"}, tok="-")
     check(lg["rider"]["status"] == "PENDING_APPROVAL", "a pending rider can sign in (app shows 'under review')")
+    s, bad = call("POST", f"/riders/{R1['id']}/approve", {"warehouseId": WH_O})
+    check(s == 400 and bad.get("code") == "NOT_VERIFIED", "approval refused until documents + PCC are verified", bad)
     for R in (R1, R2):
+        clear_verification(R["tok"])
         a = must("POST", f"/riders/{R['id']}/approve", {"warehouseId": WH_O})
         check(a["status"] == "ACTIVE" and a["code"].startswith("RDR-") and a["warehouse"]["id"] == WH_O, f"approved {a['code']} to the outlet", a)
         must("POST", "/rider/availability", {"online": True, "latitude": R["ll"][0], "longitude": R["ll"][1]}, tok=R["tok"])

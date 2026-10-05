@@ -9,6 +9,7 @@ import { distanceKm } from '../zones/zone.logic';
 
 export type SkipReason =
   | 'NOT_ACTIVE' // suspended / not approved
+  | 'NOT_VERIFIED' // documents / PCC / security deposit not cleared (or an approval expired)
   | 'OFFLINE' // switched themselves off
   | 'SIGNED_OUT' // no live login session
   | 'NOT_SEEN' // ONLINE but the app has gone quiet (killed, no signal)
@@ -22,6 +23,7 @@ export type SkipReason =
 
 export const SKIP_LABEL: Record<SkipReason, string> = {
   NOT_ACTIVE: 'Account not active',
+  NOT_VERIFIED: 'Verification incomplete',
   OFFLINE: 'Offline',
   SIGNED_OUT: 'Signed out',
   NOT_SEEN: 'App not responding',
@@ -37,6 +39,8 @@ export const SKIP_LABEL: Record<SkipReason, string> = {
 export interface RiderFacts {
   id: string;
   status: RiderStatus;
+  /** Onboarding cleared: mandatory documents + PCC approved and in date, deposit paid if required. */
+  verified: boolean;
   availability: RiderAvailability;
   warehouseId: string | null;
   vehicleType: VehicleType | null;
@@ -107,6 +111,7 @@ export function assessRider(r: RiderFacts, rules: RankingRules, task: TaskFacts 
   const reasons: SkipReason[] = [];
   const spare = r.maxActiveTasks - r.heldTasks - r.pendingOffers;
   if (r.status !== 'ACTIVE') reasons.push('NOT_ACTIVE');
+  if (!r.verified) reasons.push('NOT_VERIFIED');
   if (r.availability !== 'ONLINE') reasons.push('OFFLINE');
   if (!r.hasLiveSession) reasons.push('SIGNED_OUT');
   if (r.availability === 'ONLINE' && (!r.lastSeenAt || now.getTime() - r.lastSeenAt.getTime() > rules.riderHeartbeatMinutes * 60_000)) reasons.push('NOT_SEEN');

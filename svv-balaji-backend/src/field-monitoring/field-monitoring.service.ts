@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
@@ -5,6 +6,7 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateFieldVisitDto } from './dto/create-field-visit.dto';
 import { AddFieldVisitDocumentDto } from './dto/add-field-visit-document.dto';
 import { buildFieldReport } from './field-report';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class FieldMonitoringService {
@@ -139,17 +141,18 @@ export class FieldMonitoringService {
    * client-side filter would narrow ONE page and report three visits where the
    * executive logged nine - wrong, and wrong quietly.
    */
-  findAll(user: JwtPayload, farmerId?: string, expertId?: string) {
-    return this.prisma.fieldVisit.findMany({
+  findAll(user: JwtPayload, farmerId?: string, expertId?: string, page: PageRequest | null = null) {
+    const where: Prisma.FieldVisitWhereInput = { farmerId, expertId, branchId: scopedBranchId(user) };
+    return listPage(page, () => this.prisma.fieldVisit.count({ where }), (w) => this.prisma.fieldVisit.findMany({ ...w,
       // FieldVisit carries its own branch, so scope on the column directly.
-      where: { farmerId, expertId, branchId: scopedBranchId(user) },
+      where,
       orderBy: { visitDate: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
         expert: { select: { id: true, fullName: true } },
         branch: { select: { id: true, name: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

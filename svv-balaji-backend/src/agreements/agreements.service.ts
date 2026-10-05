@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AgreementStatus } from '@prisma/client';
+import { AgreementStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedByFarmerBranch } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { assertDeletable } from '../common/dependants';
 import { CreateAgreementDto } from './dto/create-agreement.dto';
 import { UpdateAgreementDto } from './dto/update-agreement.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class AgreementsService {
@@ -26,17 +27,18 @@ export class AgreementsService {
     });
   }
 
-  findAll(user: JwtPayload, farmerId?: string) {
-    return this.prisma.agreement.findMany({
+  findAll(user: JwtPayload, farmerId?: string, page: PageRequest | null = null) {
+    const where: Prisma.AgreementWhereInput = { ...(farmerId ? { farmerId } : {}), ...scopedByFarmerBranch(user) };
+    return listPage(page, () => this.prisma.agreement.count({ where }), (w) => this.prisma.agreement.findMany({ ...w,
       // Agreements carry no branch of their own - they belong to a farmer,
       // and the farmer belongs to a branch. Scoped through the relation.
-      where: { ...(farmerId ? { farmerId } : {}), ...scopedByFarmerBranch(user) },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         farmer: { select: { id: true, fullName: true, farmerCode: true } },
         _count: { select: { harvestInspections: true } },
       },
-    });
+    }));
   }
 
   async findOne(id: string) {

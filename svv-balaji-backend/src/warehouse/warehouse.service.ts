@@ -11,6 +11,7 @@ import {
   StockOutDto,
   TransferStockDto,
 } from './dto/warehouse.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 /**
  * Warehouse + inventory ledger (FRD Sections 16-17).
@@ -163,9 +164,10 @@ export class WarehouseService {
 
   // --- Stock queries (FRD 16.7 / 17.1) -------------------------------------
 
-  findStock(warehouseId?: string, batchId?: string) {
-    return this.prisma.warehouseStock.findMany({
-      where: { warehouseId, batchId },
+  findStock(warehouseId?: string, batchId?: string, page: PageRequest | null = null) {
+    const where: Prisma.WarehouseStockWhereInput = { warehouseId, batchId };
+    return listPage(page, () => this.prisma.warehouseStock.count({ where }), (w) => this.prisma.warehouseStock.findMany({ ...w,
+      where,
       orderBy: { updatedAt: 'desc' },
       include: {
         warehouse: { select: { id: true, name: true } },
@@ -179,7 +181,7 @@ export class WarehouseService {
           },
         },
       },
-    });
+    }));
   }
 
   /** FRD 17.4 - batches at or below the given threshold. */
@@ -212,19 +214,19 @@ export class WarehouseService {
     return { threshold, count: rows.length, items: rows };
   }
 
-  findMovements(batchId?: string, warehouseId?: string) {
+  findMovements(batchId?: string, warehouseId?: string, page: PageRequest | null = null) {
     const where: Prisma.StockMovementWhereInput = { batchId };
     if (warehouseId) {
       where.OR = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
     }
-    return this.prisma.stockMovement.findMany({
+    return listPage(page, () => this.prisma.stockMovement.count({ where }), (w) => this.prisma.stockMovement.findMany({ ...w,
       where,
       orderBy: { createdAt: 'desc' },
       include: {
         batch: { select: { id: true, batchNumber: true } },
         performedBy: { select: { id: true, fullName: true } },
       },
-    });
+    }));
   }
 
   // --- Stock mutations -----------------------------------------------------

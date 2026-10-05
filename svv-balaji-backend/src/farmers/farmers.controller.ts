@@ -27,6 +27,7 @@ import { FarmerPerformanceService } from './farmer-performance.service';
 import { CreateFarmPlotDto, UpdateFarmPlotDto } from './dto/farm-plot.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { pageRequest } from '../common/pagination';
 
 @ApiTags('farmers')
 @ApiBearerAuth()
@@ -51,7 +52,7 @@ export class FarmersController {
   @RequirePermission('farmers.view')
   findAll(@Query() query: QueryFarmerDto, @CurrentUser() user: JwtPayload) {
     // Open to any authenticated role - most modules downstream need farmer lookups.
-    return this.farmersService.findAll(query, user);
+    return this.farmersService.findAll(query, user, pageRequest(query.page, query.limit));
   }
 
   @Get(':id')

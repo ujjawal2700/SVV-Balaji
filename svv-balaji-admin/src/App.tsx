@@ -74,6 +74,7 @@ const RiderDetailPage = lazy(() => import('./pages/delivery/riders/RiderDetailPa
 const LiveRidersPage = lazy(() => import('./pages/delivery/riders/LiveRidersPage').then((m) => ({ default: m.LiveRidersPage })));
 const RiderEarningsPage = lazy(() => import('./pages/delivery/riders/RiderEarningsPage').then((m) => ({ default: m.RiderEarningsPage })));
 const RiderCashPage = lazy(() => import('./pages/delivery/riders/RiderCashPage').then((m) => ({ default: m.RiderCashPage })));
+const RiderVerificationQueuePage = lazy(() => import('./pages/delivery/riders/RiderVerificationQueuePage').then((m) => ({ default: m.RiderVerificationQueuePage })));
 const InvoicesPage = lazy(() =>
   import('./pages/invoices/InvoicesPage').then((m) => ({ default: m.InvoicesPage })),
 );
@@ -339,6 +340,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/riders/live': <LiveRidersPage />,
   '/riders/earnings': <RiderEarningsPage />,
   '/riders/cash': <RiderCashPage />,
+  '/riders/verification': <RiderVerificationQueuePage />,
   '/riders/pay-rules': <RiderPayRulesPage />,
   '/delivery-board': <DeliveryBoardPage />,
   '/delivery-settings': <DeliverySettingsPage />,

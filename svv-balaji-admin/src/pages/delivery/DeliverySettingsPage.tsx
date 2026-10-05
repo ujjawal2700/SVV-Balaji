@@ -6,10 +6,10 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useState } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
-import { deliveryApi, VEHICLE_LABEL, type EarningRule, type EarningRuleKind, type FailureReason, type VehicleType } from '@shared/api/delivery';
+import { deliveryApi, VEHICLE_LABEL, type EarningRule, type EarningRuleKind, type FailureReason, type RiderDocumentType, type VehicleType } from '@shared/api/delivery';
 import { useCan } from '@shared/auth/useCan';
 import { PageHeader } from '@shared/components/PageHeader';
-import { useDeliveryMutation, useDeliverySettings, useEarningRules, useFailureReasons, useZones } from '@shared/hooks/useDelivery';
+import { useDeliveryMutation, useDeliverySettings, useDocumentTypes, useEarningRules, useFailureReasons, useZones } from '@shared/hooks/useDelivery';
 
 const KIND: Record<EarningRuleKind, { label: string; help: string }> = {
   BASE_PER_DELIVERY: { label: 'Base pay per delivery', help: 'Flat amount for every successful delivery.' },
@@ -50,6 +50,7 @@ export function DeliverySettingsPage() {
       <Tabs items={[
         { key: 'dispatch', label: 'Dispatch & COD', children: <Dispatch /> },
         { key: 'reasons', label: 'Failed-delivery reasons', children: <Reasons /> },
+        { key: 'onboarding', label: 'Rider onboarding', children: <Onboarding /> },
       ]} />
     </Space>
   );
@@ -367,5 +368,147 @@ function Dispatch() {
         {canManage ? <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button> : <Typography.Text type="secondary">View only.</Typography.Text>}
       </Form>
     </Card>
+  );
+}
+
+// ------------------------------------------------------------------ rider onboarding
+
+/**
+ * What a rider must clear before getting orders: the security deposit rule and
+ * the list of documents (the Police Clearance Certificate is built in and
+ * always required). Changing either re-checks every rider straight away.
+ */
+function Onboarding() {
+  return (
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Alert type="info" showIcon message="A rider is only approved, and only offered orders, once every mandatory document below - the Police Clearance Certificate included - is approved and in date, and the security deposit is paid when it is required. Changes here apply to every rider at once: a rider who stops qualifying goes offline." />
+      <DepositRule />
+      <DocumentTypes />
+    </Space>
+  );
+}
+
+function DepositRule() {
+  const s = useDeliverySettings();
+  const canManage = useCan('DELIVERY_SETTINGS_MANAGE');
+  const { message, modal } = AntApp.useApp();
+  const [form] = Form.useForm<{ securityDepositRequired: boolean; securityDepositAmount: number }>();
+  const required = Form.useWatch('securityDepositRequired', form);
+  const save = useDeliveryMutation((b: { securityDepositRequired: boolean; securityDepositAmount: number }) => deliveryApi.updateSettings(b));
+  useEffect(() => {
+    if (s.data) form.setFieldsValue({ securityDepositRequired: s.data.securityDepositRequired, securityDepositAmount: Number(s.data.securityDepositAmount) });
+  }, [s.data, form]);
+  const submit = (v: { securityDepositRequired: boolean; securityDepositAmount: number }) => {
+    const go = () => save.mutate({ securityDepositRequired: v.securityDepositRequired, securityDepositAmount: v.securityDepositAmount ?? 0 }, {
+      onSuccess: () => message.success('Deposit rule saved - every rider has been re-checked'),
+      onError: (e) => message.error(apiErrorMessage(e)),
+    });
+    const tightening = v.securityDepositRequired && (!s.data?.securityDepositRequired || (v.securityDepositAmount ?? 0) > Number(s.data?.securityDepositAmount ?? 0));
+    if (!tightening) return go();
+    modal.confirm({
+      title: 'Require this deposit from every rider?',
+      content: 'Riders who have not paid it in full stop getting orders straight away and are taken offline.',
+      okText: 'Save',
+      onOk: go,
+    });
+  };
+  return (
+    <Card size="small" style={{ borderRadius: 10 }} title="Security deposit" loading={s.isLoading}>
+      <Form form={form} layout="vertical" disabled={!canManage} onFinish={submit}>
+        <Row gutter={16}>
+          <Col xs={24} md={10}>
+            <Form.Item name="securityDepositRequired" label="Riders must pay a security deposit before taking orders" valuePropName="checked"><Switch /></Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="securityDepositAmount" label="Deposit per rider"
+              rules={[{ validator: (_, v) => (!required || (typeof v === 'number' && v > 0) ? Promise.resolve() : Promise.reject(new Error('Enter the amount'))) }]}
+              extra="Riders can pay online in the app (in parts), or at the store - staff record it on the rider.">
+              <InputNumber prefix="₹" min={0} max={100000} precision={2} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+        {canManage ? <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button> : <Typography.Text type="secondary">Only Super Admin can change this.</Typography.Text>}
+      </Form>
+    </Card>
+  );
+}
+
+function DocumentTypes() {
+  const types = useDocumentTypes();
+  const canManage = useCan('DELIVERY_SETTINGS_MANAGE');
+  const { message } = AntApp.useApp();
+  const [edit, setEdit] = useState<RiderDocumentType | 'new' | null>(null);
+  const toggle = useDeliveryMutation(({ id, ...b }: { id: string } & Partial<RiderDocumentType>) => deliveryApi.updateDocumentType(id, b));
+  const flip = (t: RiderDocumentType, b: Partial<RiderDocumentType>) =>
+    toggle.mutate({ id: t.id, ...b }, { onSuccess: () => message.success('Saved - every rider has been re-checked'), onError: (e) => message.error(apiErrorMessage(e)) });
+  const asks = (t: RiderDocumentType) =>
+    [t.requiresNumber && 'number', t.requiresIssuer && 'issued by', t.requiresIssueDate && 'issue date', t.requiresExpiry && 'expiry'].filter(Boolean).join(', ') || '—';
+  return (
+    <Card size="small" style={{ borderRadius: 10 }} title="Documents riders must upload"
+      extra={canManage ? <Button icon={<PlusOutlined />} onClick={() => setEdit('new')}>Add document</Button> : null}>
+      <Table<RiderDocumentType> size="small" rowKey="id" loading={types.isLoading} dataSource={types.data ?? []} pagination={false}
+        columns={[
+          {
+            title: 'Document', key: 'n',
+            render: (_, t) => (
+              <div>
+                <Space size={4}><b>{t.name}</b>{t.isSystem ? <Tag color="purple">Built in</Tag> : null}</Space>
+                <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{t.description ?? t.code}</Typography.Text></div>
+              </div>
+            ),
+          },
+          { title: 'Rider is asked for', key: 'a', render: (_, t) => asks(t) },
+          { title: 'Mandatory', key: 'm', render: (_, t) => <Switch size="small" checked={t.isMandatory || t.isSystem} disabled={!canManage || t.isSystem || !t.isActive} onChange={(v) => flip(t, { isMandatory: v })} /> },
+          { title: 'In use', key: 'u', render: (_, t) => <Switch size="small" checked={t.isActive || t.isSystem} disabled={!canManage || t.isSystem} onChange={(v) => flip(t, { isActive: v })} /> },
+          { title: '', key: 'e', width: 60, render: (_, t) => (canManage ? <Button type="text" icon={<EditOutlined />} onClick={() => setEdit(t)} aria-label="Edit" /> : null) },
+        ]} />
+      {edit ? <DocumentTypeModal type={edit === 'new' ? null : edit} onClose={() => setEdit(null)} /> : null}
+    </Card>
+  );
+}
+
+function DocumentTypeModal({ type, onClose }: { type: RiderDocumentType | null; onClose: () => void }) {
+  const [form] = Form.useForm<Partial<RiderDocumentType>>();
+  const { message } = AntApp.useApp();
+  const save = useDeliveryMutation((b: Partial<RiderDocumentType>) => (type ? deliveryApi.updateDocumentType(type.id, b) : deliveryApi.createDocumentType(b)));
+  return (
+    <Modal open title={type ? `Edit · ${type.name}` : 'New required document'} onCancel={onClose} confirmLoading={save.isPending} okText="Save" destroyOnClose
+      onOk={async () => {
+        const v = await form.validateFields();
+        const { code, ...rest } = v;
+        save.mutate(type ? rest : { ...rest, code }, {
+          onSuccess: () => {
+            message.success('Saved');
+            onClose();
+          },
+          onError: (e) => message.error(apiErrorMessage(e)),
+        });
+      }}>
+      <Form form={form} layout="vertical" preserve={false}
+        initialValues={type ?? { isMandatory: true, isActive: true, requiresNumber: true, requiresIssuer: false, requiresIssueDate: false, requiresExpiry: false, sortOrder: 10 }}>
+        <Row gutter={12}>
+          <Col span={14}><Form.Item name="name" label="Name (shown to riders)" rules={[{ required: true, min: 2 }]}><Input maxLength={80} /></Form.Item></Col>
+          <Col span={10}>
+            <Form.Item name="code" label="Code" rules={[{ required: true, pattern: /^[A-Z0-9_]{2,40}$/, message: 'CAPITALS, digits and _' }]} extra={type ? 'Cannot be changed' : undefined}>
+              <Input disabled={Boolean(type)} maxLength={40} placeholder="e.g. INSURANCE" />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="description" label="Hint for the rider"><Input.TextArea rows={2} maxLength={300} /></Form.Item>
+        <Row gutter={12}>
+          <Col span={12}><Form.Item name="requiresNumber" label="Ask for the number" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col span={12}><Form.Item name="requiresIssuer" label="Ask who issued it" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col span={12}><Form.Item name="requiresIssueDate" label="Ask for the issue date" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col span={12}><Form.Item name="requiresExpiry" label="Ask for the expiry date" valuePropName="checked" extra="An expired approval stops orders."><Switch /></Form.Item></Col>
+          {type?.isSystem ? null : (
+            <>
+              <Col span={12}><Form.Item name="isMandatory" label="Mandatory" valuePropName="checked"><Switch /></Form.Item></Col>
+              <Col span={12}><Form.Item name="isActive" label="In use" valuePropName="checked"><Switch /></Form.Item></Col>
+            </>
+          )}
+          <Col span={12}><Form.Item name="sortOrder" label="Order in the list"><InputNumber min={0} max={999} /></Form.Item></Col>
+        </Row>
+      </Form>
+    </Modal>
   );
 }

@@ -12,6 +12,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('customers')
 @ApiBearerAuth()
@@ -39,6 +40,7 @@ export class CustomersController {
   @ApiQuery({ name: 'type', enum: CustomerType, required: false })
   @ApiQuery({ name: 'status', enum: CustomerStatus, required: false })
   @ApiQuery({ name: 'search', required: false, description: 'Name, code, phone or GSTIN' })
+  @ApiPageQuery()
   findAll(
     @CurrentUser() user: JwtPayload,
     @Query('channel') channel?: SalesChannel,
@@ -46,8 +48,10 @@ export class CustomersController {
     @Query('status') status?: CustomerStatus,
     @Query('branchId') branchId?: string,
     @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.customersService.findAll(user, { channel, type, status, branchId, search });
+    return this.customersService.findAll(user, { channel, type, status, branchId, search }, pageRequest(page, limit));
   }
 
   @Get(':id')

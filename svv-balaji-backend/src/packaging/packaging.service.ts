@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
@@ -7,6 +8,7 @@ import {
   StockFinishedGoodsDto,
   TransferFinishedGoodsDto,
 } from './dto/packaging.dto';
+import { listPage, type PageRequest } from '../common/pagination';
 
 @Injectable()
 export class PackagingService {
@@ -151,15 +153,16 @@ export class PackagingService {
     return this.codes.qrSvg(payload);
   }
 
-  findAll(filters: { productionBatchId?: string; qaReleased?: boolean }) {
-    return this.prisma.finishedGoodsBatch.findMany({
-      where: filters,
+  findAll(filters: { productionBatchId?: string; qaReleased?: boolean }, page: PageRequest | null = null) {
+    const where: Prisma.FinishedGoodsBatchWhereInput = filters;
+    return listPage(page, () => this.prisma.finishedGoodsBatch.count({ where }), (w) => this.prisma.finishedGoodsBatch.findMany({ ...w,
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         product: { select: { id: true, name: true, sku: true } },
         productionBatch: { select: { id: true, productionBatchNumber: true } },
       },
-    });
+    }));
   }
 
   // --- Finished goods warehouse (FRD Section 23) ---------------------------
@@ -301,9 +304,10 @@ export class PackagingService {
     });
   }
 
-  findStock(warehouseId?: string) {
-    return this.prisma.finishedGoodsStock.findMany({
-      where: { warehouseId },
+  findStock(warehouseId?: string, page: PageRequest | null = null) {
+    const where: Prisma.FinishedGoodsStockWhereInput = { warehouseId };
+    return listPage(page, () => this.prisma.finishedGoodsStock.count({ where }), (w) => this.prisma.finishedGoodsStock.findMany({ ...w,
+      where,
       orderBy: { updatedAt: 'desc' },
       include: {
         warehouse: { select: { id: true, name: true } },
@@ -317,7 +321,7 @@ export class PackagingService {
           },
         },
       },
-    });
+    }));
   }
 
   /**

@@ -22,6 +22,7 @@ import {
   type RiderJwtPayload,
 } from './riders/rider-auth';
 import { AvailabilityDto, CreateCashSettlementOrderDto, RidersService, VerifyCashSettlementDto } from './riders/riders.service';
+import { CreateDepositOrderDto, RiderVerificationService, SubmitRiderDocumentDto, VerifyDepositPaymentDto } from './verification/verification.service';
 
 class RejectOfferDto {
   @IsOptional() @IsString() @MaxLength(200) reason?: string;
@@ -38,6 +39,7 @@ export class UpdateRiderProfileDto {
 }
 
 const IMAGE = /^image\/(jpeg|png|webp|heic|heif)$/;
+const IMAGE_OR_PDF = /^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/;
 
 /**
  * Everything the rider app calls. A rider only ever sees their own offers and
@@ -55,6 +57,7 @@ export class RiderAppController {
     private readonly reasons: FailureReasonsService,
     private readonly storage: StorageService,
     private readonly prisma: PrismaService,
+    private readonly verification: RiderVerificationService,
   ) {}
 
   // ------------------------------------------------------------ auth (public)
@@ -156,6 +159,60 @@ export class RiderAppController {
     const stored = await this.storage.put(file, 'rider-documents');
     await this.prisma.rider.update({ where: { id: r.sub }, data: kind === 'photo' ? { photoUrl: stored.url } : { documentUrl: stored.url } });
     return stored;
+  }
+
+  // ------------------------------------------------------------ verification: documents, PCC, deposit
+
+  @Get('verification')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Onboarding checklist: every required document (incl. PCC) with its status, the security deposit, and what is still missing' })
+  myVerification(@CurrentRider() r: RiderJwtPayload) {
+    return this.verification.summary(r.sub);
+  }
+
+  @Post('verification/files')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload one page of a document (photo or PDF); send the returned url with POST verification/documents' })
+  async verificationFile(@UploadedFile() file: UploadedFileLike) {
+    if (!file || !IMAGE_OR_PDF.test(file.mimetype)) throw new BadRequestException('Send a photo (JPEG, PNG, WebP or HEIC) or a PDF as field "file"');
+    return this.storage.put(file, 'rider-documents');
+  }
+
+  @Post('verification/documents')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Submit (or re-submit after rejection) a document for review' })
+  submitDocument(@CurrentRider() r: RiderJwtPayload, @Body() dto: SubmitRiderDocumentDto) {
+    return this.verification.submit(r.sub, dto);
+  }
+
+  @Get('deposit')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Security deposit: required, paid, pending, status and the ledger' })
+  myDeposit(@CurrentRider() r: RiderJwtPayload) {
+    return this.verification.deposit(r.sub);
+  }
+
+  @Post('deposit/pay-order')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Start an online payment of the pending deposit (or part of it)' })
+  depositOrder(@CurrentRider() r: RiderJwtPayload, @Body() dto: CreateDepositOrderDto) {
+    return this.verification.createDepositOrder(r.sub, dto);
+  }
+
+  @Post('deposit/pay-verify')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm an online deposit payment (gateway signature checked; safe to retry)' })
+  depositVerify(@CurrentRider() r: RiderJwtPayload, @Body() dto: VerifyDepositPaymentDto) {
+    return this.verification.verifyDepositPayment(r.sub, dto);
   }
 
   // ------------------------------------------------------------ availability & home

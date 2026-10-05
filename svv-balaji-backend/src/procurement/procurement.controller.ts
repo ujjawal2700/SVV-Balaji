@@ -25,6 +25,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { ApiPageQuery, pageRequest } from '../common/pagination';
 
 @ApiTags('procurement')
 @ApiBearerAuth()
@@ -71,12 +72,15 @@ export class ProcurementController {
 
   @Get('harvest-inspections')
   @RequirePermission('harvestInspections.view')
+  @ApiPageQuery()
   findInspections(
     @CurrentUser() user: JwtPayload,
     @Query('farmerId') farmerId?: string,
     @Query('result') result?: InspectionResult,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.procurementService.findInspections(user, farmerId, result);
+    return this.procurementService.findInspections(user, farmerId, result, pageRequest(page, limit));
   }
 
   @Get('harvest-inspections/:id')

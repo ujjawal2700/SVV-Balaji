@@ -13,14 +13,16 @@ import { useCan } from '@shared/auth/useCan';
 import { useDeliveryMutation, useDeliveryTasks, useRider, useRiderCash, useRiderEarnings } from '@shared/hooks/useDelivery';
 import { InfoRow, StatCard } from '../../customers/detailPageParts';
 import { ApproveModal, OutletSelect, RIDER_STATUS, TASK_STATUS, VEHICLE_LABEL, cashEntryLabel, inr, useRiderActions, vehicleText } from './riderParts';
+import { DepositPanel, VerificationPanel, VerificationTag } from './verificationParts';
 
-type TabKey = 'overview' | 'deliveries' | 'earnings' | 'cash';
+const TABS = ['overview', 'verification', 'deposit', 'deliveries', 'earnings', 'cash'] as const;
+type TabKey = (typeof TABS)[number];
 
 /** One rider: profile, settings, deliveries, earnings and the cash they hold. Tabs live in the URL (?tab=). */
 export function RiderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
-  const tab = (['overview', 'deliveries', 'earnings', 'cash'].includes(params.get('tab') ?? '') ? params.get('tab') : 'overview') as TabKey;
+  const tab = ((TABS as readonly string[]).includes(params.get('tab') ?? '') ? params.get('tab') : 'overview') as TabKey;
   const rider = useRider(id);
   const week = useRiderEarnings(id ?? null);
   const navigate = useNavigate();
@@ -46,6 +48,7 @@ export function RiderDetailPage() {
               <Typography.Title level={4} style={{ margin: 0 }}>{r.fullName}</Typography.Title>
               <Tag color={st.color}>{st.label}</Tag>
               {r.status === 'ACTIVE' ? <Tag color={r.availability === 'ONLINE' ? 'green' : 'default'}>{r.availability === 'ONLINE' ? 'Online' : 'Offline'}</Tag> : null}
+              {r.status !== 'REJECTED' && r.status !== 'PENDING_VERIFICATION' ? <VerificationTag verified={r.verified} /> : null}
             </Space>
             <Typography.Text type="secondary">{[r.code, r.phone, r.warehouse?.name].filter(Boolean).join(' · ')}</Typography.Text>
           </div>
@@ -59,6 +62,11 @@ export function RiderDetailPage() {
         </div>
         {r.rejectionReason && (r.status === 'REJECTED' || r.status === 'SUSPENDED') ? (
           <Alert style={{ marginTop: 14 }} type={r.status === 'SUSPENDED' ? 'error' : 'warning'} showIcon message={`${st.label}: ${r.rejectionReason}`} />
+        ) : null}
+        {!r.verified && (r.status === 'PENDING_APPROVAL' || r.status === 'ACTIVE') ? (
+          <Alert style={{ marginTop: 14 }} type="warning" showIcon
+            message={r.status === 'ACTIVE' ? 'Verification incomplete - this rider gets no orders' : 'Approval needs documents, PCC and deposit cleared first'}
+            action={<Button size="small" onClick={() => setParams({ tab: 'verification' }, { replace: true })}>Review</Button>} />
         ) : null}
       </Card>
 
@@ -75,6 +83,8 @@ export function RiderDetailPage() {
           onChange={(k) => setParams(k === 'overview' ? {} : { tab: k }, { replace: true })}
           items={[
             { key: 'overview', label: 'Overview', children: <Overview r={r} /> },
+            { key: 'verification', label: 'Documents & PCC', children: <VerificationPanel riderId={r.id} riderName={r.fullName} /> },
+            { key: 'deposit', label: 'Security deposit', children: <DepositPanel riderId={r.id} /> },
             { key: 'deliveries', label: 'Deliveries', children: <Deliveries riderId={r.id} /> },
             { key: 'earnings', label: 'Earnings', children: <Earnings riderId={r.id} /> },
             { key: 'cash', label: 'Cash in hand', children: <Cash riderId={r.id} /> },

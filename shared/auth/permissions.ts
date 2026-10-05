@@ -184,6 +184,8 @@ export const PERMISSIONS = {
   RIDERS_VIEW: 'riders.view',
   RIDERS_MANAGE: 'riders.manage',
   RIDER_CASH_RECORD: 'riderCash.record',
+  RIDERS_VERIFY: 'riders.verify',
+  RIDER_DEPOSIT_RECORD: 'riderDeposit.record',
   DELIVERY_TASKS_VIEW: 'deliveryTasks.view',
   DELIVERY_TASKS_MANAGE: 'deliveryTasks.manage',
   DELIVERY_SETTINGS_MANAGE: 'deliverySettings.manage',
