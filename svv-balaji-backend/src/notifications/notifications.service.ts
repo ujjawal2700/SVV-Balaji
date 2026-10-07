@@ -369,6 +369,27 @@ export class NotificationsService {
   }
 
   /**
+   * One non-order message to one storefront account (e.g. "your affiliate
+   * application was approved"): inbox row first, then push to signed-in
+   * devices. Best-effort: never throws - a notification must not undo the
+   * action that caused it.
+   */
+  async notifyCustomerAccount(customerAccountId: string, message: { title: string; body: string; link?: string | null }) {
+    try {
+      const notification = await this.prisma.appNotification.create({
+        data: { kind: PushRecipientKind.CUSTOMER, customerAccountId, title: message.title, body: message.body, link: message.link ?? null },
+        select: { id: true },
+      });
+      if (!this.fcm.enabled) return;
+      const devices = await this.liveDevices({ staff: [], customers: [customerAccountId], riders: [] });
+      const result = await this.fcm.send(devices.map((d) => d.token), { ...message, notificationId: notification.id });
+      if (result.deadTokens.length) await this.prisma.pushDevice.deleteMany({ where: { token: { in: result.deadTokens } } });
+    } catch (error) {
+      this.logger.warn(`Customer notification failed for ${customerAccountId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * System notification on riders' signed-in phones, for delivery work (offers,
    * assignments). The rider inbox row is the caller's (RiderNotification); this
    * only reaches a phone whose app is in the background or closed - an open app

@@ -196,7 +196,8 @@ export const checkoutApi = {
   deleteAddress: (id: string) => api.delete(`/storefront/addresses/${id}`).then((r) => r.data),
 
   quote: (req: CheckoutRequest) => api.post<Quote>('/storefront/checkout/quote', req).then((r) => r.data),
-  start: (req: CheckoutRequest) => api.post<CheckoutSession>('/storefront/checkout/sessions', req).then((r) => r.data),
+  // withCredentials: the HTTP-only aff_tracker cookie (affiliate link) must reach the server even on a split deployment.
+  start: (req: CheckoutRequest) => api.post<CheckoutSession>('/storefront/checkout/sessions', req, { withCredentials: true }).then((r) => r.data),
   confirm: (sessionId: string, body: { gatewayPaymentId?: string; signature?: string }) =>
     api.post<PlacedOrder>(`/storefront/checkout/sessions/${sessionId}/confirm`, body).then((r) => r.data),
   abort: (sessionId: string) => api.post(`/storefront/checkout/sessions/${sessionId}/abort`).then((r) => r.data),

@@ -29,6 +29,13 @@ export interface PaymentGateway {
    * would mean two orders for one payment).
    */
   clientConfigFor(gatewayOrderId: string, amountRupees: number): Record<string, unknown>;
+  /**
+   * Identifiers of a VERIFIED payment's instrument and contact, normalised:
+   * "upi:<vpa>", "token:<saved card token>", "phone:<10 digits>", "email:<lower>".
+   * Used only by the affiliate self-referral check. Best-effort: [] when the
+   * gateway cannot say. Never call it with an unverified payment id.
+   */
+  paymentFingerprints(paymentId: string): Promise<string[]>;
 }
 
 export const PAYMENT_GATEWAY = Symbol('PAYMENT_GATEWAY');
@@ -70,6 +77,12 @@ export class MockPaymentGateway implements PaymentGateway {
 
   clientConfigFor(gatewayOrderId: string, amountRupees: number): Record<string, unknown> {
     return { provider: 'mock', gatewayOrderId, amount: amountRupees, currency: 'INR' };
+  }
+
+  /** `mockpay_upi_<vpa>_<anything>` pays from that UPI id, so tests can exercise the self-referral check. */
+  async paymentFingerprints(paymentId: string): Promise<string[]> {
+    const m = /^mockpay_upi_([^_]+@[^_]+)/.exec(paymentId);
+    return m ? [`upi:${m[1].toLowerCase()}`] : [];
   }
 }
 
@@ -119,6 +132,25 @@ export class RazorpayGateway implements PaymentGateway {
   verifyWebhook(rawBody: string, signature: string): boolean {
     if (!this.webhookSecret) return false;
     return safeEqual(createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex'), signature);
+  }
+
+  async paymentFingerprints(paymentId: string): Promise<string[]> {
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}` },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) {
+      this.logger.warn(`Razorpay payment lookup ${paymentId} failed: ${res.status}`);
+      return [];
+    }
+    const p = (await res.json()) as { vpa?: string | null; token_id?: string | null; contact?: string | null; email?: string | null };
+    const out: string[] = [];
+    if (p.vpa) out.push(`upi:${p.vpa.trim().toLowerCase()}`);
+    if (p.token_id) out.push(`token:${p.token_id}`);
+    const phone = (p.contact ?? '').replace(/\D/g, '');
+    if (phone.length >= 10) out.push(`phone:${phone.slice(-10)}`);
+    if (p.email?.includes('@')) out.push(`email:${p.email.trim().toLowerCase()}`);
+    return out;
   }
 }
 

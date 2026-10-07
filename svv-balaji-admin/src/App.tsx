@@ -296,6 +296,9 @@ const SupportSettingsPage = lazy(() =>
 const ReferralsPage = lazy(() =>
   import('./pages/referrals/ReferralsPage').then((m) => ({ default: m.ReferralsPage })),
 );
+const AffiliatesPage = lazy(() => import('./pages/affiliates/AffiliatesPage').then((m) => ({ default: m.AffiliatesPage })));
+const AffiliateSettingsPage = lazy(() => import('./pages/affiliates/AffiliateSettingsPage').then((m) => ({ default: m.AffiliateSettingsPage })));
+const AffiliatePayoutsPage = lazy(() => import('./pages/affiliates/AffiliatePayoutsPage').then((m) => ({ default: m.AffiliatePayoutsPage })));
 const ProfilePage = lazy(() =>
   import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
@@ -404,6 +407,9 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/legal': <LegalPoliciesPage />,
   '/coupons': <Navigate to="/schemes" replace />,
   '/referrals': <ReferralsPage />,
+  '/affiliates': <AffiliatesPage />,
+  '/affiliates/settings': <AffiliateSettingsPage />,
+  '/affiliates/payouts': <AffiliatePayoutsPage />,
   '/profile': <ProfilePage />,
 };
 

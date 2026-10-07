@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { LegalConsent } from '../components/LegalConsent';
 import { apiErrorMessage } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 
@@ -562,6 +563,8 @@ export function RegisterPage() {
               </div>
             )}
           </div>
+
+          {!isCompleted && <LegalConsent audience="RETAILER" />}
 
           {!isCompleted && (
              <div style={{ marginTop: 24, textAlign: 'center' }}>

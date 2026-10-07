@@ -1,8 +1,9 @@
 import { lazy, Suspense } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAccount } from './auth/RequireAccount';
 import { useCustomerAuth } from './auth/CustomerAuthContext';
 import { StoreShell } from './layout/StoreShell';
+import { useAffiliateTracker } from './hooks/useAffiliateTracker';
 
 /**
  * The storefront's routes — WS3.5, FRD sections 29 and 30.
@@ -66,6 +67,9 @@ const HelpSupportPage = lazy(() =>
 const OrderSupportPage = lazy(() =>
   import('./pages/OrderSupportPage').then((m) => ({ default: m.OrderSupportPage })),
 );
+const AffiliatePage = lazy(() => import('./pages/AffiliatePage').then((m) => ({ default: m.AffiliatePage })));
+const LegalPage = lazy(() => import('./pages/LegalPage').then((m) => ({ default: m.LegalPage })));
+const AffiliateProgramPage = lazy(() => import('./pages/AffiliateProgramPage').then((m) => ({ default: m.AffiliateProgramPage })));
 const TracePage = lazy(() => import('./pages/TracePage').then((m) => ({ default: m.TracePage })));
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -86,6 +90,8 @@ const NotFoundPage = lazy(() =>
 
 export function App() {
   const { role, retailerProfile, initialising } = useCustomerAuth();
+  // Before any early return: an affiliate link may land on any page, including login.
+  useAffiliateTracker();
 
   if (!initialising && role === 'RETAILER' && retailerProfile?.kycStatus === 'PENDING') {
     return (
@@ -126,6 +132,7 @@ export function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="refer" element={<ReferralPage />} />
           <Route path="refer-and-earn" element={<ReferralPage />} />
+          <Route path="affiliate" element={<AffiliatePage />} />
           <Route path="help" element={<HelpSupportPage />} />
           <Route path="support" element={<HelpSupportPage />} />
           <Route path="help-and-support" element={<HelpSupportPage />} />
@@ -169,6 +176,13 @@ export function App() {
         </Route>
         {/* Standalone pages without StoreShell header/footer */}
         <Route path="login" element={<LoginPage />} />
+        {/* Conditions of Use / Privacy Notice, published by Super Admin. Standalone: opened from sign-in screens. */}
+        <Route path="legal/:audience/:doc" element={<LegalPage />} />
+        <Route path="conditions-of-use" element={<Navigate to="/legal/customer/conditions-of-use" replace />} />
+        <Route path="privacy-notice" element={<Navigate to="/legal/customer/privacy-notice" replace />} />
+        {/* Public affiliate program site (no sign-in), standalone like Amazon Associates - outside the store shell. */}
+        <Route path="affiliate-program" element={<AffiliateProgramPage />} />
+        <Route path="become-an-affiliate" element={<AffiliateProgramPage />} />
         <Route path="retailers/login" element={<LoginPage />} />
         <Route path="retailers/register" element={<RegisterPage />} />
         <Route path="retailers/under-review" element={<UnderReviewPage />} />

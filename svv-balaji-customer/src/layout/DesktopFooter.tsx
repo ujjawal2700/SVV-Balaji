@@ -241,6 +241,11 @@ export function DesktopFooter() {
                   Store Profile &amp; KYC
                 </Link>
               </li>
+              <li>
+                <Link to="/affiliate-program" style={{ color: '#a8a29e', textDecoration: 'none' }} className="nav-link-hover">
+                  Become an Affiliate
+                </Link>
+              </li>
             </ul>
           </div>
 

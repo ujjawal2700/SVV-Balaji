@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   CustomerStatus,
   OrderStatus,
@@ -27,6 +27,7 @@ import {
   UpdatePaymentStatusDto,
 } from './dto/order.dto';
 import { listPage, type PageRequest } from '../common/pagination';
+import { AffiliateLedgerService } from '../affiliates/affiliate-ledger.service';
 
 /** Forward-only order lifecycle. Anything not listed here is refused. */
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -71,6 +72,7 @@ export class SalesService {
     private readonly events: OrderEventsService,
     private readonly invoices: InvoicesService,
     private readonly refundWallet: RefundWalletService,
+    @Optional() private readonly affiliates?: AffiliateLedgerService,
   ) {}
 
   async create(dto: CreateOrderDto, placedById: string | null) {
@@ -1062,6 +1064,8 @@ export class SalesService {
         );
       }
       const { pointsReversed } = await this.loyalty.reverseForReturn(tx, order.id, [...wanted.keys()]);
+      // Affiliate commission on the returned units is taken back in the same transaction.
+      for (const row of rows) await this.affiliates?.onGoodsReturned(tx, row);
       return { orderNumber: order.orderNumber, returns: rows, loyaltyPointsReversed: pointsReversed };
     });
     await this.record(id, 'RETURN_RECORDED', recordedById, dto.reason);
@@ -1130,6 +1134,7 @@ export class SalesService {
       await this.wallet.refundRedemptionForOrder(tx, id);
       await this.refundWallet.reverseOrderSpend(tx, id);
       await refundCouponForOrder(tx, id);
+      await this.affiliates?.onOrderCancelled(tx, id);
 
       return tx.order.update({
         where: { id },

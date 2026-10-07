@@ -883,7 +883,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: 'loyalty-referrals',
-    label: 'Referrals & Loyalty Program',
+    label: 'Referrals, Affiliates & Loyalty',
     icon: <GiftOutlined />,
     items: [
       {
@@ -923,6 +923,38 @@ export const NAV_SECTIONS: NavSection[] = [
           'Percentage-based rewards: earn percentage per channel, point value, eligibility, ' +
           'minimums, per-order cap and expiry. Points are credited when an order is delivered.',
         endpoints: ['GET /loyalty/settings', 'PATCH /loyalty/settings'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'affiliates',
+        path: '/affiliates',
+        label: 'Affiliates',
+        permission: 'AFFILIATES_VIEW',
+        description:
+          'Affiliate applications (approve / reject), every affiliate\'s clicks, orders and balances, the per-item ' +
+          'commission ledger, and orders flagged by the self-referral check.',
+        endpoints: ['GET /affiliates', 'POST /affiliates/:id/approve', 'GET /affiliates/commissions', 'GET /affiliates/attributions'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'affiliateSettings',
+        path: '/affiliates/settings',
+        label: 'Affiliate Commission Rates',
+        permission: 'AFFILIATE_SETTINGS_VIEW',
+        description: 'Commission % per product category (sub-categories inherit), cookie window, hold period and minimum payout.',
+        endpoints: ['GET /affiliate-settings', 'PATCH /affiliate-settings', 'GET /affiliate-settings/category-rates', 'PUT /affiliate-settings/category-rates'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
+        key: 'affiliatePayouts',
+        path: '/affiliates/payouts',
+        label: 'Affiliate Payouts',
+        permission: 'AFFILIATE_PAYOUTS_VIEW',
+        description: 'Affiliates owed matured commission (past the hold window), net of clawbacks; record month-end UPI / bank payouts.',
+        endpoints: ['GET /affiliate-payouts/due', 'POST /affiliate-payouts', 'GET /affiliate-payouts'],
         workstream: 'WS2.5',
         zone: 'commerce',
       },
@@ -990,8 +1022,10 @@ export const NAV_SECTIONS: NavSection[] = [
         key: 'legalPolicies',
         path: '/legal-policies',
         label: 'Terms & Privacy Policies',
-        permission: 'USER_VIEW',
-        description: 'Manage dynamic Terms & Conditions and Privacy Policies for Delivery Partners (Riders), Retailers, and Customers.',
+        permission: 'LEGAL_POLICIES_VIEW',
+        description:
+          'Conditions of Use and Privacy Notice for Riders, Retailers and Customers - served live on the storefront ' +
+          'sign-in screens ("By continuing, you agree to..."), profile pages and the rider app.',
         endpoints: ['GET /legal-policies', 'PUT /legal-policies'],
         workstream: 'WS2.5',
       },

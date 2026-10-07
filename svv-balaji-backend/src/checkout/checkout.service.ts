@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { SequenceService } from '../common/sequence.service';
+import { AffiliateLedgerService } from '../affiliates/affiliate-ledger.service';
 import { WalletService } from '../wallet/wallet.service';
 import { RefundWalletService } from '../wallet/refund-wallet.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -140,6 +141,7 @@ export class CheckoutService {
     private readonly events: OrderEventsService,
     private readonly zones: ZonesService,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
+    private readonly affiliates: AffiliateLedgerService,
   ) {}
 
   // ------------------------------------------------------------------- quote
@@ -410,8 +412,13 @@ export class CheckoutService {
    * second stock hold and a second gateway order. It is scoped per customer
    * (`@@unique([customerId, idempotencyKey])`), and a request with no key
    * behaves exactly as before - every keyless call opens its own session.
+   *
+   * `affiliateClickId` is the live click from the shopper's aff_tracker cookie
+   * (already verified by the controller). It is frozen on the session so the
+   * order can be attributed even when a gateway webhook, with no cookie, is
+   * what finally places it.
    */
-  async startSession(customer: Customer, dto: CheckoutDto, idempotencyKey?: string) {
+  async startSession(customer: Customer, dto: CheckoutDto, idempotencyKey?: string, opts: { affiliateClickId?: string | null } = {}) {
     if (idempotencyKey) {
       const existing = await this.prisma.checkoutSession.findUnique({
         where: { customerId_idempotencyKey: { customerId: customer.id, idempotencyKey } },
@@ -447,6 +454,7 @@ export class CheckoutService {
                 paymentMode: quote.payment.mode,
                 expiresAt: new Date(Date.now() + settings.reservationTtlMinutes * 60_000),
                 idempotencyKey: idempotencyKey ?? null,
+                affiliateClickId: opts.affiliateClickId ?? null,
               },
             });
             await this.reservations.hold(tx, {
@@ -594,6 +602,11 @@ export class CheckoutService {
     try {
       const order = await this.prisma.$transaction((tx) => this.placeOrder(tx, customer, session, quote, dto.gatewayPaymentId), { timeout: 30_000 });
       this.events.publish('new', order.id);
+      // Affiliate attribution + self-referral check, after the commit: it can never undo an order.
+      // Anything missed here (gateway lookup timeout, crash) is retried by the affiliate sweep.
+      await this.affiliates.afterOrderPlaced(order.id, online ? dto.gatewayPaymentId : null).catch((e) => {
+        this.logger.warn(`Affiliate attribution failed for order ${order.orderNumber}, sweep will retry: ${e instanceof Error ? e.message : String(e)}`);
+      });
       return { orderId: order.id, orderNumber: order.orderNumber, alreadyPlaced: false };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

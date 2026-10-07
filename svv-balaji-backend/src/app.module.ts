@@ -53,6 +53,7 @@ import { SupportSettingsModule } from './support-settings/support-settings.modul
 import { LegalPoliciesModule } from './legal-policies/legal-policies.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReturnsModule } from './returns/returns.module';
+import { AffiliatesModule } from './affiliates/affiliates.module';
 
 @Module({
   imports: [
@@ -119,6 +120,7 @@ import { ReturnsModule } from './returns/returns.module';
     SupportSettingsModule,
     LegalPoliciesModule,
     NotificationsModule, // Super Admin push broadcasts (FCM), device registry, in-app inbox
+    AffiliatesModule, // affiliate links (HTTP-only cookie), per-item category commission, self-referral check, hold window, payouts
     ReturnsModule, // order-item returns & exchanges (customers and retailers separately), rider/Shiprocket reverse logistics, refund wallet
   ],
 })

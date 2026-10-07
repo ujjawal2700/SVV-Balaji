@@ -1,3 +1,4 @@
+import { legalPath } from '../api/legal';
 import {
   BellOutlined,
   CreditCardOutlined,
@@ -19,6 +20,7 @@ import {
   TrophyOutlined,
   UserOutlined,
   WalletOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons';
 import {
   Avatar,
@@ -144,6 +146,15 @@ export function ProfilePage() {
           label: 'Refer & Earn',
           subtitle: referralCode ? `Your code: ${referralCode} • Earn 100 coins` : 'Share your code with friends',
           route: '/refer',
+        },
+        {
+          key: 'affiliate',
+          icon: <ShareAltOutlined />,
+          iconBg: '#eff6ff',
+          iconColor: '#2563eb',
+          label: 'Affiliate Program',
+          subtitle: 'Share links, earn commission on every item',
+          route: '/affiliate',
         },
       ],
     },
@@ -310,7 +321,32 @@ export function ProfilePage() {
     },
   ];
 
-  const activeSections = isRetailer ? retailerSections : customerSections;
+  // Conditions of Use / Privacy Notice - published by Super Admin, per audience (Terms & Privacy Policies).
+  const legalSection = (audience: 'CUSTOMER' | 'RETAILER') => ({
+    title: 'Legal',
+    items: [
+      {
+        key: 'conditions',
+        icon: <FileProtectOutlined />,
+        iconBg: '#f5f5f4',
+        iconColor: '#57534e',
+        label: 'Conditions of Use',
+        subtitle: audience === 'RETAILER' ? 'Terms of supply for business partners' : 'The terms of using Desi Tokri',
+        route: legalPath(audience, 'TERMS_AND_CONDITIONS'),
+      },
+      {
+        key: 'privacy',
+        icon: <LockOutlined />,
+        iconBg: '#f5f5f4',
+        iconColor: '#57534e',
+        label: 'Privacy Notice',
+        subtitle: 'How we collect and use your data',
+        route: legalPath(audience, 'PRIVACY_POLICY'),
+      },
+    ],
+  });
+
+  const activeSections = isRetailer ? [...retailerSections, legalSection('RETAILER')] : [...customerSections, legalSection('CUSTOMER')];
 
   return (
     <div>

@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { SequenceService } from '../common/sequence.service';
+import { AffiliateLedgerService } from '../affiliates/affiliate-ledger.service';
 import { ShipmentWebhookRouter } from '../common/shipment-webhook-router';
 import { PAYMENT_GATEWAY, type PaymentGateway } from '../checkout/payment/payment-gateway';
 import { SHIPPING_PROVIDER, type ShippingProvider } from '../checkout/shipping/shipping-provider';
@@ -81,6 +82,7 @@ export class ReturnsService implements OnModuleInit {
     private readonly webhookRouter: ShipmentWebhookRouter,
     @Inject(SHIPPING_PROVIDER) private readonly shipping: ShippingProvider,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
+    private readonly affiliates: AffiliateLedgerService,
   ) {}
 
   onModuleInit() {
@@ -726,18 +728,20 @@ export class ReturnsService implements OnModuleInit {
   /**
    * The goods are back for good (or lost by the courier after the customer
    * handed them over): write the OrderReturn row and take back the loyalty
-   * points those units earned - the existing reversal machinery, unchanged.
+   * points those units earned - the existing reversal machinery, unchanged -
+   * and the affiliate commission on those units (per item, pro-rata).
    */
   private async recordGoodsBack(tx: Tx, req: Loaded, performerId: string) {
     const exists = await tx.orderReturn.findUnique({ where: { returnRequestId: req.id } });
     if (exists) return;
-    await tx.orderReturn.create({
+    const created = await tx.orderReturn.create({
       data: {
         orderId: req.orderId, orderItemId: req.orderItemId, quantity: req.quantity, returnRequestId: req.id,
         reason: `${req.requestNumber}: ${req.reasonLabel}`, refundAmount: req.refundAmount, recordedById: performerId,
       },
     });
     await this.loyalty.reverseForReturn(tx, req.orderId, [req.orderItemId]);
+    await this.affiliates.onGoodsReturned(tx, created);
   }
 
   /** A courier lost / destroyed the parcel after collecting it: settle without receipt. */

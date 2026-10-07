@@ -1,6 +1,9 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import type { Request } from 'express';
+import { AffiliateTrackingCookie } from '../affiliates/affiliate-tracking.cookie';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { CurrentCustomer } from '../storefront/decorators/current-customer.decorator';
 import { CustomerJwtAuthGuard } from '../storefront/guards/customer-jwt-auth.guard';
 import type { CustomerJwtPayload } from '../storefront/strategies/customer-jwt.strategy';
@@ -33,6 +36,8 @@ export class StorefrontCheckoutController {
     private readonly checkout: CheckoutService,
     private readonly coupons: CouponsService,
     private readonly orders: StorefrontOrdersService,
+    private readonly affiliateCookie: AffiliateTrackingCookie,
+    private readonly affiliates: AffiliatesService,
   ) {}
 
   // --- addresses ---
@@ -75,14 +80,17 @@ export class StorefrontCheckoutController {
     description:
       'Send an `Idempotency-Key` header on every attempt (one per checkout, reused only on retry). ' +
       'A retried or double-tapped request with the same key returns the session already opened for ' +
-      'it instead of taking a second stock hold.',
+      'it instead of taking a second stock hold. A live `aff_tracker` cookie (affiliate link) is captured on the session ' +
+      'and the order is attributed to that affiliate once placed.',
   })
   async start(
     @CurrentCustomer() s: CustomerJwtPayload,
     @Body() dto: CheckoutDto,
+    @Req() req: Request,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.checkout.startSession(await this.ctx.forAccount(s.sub), dto, idempotencyKey);
+    const affiliateClickId = await this.affiliates.liveClickId(this.affiliateCookie.clickIdFrom(req));
+    return this.checkout.startSession(await this.ctx.forAccount(s.sub), dto, idempotencyKey, { affiliateClickId });
   }
 
   @Post('checkout/sessions/:id/confirm')

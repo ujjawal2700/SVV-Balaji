@@ -1555,6 +1555,93 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       },
     ],
   },
+  {
+    key: 'legalPolicies',
+    label: 'Terms & Privacy Policies',
+    path: '/legal-policies',
+    viewKey: 'legalPolicies.view',
+    permissions: [
+      {
+        key: 'legalPolicies.view',
+        label: 'View Terms & Privacy Policies',
+        description: 'The Conditions of Use and Privacy Notice shown to customers, retailers and riders.',
+        defaultRoles: [],
+      },
+      {
+        key: 'legalPolicies.manage',
+        label: 'Edit Terms & Privacy Policies',
+        description:
+          'Changes go live immediately in the customer, retailer and rider apps (sign-in screens and profile pages). ' +
+          'Until 5 Oct 2026 any signed-in staff member could do this; it is now Super Admin only by default.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    key: 'affiliates',
+    label: 'Affiliate Program',
+    path: '/affiliates',
+    viewKey: 'affiliates.view',
+    permissions: [
+      {
+        key: 'affiliates.view',
+        label: 'View affiliates, commissions and the fraud log',
+        description:
+          'Applications, every affiliate\'s clicks, orders and balances, the per-item commission ledger ' +
+          'and orders flagged as self-referral.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'affiliates.review',
+        label: 'Approve, reject and suspend affiliates',
+        description: 'Approving lets the affiliate\'s links start earning commission; suspending stops it.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    key: 'affiliateSettings',
+    label: 'Affiliate Commission Settings',
+    path: '/affiliates/settings',
+    viewKey: 'affiliateSettings.view',
+    permissions: [
+      {
+        key: 'affiliateSettings.view',
+        label: 'View affiliate commission rates and program settings',
+        description: 'Commission % per category, cookie window, hold period and minimum payout.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'affiliateSettings.manage',
+        label: 'Change affiliate commission rates and program settings',
+        description:
+          'Rates apply to orders placed after the change; commission already earned is never re-priced.',
+        defaultRoles: [],
+      },
+    ],
+  },
+  {
+    key: 'affiliatePayouts',
+    label: 'Affiliate Payouts',
+    path: '/affiliates/payouts',
+    viewKey: 'affiliatePayouts.view',
+    permissions: [
+      {
+        key: 'affiliatePayouts.view',
+        label: 'View affiliate balances due and payout history',
+        description: 'Who is owed matured commission (past the hold window) and every payout made.',
+        defaultRoles: [],
+      },
+      {
+        key: 'affiliatePayouts.pay',
+        label: 'Record affiliate payouts',
+        description:
+          'Marks every matured commission of an affiliate as paid against a UPI / bank transfer reference. ' +
+          'Money moves outside the system; this records it.',
+        defaultRoles: [],
+      },
+    ],
+  },
 
   {
     key: 'supportTickets',

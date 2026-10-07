@@ -3301,3 +3301,176 @@ sign-up photo is already waiting as a pending licence). Plan a review pass befor
   Step 9 now uses whichever round rider holds the most deliveries and asserts it holds at least one.
 - Verified: `e2e-broadcast-dispatch-flow.py` ALL PASSED 3/3 on fresh DBs (both race outcomes seen, no deadlocks in
   the API log); `e2e-rider-flow.py` and `e2e-rider-onboarding-flow.py` pass; `jest src/delivery` 75/75; `tsc` clean.
+
+## 2026-10-05 — SECURITY: malware loader force-pushed to origin/main (4th time) - removed (Raunak, via agent)
+
+- **What happened.** After the clean 3 Oct push (`0558499`), someone **force-pushed** `origin/main` to `ad2611c`: the
+  identical tree plus `.vscode/tasks.json` (hidden folderOpen task running `node ./public/fonts/fa-solid-300.llf`),
+  `.vscode/launch.json`, `.vscode/settings.json` (`task.allowAutomaticTasks: true`), `public/fonts/README.md` and the
+  payload `public/fonts/fa-solid-300.llf` (14.8 KB tab-padded obfuscated JS - note the new `.llf` name). Same message
+  and author as the real commit; **committer timezone -0700** (ours is +0530). A `git pull` at 14:56 stopped mid-merge
+  with all of it staged.
+- **Done.** `git merge --abort` (local HEAD `b23e7ad` was clean and already had all work). No sign it executed: no
+  process referenced it, no node process started after it landed. All fonts verified by magic bytes; no install hooks
+  in any package.json. `origin/main` restored with `git push --force-with-lease=main:ad2611c origin main` -> `b23e7ad`.
+- **Still to do (people, not code):** whoever can push to `ujjawal2700/SVV-Balaji` has a compromised machine or token.
+  Rotate GitHub tokens / SSH keys for every collaborator, check GitHub -> Settings -> Security log and the repo's
+  collaborators / deploy keys, and turn on **branch protection for main (block force pushes)**. Any other clone that
+  pulled since 14:56 today must NOT be opened in VS Code until checked: delete `.vscode/tasks.json` and
+  `public/fonts/fa-solid-300.llf`, set `task.allowAutomaticTasks` to "off".
+
+## 2026-10-05 (latest) — Raunak (via agent) — Affiliate Marketing system (per-item category commission)
+
+**Did:** New `src/affiliates` module (backend), affiliate page in the customer app, three admin screens.
+- **Tracking.** Any storefront URL with `?aff=CODE` -> `useAffiliateTracker` (customer `App.tsx`, runs on every route incl.
+  login) calls `POST /storefront/affiliate/track`, which records an `AffiliateClick` and sets an **HTTP-only, signed
+  (HMAC) `aff_tracker` cookie**, 30 days (Super Admin setting), path `/`, SameSite=Lax. A new click always overwrites it
+  -> **last click wins**. Refreshes from the same IP within 30 min reuse the click. Forged/edited cookies are ignored.
+  `?aff=` is separate from refer-a-friend's `?ref=`.
+- **Checkout.** `POST /storefront/checkout/sessions` reads the cookie and freezes the live click on
+  `CheckoutSession.affiliateClickId` (so a Razorpay webhook with no browser still attributes). After the order commits,
+  `CheckoutService.confirm` calls `AffiliateLedgerService.afterOrderPlaced` - best-effort, can never undo an order; a
+  10-min sweep re-attributes anything missed.
+- **Self-referral (fraud).** Buyer vs affiliate: same Customer, any shared phone (account, customer, shipping address,
+  payment contact) or email, or the same payment instrument (UPI VPA / saved-card token from the gateway, or the
+  affiliate's payout UPI). Gateway fingerprints are read after verification (`PaymentGateway.paymentFingerprints`, new;
+  Razorpay `GET /v1/payments/:id`) and stored on `Order.paymentFingerprints` for **every** online order, so an
+  affiliate's own past payments can be matched. Match -> `AffiliateAttribution` status FRAUD with reasons, no commission
+  rows, `Logger.warn` "AFFILIATE FRAUD", and the admin Fraud log tab.
+- **Commission.** One `AffiliateCommission` row per order item: base = unit price x qty - the item's pro-rata share of
+  the coupon (paise-exact, same apportioning as checkout). GST, delivery fee and loyalty/referral coin redemptions are
+  excluded. Rate = item's category rate, else nearest parent's, else program default (0 by default); rate and source are
+  snapshotted. Status PENDING, `releaseDate` = order date + 7 days.
+- **Maturity.** PENDING -> APPROVED only when release date passed AND order DELIVERED AND no open return on that item
+  (setting `holdFrom` can count the hold from delivery instead). Order cancelled -> CANCELLED (inside `cancelCore` tx).
+- **Partial returns.** `onGoodsReturned` runs in the same transaction that writes `OrderReturn` - both the returns
+  workflow (`recordGoodsBack`, i.e. QC accepted / lost in transit / exchange converted to refund) and staff
+  `POST /orders/:id/returns`. Per-unit pro-rata, last unit takes the remainder; fully returned -> REFUNDED. Keyed on the
+  OrderReturn id (unique) so it deducts once. Already PAID -> a **clawback** adjustment netted off the next payout.
+- **Payouts.** Super Admin: list of affiliates with matured balance >= minimum, "Mark paid" with UTR. Locks the affiliate
+  and its APPROVED rows, refuses if the amount moved since it was shown (`BALANCE_CHANGED`), marks rows PAID, recovers
+  clawbacks. Money moves outside the system.
+- **Customer app:** `/affiliate` (Profile -> Affiliate Program): apply, pending/rejected (re-apply), dashboard with
+  clicks / successful orders / total earnings, balances, link generator, per-item commission list, payouts, payout details.
+- **Admin:** `/affiliates` (Applications, All affiliates, Commission ledger, Fraud log), `/affiliates/settings`
+  (program + category rate matrix with inheritance shown), `/affiliates/payouts` (Ready to pay, history).
+
+**Contract changes:** new routes `POST /storefront/affiliate/track` (public), `GET|PATCH /storefront/affiliate/me`,
+`POST /storefront/affiliate/apply`, `GET /storefront/affiliate/{commissions,payouts}`; staff `GET /affiliates`,
+`GET /affiliates/:id`, `POST /affiliates/:id/{approve,reject,suspend,reactivate}`, `GET /affiliates/{commissions,attributions}`,
+`GET|PATCH /affiliate-settings`, `GET|PUT /affiliate-settings/category-rates`, `GET /affiliate-payouts/due`,
+`GET|POST /affiliate-payouts`. `PaymentGateway` interface gained `paymentFingerprints()`. `CheckoutService.startSession`
+gained an optional 4th arg. New permissions `affiliates.view` (BM), `affiliates.review`, `affiliateSettings.view` (BM),
+`affiliateSettings.manage`, `affiliatePayouts.view`, `affiliatePayouts.pay` (the last four Super Admin only by default).
+Migration `20261005140000_affiliate_marketing` (additive only: 8 tables, 6 enums, `orders.paymentFingerprints`,
+`checkout_sessions.affiliateClickId`). New env `AFFILIATE_COOKIE_SECRET`, `AFFILIATE_COOKIE_SAMESITE` (see `.env.example`).
+
+**Verified:** new `e2e-affiliate-flow.py` **56/56, twice, each on a fresh throwaway DB** (local Postgres
+`svv_affiliate_e2e`, API on :3110) - covers all of the above incl. cookie attributes, last click, forged cookie, coupon
+split, inherited rate, three fraud kinds, partial return via the rider/QC workflow and via staff record-return, hold +
+open-return blocking, cancellation, stale-amount refusal, double-pay refusal, clawback recovered in the next payout,
+suspension, and the shipped pack still tracing to the farmer. `affiliate.logic.spec.ts` 23 tests; backend `jest` 774/775
+(the 1 is the known pre-existing storefront-auth "pending retailer" test); `e2e-returns-flow.py` ALL PASSED;
+`e2e-loyalty-flow.py` 0 failed; migration applies with zero drift; backend/admin/customer `tsc` clean; admin + customer
+`vite build` OK; customer `vitest` 30/30. **Not click-tested in a browser.**
+
+**Other developer needs to know:**
+- `e2e-checkout-flow.py` has 2 failures that are **pre-existing and not from this change**: "no coordinates -> never
+  local" (also fails at HEAD) and "customer is shown a 4-digit OTP" - since `ad83f3c` the customer only sees the
+  delivery OTP once the order is DISPATCHED, but the script still expects it right after placement. The script needs
+  updating, not the code.
+- The cookie is first-party only when the storefront and the API share an origin (`VITE_API_BASE_URL=/api/v1`, the
+  documented setup). If the live storefront on Vercel calls the Render API on a different domain, the cookie becomes a
+  third-party cookie that Safari / Chrome block - fix with a Vercel rewrite `/api/:path*` -> the API, not with
+  SameSite=None.
+- Scope: affiliate marketing is not in the FRD or the signed SOW - same bucket as A-10 (B2C additions). Raised in
+  PROJECT_STATE; rates default to 0% until Super Admin sets them, so nothing is paid by accident.
+- Card payments without a saved-card token have no stable fingerprint from Razorpay, so the payment check covers UPI and
+  tokenised cards; phone/email/account checks still apply to every order.
+
+**Deploy:** `prisma migrate deploy` + generate + API restart; set `AFFILIATE_COOKIE_SECRET`; rebuild admin + customer.
+Then Super Admin sets category rates under Affiliate Commission Rates (all 0% until then).
+
+**Next:** browser click-through of `/affiliate` and the three admin screens; client confirmation of rates, hold-from
+(order vs delivery date) and TDS handling on payouts.
+
+## 2026-10-05 (latest +1) — Raunak (via agent) — Affiliate landing page, notifications, real product share
+
+**Did:**
+- **Public landing page** `/affiliate-program` (alias `/become-an-affiliate`), no sign-in needed: hero with "earn up to
+  X%", how it works (3 steps), live commission rate per category, benefits, when commission becomes yours, FAQ, terms,
+  closing CTA. "Join now" -> login -> `/affiliate` (apply form); signed-in affiliates get "Go to your dashboard".
+  Signed-out visitors to `/affiliate` are now sent here instead of to login. Linked from the desktop footer.
+- **`GET /storefront/affiliate/program`** (public, new): rules + rates. Only lists categories that are active, have
+  products of their own and earn > 0%, so the page never advertises a rate nothing pays.
+- **Notifications** to the affiliate's storefront inbox (+ push when FCM is configured) on approve, reject (with reason),
+  suspend, reactivate and payout. New `NotificationsService.notifyCustomerAccount()` - best-effort, never throws.
+- **Product page Share button** was a stub (only showed "copied"). It now shares/copies the real link; for an approved
+  affiliate it is their own `?aff=CODE` link (Amazon SiteStripe-style).
+
+**Contract changes:** `GET /storefront/affiliate/program` (new, public). No migration.
+
+**Verified:** `e2e-affiliate-flow.py` ALL PASSED on a fresh DB (new checks: public program data incl. inherited rates,
+approval/rejection/payout notifications). `jest src/affiliates src/notifications` 44/44; customer `tsc`, `vitest` 30/30,
+`vite build` OK. Not click-tested in a browser.
+
+## 2026-10-05 (latest +2) — Raunak (via agent) — Affiliate landing page redesigned (Amazon Associates layout, Desi Tokri look)
+
+**Did:** the affiliate-program page rebuilt as a standalone microsite (now OUTSIDE the store shell, like Amazon's program
+site): slim sticky header (logo + "Affiliates", How it works / Commission / Calculator / FAQ anchors, Sign in, Sign up),
+hero "Recommend real desi food. Earn on every tokri." + "Share karo, kamao." with an illustrated tokri carrying the top
+live rates, Sign up -> Recommend -> Earn cards, live rate band, earnings calculator (category rate x monthly sales,
+labelled an estimate), "who it's for" cards, click-to-payout steps, FAQ, repeated CTA, mini footer. Emerald + haldi +
+kesar on kraft. No testimonials on purpose (none exist yet - add real ones when the client has them). Checked with
+headless-Edge screenshots at 1366 and 500 px against the e2e API; no overflow. Contract changes: none.
+
+## 2026-10-05 (latest +3) — Raunak (via agent) — Affiliate landing hero restyled to the client's reference
+
+**Did:** hero of the affiliate-program page now follows the supplied grocery-hero reference: off-white left with a
+two-line eyebrow, very large headline "Share Desi Food, Earn With Every Tokri" (Tokri in green), yellow pill CTA, and a
+social-proof pill; right side a slanted emerald panel with a giant outlined vertical "TOKRI", the existing
+`/images/snacks-basket.jpg` in an arched frame, and three floating badge cards. Deliberately NOT copied from the reference:
+the review score / stock avatars - the badges show live data (top rate, tracking days, ₹0 to join) and the proof pill
+shows the real active-affiliate count only once it is 10+. The SVG tokri illustration was removed. Screenshot-checked at
+1366 and 500 px. Contract changes: none.
+
+## 2026-10-05 (latest +4) — Raunak (via agent) — Legal consent on sign-in, Super Admin-managed Conditions/Privacy, single affiliate sign-in
+
+**Did:**
+- **Affiliate page:** one "Join / Sign in" button instead of "Sign in" + "Sign up" - mobile OTP login already signs existing
+  users in and creates new accounts, so both buttons went to the same screen. "Already an affiliate? Sign in" removed.
+- **"By continuing, you agree to Desi Tokri's Conditions of Use and Privacy Notice."** under the customer login, the
+  retailer (Store Partner) login and the retailer registration form (`components/LegalConsent.tsx`), linking to the
+  audience's own documents.
+- **Storefront legal pages** `/legal/:audience/:doc` (customer|retailer x conditions-of-use|privacy-notice; aliases
+  `/conditions-of-use`, `/privacy-notice`) render what Super Admin publishes in the existing **Terms & Privacy Policies**
+  screen (`LegalPolicy`, `GET /public/legal-policies/:audience/:type`; server default until one is saved). New "Legal"
+  section on both the customer and retailer profile menus.
+- **Security fix:** `GET|PUT /legal-policies` had no permission check - any signed-in staff member of any role could
+  rewrite the published Terms/Privacy. New keys `legalPolicies.view` / `legalPolicies.manage` (Super Admin only by
+  default); admin nav entry uses `legalPolicies.view` (was `users.view`); editor read-only without manage. Public routes now
+  400 on an unknown audience/type (was 500).
+
+**Contract changes:** new permissions `legalPolicies.view`, `legalPolicies.manage`; `PUT /legal-policies` now 403 for
+staff without it (verified: Super Admin 200, Branch Manager 403). No migration.
+
+**Other developer needs to know:** the built-in default CUSTOMER/RETAILER policy texts still say "SVV Balaji" - Super
+Admin should publish Desi Tokri versions before launch. If a non-Super-Admin role needs to edit policies, grant
+`legalPolicies.manage` from Roles & Permissions.
+
+**Verified:** live against the throwaway e2e API (save as SA -> served on the storefront page; BM refused); headless-Edge
+screenshots of customer login, retailer login, legal page and affiliate header. Backend tsc + `jest src/auth/permissions
+src/affiliates` 45/45; customer tsc, vitest 30/30, vite build; admin tsc + vite build.
+
+---
+
+### 2026-10-07 - Raunak (agent) - Affiliate program page: app-view layout
+
+- `svv-balaji-customer/src/pages/AffiliateProgramPage.tsx`: added an app view under 767px (the store's mobile breakpoint)
+  with tiers for small phones (<375px) and large phones/small tablets (480-767px). Hero carousel is now compact
+  (156px / 140px small / 184px large, was ~300px+ stacked). App bar with back button, step rows, swipe rail for
+  "who it's for", vertical payout timeline, and a sticky bottom "Join now" bar. All CSS is inside max-width media
+  queries, so desktop (>=768px) is visually unchanged. No API/contract changes.
+
+**Verified:** customer tsc; headless-Edge screenshots via CDP device emulation at 320/375/414/600/1280 with no
+horizontal overflow.

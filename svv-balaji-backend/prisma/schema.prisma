@@ -1702,6 +1702,9 @@ model Category {
 
   products Product[]
 
+  /// Affiliate commission % for this category, when Super Admin set one.
+  affiliateRate AffiliateCategoryRate?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2459,6 +2462,14 @@ model Order {
   couponRedemption    CouponRedemption?
   productReviews      ProductReview[]
 
+  /// Card / UPI / contact identifiers of the payment, read back from the
+  /// gateway after it was verified ("upi:name@bank", "token:...", "phone:...").
+  /// Only ever compared - the affiliate self-referral check matches a buyer's
+  /// payment against the affiliate's own past payments. Empty for COD/credit.
+  paymentFingerprints  String[]              @default([])
+  affiliateAttribution AffiliateAttribution?
+  affiliateCommissions AffiliateCommission[]
+
   @@index([channel])
   @@index([status])
   @@index([customerId])
@@ -2991,6 +3002,8 @@ model CustomerAccount {
   sessions         CustomerSession[]
   pushDevices      PushDevice[]
   appNotifications AppNotification[]
+  /// Set when this login applied to the affiliate program (one per account).
+  affiliate        Affiliate?
 
   @@index([status])
   @@index([channel])
@@ -3443,6 +3456,13 @@ model CheckoutSession {
   /// every NULL as distinct, so keyless requests never collide with each
   /// other.
   idempotencyKey String?
+
+  /// The affiliate click (from the HTTP-only aff_tracker cookie) that was live
+  /// when this checkout started. Captured here, not at confirm, because a
+  /// gateway webhook can place the order with no browser - and no cookie - in
+  /// the request. The order is attributed from this after it is placed.
+  affiliateClickId String?
+  affiliateClick   AffiliateClick? @relation(fields: [affiliateClickId], references: [id])
 
   reservations StockReservation[]
   payments     PaymentTransaction[]
@@ -5585,4 +5605,285 @@ model RefundWalletTransaction {
   @@index([orderId])
   @@index([returnRequestId])
   @@map("refund_wallet_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Affiliate marketing (added 5 Oct 2026)
+//
+// Commission is earned per ORDER ITEM, at the rate of the item's category,
+// because margins differ wildly between staples and masalas. Base =
+// (unit price x quantity) - the line's share of the coupon; GST, delivery fee
+// and coin redemptions are never commissioned. Every rupee an affiliate is owed
+// is an AffiliateCommission row; returns never edit the original amount, they
+// add an AffiliateCommissionAdjustment and bump refundedQuantity/Amount.
+// ---------------------------------------------------------------------------
+
+enum AffiliateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum AffiliatePayoutMethod {
+  UPI
+  BANK
+}
+
+/// PENDING = inside the hold window. APPROVED = matured, payable. PAID = in a
+/// payout. REFUNDED = every unit returned. CANCELLED = order cancelled.
+enum AffiliateCommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+/// ATTRIBUTED = commission rows written. FRAUD = self-referral, nothing paid.
+/// NO_COMMISSION = attributed but every line earned 0 (no rate configured).
+enum AffiliateAttributionStatus {
+  ATTRIBUTED
+  FRAUD
+  NO_COMMISSION
+}
+
+enum AffiliateAdjustmentKind {
+  RETURN
+  CANCELLATION
+}
+
+enum AffiliateHoldFrom {
+  ORDER_DATE
+  DELIVERY_DATE
+}
+
+/// Singleton (id = "default"), edited by Super Admin.
+model AffiliateSettings {
+  id                 String            @id @default("default")
+  enabled            Boolean           @default(true)
+  /// Lifetime of the aff_tracker cookie, and how old a click may be at checkout.
+  cookieDays         Int               @default(30)
+  /// Days a commission stays PENDING (the grocery return window).
+  holdDays           Int               @default(7)
+  /// The hold counts from the order date (as specified) or from delivery.
+  /// Either way a commission never matures before the order is DELIVERED.
+  holdFrom           AffiliateHoldFrom @default(ORDER_DATE)
+  /// Used when neither the item's category nor any parent has a rate.
+  defaultRatePercent Decimal           @default(0) @db.Decimal(5, 2)
+  /// Retailer (B2B) orders earn commission only when this is on.
+  applyToB2B         Boolean           @default(false)
+  /// The payout list only shows affiliates owed at least this much.
+  minPayoutAmount    Decimal           @default(0) @db.Decimal(14, 2)
+  termsText          String?
+  updatedById        String?
+  updatedAt          DateTime          @updatedAt
+
+  @@map("affiliate_settings")
+}
+
+/// Category-level commission %. A sub-category without a row inherits its parent's.
+model AffiliateCategoryRate {
+  id          String   @id @default(uuid())
+  categoryId  String   @unique
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  ratePercent Decimal  @db.Decimal(5, 2)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("affiliate_category_rates")
+}
+
+model Affiliate {
+  id     String          @id @default(uuid())
+  /// Goes in the link: ?aff=CODE. Upper-case letters and digits.
+  code   String          @unique
+  status AffiliateStatus @default(PENDING)
+
+  /// The storefront login that applied. The affiliate dashboard is this login.
+  customerAccountId String          @unique
+  customerAccount   CustomerAccount @relation(fields: [customerAccountId], references: [id])
+  /// Their own shopper record, when they have one - buying through your own
+  /// link is the most direct self-referral.
+  customerId        String?
+
+  fullName      String
+  phone         String
+  email         String?
+  /// Website / social handles they will promote on.
+  promotionUrl  String?
+  audienceSize  String?
+  promotionPlan String?
+  pan           String?
+
+  payoutMethod        AffiliatePayoutMethod @default(UPI)
+  payoutUpiId         String?
+  payoutAccountName   String?
+  payoutAccountNumber String?
+  payoutIfsc          String?
+  payoutBankName      String?
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  suspendedReason String?
+
+  clicks       AffiliateClick[]
+  attributions AffiliateAttribution[]
+  commissions  AffiliateCommission[]
+  adjustments  AffiliateCommissionAdjustment[]
+  payouts      AffiliatePayout[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("affiliates")
+}
+
+/// One visit through an affiliate link. The cookie holds this row's id, signed.
+model AffiliateClick {
+  id          String    @id @default(uuid())
+  affiliateId String
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
+  /// sha256 of the IP - enough to de-duplicate refreshes, not to identify anyone.
+  ipHash      String?
+  userAgent   String?
+  landingPath String?
+  referrer    String?
+  createdAt   DateTime  @default(now())
+
+  checkoutSessions CheckoutSession[]
+  attributions     AffiliateAttribution[]
+
+  @@index([affiliateId, createdAt])
+  @@map("affiliate_clicks")
+}
+
+/// The decision taken once per order that arrived with a live affiliate click.
+model AffiliateAttribution {
+  id              String                     @id @default(uuid())
+  orderId         String                     @unique
+  order           Order                      @relation(fields: [orderId], references: [id])
+  affiliateId     String
+  affiliate       Affiliate                  @relation(fields: [affiliateId], references: [id])
+  clickId         String?
+  click           AffiliateClick?            @relation(fields: [clickId], references: [id])
+  status          AffiliateAttributionStatus
+  /// e.g. SAME_CUSTOMER, PHONE_MATCH, EMAIL_MATCH, PAYMENT_MATCH - why it is FRAUD.
+  fraudReasons    String[]                   @default([])
+  fraudDetail     String?
+  /// Sum of commission bases / commission at the time of the order.
+  baseTotal       Decimal                    @default(0) @db.Decimal(14, 2)
+  commissionTotal Decimal                    @default(0) @db.Decimal(14, 2)
+  createdAt       DateTime                   @default(now())
+
+  @@index([affiliateId, createdAt])
+  @@index([status])
+  @@map("affiliate_attributions")
+}
+
+/// The commission ledger: one row per order item.
+model AffiliateCommission {
+  id            String    @id @default(uuid())
+  affiliateId   String
+  affiliate     Affiliate @relation(fields: [affiliateId], references: [id])
+  attributionId String
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id])
+  orderItemId   String    @unique
+  productId     String
+  productName   String
+  categoryId    String?
+  categoryName  String?
+
+  quantity         Int
+  unitPrice        Decimal @db.Decimal(14, 2)
+  /// unitPrice x quantity, before GST.
+  grossAmount      Decimal @db.Decimal(14, 2)
+  /// This line's share of the order coupon.
+  couponShare      Decimal @db.Decimal(14, 2)
+  /// grossAmount - couponShare: what the rate is applied to.
+  baseAmount       Decimal @db.Decimal(14, 2)
+  ratePercent      Decimal @db.Decimal(5, 2)
+  /// CATEGORY / PARENT_CATEGORY / DEFAULT - where the rate came from.
+  rateSource       String
+  commissionAmount Decimal @db.Decimal(14, 2)
+
+  /// Units returned so far, and the commission taken back for them.
+  refundedQuantity Int     @default(0)
+  refundedAmount   Decimal @default(0) @db.Decimal(14, 2)
+
+  status      AffiliateCommissionStatus @default(PENDING)
+  /// Order date + hold days. Matures at this date once the order is delivered.
+  releaseDate DateTime
+  approvedAt  DateTime?
+  payoutId    String?
+  payout      AffiliatePayout?          @relation(fields: [payoutId], references: [id])
+  paidAt      DateTime?
+  statusNote  String?
+
+  adjustments AffiliateCommissionAdjustment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([affiliateId, status])
+  @@index([status, releaseDate])
+  @@index([orderId])
+  @@map("affiliate_commissions")
+}
+
+/// Commission taken back. When the commission was already PAID, it is a
+/// clawback: deducted from the affiliate's next payout (recoveredInPayoutId).
+model AffiliateCommissionAdjustment {
+  id                  String                  @id @default(uuid())
+  commissionId        String
+  commission          AffiliateCommission     @relation(fields: [commissionId], references: [id])
+  affiliateId         String
+  affiliate           Affiliate               @relation(fields: [affiliateId], references: [id])
+  kind                AffiliateAdjustmentKind
+  quantity            Int
+  /// Positive: what the affiliate loses.
+  amount              Decimal                 @db.Decimal(14, 2)
+  /// The OrderReturn row that triggered it - unique, so a return is deducted once.
+  orderReturnId       String?                 @unique
+  clawback            Boolean                 @default(false)
+  recoveredInPayoutId String?
+  recoveredInPayout   AffiliatePayout?        @relation("PayoutRecoveredClawbacks", fields: [recoveredInPayoutId], references: [id])
+  note                String?
+  createdAt           DateTime                @default(now())
+
+  @@index([affiliateId, clawback])
+  @@map("affiliate_commission_adjustments")
+}
+
+/// A manual payout made by Super Admin (UPI / bank) outside the system.
+model AffiliatePayout {
+  id              String                @id @default(uuid())
+  /// AFP-YYYYMMDD-NNN
+  payoutNumber    String                @unique
+  affiliateId     String
+  affiliate       Affiliate             @relation(fields: [affiliateId], references: [id])
+  /// Matured commission included, before clawbacks.
+  grossAmount     Decimal               @db.Decimal(14, 2)
+  clawbackAmount  Decimal               @default(0) @db.Decimal(14, 2)
+  /// What was actually sent: gross - clawbacks.
+  netAmount       Decimal               @db.Decimal(14, 2)
+  commissionCount Int
+  method          AffiliatePayoutMethod
+  /// Snapshot of where it went (UPI id / masked account).
+  paidTo          String
+  /// The UTR / UPI transaction reference.
+  reference       String
+  note            String?
+  paidById        String
+  paidAt          DateTime              @default(now())
+
+  commissions        AffiliateCommission[]
+  recoveredClawbacks AffiliateCommissionAdjustment[] @relation("PayoutRecoveredClawbacks")
+
+  @@index([affiliateId, paidAt])
+  @@map("affiliate_payouts")
 }

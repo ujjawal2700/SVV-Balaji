@@ -10,6 +10,7 @@ import {
   ShopOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { useCan } from '@shared/auth/useCan';
 import {
   App as AntApp,
   Badge,
@@ -50,6 +51,7 @@ interface LegalPolicy {
 
 export function LegalPoliciesPage() {
   const { message } = AntApp.useApp();
+  const canManage = useCan('LEGAL_POLICIES_MANAGE');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [policies, setPolicies] = useState<LegalPolicy[]>([]);
@@ -214,7 +216,7 @@ export function LegalPoliciesPage() {
         {loading ? (
           <Skeleton active paragraph={{ rows: 10 }} />
         ) : (
-          <Form form={form} layout="vertical" onFinish={handleSave} style={{ marginTop: 20 }}>
+          <Form form={form} layout="vertical" onFinish={handleSave} style={{ marginTop: 20 }} disabled={!canManage}>
             <Row gutter={16} align="middle">
               <Col xs={24} md={12}>
                 <Form.Item
@@ -295,9 +297,11 @@ export function LegalPoliciesPage() {
                   </Text>
                 ) : null}
               </Space>
-              <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving} size="large">
-                Save Policy
-              </Button>
+              {canManage ? (
+                <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving} size="large">
+                  Save Policy
+                </Button>
+              ) : null}
             </div>
           </Form>
         )}

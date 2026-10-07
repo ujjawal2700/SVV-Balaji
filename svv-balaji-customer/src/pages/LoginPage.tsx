@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { LegalConsent } from '../components/LegalConsent';
 
 const OTP_LENGTH = 6;
 
@@ -344,6 +345,8 @@ export function LoginPage() {
               </Typography.Text>
             </div>
           )}
+
+          <LegalConsent audience={loginRole} />
 
         </div>
       </div>

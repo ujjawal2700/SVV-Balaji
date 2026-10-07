@@ -30,6 +30,9 @@ import { Badge, Button, Carousel, Collapse, Divider, Input, InputNumber, Spin, S
 import type { StorefrontPriceTier, StorefrontVariant } from '@shared/api/types';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { affiliateApi } from '../api/affiliate';
+import { buildAffiliateLink } from '../utils/affiliateLink';
 import { useToggleWishlist, useWishlist } from '../hooks/useWishlist';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
@@ -88,6 +91,34 @@ export function ProductDetailPage() {
       { productId: detail.id, saved: wishlisted },
       { onSuccess: () => message.success(wishlisted ? 'Removed from wishlist' : 'Saved to wishlist') },
     );
+  };
+
+  // An approved affiliate sharing a product shares THEIR link (?aff=CODE), Amazon SiteStripe-style.
+  const affiliate = useQuery({
+    queryKey: ['storefront', 'affiliate', 'me'],
+    queryFn: affiliateApi.me,
+    enabled: isLoggedIn,
+    staleTime: 5 * 60_000,
+  });
+  const affiliateCode = affiliate.data?.affiliate?.status === 'APPROVED' ? affiliate.data.affiliate.code : null;
+  const handleShare = async () => {
+    const plain = window.location.href.split('#')[0];
+    const url = (affiliateCode && buildAffiliateLink(plain, affiliateCode)) || plain;
+    const done = affiliateCode ? 'Your affiliate link copied - you earn on what people buy through it' : 'Product link copied';
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: detail?.name ?? 'Desi Tokri', url });
+        return;
+      } catch {
+        // cancelled or unsupported - fall back to copying
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      message.success(done);
+    } catch {
+      message.info(url);
+    }
   };
 
 
@@ -559,7 +590,7 @@ export function ProductDetailPage() {
             boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
             cursor: 'pointer',
           }}
-          onClick={() => message.info('Product link copied to clipboard')}
+          onClick={() => void handleShare()}
         >
           <ShareAltOutlined style={{ fontSize: 18, color: '#878787' }} />
         </button>

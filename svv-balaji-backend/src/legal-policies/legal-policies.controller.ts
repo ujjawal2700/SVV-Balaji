@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseEnumPipe, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PolicyAudience, PolicyType } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -18,15 +19,15 @@ export class LegalPoliciesController {
   @Get('public/legal-policies/:audience/:type')
   @ApiOperation({ summary: 'Get active legal policy (Public)' })
   getPublicPolicy(
-    @Param('audience') audience: PolicyAudience,
-    @Param('type') type: PolicyType,
+    @Param('audience', new ParseEnumPipe(PolicyAudience)) audience: PolicyAudience,
+    @Param('type', new ParseEnumPipe(PolicyType)) type: PolicyType,
   ) {
     return this.legalPoliciesService.getPublicPolicy(audience, type);
   }
 
   @Get('public/legal-policies/by-audience/:audience')
   @ApiOperation({ summary: 'Get privacy policy & terms for an audience (Public)' })
-  getPublicPoliciesByAudience(@Param('audience') audience: PolicyAudience) {
+  getPublicPoliciesByAudience(@Param('audience', new ParseEnumPipe(PolicyAudience)) audience: PolicyAudience) {
     return this.legalPoliciesService.getPublicPoliciesByAudience(audience);
   }
 
@@ -50,6 +51,7 @@ export class LegalPoliciesController {
   @Get('legal-policies')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission('legalPolicies.view')
   @ApiOperation({ summary: 'List all legal policies for admin' })
   getAllPoliciesAdmin() {
     return this.legalPoliciesService.getAllPoliciesAdmin();
@@ -58,7 +60,8 @@ export class LegalPoliciesController {
   @Put('legal-policies')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @ApiOperation({ summary: 'Create or update legal policy (Admin)' })
+  @RequirePermission('legalPolicies.manage')
+  @ApiOperation({ summary: 'Create or update legal policy (Admin) - served live to the storefront, retailer and rider apps' })
   upsertPolicy(@Body() dto: UpsertLegalPolicyDto, @CurrentUser() user: JwtPayload) {
     return this.legalPoliciesService.upsertPolicy(dto, user?.sub);
   }
