@@ -108,7 +108,66 @@ export interface RecordReturnResult {
   loyaltyPointsReversed: number;
 }
 
+export type CoinReason =
+  | 'LOYALTY_EARN' | 'LOYALTY_REVERSAL' | 'LOYALTY_EXPIRY' | 'LOYALTY_REDEMPTION' | 'LOYALTY_REDEMPTION_REFUND'
+  | 'REFERRAL_REFERRER_REWARD' | 'REFERRAL_REFEREE_REWARD' | 'REFERRAL_REDEMPTION' | 'REFERRAL_REDEMPTION_REFUND'
+  | 'MANUAL_ADJUSTMENT';
+
+export interface CoinLedgerQuery {
+  reason?: CoinReason;
+  source?: 'LOYALTY' | 'REFERRAL';
+  channel?: 'B2B' | 'B2C';
+  /** YYYY-MM-DD (IST), inclusive. */
+  from?: string;
+  to?: string;
+  search?: string;
+  customerId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CoinLedgerRow {
+  id: string;
+  createdAt: string;
+  amount: number;
+  reason: CoinReason;
+  reasonLabel: string;
+  source: 'LOYALTY' | 'REFERRAL';
+  note: string | null;
+  expiresAt: string | null;
+  remainingAmount: number | null;
+  customer: { id: string; name: string; customerCode: string; channel: 'B2B' | 'B2C'; phone: string };
+  order: { id: string; orderNumber: string; channel: 'B2B' | 'B2C' } | null;
+  performedBy: string | null;
+  referralText: string | null;
+}
+
+export interface CoinLedgerSummary {
+  issued: number;
+  redeemed: number;
+  reversed: number;
+  expired: number;
+  manualAdded: number;
+  manualRemoved: number;
+  outstanding: number;
+  customers: number;
+  transactions: number;
+  byReason: Array<{ reason: CoinReason; label: string; count: number; amount: number }>;
+}
+
 export const loyaltyApi = {
+  /** GET /loyalty/ledger - every coin movement across customers, with totals. */
+  async coinLedger(q: CoinLedgerQuery): Promise<{ data: CoinLedgerRow[]; meta: { total: number; page: number; limit: number }; summary: CoinLedgerSummary }> {
+    const response = await api.get('/loyalty/ledger', { params: q });
+    return response.data;
+  },
+
+  /** GET /loyalty/ledger/export - same filters, CSV file. */
+  async coinLedgerCsv(q: CoinLedgerQuery): Promise<Blob> {
+    const response = await api.get('/loyalty/ledger/export', { params: q, responseType: 'blob' });
+    return response.data as Blob;
+  },
+
   async getSettings(): Promise<LoyaltySettings> {
     const response = await api.get<LoyaltySettings>('/loyalty/settings');
     return response.data;

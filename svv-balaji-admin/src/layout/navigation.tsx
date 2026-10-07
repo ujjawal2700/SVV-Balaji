@@ -927,6 +927,18 @@ export const NAV_SECTIONS: NavSection[] = [
         zone: 'commerce',
       },
       {
+        key: 'coinLedger',
+        path: '/loyalty/ledger',
+        label: 'Coin & Points Ledger',
+        permission: 'LOYALTY_VIEW',
+        description:
+          'Every loyalty point and referral coin given, used, taken back or expired, across all customers - with the ' +
+          'order, the customer and the staff member behind each, totals and CSV export.',
+        endpoints: ['GET /loyalty/ledger', 'GET /loyalty/ledger/export'],
+        workstream: 'WS2.5',
+        zone: 'commerce',
+      },
+      {
         key: 'affiliates',
         path: '/affiliates',
         label: 'Affiliates',

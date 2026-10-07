@@ -3649,3 +3649,23 @@ home; customer `tsc` + `vite build`. Phones keep their layout (skeletons only wh
 **Verified:** admin `tsc` + `vite build`, backend `tsc`; `e2e-affiliate-flow.py` ALL PASSED; headless-Edge screenshot of
 the page for an affiliate with commissions, returns and two payouts. No API changes (uses existing detail /
 commissions?affiliateId / attributions?affiliateId / payouts?affiliateId).
+
+## 2026-10-07 (later) — Super Admin Coin & Points Ledger (Raunak, via agent)
+
+There was no all-customer view of coin / point movements (only per customer in Referral Management / customer page,
+and per order). New:
+
+- **API (read-only), `loyalty.view`:** `GET /loyalty/ledger` - every `CoinTransaction` newest first with customer
+  (code, channel, phone), order, referral ("A referred B"), staff member, expiry; filters `reason`, `source`
+  (LOYALTY | REFERRAL), `channel`, `from` / `to` (YYYY-MM-DD IST, inclusive), `search` (customer name / code / phone or
+  order number), `customerId`; `page` / `limit` (max 100). `summary` = issued (loyalty earned + referral rewards), used
+  at checkout (net of cancellation give-backs), taken back (returns), expired, staff +/-, customers, entries, by-type
+  breakdown - same filters except type; `outstanding` = what customers of the channel hold now.
+  `GET /loyalty/ledger/export` = same filters as CSV (up to 20,000 rows). Bad filter values -> 400.
+  `src/loyalty/coin-ledger.service.ts`.
+- **Admin page** `/loyalty/ledger` "Coin & Points Ledger" (menu: Referrals, Affiliates & Loyalty, after Loyalty
+  Rewards): totals cards, filters, table linking customer and order pages, by-type breakdown, Export CSV.
+
+**Verified:** new `e2e-coin-ledger-flow.py` (run after `e2e-loyalty-flow.py` on the same fresh DB) ALL PASSED - paging
+covers every row, summary equals the sum of rows, every filter, CSV line count, 400s, Branch Manager 200 / Logistics
+403; backend + admin tsc, admin build; screenshot of the page. No migration.

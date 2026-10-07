@@ -16,7 +16,9 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**7 Oct (latest) — Storefront loading states.** Pages show skeleton placeholders while loading, the desktop footer no longer jumps up under the header, and signed-in users no longer see a guest view (or retailers consumer prices) for a moment while their session restores. UI only; see `DEV_LOG.md` 2026-10-07.
+**7 Oct (latest) — Coin & Points Ledger.** Super Admin page `/loyalty/ledger`: every loyalty point and referral coin given, used, taken back, expired or adjusted by staff, across all customers, with totals, filters and CSV export. Read-only API `GET /loyalty/ledger` (+ `/export`). See `DEV_LOG.md` 2026-10-07.
+
+**7 Oct — Storefront loading states.** Pages show skeleton placeholders while loading, the desktop footer no longer jumps up under the header, and signed-in users no longer see a guest view (or retailers consumer prices) for a moment while their session restores. UI only; see `DEV_LOG.md` 2026-10-07.
 
 **7 Oct — Storefront desktop / tablet layouts.** Customer + retailer pages now have proper desktop and mid-size layouts (breadcrumb + title header, header-width container, two-column order details, card grids, sticky cart / checkout summaries) and the header no longer overflows at 768-1100px. Phones unchanged. UI only; see `DEV_LOG.md` 2026-10-07.
 

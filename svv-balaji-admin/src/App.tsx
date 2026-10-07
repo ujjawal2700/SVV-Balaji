@@ -299,6 +299,7 @@ const ReferralsPage = lazy(() =>
 const AffiliatesPage = lazy(() => import('./pages/affiliates/AffiliatesPage').then((m) => ({ default: m.AffiliatesPage })));
 const AffiliateSettingsPage = lazy(() => import('./pages/affiliates/AffiliateSettingsPage').then((m) => ({ default: m.AffiliateSettingsPage })));
 const AffiliatePayoutsPage = lazy(() => import('./pages/affiliates/AffiliatePayoutsPage').then((m) => ({ default: m.AffiliatePayoutsPage })));
+const CoinLedgerPage = lazy(() => import('./pages/loyalty/CoinLedgerPage').then((m) => ({ default: m.CoinLedgerPage })));
 const AffiliateDetailPage = lazy(() => import('./pages/affiliates/AffiliateDetailPage').then((m) => ({ default: m.AffiliateDetailPage })));
 const ProfilePage = lazy(() =>
   import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
@@ -401,6 +402,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/settings/roles': <RolesPermissionsPage />,
   '/settings/referrals': <ReferralSettingsPage />,
   '/settings/loyalty': <LoyaltySettingsPage />,
+  '/loyalty/ledger': <CoinLedgerPage />,
   '/settings/support': <SupportSettingsPage />,
   '/settings/checkout': <CheckoutSettingsPage />,
   '/settings/gst': <GstSettingsPage />,

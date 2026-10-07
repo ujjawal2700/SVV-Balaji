@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { LoyaltyEligibility } from '@prisma/client';
+import { CoinSource, CoinTransactionReason, LoyaltyEligibility } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
@@ -14,13 +14,59 @@ import { SalesChannel } from '@prisma/client';
 import { EstimateLoyaltyDto, UpdateLoyaltySettingsDto } from './dto/loyalty.dto';
 import { LoyaltyService } from './loyalty.service';
 
+import { CoinLedgerService, type CoinLedgerFilters } from './coin-ledger.service';
 /** Staff side: configure the program and audit what it did. */
 @ApiTags('loyalty')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('loyalty')
 export class LoyaltyAdminController {
-  constructor(private readonly service: LoyaltyService) {}
+  constructor(
+    private readonly service: LoyaltyService,
+    private readonly ledger: CoinLedgerService,
+  ) {}
+
+  /** Query string -> validated ledger filters (bad values are a 400, not silently ignored). */
+  private ledgerFilters(q: Record<string, string | undefined>): CoinLedgerFilters {
+    const pick = <T extends string>(v: string | undefined, allowed: readonly T[], name: string): T | undefined => {
+      if (!v) return undefined;
+      if (!(allowed as readonly string[]).includes(v)) throw new BadRequestException(`Unknown ${name} "${v}"`);
+      return v as T;
+    };
+    return {
+      reason: pick(q.reason, Object.values(CoinTransactionReason), 'reason'),
+      source: pick(q.source, Object.values(CoinSource), 'source'),
+      channel: pick(q.channel, Object.values(SalesChannel), 'channel'),
+      from: q.from || undefined,
+      to: q.to || undefined,
+      search: q.search || undefined,
+      customerId: q.customerId || undefined,
+    };
+  }
+
+  @Get('ledger')
+  @RequirePermission('loyalty.view')
+  @ApiOperation({
+    summary: 'Every coin / point movement across all customers, newest first, with totals',
+    description:
+      'Filters: reason, source (LOYALTY | REFERRAL), channel (B2B | B2C), from / to (YYYY-MM-DD, IST, inclusive), search ' +
+      '(customer name, code, phone or order number), customerId. Paged with page / limit (max 100). `summary` totals use ' +
+      'the same filters except reason; `outstanding` is the current balance held by customers of the channel.',
+  })
+  coinLedger(@Query() q: Record<string, string | undefined>) {
+    const page = Math.max(1, Number(q.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 50));
+    return this.ledger.list(this.ledgerFilters(q), page, limit);
+  }
+
+  @Get('ledger/export')
+  @RequirePermission('loyalty.view')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="coin-ledger.csv"')
+  @ApiOperation({ summary: 'The coin ledger for the same filters as CSV (up to 20,000 rows)' })
+  coinLedgerCsv(@Query() q: Record<string, string | undefined>) {
+    return this.ledger.csv(this.ledgerFilters(q));
+  }
 
   @Get('settings')
   @RequirePermission('loyalty.view')
