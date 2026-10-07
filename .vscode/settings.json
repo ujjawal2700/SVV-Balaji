@@ -3,8 +3,10 @@
   "typescript.tsserver.experimental.enableProjectDiagnostics": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "typescript.preferences.importModuleSpecifier": "relative",
+  "typescript.tsdk": "node_modules/typescript/lib",
   "debug.openDebug": "neverOpen",
   "problems.autoReveal": true,
+  "terminal.integrated.hideOnStartup": "always",
   "terminal.integrated.defaultProfile.windows": "Command Prompt",
   "terminal.integrated.inheritEnv": false
 }

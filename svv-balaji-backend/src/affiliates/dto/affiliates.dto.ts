@@ -21,15 +21,42 @@ export class PayoutDetailsDto {
   @ApiPropertyOptional({ example: 'name@okaxis' })
   @IsOptional() @IsString() @Matches(/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/, { message: 'Enter a valid UPI id, e.g. name@okaxis' })
   payoutUpiId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) payoutAccountName?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^\d{9,18}$/, { message: 'Account number is 9-18 digits' }) payoutAccountNumber?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^[A-Z]{4}0[A-Z0-9]{6}$/, { message: 'Enter a valid IFSC, e.g. HDFC0001234' }) payoutIfsc?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) payoutBankName?: string;
+  @ApiPropertyOptional({ example: 'John Doe' })
+  @IsOptional() @IsString()
+  @MinLength(2, { message: 'Account holder name must be at least 2 characters' })
+  @MaxLength(100, { message: 'Account holder name cannot exceed 100 characters' })
+  @Matches(/^[a-zA-Z\s]+$/, { message: 'Account holder name must contain only letters and spaces' })
+  payoutAccountName?: string;
+  @ApiPropertyOptional({ example: '123456789012' })
+  @IsOptional() @IsString()
+  @Matches(/^\d{9,18}$/, { message: 'Account number must be 9 to 18 digits (numbers only)' })
+  payoutAccountNumber?: string;
+  @ApiPropertyOptional({ example: 'HDFC0001234' })
+  @IsOptional() @IsString()
+  @MinLength(11, { message: 'IFSC must be exactly 11 characters' })
+  @MaxLength(11, { message: 'IFSC must be exactly 11 characters' })
+  @Matches(/^[A-Z]{4}0[A-Z0-9]{6}$/, { message: 'Enter a valid 11-character IFSC code (e.g. HDFC0001234)' })
+  payoutIfsc?: string;
+  @ApiPropertyOptional({ example: 'HDFC Bank' })
+  @IsOptional() @IsString()
+  @MinLength(2, { message: 'Bank name must be at least 2 characters' })
+  @MaxLength(100, { message: 'Bank name cannot exceed 100 characters' })
+  @Matches(/^[^0-9]+$/, { message: 'Bank name cannot contain numbers' })
+  payoutBankName?: string;
 }
 
 export class ApplyAffiliateDto extends PayoutDetailsDto {
-  @ApiProperty() @IsString() @MinLength(2) @MaxLength(120) fullName!: string;
-  @ApiPropertyOptional() @IsOptional() @IsEmail() @MaxLength(160) email?: string;
+  @ApiProperty({ example: 'Priya Sharma' })
+  @IsString()
+  @MinLength(2, { message: 'Full name must be at least 2 characters' })
+  @MaxLength(100, { message: 'Full name cannot exceed 100 characters' })
+  @Matches(/^[a-zA-Z\s]+$/, { message: 'Full name must contain only letters and spaces' })
+  fullName!: string;
+  @ApiPropertyOptional({ example: 'priya@example.com' })
+  @IsOptional()
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(100, { message: 'Email cannot exceed 100 characters' })
+  email?: string;
   @ApiPropertyOptional({ description: 'Website, YouTube / Instagram handle, WhatsApp group...' })
   @IsOptional() @IsString() @MaxLength(300) promotionUrl?: string;
   @ApiPropertyOptional({ example: '10k-50k' }) @IsOptional() @IsString() @MaxLength(60) audienceSize?: string;
@@ -39,7 +66,7 @@ export class ApplyAffiliateDto extends PayoutDetailsDto {
 }
 
 export class UpdateMyAffiliateDto extends PayoutDetailsDto {
-  @ApiPropertyOptional() @IsOptional() @IsEmail() @MaxLength(160) email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEmail({}, { message: 'Enter a valid email address' }) @MaxLength(100, { message: 'Email cannot exceed 100 characters' }) email?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) promotionUrl?: string;
 }
 

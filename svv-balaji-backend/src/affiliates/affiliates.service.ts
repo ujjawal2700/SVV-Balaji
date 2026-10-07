@@ -127,11 +127,28 @@ export class AffiliatesService {
 
   private assertPayout(
     method: AffiliatePayoutMethod,
-    d: { [K in 'payoutUpiId' | 'payoutAccountName' | 'payoutAccountNumber' | 'payoutIfsc']?: string | null },
+    d: { [K in 'payoutUpiId' | 'payoutAccountName' | 'payoutAccountNumber' | 'payoutIfsc' | 'payoutBankName']?: string | null },
   ) {
     if (method === AffiliatePayoutMethod.UPI && !d.payoutUpiId) throw new BadRequestException('Enter the UPI id your commission should be paid to');
-    if (method === AffiliatePayoutMethod.BANK && (!d.payoutAccountName || !d.payoutAccountNumber || !d.payoutIfsc)) {
-      throw new BadRequestException('Enter the account holder name, account number and IFSC for bank payouts');
+    if (method === AffiliatePayoutMethod.BANK) {
+      if (!d.payoutAccountName || !d.payoutAccountNumber || !d.payoutIfsc || !d.payoutBankName) {
+        throw new BadRequestException('Enter the account holder name, account number, IFSC and bank name for bank payouts');
+      }
+      if (!/^[a-zA-Z\s]+$/.test(d.payoutAccountName.trim())) {
+        throw new BadRequestException('Account holder name must contain only letters and spaces');
+      }
+      if (d.payoutAccountName.trim().length < 2 || d.payoutAccountName.trim().length > 100) {
+        throw new BadRequestException('Account holder name must be between 2 and 100 characters');
+      }
+      if (!/^\d{9,18}$/.test(d.payoutAccountNumber.trim())) {
+        throw new BadRequestException('Account number must be 9 to 18 digits (numbers only)');
+      }
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(d.payoutIfsc.trim().toUpperCase())) {
+        throw new BadRequestException('Enter a valid 11-character IFSC code (e.g. HDFC0001234)');
+      }
+      if (/\d/.test(d.payoutBankName) || d.payoutBankName.trim().length < 2 || d.payoutBankName.trim().length > 100) {
+        throw new BadRequestException('Bank name cannot contain numbers and must be between 2 and 100 characters');
+      }
     }
   }
 
