@@ -142,6 +142,21 @@ const DAY = 24 * 60 * 60_000;
 export const releaseDateFor = (orderDate: Date, holdDays: number) => new Date(orderDate.getTime() + holdDays * DAY);
 
 /**
+ * How long one line's commission is held. A product with its own return
+ * window (frozen on the order line) holds for exactly that window, counted
+ * from delivery - the commission matures when the customer can no longer
+ * return it. Products without one use the program's hold (Affiliate Settings).
+ * A 0-day window (not returnable) matures as soon as it is delivered.
+ */
+export function holdFor(
+  lineReturnWindowDays: number | null | undefined,
+  s: { holdDays: number; holdFrom: 'ORDER_DATE' | 'DELIVERY_DATE' },
+): { holdDays: number; holdFrom: 'ORDER_DATE' | 'DELIVERY_DATE' } {
+  if (lineReturnWindowDays === null || lineReturnWindowDays === undefined) return { holdDays: s.holdDays, holdFrom: s.holdFrom };
+  return { holdDays: lineReturnWindowDays, holdFrom: 'DELIVERY_DATE' };
+}
+
+/**
  * May a PENDING commission become payable? Only once the order is DELIVERED
  * (nothing can be returned before then, so "past the return window" means
  * nothing earlier), its release date has passed, and - when the hold counts

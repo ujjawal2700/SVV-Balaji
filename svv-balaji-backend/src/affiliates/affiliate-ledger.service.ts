@@ -5,7 +5,7 @@ import {
 import { createPaymentGateway, type PaymentGateway } from '../checkout/payment/payment-gateway';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  canMature, commissionBases, commissionFor, deductionFor, releaseDateFor, resolveRate, round2, selfReferralReasons, type CategoryNode,
+  canMature, commissionBases, commissionFor, deductionFor, holdFor, releaseDateFor, resolveRate, round2, selfReferralReasons, type CategoryNode,
 } from './affiliate.logic';
 import { AffiliateSettingsService } from './affiliate-settings.service';
 
@@ -104,7 +104,7 @@ export class AffiliateLedgerService implements OnModuleInit, OnModuleDestroy {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: { select: { id: true, productId: true, quantity: true, unitPrice: true, nameSnapshot: true, returns: { select: { quantity: true } } } },
+        items: { select: { id: true, productId: true, quantity: true, unitPrice: true, nameSnapshot: true, returnWindowDays: true, returns: { select: { quantity: true } } } },
         customer: { select: { id: true, phone: true, email: true, account: { select: { phone: true, email: true } } } },
         checkoutSession: { select: { affiliateClickId: true, affiliateClick: { select: { id: true, createdAt: true, affiliateId: true } } } },
       },
@@ -184,7 +184,12 @@ export class AffiliateLedgerService implements OnModuleInit, OnModuleDestroy {
       order.items.map((i) => ({ key: i.id, quantity: i.quantity, unitPrice: unitPriceOf(i.productId, Number(i.unitPrice)) })),
       quote?.totals.couponDiscount ?? 0,
     );
-    const releaseDate = releaseDateFor(order.orderDate, s.holdDays);
+    // Per line: the product's return window from delivery, or the program hold. Until the
+    // order is delivered the date counts from the order date (a lower bound) - see onOrderDelivered.
+    const releaseDateOf = (lineDays: number | null) => {
+      const h = holdFor(lineDays, s);
+      return releaseDateFor(h.holdFrom === 'DELIVERY_DATE' && order.deliveredAt ? order.deliveredAt : order.orderDate, h.holdDays);
+    };
 
     const rows = order.items.map((item, idx) => {
       const product = productById.get(item.productId);
@@ -216,7 +221,7 @@ export class AffiliateLedgerService implements OnModuleInit, OnModuleDestroy {
         refundedQuantity: back.quantity,
         refundedAmount: back.amount,
         status: back.fullyRefunded ? AffiliateCommissionStatus.REFUNDED : AffiliateCommissionStatus.PENDING,
-        releaseDate,
+        releaseDate: releaseDateOf(item.returnWindowDays),
       };
     });
     const earning = rows.filter((r) => r.commissionAmount > 0);
@@ -252,6 +257,30 @@ export class AffiliateLedgerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ================================================================ order lifecycle
+
+  /**
+   * The order was delivered: pending commissions whose hold counts from
+   * delivery get their real release date (delivery + the line's return
+   * window), so the affiliate sees when it will actually be paid. Best-effort.
+   */
+  async onOrderDelivered(orderId: string, deliveredAt: Date) {
+    const s = await this.settings.effective();
+    const pending = await this.prisma.affiliateCommission.findMany({
+      where: { orderId, status: AffiliateCommissionStatus.PENDING },
+      select: { id: true, orderItemId: true, releaseDate: true },
+    });
+    if (!pending.length) return;
+    const lines = await this.prisma.orderItem.findMany({ where: { id: { in: pending.map((p) => p.orderItemId) } }, select: { id: true, returnWindowDays: true } });
+    const days = new Map(lines.map((l) => [l.id, l.returnWindowDays]));
+    for (const c of pending) {
+      const h = holdFor(days.get(c.orderItemId), s);
+      if (h.holdFrom !== 'DELIVERY_DATE') continue;
+      const due = releaseDateFor(deliveredAt, h.holdDays);
+      if (due.getTime() !== c.releaseDate.getTime()) {
+        await this.prisma.affiliateCommission.update({ where: { id: c.id }, data: { releaseDate: due } });
+      }
+    }
+  }
 
   /** Cancelled before it shipped: nothing was earned. */
   async onOrderCancelled(tx: Tx, orderId: string) {
@@ -322,12 +351,14 @@ export class AffiliateLedgerService implements OnModuleInit, OnModuleDestroy {
       select: { orderItemId: true },
     });
     const openItems = new Set(open.map((o) => o.orderItemId));
+    const lines = await this.prisma.orderItem.findMany({ where: { id: { in: due.map((d) => d.orderItemId) } }, select: { id: true, returnWindowDays: true } });
+    const lineDays = new Map(lines.map((l) => [l.id, l.returnWindowDays]));
 
     const cancelled = due.filter((d) => d.order.status === OrderStatus.CANCELLED).map((d) => d.id);
     const ready = due
       .filter((d) => canMature({
         now, releaseDate: d.releaseDate, orderStatus: d.order.status, deliveredAt: d.order.deliveredAt,
-        holdFrom: s.holdFrom, holdDays: s.holdDays, openReturn: openItems.has(d.orderItemId),
+        ...holdFor(lineDays.get(d.orderItemId), s), openReturn: openItems.has(d.orderItemId),
       }))
       .map((d) => d.id);
 

@@ -1,13 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, UnauthorizedException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   CustomerAccount,
@@ -47,6 +38,7 @@ import {
   customerRefreshSecret,
 } from './customer-token.config';
 import type { CustomerJwtPayload } from './strategies/customer-jwt.strategy';
+import { StaffAlertsService } from '../realtime/staff-alerts.service';
 
 /** Where a sign-in came from - stored on the session so a person can see and end their devices. */
 export interface SessionMeta {
@@ -127,6 +119,7 @@ export class StorefrontAuthService {
     private readonly jwtService: JwtService,
     private readonly sequence: SequenceService,
     private readonly referrals: ReferralService,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {
     warnIfMockMode(this.otpMode, this.logger);
   }
@@ -309,6 +302,13 @@ export class StorefrontAuthService {
       : await this.prisma.customerAccount.create({ data });
 
     this.logger.log(`Retailer registration submitted: ${account.businessName} (${maskPhone(phone)})`);
+    void this.staffAlerts?.notify({
+      type: 'RETAILER_SIGNUP',
+      title: 'New retailer registration',
+      body: `${account.businessName} is waiting for approval.`,
+      link: `/b2b-accounts/${account.id}`,
+      permission: 'customerAccounts.review',
+    });
 
     return this.sessionFor(account, meta, { touchLogin: true });
   }

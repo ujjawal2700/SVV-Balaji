@@ -1147,6 +1147,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         defaultRoles: [BM, ST],
       },
       {
+        key: 'orders.override',
+        label: 'Override order status',
+        description:
+          'Move an order to any status by hand, with a reason kept on its timeline. Skips the batch scan, rider, AWB and ' +
+          'doorstep OTP checks; stock, invoice and loyalty still move. Super Admin only by default.',
+        defaultRoles: [],
+      },
+      {
         key: 'orders.payment',
         label: 'Change order payment status',
         description: 'Records what has actually been received.',

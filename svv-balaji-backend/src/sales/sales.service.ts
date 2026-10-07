@@ -28,6 +28,7 @@ import {
 } from './dto/order.dto';
 import { listPage, type PageRequest } from '../common/pagination';
 import { AffiliateLedgerService } from '../affiliates/affiliate-ledger.service';
+import { LONG_TX } from '../common/tx-options';
 
 /** Forward-only order lifecycle. Anything not listed here is refused. */
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -40,6 +41,16 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   DELIVERED: [],
   CANCELLED: [],
 };
+
+/** The order of the fulfilment steps, for the staff status override. */
+const OVERRIDE_FLOW: OrderStatus[] = [
+  OrderStatus.PLACED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.ALLOCATED,
+  OrderStatus.PACKED,
+  OrderStatus.DISPATCHED,
+  OrderStatus.DELIVERED,
+];
 
 /**
  * WS1.5 - sales and order fulfilment, for both channels.
@@ -98,6 +109,11 @@ export class SalesService {
     }
 
     const orderDate = dto.orderDate ? new Date(dto.orderDate) : new Date();
+    // Each product's return window is frozen onto its line, like the price.
+    const windows = new Map(
+      (await this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, returnWindowDays: true } }))
+        .map((p) => [p.id, p.returnWindowDays]),
+    );
 
     // Price every line through the pricing engine, in this order's channel.
     // A B2C order physically cannot pick up a B2B rate: the channel is part of
@@ -124,6 +140,7 @@ export class SalesService {
           lineSubtotal,
           lineTax,
           lineTotal: round2(lineSubtotal + lineTax),
+          returnWindowDays: windows.get(item.productId) ?? null,
         };
       }),
     );
@@ -359,10 +376,36 @@ export class SalesService {
           orderBy: { createdAt: 'asc' },
           include: { actor: { select: { fullName: true } } },
         },
+        // The latest rider-app delivery for a local order: who it is offered to, or who has it.
+        deliveryTasks: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true, taskNumber: true, status: true, attempt: true, offerRound: true,
+            needsManualAssignment: true, autoDispatchPaused: true, assignedAt: true, pickedUpAt: true,
+            rider: { select: { id: true, fullName: true, phone: true } },
+            offers: {
+              where: { status: 'PENDING' },
+              select: { id: true, expiresAt: true, rider: { select: { fullName: true } } },
+            },
+          },
+        },
       },
     });
     if (!order) throw new NotFoundException('Order not found');
-    return order;
+    const now = new Date();
+    const [task] = order.deliveryTasks;
+    return {
+      ...order,
+      // Seconds left are worked out here, on the server clock, so a screen
+      // whose clock is off still counts down the real time.
+      deliveryTask: task
+        ? {
+            ...task,
+            offers: task.offers.map((o) => ({ ...o, secondsLeft: Math.max(0, Math.round((o.expiresAt.getTime() - now.getTime()) / 1000)) })),
+          }
+        : null,
+    };
   }
 
   private assertTransition(from: OrderStatus, to: OrderStatus) {
@@ -807,6 +850,13 @@ export class SalesService {
         await this.loyalty.creditForDeliveredOrder(order.id).catch((err) => {
           this.logger.warn(`Loyalty credit failed for delivered order ${order.orderNumber}, sweep will retry: ${err instanceof Error ? err.message : String(err)}`);
         });
+
+        // Affiliate commissions held for the product's return window now count from this delivery.
+        if (updated.deliveredAt) {
+          await this.affiliates?.onOrderDelivered(order.id, updated.deliveredAt).catch((err) => {
+            this.logger.warn(`Affiliate release date update failed for ${order.orderNumber}: ${err instanceof Error ? err.message : String(err)}`);
+          });
+        }
       }
 
       return updated;
@@ -1145,6 +1195,105 @@ export class SalesService {
         },
       });
     });
+  }
+
+  /**
+   * Staff override: move an order to any status by hand, with a reason.
+   *
+   * Forward runs each skipped step for real - allocation reserves batches,
+   * dispatch moves stock out and raises the tax invoice, delivery credits
+   * loyalty - so the ledger, traceability and rewards stay true. Only the
+   * storefront checks (batch scan, rider, AWB, doorstep OTP) are bypassed;
+   * that bypass is what the override is for, and the reason is kept on the
+   * order's timeline.
+   *
+   * Backward is allowed only before the goods leave: PACKED -> ALLOCATED
+   * (scans cleared, re-pack) and ALLOCATED/PACKED -> CONFIRMED (batch
+   * reservations released, allocate again). After dispatch stock has moved
+   * and an invoice exists - that is a return, not a status change.
+   *
+   * Delivery tasks are the caller's job (FulfillmentService), since the
+   * dispatch module depends on this one.
+   */
+  async overrideStatus(id: string, to: OrderStatus, reason: string, userId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id }, select: { status: true, orderNumber: true } });
+    if (!order) throw new NotFoundException('Order not found');
+    const from = order.status;
+    const why = reason.trim();
+    if (!why) throw new BadRequestException('A reason is required to override an order status');
+    if (from === to) throw new BadRequestException(`The order is already ${to}`);
+    if (from === OrderStatus.CANCELLED) throw new BadRequestException('A cancelled order cannot be reopened - place a new order');
+    if (from === OrderStatus.DRAFT || to === OrderStatus.DRAFT) {
+      throw new BadRequestException('Drafts are placed from the order screen, not by override');
+    }
+
+    if (to === OrderStatus.CANCELLED) {
+      const cancelled = await this.cancel(id, { reason: why });
+      await this.record(id, 'STATUS_OVERRIDE', userId, `${from} → CANCELLED: ${why}`);
+      return { order: cancelled, from, to, shortfalls: [] as unknown[] };
+    }
+
+    const fi = OVERRIDE_FLOW.indexOf(from);
+    const ti = OVERRIDE_FLOW.indexOf(to);
+    let shortfalls: unknown[] = [];
+    const passed: OrderStatus[] = [];
+
+    if (ti > fi) {
+      for (const step of OVERRIDE_FLOW.slice(fi + 1, ti + 1)) {
+        if (step === OrderStatus.CONFIRMED) await this.confirmCore(id);
+        else if (step === OrderStatus.ALLOCATED) shortfalls = (await this.allocateCore(id, userId)).shortfalls;
+        else {
+          if (step === OrderStatus.PACKED) {
+            await this.prisma.orderAllocation.updateMany({
+              where: { orderId: id, releasedAt: null, scannedAt: null },
+              data: { scannedAt: new Date(), scannedById: userId },
+            });
+          }
+          await this.advanceCore(id, step, userId);
+        }
+        passed.push(step);
+      }
+    } else {
+      const dispatchedAt = OVERRIDE_FLOW.indexOf(OrderStatus.DISPATCHED);
+      if (fi >= dispatchedAt) {
+        throw new BadRequestException(
+          `${order.orderNumber} is ${from}: the stock has left and the tax invoice is issued. Record a return instead of moving it back.`,
+        );
+      }
+      if (to !== OrderStatus.ALLOCATED && to !== OrderStatus.CONFIRMED) {
+        throw new BadRequestException('An order can only be moved back to Allocated (re-pack) or Confirmed (re-allocate)');
+      }
+      await this.prisma.$transaction(async (tx) => {
+        if (to === OrderStatus.CONFIRMED) {
+          const live = await tx.orderAllocation.findMany({ where: { orderId: id, releasedAt: null } });
+          for (const a of live) {
+            const row = await tx.finishedGoodsStock.findUnique({
+              where: { warehouseId_fgBatchId: { warehouseId: a.warehouseId, fgBatchId: a.fgBatchId } },
+            });
+            if (row) {
+              await tx.finishedGoodsStock.update({
+                where: { id: row.id },
+                data: { reservedQuantity: { decrement: Math.min(a.quantity, row.reservedQuantity) } },
+              });
+            }
+          }
+          await tx.orderAllocation.updateMany({
+            where: { orderId: id, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: `Status override to CONFIRMED: ${why}`.slice(0, 300) },
+          });
+        } else {
+          await tx.orderAllocation.updateMany({ where: { orderId: id, releasedAt: null }, data: { scannedAt: null, scannedById: null } });
+        }
+        // Whoever was taking it out is no longer: the order goes back to the floor.
+        await tx.order.update({ where: { id }, data: { status: to, riderName: null, riderPhone: null } });
+      }, LONG_TX);
+    }
+
+    // Timeline after the whole move, so listeners never see a half-way status.
+    for (const step of passed) await this.record(id, step, userId, 'By status override');
+    await this.record(id, 'STATUS_OVERRIDE', userId, `${from} → ${to}: ${why}`);
+    const updated = await this.prisma.order.findUniqueOrThrow({ where: { id } });
+    return { order: updated, from, to, shortfalls };
   }
 
   async setPaymentStatus(id: string, dto: UpdatePaymentStatusDto) {

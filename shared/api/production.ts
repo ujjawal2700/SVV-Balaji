@@ -33,6 +33,7 @@ const CLEARABLE_PRODUCT_FIELDS = [
   'brand',
   'packLabel',
   'packWeightKg',
+  'returnWindowDays',
   'mrp',
   'badge',
   'hsnCode',

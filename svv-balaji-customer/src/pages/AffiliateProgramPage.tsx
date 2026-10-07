@@ -1072,8 +1072,8 @@ export function AffiliateProgramPage() {
               <p>Commission records instantly in your affiliate dashboard under hold status.</p>
             </div>
             <div className="dta-pipe-col">
-              <h5>2 · {holdDays}-Day Hold</h5>
-              <p>Covers our return window{p?.holdFrom === 'DELIVERY_DATE' ? ' after delivery' : ''}. A returned item adjusts only its own line.</p>
+              <h5>2 · Return-Window Hold</h5>
+              <p>Each item is held until its product's return window closes (usually {holdDays} days). A returned item adjusts only its own line.</p>
             </div>
             <div className="dta-pipe-col">
               <h5>3 · Matured &amp; Approved</h5>
@@ -1200,7 +1200,7 @@ function faqs(p?: AffiliateProgramInfo): Array<[string, string]> {
     ],
     [
       'What happens if a customer returns an item?',
-      `Commissions are held for ${hold} days following order delivery to account for customer returns. If an item is returned, only that specific item's commission is adjusted.`,
+      `Each item's commission is held until that product's return window closes (usually ${hold} days after delivery; some products have a longer or shorter window). If an item is returned, only that specific item's commission is adjusted.`,
     ],
     [
       'When and how do I receive payouts?',

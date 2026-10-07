@@ -486,9 +486,12 @@ export class RidersService {
       },
       orderBy: { offeredAt: 'desc' },
     });
+    const now = Date.now();
     return offers.map((o) => ({
       offerId: o.id,
       expiresAt: o.expiresAt,
+      /** Server-clock seconds to the deadline. Phones' clocks drift; the app counts down from this, not from expiresAt. */
+      secondsLeft: Math.max(0, Math.round((o.expiresAt.getTime() - now) / 1000)),
       taskId: o.task.id,
       taskNumber: o.task.taskNumber,
       speed: o.task.speed,

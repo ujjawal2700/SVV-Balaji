@@ -311,8 +311,9 @@ try:
     check(all(x in types for x in ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED", "COD_COLLECTED", "DELIVERED"]),
           "the customer's order timeline has every rider step", types)
     notices = wait_for(lambda: (lambda x: x if "Order delivered" in x else None)(customer_notification_titles(O1)))
-    expected_notices = {"Order placed successfully", "Order accepted", "Order packed", "Rider assigned", "Rider picked up your order", "Out for delivery", "Your rider has arrived", "Order delivered"}
-    check(notices is not None and expected_notices.issubset(set(notices)), "customer inbox has every important order and rider update", notices)
+    # 7 Oct (client): only accepted, out for delivery and delivered are pushed - one each.
+    check(notices is not None and sorted(notices) == sorted(["Order accepted", "Out for delivery", "Order delivered"]),
+          "customer inbox: exactly accepted, out for delivery, delivered (no packed / rider / arrived noise)", notices)
     td = must("GET", f"/delivery/tasks/{T1['id']}")
     check(td["arrivedPickupVerified"] and td["arrivedDropVerified"], "both arrivals were location-verified")
 
@@ -350,8 +351,8 @@ try:
     check(s == 400 and "note" in json.dumps(bad).lower(), "'customer refused' needs a note", bad)
     must("POST", f"/rider/tasks/{T2['id']}/fail", {"reasonCode": "CUSTOMER_UNAVAILABLE", "note": "Door locked, phone off", **LOC_DROP}, tok=who["tok"])
     check(must("GET", f"/orders/{O2['id']}")["status"] == "DISPATCHED", "a failed delivery does NOT cancel the order")
-    failed_notice = wait_for(lambda: next((t for t in customer_notification_titles(O2) if t == "Delivery needs attention"), None))
-    check(failed_notice is not None, "customer is notified when delivery fails")
+    time.sleep(2)
+    check("Delivery needs attention" not in customer_notification_titles(O2), "a failed attempt sends no push (only accepted / out for delivery / delivered do)")
     s, bad = call("POST", f"/delivery/tasks/{T2['id']}/reattempt", {})
     check(s == 400, "cannot re-attempt before the goods are back", bad)
     must("POST", f"/rider/tasks/{T2['id']}/returned", LOC_OUT, tok=who["tok"])
@@ -382,8 +383,8 @@ try:
     check(e3 is not None and e3["amount"] == 10, "cancelled-after-accept pays the configured 10", e3)
     n = must("GET", "/rider/notifications", tok=who3["tok"])
     check(any(x["type"] == "TASK_CANCELLED" for x in n), "the rider was notified of the cancellation")
-    cancelled_notice = wait_for(lambda: next((t for t in customer_notification_titles(O3) if t == "Order cancelled"), None))
-    check(cancelled_notice is not None, "customer is notified when the order is cancelled")
+    time.sleep(2)
+    check("Order cancelled" not in customer_notification_titles(O3), "a cancellation sends no push (only accepted / out for delivery / delivered do)")
 
     # ------------------------------------------------------------------------
     step("8. Suspension")

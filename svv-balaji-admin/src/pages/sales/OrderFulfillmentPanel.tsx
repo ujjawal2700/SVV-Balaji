@@ -1,10 +1,13 @@
-import { Alert, App as AntApp, Button, Descriptions, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
-import { useState } from 'react';
+import { Alert, App as AntApp, Button, Card, Descriptions, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
 import { checkoutAdminApi, type PickPlanRow, type ScanResult } from '@shared/api/checkout';
 import { useFulfillmentAction, usePickPlan } from '@shared/hooks/useCheckoutAdmin';
 import { useRiders } from '@shared/hooks/useDelivery';
+import type { OrderDeliveryTask } from '@shared/api/types';
 import { Can } from '../../components/Can';
+import { liveTask } from './fulfilmentGuide';
 
 const { Text } = Typography;
 
@@ -20,6 +23,73 @@ interface OrderLite {
   etaMax?: string | null;
   distanceKm?: string | null;
   shipment?: { awb?: string | null; courier?: string | null; trackingUrl?: string | null } | null;
+  deliveryTask?: OrderDeliveryTask | null;
+}
+
+const TASK_LABEL: Record<string, { label: string; color: string }> = {
+  READY_FOR_PICKUP: { label: 'Waiting for a rider', color: 'gold' },
+  OFFERED: { label: 'Offered to riders', color: 'blue' },
+  ASSIGNED: { label: 'Rider coming to store', color: 'geekblue' },
+  AT_PICKUP: { label: 'Rider at store', color: 'purple' },
+  PICKED_UP: { label: 'Picked up', color: 'cyan' },
+  OUT_FOR_DELIVERY: { label: 'On the way', color: 'cyan' },
+  AT_DROP: { label: 'At customer', color: 'cyan' },
+  FAILED: { label: 'Failed - returning to store', color: 'red' },
+};
+
+/** Counts down from the server-measured seconds, so a wrong PC clock cannot show the wrong time left. */
+function SecondsLeft({ seconds }: { seconds: number }) {
+  const [left, setLeft] = useState(seconds);
+  useEffect(() => {
+    setLeft(seconds);
+    const t = setInterval(() => setLeft((x) => Math.max(0, x - 1)), 1000);
+    return () => clearInterval(t);
+  }, [seconds]);
+  return <Tag color={left <= 10 ? 'red' : 'orange'} style={{ marginInlineEnd: 0 }}>{left > 0 ? `${left}s left` : 'closing…'}</Tag>;
+}
+
+/** The rider-app side of a local delivery: who it is offered to, or who has it. */
+function DeliveryTaskCard({ task }: { task: OrderDeliveryTask | null }) {
+  if (!task) {
+    return <Alert type="info" showIcon message="Creating the delivery and looking for the nearest rider…" />;
+  }
+  const st = TASK_LABEL[task.status] ?? { label: task.status, color: 'default' };
+  return (
+    <Card
+      size="small"
+      style={{ borderRadius: 10 }}
+      title={
+        <Space size={8}>
+          <Text strong>Delivery {task.taskNumber}</Text>
+          <Tag color={st.color}>{st.label}</Tag>
+          {task.attempt > 1 ? <Tag>Attempt {task.attempt}</Tag> : null}
+        </Space>
+      }
+      extra={<Link to="/delivery-board">Delivery board</Link>}
+    >
+      {task.rider ? (
+        <Text>
+          Rider: <Text strong>{task.rider.fullName}</Text> ({task.rider.phone})
+        </Text>
+      ) : task.offers.length ? (
+        <Space direction="vertical" size={6} style={{ width: '100%' }}>
+          <Text type="secondary">Round {task.offerRound} - the first rider to accept gets it:</Text>
+          {task.offers.map((o) => (
+            <Space key={o.id} size={8}>
+              <Text>{o.rider.fullName}</Text>
+              <SecondsLeft seconds={o.secondsLeft} />
+            </Space>
+          ))}
+        </Space>
+      ) : task.autoDispatchPaused ? (
+        <Text type="warning">Auto-offer is paused - assign a rider below.</Text>
+      ) : task.needsManualAssignment ? (
+        <Text type="warning">No rider accepted - assign one below.</Text>
+      ) : (
+        <Text type="secondary">Looking for the next available rider…</Text>
+      )}
+    </Card>
+  );
 }
 
 /**
@@ -33,6 +103,10 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
   const [scanCode, setScanCode] = useState('');
   const [otp, setOtp] = useState('');
   const [rider, setRider] = useState({ name: '', phone: '' });
+  const [showAssign, setShowAssign] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const task = liveTask(order);
+  const riderHasIt = !!task?.rider;
   const showPlan = ['ALLOCATED', 'PACKED', 'DISPATCHED', 'DELIVERED'].includes(order.status);
   const plan = usePickPlan(order.id, showPlan);
   const activeRidersQuery = useRiders({ status: 'ACTIVE' });
@@ -56,7 +130,11 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
   const handleAssignRider = async () => {
     try {
       await assignAction.mutateAsync(rider);
-      message.success('Rider assigned — out for delivery');
+      const digits = (v: string) => v.replace(/\D/g, '').slice(-10);
+      const registered = activeRiders.some((r) => digits(r.phone) === digits(rider.phone));
+      message.success(registered ? 'Rider assigned - the order goes out when they pick it up in the app' : 'Handed to the driver - out for delivery');
+      setShowAssign(false);
+      setRider({ name: '', phone: '' });
     } catch (e) {
       message.error(apiErrorMessage(e, 'Could not assign rider'), 6);
     }
@@ -270,8 +348,18 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
       ) : null}
 
       {order.status === 'PACKED' && local ? (
-        <Can do="ORDER_DISPATCH">
-          <Form layout="inline" onFinish={() => void handleAssignRider()}>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <DeliveryTaskCard task={task} />
+          <Can do="ORDER_DISPATCH">
+            {riderHasIt && !showAssign ? (
+              <Button onClick={() => setShowAssign(true)}>Assign a different rider</Button>
+            ) : (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                  {riderHasIt ? 'Give it to someone else.' : 'Or assign a rider yourself.'} A registered rider gets it in their app and the order
+                  goes out at pickup; anyone else is treated as an outside driver and the order goes out now.
+                </Text>
+                <Form layout="inline" onFinish={() => void handleAssignRider()}>
             {activeRiders.length > 0 && (
               <Form.Item>
                 <Select
@@ -293,9 +381,12 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
             )}
             <Form.Item><Input placeholder="Rider name" value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} /></Form.Item>
             <Form.Item><Input placeholder="Rider mobile" maxLength={10} value={rider.phone} onChange={(e) => setRider({ ...rider, phone: e.target.value })} /></Form.Item>
-            <Button type="primary" htmlType="submit" loading={assignAction.isPending} disabled={rider.name.length < 2 || rider.phone.length !== 10 || busy}>Assign rider & send out</Button>
+            <Button type="primary" htmlType="submit" loading={assignAction.isPending} disabled={rider.name.length < 2 || rider.phone.length !== 10 || busy}>Assign rider</Button>
           </Form>
-        </Can>
+              </div>
+            )}
+          </Can>
+        </Space>
       ) : null}
 
       {order.status === 'PACKED' && !local ? (
@@ -307,13 +398,22 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
       ) : null}
 
       {order.status === 'DISPATCHED' && local ? (
-        <Can do="ORDER_DELIVER">
-          <Alert type="info" showIcon message="Ask the customer for the OTP shown in their app, then enter it here." style={{ marginBottom: 8 }} />
-          <Form layout="inline" onFinish={() => void handleVerifyOtp()}>
-            <Form.Item><Input placeholder="Customer OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} style={{ width: 160 }} /></Form.Item>
-            <Button type="primary" htmlType="submit" loading={verifyAction.isPending} disabled={otp.length < 4 || busy}>Verify & deliver</Button>
-          </Form>
-        </Can>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          {task ? <DeliveryTaskCard task={task} /> : null}
+          <Can do="ORDER_DELIVER">
+            {riderHasIt && !showOtp ? (
+              <Button onClick={() => setShowOtp(true)}>Rider cannot enter the OTP? Enter it here</Button>
+            ) : (
+              <>
+                <Alert type="info" showIcon message="Ask the customer for the OTP shown in their app, then enter it here." style={{ marginBottom: 8 }} />
+                <Form layout="inline" onFinish={() => void handleVerifyOtp()}>
+                  <Form.Item><Input placeholder="Customer OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} style={{ width: 160 }} /></Form.Item>
+                  <Button type="primary" htmlType="submit" loading={verifyAction.isPending} disabled={otp.length < 4 || busy}>Verify & deliver</Button>
+                </Form>
+              </>
+            )}
+          </Can>
+        </Space>
       ) : null}
 
       {order.status === 'DISPATCHED' && !local ? (

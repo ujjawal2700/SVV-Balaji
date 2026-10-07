@@ -67,6 +67,19 @@ export function windowCheck(deliveredAt: Date | null, windowHours: number, now =
   return { ok: true, closesAt, reason: null };
 }
 
+/**
+ * The window that applies to one order line: the product's own return window
+ * (frozen on the line at placement, in days) when it has one, else the
+ * channel default from Return Settings. 0 days = the product is not
+ * returnable / exchangeable at all -> null.
+ */
+export function lineWindowHours(lineDays: number | null | undefined, channelHours: number): number | null {
+  if (lineDays === null || lineDays === undefined) return channelHours;
+  return lineDays > 0 ? lineDays * 24 : null;
+}
+
+export const NOT_RETURNABLE = 'This product cannot be returned or exchanged';
+
 export function windowLabel(hours: number): string {
   return hours % 24 === 0 ? `${hours / 24}-day` : `${hours}-hour`;
 }

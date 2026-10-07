@@ -74,6 +74,7 @@ export interface ProductFormValues {
   unit: string;
   packLabel?: string;
   packWeightKg?: number | null;
+  returnWindowDays?: number | null;
   badge?: string;
   description?: string;
   mainCategoryId?: string;
@@ -229,6 +230,7 @@ export function productToFormValues(product: Product): ProductFormValues {
     unit: product.unit,
     packLabel: product.packLabel ?? undefined,
     packWeightKg: num(product.packWeightKg),
+    returnWindowDays: product.returnWindowDays ?? undefined,
     badge: product.badge ?? undefined,
     description: product.description ?? undefined,
     mainCategoryId,
@@ -357,6 +359,7 @@ export function formValuesToPayload(values: ProductFormValues): CreateProductInp
     brand: clean(values.brand),
     packLabel: clean(values.packLabel),
     packWeightKg: typeof values.packWeightKg === 'number' ? values.packWeightKg : null, // null clears it
+    returnWindowDays: typeof values.returnWindowDays === 'number' ? values.returnWindowDays : null, // blank = Return Settings default
     mrp: opt(values.mrp),
     badge: clean(values.badge),
     hsnCode: clean(values.hsnCode),
@@ -406,7 +409,7 @@ export function formValuesToPayload(values: ProductFormValues): CreateProductInp
 
 /** First form-field name segment -> the tab that owns it, so a validation error can switch tabs. */
 export const FIELD_TAB: Record<string, string> = {
-  name: 'basic', brand: 'basic', sku: 'basic', unit: 'basic', packLabel: 'basic', packWeightKg: 'basic', badge: 'basic',
+  name: 'basic', brand: 'basic', sku: 'basic', unit: 'basic', packLabel: 'basic', packWeightKg: 'basic', returnWindowDays: 'basic', badge: 'basic',
   description: 'basic', mainCategoryId: 'basic', categoryId: 'basic', highlights: 'basic',
   showOnStorefront: 'basic', isTopPick: 'basic', isDailyStaple: 'basic', loyaltyEligibility: 'basic',
 

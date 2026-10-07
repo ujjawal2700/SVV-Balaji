@@ -6,8 +6,8 @@ import { PermissionsService } from '../auth/permissions/permissions.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEventsService } from './order-events.service';
-import { loadSummary, type OrderSummary } from './order-summary';
-import { PushService } from './push.service';
+import { loadSummary } from './order-summary';
+import type { StaffAlertPayload } from './staff-alerts.service';
 
 const ALL_ROOM = 'orders:all';
 const branchRoom = (branchId: string) => `branch:${branchId}`;
@@ -38,12 +38,12 @@ export class AdminOrdersGateway implements OnGatewayConnection, OnModuleInit {
     private readonly permissions: PermissionsService,
     private readonly prisma: PrismaService,
     private readonly events: OrderEventsService,
-    private readonly push: PushService,
   ) {}
 
   onModuleInit(): void {
-    this.events.on('new', (id) => void this.broadcast('orders:new', id, true));
-    this.events.on('updated', (id) => void this.broadcast('orders:updated', id, false));
+    // The new-order bell entry and browser push are StaffAlertsService's job.
+    this.events.on('new', (id) => void this.broadcast('orders:new', id));
+    this.events.on('updated', (id) => void this.broadcast('orders:updated', id));
   }
 
   async handleConnection(client: Socket): Promise<void> {
@@ -65,39 +65,25 @@ export class AdminOrdersGateway implements OnGatewayConnection, OnModuleInit {
     }
   }
 
-  private async broadcast(event: 'orders:new' | 'orders:updated', orderId: string, alertOffline: boolean) {
+  private async broadcast(event: 'orders:new' | 'orders:updated', orderId: string) {
     try {
       const summary = await loadSummary(this.prisma, orderId);
       if (!summary) return;
       let target = this.server.to(ALL_ROOM);
       if (summary.branchId) target = target.to(branchRoom(summary.branchId));
       target.emit(event, summary);
-      if (alertOffline) await this.alertOfflineStaff(summary);
     } catch (error) {
       this.logger.warn(`Order broadcast failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  /** Push to staff who should hear about this order but have no live socket. */
-  private async alertOfflineStaff(order: OrderSummary): Promise<void> {
-    if (!this.push.publicKey) return;
-    const users = await this.prisma.user.findMany({
-      where: {
-        status: 'ACTIVE',
-        OR: [{ role: 'SUPER_ADMIN' }, ...(order.branchId ? [{ branchId: order.branchId }] : [])],
-        pushSubscriptions: { some: {} },
-      },
-      select: { id: true, role: true },
-    });
-
-    const offline: string[] = [];
-    for (const u of users) {
-      if (u.role !== 'SUPER_ADMIN' && !(await this.permissions.can(u.role, 'orders.view'))) continue;
-      const live = await this.server.in(userRoom(u.id)).fetchSockets();
-      if (live.length === 0) offline.push(u.id);
+  /** A staff alert (see StaffAlertsService) to these users' open dashboards. */
+  alertUsers(userIds: string[], payload: StaffAlertPayload): void {
+    try {
+      if (userIds.length) this.server?.to(userIds.map(userRoom)).emit('alerts:new', payload);
+    } catch (error) {
+      this.logger.warn(`Alert broadcast failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (offline.length === 0) return;
-    await this.push.sendNewOrder(await this.push.subscriptionsFor(offline), order);
   }
 
   /** Broadcast support ticket events to all connected admin dashboards in realtime. */

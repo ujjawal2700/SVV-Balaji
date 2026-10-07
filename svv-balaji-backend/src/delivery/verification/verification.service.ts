@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Prisma, RiderDepositEntryType, RiderDepositMethod, RiderDocumentStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { DeliverySettingsService } from '../core/delivery-core';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { assessVerification, endOfExpiryDay, PCC_CODE, type VerificationAssessment } from './verification.logic';
+import { StaffAlertsService } from '../../realtime/staff-alerts.service';
 
 // ------------------------------------------------------------------ DTOs
 
@@ -92,6 +93,7 @@ export class RiderVerificationService {
     private readonly prisma: PrismaService,
     private readonly settings: DeliverySettingsService,
     private readonly dispatch: DispatchService,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
   // ================================================================ the gate
@@ -279,6 +281,14 @@ export class RiderVerificationService {
       });
     });
     await this.recompute([riderId]);
+    const who = await this.prisma.rider.findUnique({ where: { id: riderId }, select: { fullName: true } });
+    void this.staffAlerts?.notify({
+      type: 'RIDER_DOCUMENT',
+      title: 'Rider document to verify',
+      body: `${who?.fullName ?? 'A rider'} uploaded ${type.name}.`,
+      link: `/riders/${riderId}`,
+      permission: 'riders.verify',
+    });
     return this.view(created);
   }
 

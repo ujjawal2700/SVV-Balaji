@@ -11,6 +11,7 @@ import { EarningsService } from '../earnings/earnings.service';
 import type { Outcome } from '../earnings/earning.logic';
 import { distanceKm } from '../zones/zone.logic';
 import { DispatchService } from './dispatch.service';
+import { LONG_TX } from '../../common/tx-options';
 
 export class LocationDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(-90) @Max(90) latitude?: number;
@@ -182,7 +183,7 @@ export class TaskFlowService {
         });
       }
       return c;
-    });
+    }, LONG_TX);
     if (task.orderId) await this.sales.record(task.orderId, 'COD_COLLECTED', undefined, `₹${due.toFixed(2)} by ${dto.method === 'CASH' ? 'cash' : 'UPI'} to ${rider.fullName}`);
     await this.dispatch.log(taskId, 'COD_COLLECTED', { riderId, note: `${dto.method} ₹${due.toFixed(2)}`, lat: dto.latitude ?? null, lng: dto.longitude ?? null });
     this.dispatch.changed(task);

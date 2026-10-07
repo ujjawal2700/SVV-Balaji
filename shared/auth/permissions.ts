@@ -201,6 +201,7 @@ export const PERMISSIONS = {
   ORDER_DISPATCH: 'orders.dispatch',
   ORDER_DELIVER: 'orders.deliver',
   ORDER_CANCEL: 'orders.cancel',
+  ORDER_OVERRIDE: 'orders.override',
   ORDER_PAYMENT: 'orders.payment',
 
   // --- Storefront -------------------------------------------------------------

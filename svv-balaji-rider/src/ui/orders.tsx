@@ -80,14 +80,19 @@ export function useOfferResponse(onDone?: () => void) {
       onDone?.();
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['tasks'] });
-      if (v.accept && r && typeof r === 'object' && 'taskId' in r) {
-        riderEvents.assigned({ taskId: (r as { taskId: string }).taskId, by: 'ACCEPT' });
+      const res = r as { status?: string; taskId?: string } | undefined;
+      if (v.accept && res?.status === 'ACCEPTED' && res.taskId) {
+        riderEvents.assigned({ taskId: res.taskId, by: 'ACCEPT' });
+      } else if (v.accept) {
+        // Defensive: older APIs answered a too-late accept with 200 + EXPIRED.
+        toast('Time ran out on this request - it has gone to another rider', 'info');
+        void qc.invalidateQueries({ queryKey: ['offers'] });
       } else toast('Order rejected - it goes to another rider', 'info');
     },
     onError: (e) => {
       onDone?.();
       const code = errorCode(e);
-      toast(errorMessage(e), code === 'OFFER_TAKEN' || code === 'OFFER_CLOSED' ? 'info' : 'error');
+      toast(errorMessage(e), code === 'OFFER_TAKEN' || code === 'OFFER_CLOSED' || code === 'OFFER_EXPIRED' ? 'info' : 'error');
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['offers'] });
     },

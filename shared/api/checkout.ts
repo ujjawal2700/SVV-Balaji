@@ -1,4 +1,5 @@
 import { api } from './client';
+import type { OrderStatus, OverrideStatusResult } from './types';
 
 /** Super Admin side of checkout & fulfilment: rules, coupons, packing/dispatch actions, live-order catch-up. */
 
@@ -143,6 +144,9 @@ export const checkoutAdminApi = {
     api.post(`/orders/${orderId}/assign-rider`, { riderName, riderPhone }).then((r) => r.data),
   ship: (orderId: string) => api.post(`/orders/${orderId}/ship`).then((r) => r.data),
   verifyOtp: (orderId: string, otp: string) => api.post<{ delivered: boolean }>(`/orders/${orderId}/verify-otp`, { otp }).then((r) => r.data),
+  /** Staff override (orders.override): any status, with a reason. */
+  overrideStatus: (orderId: string, status: OrderStatus, reason: string) =>
+    api.post<OverrideStatusResult>(`/orders/${orderId}/override-status`, { status, reason }).then((r) => r.data),
 
   syncSince: (since: string) => api.get<OrderSyncResult>('/orders-sync', { params: { since } }).then((r) => r.data),
   pushKey: () => api.get<{ publicKey: string | null }>('/notifications/push/key').then((r) => r.data),

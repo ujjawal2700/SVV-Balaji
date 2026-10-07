@@ -8,6 +8,7 @@ import { CustomerJwtAuthGuard } from './guards/customer-jwt-auth.guard';
 import { CurrentCustomer } from './decorators/current-customer.decorator';
 import type { CustomerJwtPayload } from './strategies/customer-jwt.strategy';
 import { AdminOrdersGateway } from '../realtime/admin-orders.gateway';
+import { StaffAlertsService } from '../realtime/staff-alerts.service';
 
 const CATEGORIES = ['ORDER_ISSUE', 'PAYMENT_REFUND', 'DELIVERY_DELAY', 'ACCOUNT_GST', 'OTHER'] as const;
 
@@ -45,6 +46,7 @@ export class StorefrontSupportTicketsService {
     private readonly prisma: PrismaService,
     private readonly sequence: SequenceService,
     @Optional() private readonly gateway?: AdminOrdersGateway,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
   private customerIdOf(c: CustomerJwtPayload): string {
@@ -178,6 +180,13 @@ export class StorefrontSupportTicketsService {
       orderNumber: created.orderNumber,
       category: created.category,
       createdAt: created.createdAt.toISOString(),
+    });
+    void this.staffAlerts?.notify({
+      type: 'SUPPORT_TICKET',
+      title: `New support ticket ${created.ticketNumber}`,
+      body: `${created.subject}${created.orderNumber ? ` · order ${created.orderNumber}` : ''}`,
+      link: '/support-tickets',
+      permission: 'supportTickets.reply',
     });
 
     return created;

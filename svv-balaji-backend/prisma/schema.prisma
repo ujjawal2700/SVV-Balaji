@@ -1589,20 +1589,24 @@ model Product {
   // PriceList rules so historical invoices reproduce (see PriceList).
 
   /// Marketing brand, distinct from the manufacturer entity below.
-  brand        String?
+  brand            String?
   /// The pack descriptor a shopper reads under the name - "10kg Bag",
   /// "100g x 20". Not `unit`, which is the operational measure (KG/PACK).
-  packLabel    String?
+  packLabel        String?
   /// Shipping weight of one pack in kg (goods + packaging). Drives which rider
   /// vehicle may carry a delivery; null = not recorded (no vehicle limit applied).
-  packWeightKg Decimal? @db.Decimal(10, 3)
+  packWeightKg     Decimal? @db.Decimal(10, 3)
+  /// Days after delivery this product can be returned / exchanged. Null = the
+  /// channel default in Return Settings; 0 = not returnable. Also how long an
+  /// affiliate's commission on it is held. Copied onto each order line.
+  returnWindowDays Int?
   /// Struck-through reference price. The sell price is a PriceList rule;
   /// this is the "was" figure a discount is calculated against, and it is a
   /// property of the pack, not of a channel.
-  mrp          Decimal? @db.Decimal(12, 2)
+  mrp              Decimal? @db.Decimal(12, 2)
   /// Small overlay on the product card - "Buy 10 Get 1", "100% Sharbati".
-  badge        String?
-  hsnCode      String?
+  badge            String?
+  hsnCode          String?
 
   /// Display-only until a real review subsystem exists. Staff-entered, so a
   /// seeded catalogue does not show "0 ratings" on every card.
@@ -2511,8 +2515,11 @@ model OrderItem {
   lineTotal    Decimal @db.Decimal(14, 2)
 
   /// Frozen at placement so a later rename or re-SKU never rewrites history.
-  skuSnapshot  String?
-  nameSnapshot String?
+  skuSnapshot      String?
+  nameSnapshot     String?
+  /// The product's return window when ordered (frozen like the price). Null =
+  /// the channel default at the time of the return; 0 = not returnable.
+  returnWindowDays Int?
 
   allocations OrderAllocation[]
 

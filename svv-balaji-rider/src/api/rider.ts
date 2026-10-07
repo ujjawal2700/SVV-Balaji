@@ -58,7 +58,9 @@ export interface Offer {
   offerId: string;
   kind?: TaskKind;
   returnRequest?: ReturnRef | null;
+  /** Deadline on THIS phone's clock (rebased from the server's secondsLeft - see onPhoneClock). */
   expiresAt: string;
+  secondsLeft?: number;
   taskId: string;
   taskNumber: string;
   speed: 'QUICK' | 'STANDARD';
@@ -213,6 +215,15 @@ export interface DepositLedger extends DepositSummary {
 
 const d = <T>(p: Promise<{ data: T }>) => p.then((r) => r.data);
 
+/**
+ * The server decides when an offer expires, by its own clock. A phone whose
+ * clock is a few seconds off would otherwise show time left on a request the
+ * server has already closed (or hide one that is still open). So the deadline
+ * is rebuilt on this phone's clock from the server-measured seconds left.
+ */
+const onPhoneClock = (offers: Offer[]): Offer[] =>
+  offers.map((o) => (typeof o.secondsLeft === 'number' ? { ...o, expiresAt: new Date(Date.now() + o.secondsLeft * 1000).toISOString() } : o));
+
 export const riderApi = {
   signup: (body: { fullName: string; phone: string; email?: string; password: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string }) =>
     d<OtpSent>(api.post('/rider/auth/signup', body)),
@@ -246,8 +257,8 @@ export const riderApi = {
 
   availability: (online: boolean, loc: Loc = {}) => d<{ availability: 'ONLINE' | 'OFFLINE' }>(api.post('/rider/availability', { online, ...loc })),
   location: (loc: Loc) => d(api.post('/rider/location', loc)),
-  dashboard: () => d<Dashboard>(api.get('/rider/dashboard')),
-  offers: () => d<Offer[]>(api.get('/rider/offers')),
+  dashboard: () => d<Dashboard>(api.get('/rider/dashboard')).then((x) => ({ ...x, offers: onPhoneClock(x.offers ?? []) })),
+  offers: () => d<Offer[]>(api.get('/rider/offers')).then(onPhoneClock),
   accept: (offerId: string) => d<{ status: string; taskId: string }>(api.post(`/rider/offers/${offerId}/accept`)),
   reject: (offerId: string, reason?: string) => d(api.post(`/rider/offers/${offerId}/reject`, { reason })),
 

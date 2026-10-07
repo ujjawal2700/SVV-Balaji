@@ -516,5 +516,57 @@ check(s == 401, "a customer token cannot reach the admin affiliate API")
 tr = must("GET", f"/trace/{FG_MASALA['fgBatchNumber']}")
 check(farmer["id"] in json.dumps(tr) or farmer["fullName"] in json.dumps(tr), "the shipped masala pack still traces back to the farmer")
 
+# ===================================================================== J. Per-product return window
+step("J. Per-product return window: returns and the affiliate hold follow each product's own window")
+from datetime import datetime, timedelta
+
+
+def ts(v):
+    return datetime.fromisoformat(v.replace("Z", "+00:00"))
+
+
+def eligibility(o):
+    return must("GET", f"/storefront/returns/orders/{o['number']}/eligibility", tok=BUYER["tok"])
+
+
+# The program hold is 0 days since G; a product window must still hold its commission.
+pd = must("PATCH", f"/products/{MASALA['id']}", {"returnWindowDays": 3})
+check(pd.get("returnWindowDays") == 3, "Super Admin sets Masala's return window to 3 days", pd.get("returnWindowDays"))
+must("PATCH", f"/products/{ATTA['id']}", {"returnWindowDays": 0})
+detail_m = must("GET", f"/storefront/catalogue/products/{MASALA['id']}", tok=BUYER["tok"])
+detail_a = must("GET", f"/storefront/catalogue/products/{ATTA['id']}", tok=BUYER["tok"])
+check(detail_m.get("returnWindowDays") == 3 and detail_a.get("returnWindowDays") == 0, "the product page shows the real window (3 days / not returnable)",
+      [detail_m.get("returnWindowDays"), detail_a.get("returnWindowDays")])
+
+O6 = place(BUYER, BUY_ADDR, [(MASALA, 2)])
+O7 = place(BUYER, BUY_ADDR, [(ATTA, 2)])
+wait_for(lambda: commissions_of(O6["number"], ID_B) and commissions_of(O7["number"], ID_B))
+check(item_of(O6, MASALA).get("returnWindowDays") == 3, "the window is frozen onto the order line at placement", item_of(O6, MASALA).get("returnWindowDays"))
+must("PATCH", f"/products/{MASALA['id']}", {"returnWindowDays": 30})  # a later change must not reach O6
+deliver_local(O6, BUYER)
+deliver_local(O7, BUYER)
+delivered6 = ts(must("GET", f"/orders/{O6['id']}")["deliveredAt"])
+
+e6 = eligibility(O6)["items"][0]
+check(e6["returnWindowDays"] == 3 and e6["return"]["eligible"], "Masala order: returnable, 3-day window (not the later 30)", {k: e6[k] for k in ("returnWindowDays", "return")})
+closes = ts(e6["return"]["closesAt"])
+check(abs((closes - delivered6) - timedelta(days=3)) < timedelta(seconds=5), "return window closes 3 days after delivery", e6["return"]["closesAt"])
+e7 = eligibility(O7)["items"][0]
+check(not e7["return"]["eligible"] and not e7["exchange"]["eligible"] and "cannot be returned" in (e7["return"]["reason"] or ""),
+      "0-day product: no return and no exchange offered", e7["return"])
+s7, bad7 = call("POST", "/storefront/returns", {"orderNumber": O7["number"], "orderItemId": item_of(O7, ATTA)["id"], "type": "RETURN", "quantity": 1,
+                                                "reasonId": REASONS["CHANGED_MIND"]["id"]}, tok=BUYER["tok"])
+check(s7 == 400 and isinstance(bad7, dict) and bad7.get("code") == "ITEM_NOT_ELIGIBLE", "a return request for it is refused", (s7, bad7))
+
+must("GET", "/affiliate-payouts/due")  # runs maturity
+c6 = commissions_of(O6["number"], ID_B)[0]
+c7 = commissions_of(O7["number"], ID_B)[0]
+check(c6["status"] == "PENDING", "Masala commission held for its 3-day window even though the program hold is 0", c6["status"])
+check(abs((ts(c6["releaseDate"]) - delivered6) - timedelta(days=3)) < timedelta(seconds=5), "its release date = delivery + 3 days", c6["releaseDate"])
+check(c7["status"] == "APPROVED", "not-returnable product: commission matures on delivery", c7["status"])
+must("PATCH", f"/products/{MASALA['id']}", {"returnWindowDays": None})
+check(must("GET", f"/storefront/catalogue/products/{MASALA['id']}", tok=BUYER["tok"]).get("returnWindowDays") == 7,
+      "clearing the window falls back to the Return Settings default (7 days)")
+
 print(f"\n{'ALL PASSED' if failures == 0 else f'{failures} FAILURE(S)'}")
 raise SystemExit(1 if failures else 0)

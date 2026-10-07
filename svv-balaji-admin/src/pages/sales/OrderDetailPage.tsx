@@ -33,6 +33,7 @@ import {
   Row,
   Space,
   Spin,
+  Steps,
   Table,
   Tabs,
   Tag,
@@ -64,6 +65,8 @@ import { downloadOrderBill } from '../../utils/invoiceGenerator';
 import { InfoRow, StatCard } from '../customers/detailPageParts';
 import { CANCELLABLE, NEXT_STEP, ORDER_STATUS_LABEL } from './orderStatus';
 import { OrderFulfillmentPanel } from './OrderFulfillmentPanel';
+import { FULFILMENT_STEPS, fulfilmentGuide } from './fulfilmentGuide';
+import { OrderStatusOverride } from './OrderStatusOverride';
 import { OrderLoyaltyPanel } from './OrderLoyaltyPanel';
 import { OrderInvoicePanel } from '../invoices/OrderInvoicePanel';
 import {
@@ -111,7 +114,17 @@ export function OrderDetailPage() {
   const canCancel = useCan('ORDER_CANCEL');
   const canViewInvoices = useCan('INVOICES_VIEW');
   const data = order.data as any;
-  const step = data ? NEXT_STEP[data.status] : undefined;
+  // Storefront orders follow scan -> rider/AWB -> OTP in the Pack & Deliver tab; the
+  // plain status buttons would only be refused there, so they get a guide instead.
+  const storefront = data?.source === 'STOREFRONT';
+  const step = data && !storefront ? NEXT_STEP[data.status] : undefined;
+  const guide = data && storefront ? fulfilmentGuide(data) : null;
+  const openFulfilment = () => {
+    setActiveTab('fulfillment');
+    setTimeout(() => {
+      document.getElementById(data?.status === 'ALLOCATED' ? 'pick-list-section' : 'fulfilment-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
   const listPath = data?.channel === 'B2B' ? '/b2b-orders' : '/b2c-orders';
 
   const handleCopy = (text: string, label: string) => {
@@ -409,12 +422,18 @@ export function OrderDetailPage() {
                     Cancel
                   </Button>
                 )}
+                <OrderStatusOverride order={data} />
                 {step && (
                   <Can do={step.permission}>
                     <Button type="primary" icon={<CheckCircleOutlined />} loading={busy} onClick={confirmStep} style={{ borderRadius: 8, fontWeight: 600 }}>
                       {step.label}
                     </Button>
                   </Can>
+                )}
+                {guide?.cta && (
+                  <Button type="primary" icon={<TruckOutlined />} onClick={openFulfilment} style={{ borderRadius: 8, fontWeight: 600 }}>
+                    {guide.cta}
+                  </Button>
                 )}
               </Space>
             </Col>
@@ -506,38 +525,33 @@ export function OrderDetailPage() {
                 />
               )}
 
-              {data.status === 'ALLOCATED' && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={<Text strong style={{ fontSize: 14 }}>Next Step: Verify Allocated Batches</Text>}
-                  description={
-                    <div style={{ marginTop: 4 }}>
-                      <Text style={{ fontSize: 13, color: '#475569' }}>
-                        Batches have been allocated for this order. Please verify each batch in the <strong>PACK &amp; DELIVERY</strong> tab before marking packed.
-                      </Text>
-                      <div style={{ marginTop: 10 }}>
-                        <Button
-                          type="primary"
-                          size="small"
-                          onClick={() => {
-                            setActiveTab('fulfillment');
-                            setTimeout(() => {
-                              document.getElementById('pick-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 100);
-                          }}
-                          style={{ borderRadius: 6, backgroundColor: '#d97706', borderColor: '#d97706', fontWeight: 600 }}
-                        >
-                          📦 Go to Pack &amp; Delivery (Verify Batches)
+              {guide && guide.step >= 0 && (
+                <Card className="page-card" bodyStyle={{ padding: '16px 20px' }}>
+                  <Steps
+                    size="small"
+                    current={guide.step}
+                    status={guide.tone === 'error' ? 'error' : guide.step === FULFILMENT_STEPS.length - 1 ? 'finish' : 'process'}
+                    items={FULFILMENT_STEPS.map((title) => ({ title }))}
+                    style={{ marginBottom: 14 }}
+                  />
+                  <Alert
+                    type={guide.tone}
+                    showIcon
+                    message={<Text strong style={{ fontSize: 14 }}>{guide.title}</Text>}
+                    description={guide.detail}
+                    action={
+                      guide.cta ? (
+                        <Button size="small" type="primary" onClick={openFulfilment} style={{ fontWeight: 600 }}>
+                          {guide.cta}
                         </Button>
-                      </div>
-                    </div>
-                  }
-                  style={{ borderRadius: 10, border: '1px solid #fcd34d' }}
-                />
+                      ) : undefined
+                    }
+                    style={{ borderRadius: 10 }}
+                  />
+                </Card>
               )}
 
-              <Card className="page-card" bodyStyle={{ padding: '8px 24px 24px' }}>
+              <Card id="fulfilment-tabs" className="page-card" bodyStyle={{ padding: '8px 24px 24px' }}>
                 <Tabs
                   activeKey={activeTab}
                   onChange={setActiveTab}

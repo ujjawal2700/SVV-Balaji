@@ -1,15 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  createParamDecorator,
-  ExecutionContext,
-  ForbiddenException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, createParamDecorator, ExecutionContext, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, UnauthorizedException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthGuard, PassportStrategy } from '@nestjs/passport';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -27,6 +16,7 @@ import {
   OTP_TTL_SECONDS,
   resolveOtpMode,
 } from '../../storefront/otp.config';
+import { StaffAlertsService } from '../../realtime/staff-alerts.service';
 
 // ---------------------------------------------------------------- secrets
 
@@ -153,6 +143,7 @@ export class RiderAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
   private async issueOtp(phone: string, purpose: RiderOtpPurpose, riderId: string) {
@@ -231,6 +222,15 @@ export class RiderAuthService {
       rider.status === RiderStatus.PENDING_VERIFICATION
         ? await this.prisma.rider.update({ where: { id: rider.id }, data: { status: RiderStatus.PENDING_APPROVAL, phoneVerifiedAt: new Date() } })
         : rider;
+    if (rider.status === RiderStatus.PENDING_VERIFICATION) {
+      void this.staffAlerts?.notify({
+        type: 'RIDER_SIGNUP',
+        title: 'New rider registered',
+        body: `${updated.fullName} (${updated.phone})${updated.city ? ` · ${updated.city}` : ''} is waiting for approval.`,
+        link: `/riders/${updated.id}`,
+        permission: 'riders.manage',
+      });
+    }
     return this.startSession(updated, userAgent);
   }
 

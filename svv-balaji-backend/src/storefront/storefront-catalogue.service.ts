@@ -167,7 +167,12 @@ export class StorefrontCatalogueService {
       },
     });
     if (!product) return null;
-    return this.toCard(product, params, { detailed: true });
+    const card = await this.toCard(product, params, { detailed: true });
+    // The window returns are actually checked against (see returns.service): the product's
+    // own, else this channel's default; 0 = no returns (product or channel switched off).
+    const rs = await this.prisma.returnSettings.findUnique({ where: { channel: params.channel }, select: { returnEnabled: true, returnWindowHours: true } });
+    const channelDays = rs ? (rs.returnEnabled ? Math.floor(rs.returnWindowHours / 24) : 0) : 7;
+    return { ...card, returnWindowDays: rs && !rs.returnEnabled ? 0 : (product.returnWindowDays ?? channelDays) };
   }
 
   private async toCard(

@@ -159,10 +159,9 @@ export class FulfillmentService {
         if (appRider.warehouseId && task.warehouseId && appRider.warehouseId !== task.warehouseId) {
           await this.prisma.rider.update({ where: { id: appRider.id }, data: { warehouseId: task.warehouseId } });
         }
+        // The order stays PACKED until the rider picks it up in the app - the
+        // same as a broadcast accept - so stock leaves when the goods do.
         await this.dispatch.assignManually(task.id, appRider.id, userId);
-        if (o.status !== OrderStatus.DISPATCHED) {
-          await this.sales.advance(orderId, OrderStatus.DISPATCHED, userId);
-        }
         return this.order(orderId);
       }
     }
@@ -176,6 +175,31 @@ export class FulfillmentService {
     }
     await this.sales.record(orderId, 'RIDER_ASSIGNED', userId, `${rider.name} (${rider.phone})`);
     return this.sales.advance(orderId, OrderStatus.DISPATCHED, userId);
+  }
+
+  /**
+   * Staff status override (see SalesService.overrideStatus), plus the delivery
+   * side: rider-app tasks that no longer make sense are cancelled AFTER the
+   * order has moved, so the dispatch sweep (which only acts on PACKED orders)
+   * cannot slip a new task in behind us.
+   *   -> DISPATCHED  tasks still waiting for a rider are cancelled; a rider who
+   *                  already has it keeps it and delivers as usual
+   *   -> DELIVERED / CANCELLED / back to ALLOCATED or CONFIRMED
+   *                  every live task is cancelled (the rider is told)
+   */
+  async overrideStatus(orderId: string, to: OrderStatus, reason: string, userId: string) {
+    const result = await this.sales.overrideStatus(orderId, to, reason, userId);
+    const note = `Order status changed by staff to ${to}: ${reason.trim()}`;
+    const tasks = await this.prisma.deliveryTask.findMany({
+      where: { orderId, status: { in: ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'] } },
+      select: { id: true, status: true, riderId: true },
+    });
+    for (const t of tasks) {
+      const waiting = !t.riderId && (t.status === 'READY_FOR_PICKUP' || t.status === 'OFFERED');
+      if (to === OrderStatus.DISPATCHED && !waiting) continue;
+      await this.dispatch.cancelTask(t.id, note, userId);
+    }
+    return result;
   }
 
   /** SHIPROCKET: create the shipment, get the AWB / courier / label / tracking link, and dispatch. */

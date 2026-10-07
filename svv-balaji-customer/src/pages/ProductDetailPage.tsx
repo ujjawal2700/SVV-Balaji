@@ -242,7 +242,13 @@ export function ProductDetailPage() {
     highlights: detail && detail.highlights.length > 0 ? detail.highlights : undefined,
     offers: detail && detail.offers.length > 0 ? detail.offers : undefined,
     faqs: detail && detail.faqs.length > 0 ? detail.faqs : undefined,
-    returnPolicy: detail?.returnPolicy ?? undefined,
+    // The enforced window wins over free text, so the page never promises more (or less) than returns allow.
+    returnPolicy:
+      detail?.returnWindowDays === 0
+        ? 'Not returnable'
+        : typeof detail?.returnWindowDays === 'number'
+          ? `${detail.returnWindowDays} Days Return`
+          : (detail?.returnPolicy ?? undefined),
     warranty: detail?.warranty ?? undefined,
     variant: activePack?.name,
   };

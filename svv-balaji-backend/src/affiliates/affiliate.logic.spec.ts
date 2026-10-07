@@ -1,5 +1,5 @@
 import {
-  affiliateCode, canMature, commissionBases, commissionFor, deductionFor, netCommission, readCookie, releaseDateFor, resolveRate,
+  affiliateCode, canMature, commissionBases, holdFor, commissionFor, deductionFor, netCommission, readCookie, releaseDateFor, resolveRate,
   selfReferralReasons, signClickId, verifyClickCookie, type CategoryNode,
 } from './affiliate.logic';
 
@@ -134,6 +134,24 @@ describe('affiliate.logic', () => {
     it('codes are upper-case letters and digits', () => {
       expect(affiliateCode('Raunak Khanam')).toMatch(/^RAUNAK[A-Z2-9]{4}$/);
       expect(affiliateCode('123')).toMatch(/^SVV[A-Z2-9]{4}$/);
+    });
+  });
+
+  describe('per-product hold (return window)', () => {
+    const program = { holdDays: 7, holdFrom: 'ORDER_DATE' as const };
+    it('a product without its own window uses the program hold', () => {
+      expect(holdFor(null, program)).toEqual({ holdDays: 7, holdFrom: 'ORDER_DATE' });
+    });
+    it("a product's own window holds that long, counted from delivery", () => {
+      expect(holdFor(15, program)).toEqual({ holdDays: 15, holdFrom: 'DELIVERY_DATE' });
+      expect(holdFor(0, program)).toEqual({ holdDays: 0, holdFrom: 'DELIVERY_DATE' });
+    });
+    it('matures only once that window has closed after delivery', () => {
+      const delivered = new Date('2026-10-10T10:00:00Z');
+      const h = holdFor(15, program);
+      const base = { releaseDate: new Date('2026-10-01T00:00:00Z'), orderStatus: 'DELIVERED', deliveredAt: delivered, openReturn: false, ...h };
+      expect(canMature({ ...base, now: new Date('2026-10-24T10:00:00Z') })).toBe(false); // day 14
+      expect(canMature({ ...base, now: new Date('2026-10-25T10:00:00Z') })).toBe(true); // day 15
     });
   });
 });

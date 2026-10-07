@@ -176,6 +176,15 @@ export function BasicTab({ isEdit }: { isEdit: boolean }) {
               <InputNumber min={0.001} max={2000} precision={3} addonAfter="kg" placeholder="10.2" {...NUMBER_FULL} />
             </Form.Item>
           </Col>
+          <Col xs={12} md={7}>
+            <Form.Item
+              name="returnWindowDays"
+              label="Return / exchange window"
+              extra="Days after delivery the customer can return or exchange it. Blank = the default in Return Settings; 0 = not returnable. Affiliate commission on it is held until this window closes."
+            >
+              <InputNumber min={0} max={365} precision={0} addonAfter="days" placeholder="Default" {...NUMBER_FULL} />
+            </Form.Item>
+          </Col>
         </Row>
       </Section>
 

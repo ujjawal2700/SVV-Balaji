@@ -168,17 +168,32 @@ export class StorefrontOrdersService {
       shipment: o.shipment
         ? { awb: o.shipment.awb, courier: o.shipment.courier, trackingUrl: o.shipment.trackingUrl, status: o.shipment.status }
         : null,
-      timeline: o.events
-        .filter((e) => !['SCANNED', 'OTP_FAILED'].includes(e.type)) // internal, not for shoppers
-        .map((e) => ({
-          type: e.type,
-          at: e.createdAt,
-          note: ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED', 'RETURN_UPDATE'].includes(e.type)
-            ? cleanShopperNote(e.type, e.note)
-            : null,
-        })),
+      timeline: shopperTimeline(o.events),
     };
   }
+}
+
+/** Staff-side steps a shopper never sees (STATUS_OVERRIDE carries the staff member's reason). */
+const INTERNAL_EVENTS = ['SCANNED', 'OTP_FAILED', 'STATUS_OVERRIDE', 'READY_FOR_PICKUP'];
+/** The same step with the same detail again within this window is a repeat click / retry, not news. */
+const REPEAT_WINDOW_MS = 30 * 60_000;
+
+/**
+ * The order's tracking history as the shopper sees it: internal steps hidden
+ * and repeats collapsed, so staff clicking a step twice does not show it twice.
+ * A genuinely new fact (another rider, a later delivery attempt) still shows.
+ */
+export function shopperTimeline(events: Array<{ type: string; note: string | null; createdAt: Date }>) {
+  const kept: Array<{ type: string; at: Date; note: string | null }> = [];
+  for (const e of events) {
+    if (INTERNAL_EVENTS.includes(e.type)) continue;
+    const note = ['RIDER_ASSIGNED', 'SHIPMENT_CREATED', 'PLACED', 'RETURN_UPDATE'].includes(e.type) ? cleanShopperNote(e.type, e.note) : null;
+    const repeat = kept.some(
+      (k) => k.type === e.type && k.note === note && e.createdAt.getTime() - k.at.getTime() < REPEAT_WINDOW_MS,
+    );
+    if (!repeat) kept.push({ type: e.type, at: e.createdAt, note });
+  }
+  return kept;
 }
 
 function cleanShopperNote(type: string, note: string | null): string | null {

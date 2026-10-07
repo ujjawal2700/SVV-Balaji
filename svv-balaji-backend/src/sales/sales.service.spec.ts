@@ -188,6 +188,8 @@ describe('SalesService', () => {
       },
       product: {
         findUnique: jest.fn(async () => ({ id: 'prod-atta', name: 'Wheat Atta 5kg', sku: 'ATTA-5' })),
+        // Return windows frozen onto order lines (none set on these products).
+        findMany: jest.fn(async () => []),
       },
       order: {
         create: jest.fn(async ({ data }) => {

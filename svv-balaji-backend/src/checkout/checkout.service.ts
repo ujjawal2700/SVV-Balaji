@@ -683,6 +683,11 @@ export class CheckoutService {
 
     const orderNumber = await this.sequence.next(tx, 'SO', now);
     const a = quote.address;
+    // Each product's return window is frozen onto its line, like the price.
+    const returnWindows = new Map(
+      (await tx.product.findMany({ where: { id: { in: quote.lines.map((l) => l.productId) } }, select: { id: true, returnWindowDays: true } }))
+        .map((p) => [p.id, p.returnWindowDays]),
+    );
     const order = await tx.order.create({
       data: {
         orderNumber,
@@ -723,6 +728,7 @@ export class CheckoutService {
         checkoutSessionId: session.id,
         items: {
           create: quote.lines.map((l) => ({
+            returnWindowDays: returnWindows.get(l.productId) ?? null,
             productId: l.productId,
             quantity: l.quantity,
             unitPrice: l.unitPrice,

@@ -3298,7 +3298,6 @@ sign-up photo is already waiting as a pending licence). Plan a review pass befor
   Step 9 now uses whichever round rider holds the most deliveries and asserts it holds at least one.
 - Verified: `e2e-broadcast-dispatch-flow.py` ALL PASSED 3/3 on fresh DBs (both race outcomes seen, no deadlocks in
   the API log); `e2e-rider-flow.py` and `e2e-rider-onboarding-flow.py` pass; `jest src/delivery` 75/75; `tsc` clean.
-<<<<<<< HEAD
 
 ## 2026-10-05 — SECURITY: malware loader force-pushed to origin/main (4th time) - removed (Raunak, via agent)
 
@@ -3473,3 +3472,120 @@ src/affiliates` 45/45; customer tsc, vitest 30/30, vite build; admin tsc + vite 
 **Verified:** customer tsc; headless-Edge screenshots via CDP device emulation at 320/375/414/600/1280 with no
 horizontal overflow.
 
+
+## 2026-10-07 — Admin order process: one next step, rider-offer timing, status override (Raunak, via agent)
+
+Reported: staff could not tell what to do next (Pack button still showing after packing), the admin showed "Dispatch"
+while a rider was being found, a rider's accept sometimes said "timed out" with time still on the clock, and there was
+no way to change an order's status by hand.
+
+- **Two competing button sets (cause of the confusion).** The order header offered the plain Mark packed / Dispatch /
+  Mark delivered endpoints while the Pack & Deliver tab ran scan -> rider -> OTP. For storefront orders the header now
+  shows only a guide button; a progress bar + "next step" banner (`admin/src/pages/sales/fulfilmentGuide.ts`) reads the
+  status and the rider-app delivery. Staff-placed (B2B) orders keep the old step buttons.
+- **Pack & Deliver tab** shows the live delivery: offered riders with a server-timed countdown, assigned rider, or
+  "nobody accepted - assign". Manual assign stays available ("Assign a different rider").
+- **Behaviour change:** `POST /orders/:id/assign-rider` with a *registered* rider's phone no longer moves the order to
+  DISPATCHED; it stays PACKED until the rider's pickup (as with a broadcast accept). Outside drivers unchanged.
+- **Offer timing (`dispatch.service.ts`).** `OFFER_GRACE_MS = 4000`: accept is honoured until deadline + 4 s; the sweep
+  expires offers only after that. A too-late accept now throws **409 `OFFER_EXPIRED`** (was 200 `{status:'EXPIRED'}`, which
+  the rider app treated as success). `GET /rider/offers` (and the dashboard's offers) add `secondsLeft`; the rider app
+  rebuilds `expiresAt` on the phone's clock from it and only shows "assigned" on `status === 'ACCEPTED'`.
+- **Status override:** `POST /orders/:id/override-status {status, reason}`, permission **`orders.override`** (new, Super
+  Admin only by default). Forward runs every skipped step for real (allocate FIFO, batches marked checked, stock out +
+  tax invoice, loyalty) - only scan/rider/AWB/OTP are skipped. Back only before dispatch: PACKED -> ALLOCATED (scans
+  cleared) and ALLOCATED/PACKED -> CONFIRMED (batch reservations released). CANCELLED uses the normal cancel rules.
+  Delivery tasks: cancelled on back/deliver/cancel; on -> DISPATCHED only tasks still waiting are cancelled (a rider who
+  has it keeps it). Timeline gets each step plus `STATUS_OVERRIDE` with "from → to: reason".
+- `GET /orders/:id` now also returns `deliveryTask` (latest task, rider, open offers with `secondsLeft`).
+
+**Contract changes:** new route `POST /orders/:id/override-status`; new permission `orders.override`; `GET /orders/:id`
+adds `deliveryTask`; `GET /rider/offers` adds `secondsLeft`; rider accept of an expired offer is now 409 `OFFER_EXPIRED`;
+assign-rider (app rider) no longer dispatches. No migration.
+
+**Verified:** new `e2e-order-override-flow.py` ALL PASSED 41/41 (twice, fresh DBs), incl. traceability of an
+override-delivered pack back to the farmer; `e2e-broadcast-dispatch-flow.py`, `e2e-rider-flow.py`,
+`e2e-retailer-routing-flow.py`, `e2e-returns-flow.py` (79, needs `SHIPROCKET_WEBHOOK_TOKEN` from `.env`) all pass;
+`jest src/sales src/delivery src/checkout src/auth/permissions` 164/164; tsc clean in backend, admin, rider, customer,
+field. Headless-Edge screenshots of the order page in Allocated / Packed-offered / Packed-needs-rider / rider-coming
+states and the Change status dialog. Not click-tested on a real phone.
+
+**Also:** removed a stray `<<<<<<< HEAD` line left in this file by the 5 Oct merge (no other conflict markers).
+`OrderDetailDrawer.tsx` is not imported anywhere (dead code) and still has the old step buttons.
+
+## 2026-10-07 (later) — Fix: "Transaction already closed" on Assign rider (Raunak, via agent)
+
+- **Symptom:** `POST /orders/:id/assign-rider` (and so the order screen's Assign rider) failed with Prisma
+  "Transaction API error: Transaction already closed" from `DispatchService.assignManually`.
+- **Cause:** interactive transactions default to a 5 s limit (2 s to get a connection). Against the hosted Render
+  Postgres (~200-400 ms per round trip) the dispatch transactions - row locks + ~10 queries - run past it and Prisma
+  aborts them (rolled back, nothing half-written). Not new to today's change; it shows up on a remote DB, not locally.
+- **Fix:** `src/common/tx-options.ts` `LONG_TX = { maxWait: 10s, timeout: 30s }` (the values SalesService's stock
+  transactions already used) on every transaction in `dispatch.service.ts` (8: task creation, offer round, accept,
+  staff assign, pause/resume, outside-driver hand-over, re-attempt, sweep expiry), `task-flow.service.ts` (COD) and the
+  status-override transaction. Use `LONG_TX` for any new multi-query transaction.
+- **Verified:** tsc; jest sales/delivery/checkout 142/142; `e2e-broadcast-dispatch-flow.py` and
+  `e2e-order-override-flow.py` ALL PASSED on fresh DBs. **Deploy:** API restart.
+
+## 2026-10-07 (later) — Notifications: customers get 3 per order; staff get alerts for everything that needs them (Raunak, via agent)
+
+**Customer / retailer (storefront) push + inbox** - `notifications/customer-order-notifications.service.ts`
+- Only three order moments notify now (client request): **Order accepted** (CONFIRMED), **Out for delivery**, **Order
+  delivered**. "Out for delivery" = rider-app trip start (OUT_FOR_DELIVERY); for a local order handed to an outside driver,
+  DISPATCHED; for courier orders, the courier's OUT_FOR_DELIVERY scan. Placed, packed, rider assigned, picked up, arrived,
+  failed attempt, returned to store, re-attempt, **cancelled** and courier booking/scans no longer push (still on the
+  order's tracking timeline). Return / exchange updates still notify (separate flow).
+- Repeats dropped: the same message for the same order within 30 min is not sent again (double clicks, retries).
+- Customer tracking history (`storefront-orders.service.ts` `shopperTimeline`): repeats of the same step + detail within
+  30 min collapse to one; staff-only steps hidden (SCANNED, OTP_FAILED, STATUS_OVERRIDE, READY_FOR_PICKUP).
+
+**Staff alerts** - new `realtime/staff-alerts.service.ts` (`StaffAlertsService.notify`, global, never throws)
+- One alert = header-bell entry (AppNotification STAFF) + live pop-up on open dashboards (socket `alerts:new`) + browser
+  system notification (VAPID web push; `public/sw.js` skips it when the dashboard is the focused tab).
+- Sent for: new storefront order (orders.view, branch-scoped), rider registered (riders.manage), rider document uploaded
+  (riders.verify), customer / retailer return or exchange request (returns.b2c/b2b.manage), affiliate application
+  (affiliates.review), retailer registration (customerAccounts.review), support ticket (supportTickets.reply). Recipients
+  = active staff whose role holds that permission (Super Admin always).
+- Before, only new orders pushed, and only when no dashboard tab was open. The old gateway-only path is removed.
+- Admin header button is now "Turn on alerts" for **every** staff member (was orders.view only); a browser that already
+  allowed notifications re-registers silently on sign-in. `POST/DELETE /notifications/push/subscribe` no longer require
+  orders.view.
+
+**Contract changes:** socket event `alerts:new` {type,title,body,link,tag}; push subscribe open to all staff; customer
+notification set reduced as above. No migration.
+
+**Verified:** `e2e-order-override-flow.py` 53/53 incl. new section F (customer inbox exactly 3 per order across rider-app,
+outside-driver and override paths; cancelled order only "accepted"; double-clicked rider assignment shows once in history;
+override hidden; staff bell has new order / rider registered / rider document / support ticket); `e2e-rider-flow.py`
+(assertions updated to the new rule), broadcast and returns e2e pass; jest notifications 28/28, delivery/returns/
+affiliates/storefront pass except the known pre-existing "pending retailer cannot sign in" test; tsc backend + admin.
+**Not verified:** a real browser receiving the VAPID system notification (needs a real push endpoint) - test by clicking
+"Turn on alerts", closing the tab, and placing an order. **Deploy:** API restart + admin app (new sw.js).
+
+## 2026-10-07 (later) — Per-product return window, drives returns and the affiliate hold (Raunak, via agent)
+
+- **Product field `returnWindowDays`** (admin product form, Basic tab: "Return / exchange window", days). Blank = the
+  channel default in Return Settings; **0 = not returnable / exchangeable**. Frozen onto each order line
+  (`OrderItem.returnWindowDays`) at placement in storefront checkout and staff order creation, so a later change never
+  rewrites placed orders. Migration `20261007150000_product_return_window` (two nullable INT columns).
+- **Returns / exchanges** (`returns.service.ts`, `returns.logic.ts` `lineWindowHours`): each line is checked against its
+  own window from delivery (else the channel's return / exchange hours). Eligibility now returns per item
+  `returnWindowDays`; a 0-day line gets "This product cannot be returned or exchanged" / `ITEM_NOT_ELIGIBLE`. Staff
+  override still bypasses.
+- **Affiliate hold** (`affiliate.logic.ts` `holdFor`, ledger): a line whose product has its own window is held exactly
+  that many days **from delivery**; lines without one keep the program hold (Affiliate Settings, default 7 from order
+  date). 0 days = matures on delivery. On delivery, `onOrderDelivered` rewrites pending release dates to delivery + window
+  (called from `SalesService` DELIVERED, best-effort), so the affiliate dashboard shows the real date.
+- Storefront product page shows the enforced window (`returnWindowDays` on the product detail API: product's own, else
+  the channel default, 0 when returns are off) instead of the hard-coded "7 Days Return". Affiliate pages say "held until
+  each product's return window closes (usually N days)".
+
+**Contract changes:** product create/update + read `returnWindowDays`; order items carry `returnWindowDays`; storefront
+product detail adds `returnWindowDays`; returns eligibility items add `returnWindowDays`.
+
+**Verified:** `e2e-affiliate-flow.py` 73/73 incl. new section J (window set, shown on product page, frozen on the line,
+return closes delivery+3d, 0-day refused, commission held 3 days despite a 0-day program hold, 0-day commission matures on
+delivery, clearing falls back to 7); `e2e-returns-flow.py`, `e2e-order-override-flow.py` pass; unit tests for
+`holdFor` / `lineWindowHours`; jest affiliates/returns/sales/checkout/products/storefront pass except the known
+pre-existing retailer sign-in test; `migrate diff` against the migrated throwaway DB: no difference; tsc backend, admin,
+customer. **Deploy:** `prisma migrate deploy` + generate + API restart + admin and customer apps.

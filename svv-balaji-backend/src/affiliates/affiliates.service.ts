@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   Affiliate, AffiliateAttributionStatus, AffiliateCommissionStatus, AffiliatePayoutMethod, AffiliateStatus, OrderStatus, Prisma,
 } from '@prisma/client';
@@ -12,6 +12,7 @@ import type {
   ApplyAffiliateDto, CreatePayoutDto, ListAffiliatesQueryDto, ListAttributionsQueryDto, ListCommissionsQueryDto,
   TrackClickDto, UpdateMyAffiliateDto,
 } from './dto/affiliates.dto';
+import { StaffAlertsService } from '../realtime/staff-alerts.service';
 
 const CLICK_DEDUPE_MS = 30 * 60_000;
 const n = (d: Prisma.Decimal | number | null | undefined) => Number(d ?? 0);
@@ -43,6 +44,7 @@ export class AffiliatesService {
     private readonly settings: AffiliateSettingsService,
     private readonly ledger: AffiliateLedgerService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
   // ================================================================ public program page
@@ -188,6 +190,7 @@ export class AffiliatesService {
         where: { id: existing.id },
         data: { ...data, status: AffiliateStatus.PENDING, rejectionReason: null, reviewedAt: null, reviewedById: null },
       });
+      this.alertApplication(data.fullName, true);
       return this.mine(accountId);
     }
 
@@ -200,7 +203,18 @@ export class AffiliatesService {
         if (!codeClash || attempt >= 5) throw e;
       }
     }
+    this.alertApplication(data.fullName, false);
     return this.mine(accountId);
+  }
+
+  private alertApplication(name: string, again: boolean) {
+    void this.staffAlerts?.notify({
+      type: 'AFFILIATE_APPLICATION',
+      title: again ? 'Affiliate re-applied' : 'New affiliate application',
+      body: `${name} is waiting for approval.`,
+      link: '/affiliates',
+      permission: 'affiliates.review',
+    });
   }
 
   async updateMine(accountId: string, dto: UpdateMyAffiliateDto) {

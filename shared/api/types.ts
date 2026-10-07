@@ -1594,6 +1594,8 @@ export interface Product {
   packLabel: string | null;
   /** Shipping weight of one pack (kg), Decimal as string. Null = not recorded (no rider-vehicle limit). */
   packWeightKg?: string | null;
+  /** Days after delivery it can be returned / exchanged. Null = Return Settings default; 0 = not returnable. */
+  returnWindowDays?: number | null;
   /** Decimal - serialised as a string by Prisma. */
   mrp: string | null;
   badge: string | null;
@@ -1673,6 +1675,7 @@ export interface CreateProductInput {
   brand?: string;
   packLabel?: string;
   packWeightKg?: number | null;
+  returnWindowDays?: number | null;
   mrp?: number;
   badge?: string;
   hsnCode?: string;
@@ -1782,6 +1785,8 @@ export interface StorefrontProductDetail extends StorefrontProductCard {
   shelfLife: string | null;
   disclaimer: string | null;
   returnPolicy: string | null;
+  /** The window returns are really checked against: the product's own, else the channel default; 0 = not returnable. */
+  returnWindowDays?: number;
   warranty: string | null;
   orderLimits: {
     minOrderQuantity: number;
@@ -2606,7 +2611,24 @@ export interface OrderAllocation {
   quantity: number;
   releasedAt: string | null;
   releasedReason: string | null;
+  scannedAt?: string | null;
   createdAt: string;
+}
+
+/** The latest rider-app delivery of a local order, as GET /orders/:id returns it. */
+export interface OrderDeliveryTask {
+  id: string;
+  taskNumber: string;
+  status: 'READY_FOR_PICKUP' | 'OFFERED' | 'ASSIGNED' | 'AT_PICKUP' | 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'AT_DROP' | 'DELIVERED' | 'FAILED' | 'RETURNED_TO_STORE' | 'CANCELLED';
+  attempt: number;
+  offerRound: number;
+  needsManualAssignment: boolean;
+  autoDispatchPaused: boolean;
+  assignedAt: string | null;
+  pickedUpAt: string | null;
+  rider: { id: string; fullName: string; phone: string } | null;
+  /** Open offers of the current broadcast round. `secondsLeft` is measured on the server clock. */
+  offers: Array<{ id: string; expiresAt: string; secondsLeft: number; rider: { fullName: string } }>;
 }
 
 export interface Order {
@@ -2656,6 +2678,16 @@ export interface OrderDetail extends Order {
   items: OrderItem[];
   /** Includes released rows — filter on `releasedAt` for the live ones. */
   allocations: OrderAllocation[];
+  /** Local orders only: the current rider-app delivery, if one exists. */
+  deliveryTask?: OrderDeliveryTask | null;
+}
+
+/** POST /orders/:id/override-status */
+export interface OverrideStatusResult {
+  order: Order;
+  from: OrderStatus;
+  to: OrderStatus;
+  shortfalls: AllocationShortfall[];
 }
 
 /**

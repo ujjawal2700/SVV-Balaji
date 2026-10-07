@@ -1,7 +1,4 @@
-import {
-  BadGatewayException, BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger,
-  NotFoundException, OnModuleInit,
-} from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import {
   CoinSource, CoinTransactionReason, Customer, CustomerType, ExchangeDifferenceStatus, OrderStatus, PaymentStatus, Prisma, QcDecision,
   RefundMethod, RefundWalletReason, ReturnLogistics, ReturnRequest, ReturnRequestStatus as S, ReturnRequestType, ReturnSettings,
@@ -30,8 +27,9 @@ import {
 } from './returns-inventory';
 import {
   canTransition, coinsForLine, exchangeDifference, inclusiveTotal, logisticsFor, OPEN_STATUSES, paidValue, refundFor, remainingQuantity,
-  round2, STATUS_LABEL, typeLabel, windowCheck,
+  round2, STATUS_LABEL, typeLabel, windowCheck, lineWindowHours, NOT_RETURNABLE,
 } from './returns.logic';
+import { StaffAlertsService } from '../realtime/staff-alerts.service';
 
 type Tx = Prisma.TransactionClient;
 type Actor = { kind: 'STAFF' | 'CUSTOMER' | 'RIDER' | 'COURIER' | 'SYSTEM'; id?: string | null };
@@ -83,6 +81,7 @@ export class ReturnsService implements OnModuleInit {
     @Inject(SHIPPING_PROVIDER) private readonly shipping: ShippingProvider,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     private readonly affiliates: AffiliateLedgerService,
+    @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
   onModuleInit() {
@@ -210,10 +209,13 @@ export class ReturnsService implements OnModuleInit {
     const reasons = await this.settings.reasons({ channel: order.channel, activeOnly: true });
     const blocked = this.orderBlocked(order);
     const now = new Date();
-    const retWin = windowCheck(order.deliveredAt, s.returnWindowHours, now);
-    const excWin = windowCheck(order.deliveredAt, s.exchangeWindowHours, now);
-
     const items = await Promise.all(order.items.map(async (i) => {
+      // Per line: the product's own window (frozen at placement) or the channel default.
+      const retHours = lineWindowHours(i.returnWindowDays, s.returnWindowHours);
+      const excHours = lineWindowHours(i.returnWindowDays, s.exchangeWindowHours);
+      const closed = { ok: false, closesAt: null, reason: NOT_RETURNABLE };
+      const retWin = retHours === null ? closed : windowCheck(order.deliveredAt, retHours, now);
+      const excWin = excHours === null ? closed : windowCheck(order.deliveredAt, excHours, now);
       const reqs = order.returnRequests.filter((r) => r.orderItemId === i.id);
       const remaining = Math.max(0, remainingQuantity(i.quantity, reqs) - (await this.legacyReturned(this.prisma, i.id)));
       const check = (type: ReturnRequestType, win: typeof retWin) => {
@@ -229,6 +231,7 @@ export class ReturnsService implements OnModuleInit {
         quantity: i.quantity,
         remainingQuantity: remaining,
         unitPaid: paidValue({ quantity: i.quantity, lineTotal: Number(i.lineTotal), lineSubtotal: Number(i.lineSubtotal) }, 1).unitPaid,
+        returnWindowDays: retHours === null ? 0 : retHours / 24,
         return: check(ReturnRequestType.RETURN, retWin),
         exchange: check(ReturnRequestType.EXCHANGE, excWin),
         requests: reqs.map((r) => ({ requestNumber: r.requestNumber, type: r.type, quantity: r.quantity, status: r.status, createdAt: r.createdAt })),
@@ -326,7 +329,9 @@ export class ReturnsService implements OnModuleInit {
     const itemBlock = this.itemBlocked(dto.type, s, item.product);
     if (itemBlock) throw new BadRequestException({ code: 'ITEM_NOT_ELIGIBLE', message: itemBlock });
 
-    const win = windowCheck(order.deliveredAt, dto.type === ReturnRequestType.RETURN ? s.returnWindowHours : s.exchangeWindowHours);
+    const hours = lineWindowHours(item.returnWindowDays, dto.type === ReturnRequestType.RETURN ? s.returnWindowHours : s.exchangeWindowHours);
+    if (hours === null && !override) throw new BadRequestException({ code: 'ITEM_NOT_ELIGIBLE', message: NOT_RETURNABLE });
+    const win = windowCheck(order.deliveredAt, hours ?? 0);
     if (!win.ok && !override) throw new BadRequestException({ code: 'WINDOW_CLOSED', message: win.reason, closesAt: win.closesAt });
 
     const reason = await this.prisma.returnReason.findUnique({ where: { id: dto.reasonId } });
@@ -455,6 +460,14 @@ export class ReturnsService implements OnModuleInit {
     }
 
     await this.notify(created, S.REQUESTED, actor);
+    const b2b = order.channel === 'B2B';
+    void this.staffAlerts?.notify({
+      type: 'RETURN_REQUEST',
+      title: `New ${b2b ? 'retailer ' : ''}${created.type === 'EXCHANGE' ? 'exchange' : 'return'} request`,
+      body: `${created.requestNumber} · order ${order.orderNumber} · ${customer.name}${s.autoApprove ? ' (auto-approved)' : ' - waiting for review'}`,
+      link: b2b ? '/returns/retailers' : '/returns/customers',
+      permission: b2b ? 'returns.b2b.manage' : 'returns.b2c.manage',
+    });
     if (s.autoApprove) {
       await this.approve(order.channel, created.id, { note: 'Auto-approved by policy' }, { kind: 'SYSTEM' }).catch(async (e) => {
         await this.log(created.id, 'AUTO_APPROVE_FAILED', { kind: 'SYSTEM' }, e instanceof HttpException ? this.messageOf(e) : String(e));

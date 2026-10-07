@@ -2,7 +2,8 @@ import {
   Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, RawBodyRequest, Req, UnauthorizedException, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { Matches, MinLength, IsString } from 'class-validator';
+import { IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { OrderStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -27,6 +28,11 @@ class AssignRiderDto {
 }
 class VerifyOtpDto {
   @ApiProperty({ example: '4821' }) @Matches(/^\d{4,6}$/, { message: 'The OTP is 4-6 digits' }) otp!: string;
+}
+
+class OverrideStatusDto {
+  @ApiProperty({ enum: OrderStatus, example: 'PACKED' }) @IsEnum(OrderStatus) status!: OrderStatus;
+  @ApiProperty({ example: 'Packed at the counter, scanner was down' }) @IsString() @MinLength(5, { message: 'Give a reason (at least 5 characters)' }) @MaxLength(300) reason!: string;
 }
 
 const tokenMatches = (given: string | undefined, expected: string | undefined) => {
@@ -106,6 +112,20 @@ export class FulfillmentController {
   @RequirePermission('orders.deliver')
   @ApiOperation({ summary: "LOCAL: enter the customer's doorstep OTP to complete the delivery" })
   otp(@Param('id') id: string, @Body() dto: VerifyOtpDto, @CurrentUser() user: JwtPayload) { return this.fulfillment.verifyOtp(id, dto.otp, user.sub); }
+
+  @Post(':id/override-status')
+  @HttpCode(200)
+  @RequirePermission('orders.override')
+  @ApiOperation({
+    summary: 'Staff override: move the order to any status with a reason',
+    description:
+      'Forward runs the real side effects of every skipped step (allocation, stock out + tax invoice at dispatch, loyalty at delivery) ' +
+      'but skips the storefront checks (scan, rider, AWB, OTP). Backward only before dispatch: to ALLOCATED (re-pack) or CONFIRMED ' +
+      '(batch reservations released). CANCELLED follows the normal cancel rules. Rider-app deliveries that no longer apply are cancelled.',
+  })
+  override(@Param('id') id: string, @Body() dto: OverrideStatusDto, @CurrentUser() user: JwtPayload) {
+    return this.fulfillment.overrideStatus(id, dto.status, dto.reason, user.sub);
+  }
 }
 
 /** Server-to-server callbacks. Unauthenticated by JWT; each is authenticated by its own secret. */

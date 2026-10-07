@@ -71,15 +71,13 @@ export class RealtimeController {
   }
 
   @Post('notifications/push/subscribe')
-  @RequirePermission('orders.view')
-  @ApiOperation({ summary: 'Register this browser for new-order alerts' })
+  @ApiOperation({ summary: 'Register this browser for staff alerts (new orders, approvals, returns...) - any signed-in staff member' })
   async subscribe(@Body() dto: PushSubscribeDto, @CurrentUser() user: JwtPayload) {
     await this.push.subscribe(user.sub, dto);
     return { subscribed: true };
   }
 
   @Delete('notifications/push/subscribe')
-  @RequirePermission('orders.view')
   async unsubscribe(@Body() dto: PushUnsubscribeDto, @CurrentUser() user: JwtPayload) {
     await this.push.unsubscribe(user.sub, dto.endpoint);
     return { subscribed: false };

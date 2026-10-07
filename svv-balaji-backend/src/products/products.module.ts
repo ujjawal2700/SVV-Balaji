@@ -302,6 +302,18 @@ export class CreateProductDto {
   @Max(2000)
   packWeightKg?: number | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Days after delivery this product can be returned / exchanged. Empty = the default in Return Settings; 0 = not returnable. ' +
+      'Affiliate commission on it is held until this window closes.',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  returnWindowDays?: number | null;
+
   @ApiPropertyOptional({ description: 'Struck-through reference price. The sell price is a PriceList rule.' })
   @IsOptional()
   @IsNumber()

@@ -418,7 +418,7 @@ function Intro({ holdDays, cookieDays }: { holdDays: number; cookieDays: number 
         Recommend Pure Desi Staples. Earn Generous Monthly Payouts.
       </Typography.Title>
       <Typography.Paragraph style={{ color: '#ecfdf5', fontSize: 13.5, margin: '0 0 18px', maxWidth: 650, lineHeight: 1.6 }}>
-        Share your unique links on Instagram, YouTube, WhatsApp, or your blog. Whenever anyone buys within <b>{cookieDays} days</b>, you earn commission on every eligible item confirmed after the <b>{holdDays}-day</b> return window.
+        Share your unique links on Instagram, YouTube, WhatsApp, or your blog. Whenever anyone buys within <b>{cookieDays} days</b>, you earn commission on every eligible item once its product's return window closes (usually <b>{holdDays} days</b>).
       </Typography.Paragraph>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
@@ -844,7 +844,7 @@ function Dashboard({ data, affiliate }: { data: AffiliateMe; affiliate: Affiliat
       <div style={{ ...card, padding: 16 }}>
         <Typography.Title level={5} style={{ marginTop: 0 }}><WalletOutlined /> Your balance</Typography.Title>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-          <Balance label={`On hold (${d.holdDays}-day return window)`} value={b.pending} color="#d97706" />
+          <Balance label="On hold (until each product's return window closes)" value={b.pending} color="#d97706" />
           <Balance label="Ready for payout" value={b.payable} color="#2563eb" />
           <Balance label="Paid to you" value={b.paid} color="#16a34a" />
           <Balance label="Taken back for returns" value={b.reversed} color="#78716c" />

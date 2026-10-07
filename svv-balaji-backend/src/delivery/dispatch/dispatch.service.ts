@@ -20,6 +20,7 @@ import { EarningsService } from '../earnings/earnings.service';
 import type { Outcome } from '../earnings/earning.logic';
 import { assessRider, rankRiders, SKIP_LABEL, vehicleLimits, type RankingRules, type RiderFacts, type TaskFacts } from './rider-ranking';
 import { isVerifiedNow } from '../verification/verification.logic';
+import { LONG_TX } from '../../common/tx-options';
 
 /** A task still in someone's hands (or waiting for someone). */
 export const LIVE_STATUSES: DeliveryTaskStatus[] = [
@@ -29,6 +30,16 @@ export const LIVE_STATUSES: DeliveryTaskStatus[] = [
 export const HELD_STATUSES: DeliveryTaskStatus[] = ['ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP', 'FAILED'];
 
 const SWEEP_MS = 5_000;
+
+/**
+ * An accept tapped as the countdown ends still has to cross the network. An
+ * offer stays answerable this long past its deadline (the rider app counts
+ * down to the deadline itself), and the sweep closes it only after that, so a
+ * tap made in time is not lost to latency.
+ */
+export const OFFER_GRACE_MS = 4_000;
+/** Offers with a deadline after this are still open (deadline + grace not passed). */
+const openSince = () => new Date(Date.now() - OFFER_GRACE_MS);
 
 /**
  * Offers that mean the rider passed on the task (rejected, released it, or let
@@ -171,7 +182,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       });
       await this.log(created.id, 'READY', { note: `Ready for pickup (attempt ${created.attempt})`, actorUserId }, tx);
       return created;
-    });
+    }, LONG_TX);
     if (!task) return null;
     await this.sales.record(orderId, 'READY_FOR_PICKUP', actorUserId, task.taskNumber);
     this.changed(task);
@@ -289,7 +300,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       if (!task || !['READY_FOR_PICKUP', 'OFFERED'].includes(task.status) || task.riderId) return null;
 
       // A round is still open: let it finish.
-      const open = await tx.deliveryOffer.count({ where: { taskId, status: 'PENDING', expiresAt: { gt: new Date() } } });
+      const open = await tx.deliveryOffer.count({ where: { taskId, status: 'PENDING', expiresAt: { gt: openSince() } } });
       if (open > 0) return null;
 
       const toStaff = async (note: string | null) => {
@@ -326,7 +337,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       const who = picks.map((p) => `${byId.get(p.riderId)?.fullName ?? 'rider'}${p.km !== null ? ` (${p.km.toFixed(1)} km)` : ''}`).join(', ');
       await this.log(taskId, 'OFFERED', { note: `Round ${round}: offered to ${who}` }, tx);
       return { manual: false as const, task: updated, offers, round };
-    });
+    }, LONG_TX);
 
     if (!outcome) return null;
     if (outcome.manual) {
@@ -370,16 +381,17 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${riderId} FOR UPDATE`;
       const fresh = await tx.deliveryOffer.findUnique({ where: { id: offerId } });
       if (fresh!.status === 'TAKEN') throw new ConflictException({ code: 'OFFER_TAKEN', message: 'Another rider accepted this order first' });
+      if (fresh!.status === 'EXPIRED') throw new ConflictException({ code: 'OFFER_EXPIRED', message: 'Time ran out on this request - it has gone to another rider' });
       if (fresh!.status !== 'PENDING') throw new ConflictException({ code: 'OFFER_CLOSED', message: `This request was already ${fresh!.status.toLowerCase()}` });
 
       /** Close this offer; when it was the round's last open one, the task waits for the next round. */
       const close = async (status: 'EXPIRED' | 'REJECTED', rejectReason?: string) => {
         await tx.deliveryOffer.update({ where: { id: offerId }, data: { status, respondedAt: new Date(), rejectReason: rejectReason?.slice(0, 200) } });
-        const others = await tx.deliveryOffer.count({ where: { taskId: offer.taskId, status: 'PENDING', expiresAt: { gt: new Date() } } });
+        const others = await tx.deliveryOffer.count({ where: { taskId: offer.taskId, status: 'PENDING', id: { not: offerId }, expiresAt: { gt: openSince() } } });
         if (others === 0) await tx.deliveryTask.updateMany({ where: { id: offer.taskId, status: 'OFFERED' }, data: { status: 'READY_FOR_PICKUP' } });
       };
 
-      if (fresh!.expiresAt <= new Date()) {
+      if (fresh!.expiresAt <= openSince()) {
         await close('EXPIRED');
         return { kind: 'EXPIRED' as const, taskId: offer.taskId };
       }
@@ -413,7 +425,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       await this.log(task.id, 'ASSIGNED', { riderId, note: `Accepted by ${rider.fullName}${losers.length ? ` (first of ${losers.length + 1})` : ''}` }, tx);
       if (task.orderId) await tx.order.update({ where: { id: task.orderId }, data: { riderName: rider.fullName, riderPhone: rider.phone } });
       return { kind: 'ACCEPTED' as const, task, rider, losers };
-    });
+    }, LONG_TX);
 
     if (result.kind === 'ACCEPTED') {
       for (const l of result.losers) this.events.publish({ kind: 'offer:closed', riderId: l.riderId, offerId: l.id, taskId: result.task.id, status: 'TAKEN' });
@@ -423,6 +435,13 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       return { status: 'ACCEPTED', taskId: result.task.id };
     }
     if (result.kind === 'GONE') throw new ConflictException({ code: 'OFFER_TAKEN', message: 'This order was already given to another rider' });
+    if (result.kind === 'EXPIRED') {
+      this.events.publish({ kind: 'offer:closed', riderId, offerId, taskId: result.taskId, status: 'EXPIRED' });
+      await this.dispatch(result.taskId);
+      // An accept that came too late is a failure the app must show, never a 200 it could read as "assigned".
+      if (accept) throw new ConflictException({ code: 'OFFER_EXPIRED', message: 'Time ran out on this request - it has gone to another rider' });
+      return { status: 'EXPIRED', taskId: result.taskId };
+    }
     await this.dispatch(result.taskId); // no-op while other riders of the round can still answer
     if (result.kind === 'FULL') throw new ConflictException({ code: 'AT_CAPACITY', message: 'You already hold as many orders as you are allowed - finish one first' });
     return { status: result.kind, taskId: result.taskId };
@@ -457,7 +476,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       await this.log(taskId, 'ASSIGNED', { riderId, actorUserId: userId, note: `Assigned by staff to ${rider.fullName}` }, tx);
       if (task.orderId) await tx.order.update({ where: { id: task.orderId }, data: { riderName: rider.fullName, riderPhone: rider.phone } });
       return { updated, rider, withdrawn, previousRider };
-    });
+    }, LONG_TX);
     for (const w of result.withdrawn) this.events.publish({ kind: 'offer:closed', riderId: w.riderId, offerId: w.id, taskId, status: 'WITHDRAWN' });
     if (result.previousRider) {
       await this.notify(result.previousRider, 'TASK_REASSIGNED', 'Delivery reassigned', 'A delivery you held was given to another rider.', taskId);
@@ -490,7 +509,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       });
       await this.log(taskId, paused ? 'AUTO_PAUSED' : 'AUTO_RESUMED', { actorUserId: userId, note: paused ? 'Staff will assign this delivery manually' : 'Offering to riders again' }, tx);
       return { updated, withdrawn };
-    });
+    }, LONG_TX);
     for (const w of result.withdrawn) this.events.publish({ kind: 'offer:closed', riderId: w.riderId, offerId: w.id, taskId, status: 'WITHDRAWN' });
     this.changed(result.updated);
     if (!paused) await this.dispatch(taskId, { ignoreRoundLimit: true });
@@ -524,7 +543,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       }
       await tx.order.update({ where: { id: orderId }, data: { riderName: driver.name, riderPhone: driver.phone } });
       return { ok: true as const, withdrawn, taskId: task?.id ?? null };
-    });
+    }, LONG_TX);
     if (result.taskId) {
       for (const w of result.withdrawn) this.events.publish({ kind: 'offer:closed', riderId: w.riderId, offerId: w.id, taskId: result.taskId, status: 'WITHDRAWN' });
       this.events.publish({ kind: 'task:updated', riderId: null, taskId: result.taskId, orderId, status: 'CANCELLED' });
@@ -669,7 +688,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       });
       await this.log(created.id, 'READY', { actorUserId: userId, note: `Re-attempt ${created.attempt} after ${task.taskNumber}` }, tx);
       return created;
-    });
+    }, LONG_TX);
     // The order is still DISPATCHED (goods left once); riders pick up again from the store.
     await this.sales.record(task.orderId, 'REATTEMPT_SCHEDULED', userId, next.taskNumber);
     this.changed(next);
@@ -685,7 +704,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     if (this.sweeping) return;
     this.sweeping = true;
     try {
-      const expired = await this.prisma.deliveryOffer.findMany({ where: { status: 'PENDING', expiresAt: { lte: new Date() } }, take: 100 });
+      const expired = await this.prisma.deliveryOffer.findMany({ where: { status: 'PENDING', expiresAt: { lte: openSince() } }, take: 100 });
       const roundsToCheck = new Set<string>();
       for (const o of expired) {
         const closed = await this.prisma.$transaction(async (tx) => {
@@ -693,11 +712,11 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
           await tx.$queryRaw`SELECT id FROM delivery_tasks WHERE id = ${o.taskId} FOR UPDATE`;
           const c = await tx.deliveryOffer.updateMany({ where: { id: o.id, status: 'PENDING' }, data: { status: 'EXPIRED', respondedAt: new Date() } });
           if (c.count !== 1) return false;
-          const others = await tx.deliveryOffer.count({ where: { taskId: o.taskId, status: 'PENDING', expiresAt: { gt: new Date() } } });
+          const others = await tx.deliveryOffer.count({ where: { taskId: o.taskId, status: 'PENDING', expiresAt: { gt: openSince() } } });
           if (others === 0) await tx.deliveryTask.updateMany({ where: { id: o.taskId, status: 'OFFERED' }, data: { status: 'READY_FOR_PICKUP' } });
           await this.log(o.taskId, 'OFFER_EXPIRED', { riderId: o.riderId }, tx);
           return true;
-        });
+        }, LONG_TX);
         if (!closed) continue;
         this.events.publish({ kind: 'offer:closed', riderId: o.riderId, offerId: o.id, taskId: o.taskId, status: 'EXPIRED' });
         roundsToCheck.add(o.taskId);

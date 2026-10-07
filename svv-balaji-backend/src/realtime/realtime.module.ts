@@ -4,13 +4,14 @@ import { AdminOrdersGateway } from './admin-orders.gateway';
 import { OrderEventsService } from './order-events.service';
 import { PushService } from './push.service';
 import { RealtimeController } from './realtime.controller';
+import { StaffAlertsService } from './staff-alerts.service';
 
 /** Global so any module that changes an order can publish without importing this. */
 @Global()
 @Module({
   imports: [JwtModule.register({})],
   controllers: [RealtimeController],
-  providers: [OrderEventsService, PushService, AdminOrdersGateway],
-  exports: [OrderEventsService, PushService, AdminOrdersGateway],
+  providers: [OrderEventsService, PushService, AdminOrdersGateway, StaffAlertsService],
+  exports: [OrderEventsService, PushService, AdminOrdersGateway, StaffAlertsService],
 })
 export class RealtimeModule {}

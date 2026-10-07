@@ -81,19 +81,26 @@ export function AppLayout() {
   const can = useCanFn();
 
   // The whole panel listens for orders: any screen gets notified, and every orders view refreshes.
-  const live = useLiveOrders(can('ORDER_VIEW'), () => navigate('/b2c-orders'));
+  const live = useLiveOrders(can('ORDER_VIEW'), (path) => navigate(path));
+  // Browser alerts (new orders, rider sign-ups, returns, approvals...) for every staff member.
+  // Already allowed on this browser -> (re)register silently; not decided yet -> offer the button.
   const [alertsReady, setAlertsReady] = useState(false);
   useEffect(() => {
-    if (!can('ORDER_VIEW')) return;
-    void orderAlertSupport().then((s) => setAlertsReady(s === 'ready')).catch(() => undefined);
-  }, [can]);
+    void orderAlertSupport()
+      .then(async (s) => {
+        if (s !== 'ready') return;
+        if (Notification.permission === 'granted') await enableOrderAlerts();
+        else setAlertsReady(true);
+      })
+      .catch(() => undefined);
+  }, [user?.id]);
   const turnOnAlerts = async () => {
     try {
       const ok = await enableOrderAlerts();
-      message[ok ? 'success' : 'warning'](ok ? 'Order alerts are on for this device' : 'Order alerts were not enabled');
+      message[ok ? 'success' : 'warning'](ok ? 'Alerts are on for this browser' : 'Alerts were not enabled - allow notifications for this site');
       if (ok) setAlertsReady(false);
     } catch {
-      message.error('Could not enable order alerts');
+      message.error('Could not enable alerts');
     }
   };
 
@@ -351,7 +358,7 @@ export function AppLayout() {
               </Tag>
             ) : null}
             {alertsReady ? (
-              <Button size="small" icon={<BellOutlined />} onClick={() => void turnOnAlerts()}>Enable order alerts</Button>
+              <Button size="small" icon={<BellOutlined />} onClick={() => void turnOnAlerts()}>Turn on alerts</Button>
             ) : null}
             <NotificationBell />
             {user?.branch ? <Tag>{user.branch.name}</Tag> : null}

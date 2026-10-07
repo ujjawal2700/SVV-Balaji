@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as webpush from 'web-push';
 import { PrismaService } from '../prisma/prisma.service';
-import type { OrderSummary } from './order-summary';
 
 /**
  * Web Push (VAPID) to staff browsers - the notification that still arrives when
@@ -23,7 +22,7 @@ export class PushService {
     if (this.enabled) {
       webpush.setVapidDetails(process.env.VAPID_SUBJECT ?? 'mailto:admin@svvbalaji.com', pub!, priv!);
     } else {
-      this.logger.warn('Web push is off: set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY to enable order alerts when the dashboard is closed');
+      this.logger.warn('Web push is off: set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY to enable staff alerts in the browser');
     }
   }
 
@@ -48,18 +47,13 @@ export class PushService {
     return this.prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } });
   }
 
-  async sendNewOrder(
+  /** One staff alert to these browser subscriptions. Revoked ones are forgotten. */
+  async sendAlert(
     subs: Array<{ id: string; endpoint: string; p256dh: string; auth: string }>,
-    order: OrderSummary,
+    alert: { title: string; body: string; link: string; tag: string; type: string },
   ): Promise<number> {
     if (!this.enabled || subs.length === 0) return 0;
-    const payload = JSON.stringify({
-      title: `New order ${order.orderNumber}`,
-      body: `${order.customerName} · ₹${order.total.toFixed(2)} · ${order.fulfillmentMethod ?? order.channel} · ${order.nodeName}`,
-      tag: order.id, // one notification per order, however many devices/retries
-      url: '/b2c-orders',
-      orderId: order.id,
-    });
+    const payload = JSON.stringify({ title: alert.title, body: alert.body, tag: alert.tag, url: alert.link, type: alert.type });
     let sent = 0;
     for (const s of subs) {
       try {

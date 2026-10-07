@@ -1,10 +1,19 @@
 import { ReturnLogistics, ReturnRequestStatus as S } from '@prisma/client';
 import {
   batchesForReturn, canTransition, coinsForLine, exchangeDifference, inclusiveTotal, logisticsFor, paidValue, refundFor, remainingQuantity,
-  windowCheck,
+  windowCheck, lineWindowHours,
 } from './returns.logic';
 
 describe('returns.logic', () => {
+  describe('per-product window', () => {
+    it("uses the product's own days, else the channel default; 0 = not returnable", () => {
+      expect(lineWindowHours(null, 168)).toBe(168);
+      expect(lineWindowHours(undefined, 72)).toBe(72);
+      expect(lineWindowHours(15, 168)).toBe(360);
+      expect(lineWindowHours(0, 168)).toBeNull();
+    });
+  });
+
   describe('window (from ACTUAL delivery)', () => {
     const delivered = new Date('2026-10-01T10:00:00Z');
     it('is open inside the window and closed after it', () => {

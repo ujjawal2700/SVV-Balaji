@@ -3,6 +3,7 @@ import { notification } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { checkoutAdminApi, type OrderSummary } from '@shared/api/checkout';
+import { PUSH_KEYS } from '@shared/api/pushNotifications';
 import { queryKeys } from '@shared/api/queryKeys';
 import { tokenStore } from '@shared/api/tokenStore';
 
@@ -46,12 +47,21 @@ function socketOrigin(): string {
  * - `order.id` is the dedup key: an order seen through the socket AND the
  *   catch-up query is announced once.
  */
-export function useLiveOrders(enabled: boolean, onOpenOrders: () => void): LiveStatus {
+/** A staff alert from the server (StaffAlertsService): new order, rider sign-up, return request, ... */
+interface StaffAlert {
+  type: string;
+  title: string;
+  body: string;
+  link: string;
+  tag: string;
+}
+
+export function useLiveOrders(enabled: boolean, onOpen: (path: string) => void): LiveStatus {
   const qc = useQueryClient();
   const [status, setStatus] = useState<LiveStatus>('connecting');
   const seen = useRef<Set<string>>(new Set());
-  const openRef = useRef(onOpenOrders);
-  openRef.current = onOpenOrders;
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
 
   useEffect(() => {
     if (!enabled) return;
@@ -73,7 +83,7 @@ export function useLiveOrders(enabled: boolean, onOpenOrders: () => void): LiveS
         description: `${o.customerName} · ₹${o.total.toFixed(2)} · ${o.channel}${o.fulfillmentMethod ? ` · ${o.fulfillmentMethod}` : ''} · ${o.nodeName}`,
         placement: 'bottomRight',
         duration: 8,
-        onClick: () => openRef.current(),
+        onClick: () => openRef.current(`/${o.channel === 'B2B' ? 'b2b' : 'b2c'}-orders/${o.id}`),
       });
     };
 
@@ -118,6 +128,20 @@ export function useLiveOrders(enabled: boolean, onOpenOrders: () => void): LiveS
         refresh();
       });
       socket.on('orders:updated', () => refresh());
+      // Everything that needs staff: the bell refreshes, and a pop-up shows on whatever screen is open.
+      // New orders already got their own pop-up from orders:new above.
+      socket.on('alerts:new', (a: StaffAlert) => {
+        void qc.invalidateQueries({ queryKey: PUSH_KEYS.inbox });
+        if (a.type === 'NEW_ORDER') return;
+        notification.info({
+          key: a.tag,
+          message: a.title,
+          description: a.body,
+          placement: 'bottomRight',
+          duration: 10,
+          onClick: () => openRef.current(a.link),
+        });
+      });
       socket.on('tickets:new', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
       socket.on('tickets:message', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
       socket.on('tickets:updated', () => void qc.invalidateQueries({ queryKey: ['support-tickets'] }));
