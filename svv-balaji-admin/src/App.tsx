@@ -299,6 +299,7 @@ const ReferralsPage = lazy(() =>
 const AffiliatesPage = lazy(() => import('./pages/affiliates/AffiliatesPage').then((m) => ({ default: m.AffiliatesPage })));
 const AffiliateSettingsPage = lazy(() => import('./pages/affiliates/AffiliateSettingsPage').then((m) => ({ default: m.AffiliateSettingsPage })));
 const AffiliatePayoutsPage = lazy(() => import('./pages/affiliates/AffiliatePayoutsPage').then((m) => ({ default: m.AffiliatePayoutsPage })));
+const AffiliateDetailPage = lazy(() => import('./pages/affiliates/AffiliateDetailPage').then((m) => ({ default: m.AffiliateDetailPage })));
 const ProfilePage = lazy(() =>
   import('./pages/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
@@ -464,6 +465,9 @@ export function App() {
           </Route>
           <Route element={<RequirePermission permission={PERMISSIONS.RIDERS_VIEW} />}>
             <Route path="/riders/:id" element={<RiderDetailPage />} />
+          </Route>
+          <Route element={<RequirePermission permission={PERMISSIONS.AFFILIATES_VIEW} />}>
+            <Route path="/affiliates/:id" element={<AffiliateDetailPage />} />
           </Route>
           <Route element={<RequirePermission permission={PERMISSIONS.ORDER_VIEW} />}>
             <Route path="/b2c-orders/:id" element={<OrderDetailPage />} />

@@ -359,7 +359,7 @@ export function formValuesToPayload(values: ProductFormValues): CreateProductInp
     brand: clean(values.brand),
     packLabel: clean(values.packLabel),
     packWeightKg: typeof values.packWeightKg === 'number' ? values.packWeightKg : null, // null clears it
-    returnWindowDays: typeof values.returnWindowDays === 'number' ? values.returnWindowDays : null, // blank = Return Settings default
+    returnWindowDays: typeof values.returnWindowDays === 'number' ? values.returnWindowDays : null, // null = Return Settings default
     mrp: opt(values.mrp),
     badge: clean(values.badge),
     hsnCode: clean(values.hsnCode),

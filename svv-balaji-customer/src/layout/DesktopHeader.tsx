@@ -20,7 +20,7 @@ import {
   TruckOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Badge, Button, Dropdown, Input, type MenuProps, Tag, Typography } from 'antd';
+import { Badge, Button, Dropdown, Input, type MenuProps, Tag, Typography, Skeleton } from 'antd';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
@@ -35,7 +35,7 @@ import { useUnreadNotifications } from '../notifications/useUnreadNotifications'
 export function DesktopHeader() {
   const cart = useCart();
   const navigate = useNavigate();
-  const { role, customerProfile, retailerProfile, logout, isLoggedIn } = useCustomerAuth();
+  const { role, customerProfile, retailerProfile, logout, isLoggedIn, initialising } = useCustomerAuth();
   const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const unreadNotifications = useUnreadNotifications();
@@ -200,7 +200,7 @@ export function DesktopHeader() {
             gap: 16,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+          <div className="hdr-top-left" style={{ display: 'flex', alignItems: 'center', gap: 16, overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
               <SafetyCertificateOutlined style={{ color: '#a7f3d0' }} />
               100% Farm-Traceable Agro Foods &amp; Staples
@@ -211,7 +211,7 @@ export function DesktopHeader() {
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+          <div className="hdr-top-right" style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
             {!isRetailer && (
               <Link
                 to="/register"
@@ -246,8 +246,8 @@ export function DesktopHeader() {
             >
               <QrcodeOutlined /> Trace QR Batch
             </Link>
-            <span style={{ color: '#6ee7b7' }}>|</span>
-            <span style={{ color: '#d1fae5', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span className="hdr-phone" style={{ color: '#6ee7b7' }}>|</span>
+            <span className="hdr-phone" style={{ color: '#d1fae5', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <PhoneOutlined /> <strong>1800-209-DESI</strong>
             </span>
           </div>
@@ -266,6 +266,7 @@ export function DesktopHeader() {
             justifyContent: 'space-between',
             gap: 20,
           }}
+          data-hdr-main=""
         >
           {/* Logo & Delivering To */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
@@ -280,6 +281,7 @@ export function DesktopHeader() {
               <img
                 src="/images/desi-tokri-horizontal.png"
                 alt="Desi Tokri"
+                className="hdr-logo"
                 style={{
                   height: 34,
                   width: 'auto',
@@ -310,7 +312,7 @@ export function DesktopHeader() {
           </div>
 
           {/* Clean Omnibar Search */}
-          <div style={{ flex: '1 1 280px', maxWidth: 640, minWidth: 200 }}>
+          <div className="hdr-search" style={{ flex: '1 1 280px', maxWidth: 640, minWidth: 160 }}>
             <form onSubmit={handleSearch}>
               <Input
                 size="large"
@@ -350,7 +352,10 @@ export function DesktopHeader() {
           {/* Right Action buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
             {/* User Profile / Retailer Dropdown or Sign In */}
-            {isLoggedIn ? (
+            {initialising ? (
+              // Session being restored: hold the account slot instead of flashing "Sign In".
+              <Skeleton.Button active style={{ width: 132, height: 42, borderRadius: 10 }} />
+            ) : isLoggedIn ? (
               <Dropdown menu={{ items: isRetailer ? retailerAccountMenu : customerAccountMenu }} placement="bottomRight" arrow>
                 <Link to="/profile" style={{ textDecoration: 'none' }}>
                   <div
@@ -384,7 +389,7 @@ export function DesktopHeader() {
                     >
                       <UserOutlined />
                     </div>
-                    <div style={{ textAlign: 'left', lineHeight: 1.15 }}>
+                    <div className="hdr-account-text" style={{ textAlign: 'left', lineHeight: 1.15 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1917', display: 'block' }}>
                         {isRetailer ? 'Store Profile' : 'My Account'}
                       </span>
@@ -392,7 +397,7 @@ export function DesktopHeader() {
                         {isRetailer ? retailerProfile?.storeName || 'Store' : customerProfile?.name || 'Customer'}
                       </span>
                     </div>
-                    <DownOutlined style={{ fontSize: 9, color: '#94a3b8', marginLeft: 2 }} />
+                    <DownOutlined className="hdr-account-text" style={{ fontSize: 9, color: '#94a3b8', marginLeft: 2 }} />
                   </div>
                 </Link>
               </Dropdown>
@@ -498,6 +503,7 @@ export function DesktopHeader() {
                   }}
                 >
                   <span
+                    className="hdr-cart-label"
                     style={{
                       fontSize: 10.5,
                       fontWeight: 600,
@@ -525,6 +531,7 @@ export function DesktopHeader() {
 
                 {/* Subtle Right Arrow */}
                 <RightOutlined
+                  className="hdr-cart-arrow"
                   style={{
                     fontSize: 10,
                     color: 'rgba(255, 255, 255, 0.8)',

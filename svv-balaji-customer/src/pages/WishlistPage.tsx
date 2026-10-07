@@ -15,6 +15,8 @@ import { useToggleWishlist, useWishlist } from '../hooks/useWishlist';
 import { formatInr } from '../utils/money';
 
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
+import { ProductTiles } from '../layout/PageSkeleton';
 interface WishlistItem {
   id: string;
   productId: string;
@@ -110,10 +112,22 @@ export function WishlistPage() {
     }
   };
 
+  if (wishlist.isLoading || catalogue.isLoading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#fff' }}>
+        <DesktopPageHeader title="My Wishlist" crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Wishlist' }]} />
+        <div className="store-container">
+          <ProductTiles n={8} />
+        </div>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div style={{ minHeight: '100vh', background: '#fff' }}>
-        <header style={{ padding: '16px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
+        <DesktopPageHeader title="My Wishlist" crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Wishlist' }]} />
+        <header className="mobile-flex" style={{ padding: '16px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}>
             <ArrowLeftOutlined style={{ fontSize: 20 }} />
           </button>
@@ -140,9 +154,14 @@ export function WishlistPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fff', paddingBottom: 80 }}>
+    <div className="dk-page" style={{ minHeight: '100vh', background: '#fff', paddingBottom: 80 }}>
+      <DesktopPageHeader
+        title="My Wishlist"
+        subtitle={`${items.length} saved item${items.length !== 1 ? 's' : ''} - add them to your cart whenever you are ready.`}
+        crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Wishlist' }]}
+      />
       {/* Header */}
-      <header style={{
+      <header className="mobile-flex" style={{
         padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0, background: '#fff', zIndex: 100,
       }}>
@@ -160,7 +179,8 @@ export function WishlistPage() {
       </header>
 
       {/* Product Grid */}
-      <div style={{
+      <div className="dk-container">
+      <div className="wl-grid" style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: '1px',
@@ -294,6 +314,7 @@ export function WishlistPage() {
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

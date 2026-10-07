@@ -3589,3 +3589,63 @@ delivery, clearing falls back to 7); `e2e-returns-flow.py`, `e2e-order-override-
 `holdFor` / `lineWindowHours`; jest affiliates/returns/sales/checkout/products/storefront pass except the known
 pre-existing retailer sign-in test; `migrate diff` against the migrated throwaway DB: no difference; tsc backend, admin,
 customer. **Deploy:** `prisma migrate deploy` + generate + API restart + admin and customer apps.
+
+## 2026-10-07 (later) — Customer / retailer storefront: desktop + mid-size layouts (Raunak, via agent)
+
+UI only, `svv-balaji-customer` (customer and retailer use the same pages). **Phones (< 768px) are unchanged** - every new
+rule is inside a `min-width: 768px` (or 1024px) media query, and mobile card order is preserved.
+
+- **Header (768-1099px):** it overflowed (cart button cut off at 1024 / 820). Secondary bits now hide at mid widths:
+  announcement text, phone number (< 900), account name, "My Cart" label. Class hooks `hdr-*` in `DesktopHeader.tsx`.
+- **`layout/DesktopPageHeader.tsx`** (new): breadcrumb + title + subtitle + actions, aligned with the header container;
+  replaces the phone "<- Title" app bar on desktop (the app bar is `mobile-flex` / `mobile-only` now).
+- **Layout utilities** appended to `styles.css`: `dk-container` (header-width container, desktop only), `dk-wide`,
+  `dk-readable` (960px), `dk-form` (760px), `dk-grid-2` (content + 380/400px side column from 1024px),
+  `dk-sticky` (clears the sticky header), `dk-cards` (auto-fill card grid), `dk-side-only` / `dk-inline-only`,
+  `dk-align` (align a page's own container to the header).
+- Pages: **Orders** (header + 2-up order cards), **Order details** (bill + order details in a sticky right column from
+  1024px), **Addresses** (card grid, "Add new address" in the header), **Wishlist** (card grid), **Returns**, **Return
+  request** (form width), **Rewards**, **Ledger & Credit** (retailer), **Notifications** ("Mark all read" in the header),
+  **Search** (search box in the content column, no duplicate full-width bar), **Help**, **Affiliate**, **Refer** (phone
+  bar hidden). **Cart:** items column + 400px sticky summary (was 50/50), "1 item". **Checkout / product page:** widths
+  aligned to the header, sticky summary clears the header.
+
+**Verified:** headless-Edge screenshots of 16 pages at 1440 / 1024 / 820 (signed-in shopper with cart and orders, on the
+throwaway API) - no horizontal overflow at any width; phone captures at 390 unchanged; customer `tsc` and `vite build`.
+Not click-tested by hand. No API changes.
+
+## 2026-10-07 (later) — Storefront loading states: skeletons, no guest flash, footer stays down (Raunak, via agent)
+
+Reported: while a page fetches, sections go blank and on desktop the footer jumps up under the header, then drops when
+the data arrives. Checked by holding every `/api/v1` call 2.5 s in headless Edge and capturing mid-load.
+
+- **Footer:** `.store-content` is at least `100dvh - 100px` on desktop, so the footer always starts below the fold.
+- **`layout/PageSkeleton.tsx`** (new): placeholder shaped like the page (`account` / `catalog` / `detail` / `home`,
+  picked from the route; `ProductTiles` exported for in-page use). Replaces the "Loading Storefront…" Suspense text
+  and the account guard's spinner.
+- **Real bug fixed - guest flash:** while a signed-in session was being restored (refresh + /me), every page rendered as
+  a GUEST: header "Sign In", My Orders "Sign in with OTP", cart "No Delivery Address Selected" - and a retailer would
+  briefly see consumer prices. `StoreShell` now shows the skeleton while `initialising` (guests have no session to
+  restore, so no wait for them) and the header shows a placeholder instead of "Sign In".
+- **Per page:** product page and product listing (tile skeletons, were a spinner), Notifications (list skeleton),
+  Wishlist (waits for the list before "Nothing saved yet"), Profile stats (placeholders, never a misleading "0 pts" /
+  "0 orders"), Cart delivery-address card (placeholder, never "No Delivery Address Selected" while loading).
+
+**Verified:** slow-API captures at 1440 and 390 for orders, cart, profile, notifications, wishlist, product, listing,
+home; customer `tsc` + `vite build`. Phones keep their layout (skeletons only while loading). No API changes.
+
+## 2026-10-07 (later) — Admin: affiliate opens as a full page, not a drawer (Raunak, via agent)
+
+- New `svv-balaji-admin/src/pages/affiliates/AffiliateDetailPage.tsx` at **`/affiliates/:id`** (guarded by
+  `affiliates.view`), laid out like the order / customer detail pages: header card (back, name, code, status, applied /
+  reviewed dates, Approve / Reject / Suspend / Reactivate with the reason dialog), status alerts (pending review,
+  rejected / suspended reason), left column (profile, promotion, payout), right column (6 stat cards: clicks, orders,
+  on hold, payable now, paid, taken back) and tabs: commission per item, orders through their links (linked to the
+  order page), payouts.
+- `AffiliatesPage.tsx`: the drawer is gone; clicking a row or Review / Open navigates to the page. `CommissionLedger`
+  is exported and takes `affiliateId` (+ `bare`) so the page reuses it.
+- Staff alert for a new / repeat affiliate application now links to `/affiliates/<id>` (was the list).
+
+**Verified:** admin `tsc` + `vite build`, backend `tsc`; `e2e-affiliate-flow.py` ALL PASSED; headless-Edge screenshot of
+the page for an affiliate with commissions, returns and two payouts. No API changes (uses existing detail /
+commissions?affiliateId / attributions?affiliateId / payouts?affiliateId).

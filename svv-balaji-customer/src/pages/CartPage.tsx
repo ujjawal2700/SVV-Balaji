@@ -11,7 +11,7 @@ import {
   ShoppingOutlined,
   TagsOutlined,
 } from '@ant-design/icons';
-import { Button, Divider, Empty, Input, Modal, Radio, Space, Tag, Typography, message } from 'antd';
+import { Button, Divider, Empty, Input, Modal, Radio, Space, Tag, Typography, message, Skeleton } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -263,11 +263,11 @@ export function CartPage() {
             <span style={{ color: '#1c1917', fontWeight: 600 }}>Shopping Cart</span>
           </div>
           <Typography.Title level={3} style={{ margin: 0, color: '#1c1917' }}>
-            Shopping Cart ({cart.count} items)
+            Shopping Cart ({cart.count} item{cart.count === 1 ? '' : 's'})
           </Typography.Title>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'flex-start' }}>
+        <div className="dk-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, alignItems: 'flex-start' }}>
           
           {/* Left Column: Delivery Address & Cart Lines */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -284,7 +284,10 @@ export function CartPage() {
                 boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
               }}
             >
-              {selectedAddress ? (
+              {addressesQuery.isLoading ? (
+                // Saved addresses still loading: never claim "No delivery address" before we know.
+                <Skeleton active title={{ width: '40%' }} paragraph={{ rows: 1, width: '75%' }} style={{ flex: 1 }} />
+              ) : selectedAddress ? (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <Typography.Text strong style={{ fontSize: 14 }}>Delivering to:</Typography.Text>
@@ -466,7 +469,7 @@ export function CartPage() {
           </div>
 
           {/* Right Column: Sticky Price Breakdown & Checkout */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="dk-sticky" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Coupons & Promo Codes Card */}
             <div
               style={{

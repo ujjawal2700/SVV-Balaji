@@ -190,29 +190,30 @@ export class AffiliatesService {
         where: { id: existing.id },
         data: { ...data, status: AffiliateStatus.PENDING, rejectionReason: null, reviewedAt: null, reviewedById: null },
       });
-      this.alertApplication(data.fullName, true);
+      this.alertApplication(existing.id, data.fullName, true);
       return this.mine(accountId);
     }
 
+    let createdId = '';
     for (let attempt = 0; ; attempt += 1) {
       try {
-        await this.prisma.affiliate.create({ data: { ...data, customerAccountId: accountId, code: affiliateCode(data.fullName) } });
+        createdId = (await this.prisma.affiliate.create({ data: { ...data, customerAccountId: accountId, code: affiliateCode(data.fullName) }, select: { id: true } })).id;
         break;
       } catch (e) {
         const codeClash = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002' && String(e.meta?.target ?? '').includes('code');
         if (!codeClash || attempt >= 5) throw e;
       }
     }
-    this.alertApplication(data.fullName, false);
+    this.alertApplication(createdId, data.fullName, false);
     return this.mine(accountId);
   }
 
-  private alertApplication(name: string, again: boolean) {
+  private alertApplication(affiliateId: string, name: string, again: boolean) {
     void this.staffAlerts?.notify({
       type: 'AFFILIATE_APPLICATION',
       title: again ? 'Affiliate re-applied' : 'New affiliate application',
       body: `${name} is waiting for approval.`,
-      link: '/affiliates',
+      link: `/affiliates/${affiliateId}`,
       permission: 'affiliates.review',
     });
   }

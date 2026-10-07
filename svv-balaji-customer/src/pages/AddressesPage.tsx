@@ -7,6 +7,7 @@ import { checkoutApi, checkoutError, type Address } from '../api/checkout';
 import { AddressFormModal } from '../components/AddressFormModal';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 export const ADDRESSES_KEY = ['storefront', 'addresses'] as const;
 
 export function AddressesPage() {
@@ -28,14 +29,27 @@ export function AddressesPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
-      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}>
           <ArrowLeftOutlined style={{ fontSize: 20 }} />
         </button>
         <Typography.Text strong style={{ fontSize: 16 }}>My Addresses</Typography.Text>
       </header>
+      <DesktopPageHeader
+        title="My Addresses"
+        subtitle="Saved delivery addresses. Pin an address on the map for faster local delivery."
+        crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'My Addresses' }]}
+        actions={
+          role !== 'GUEST' ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditing(null); setOpen(true); }} style={{ borderRadius: 10, fontWeight: 600 }}>
+              Add new address
+            </Button>
+          ) : undefined
+        }
+      />
 
-      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
+      <div className="dk-container">
+      <div className="dk-wide" style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
         {role === 'GUEST' ? (
           <div style={{ background: '#fff', borderRadius: 12, padding: 20 }}>
             <Typography.Text>Sign in to save delivery addresses.</Typography.Text>
@@ -45,6 +59,7 @@ export function AddressesPage() {
           <Skeleton active />
         ) : (
           <>
+            <div className="dk-cards">
             {(addresses.data ?? []).map((a) => (
               <div key={a.id} style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -66,16 +81,20 @@ export function AddressesPage() {
                 </Typography.Text>
               </div>
             ))}
+            </div>
             {(addresses.data ?? []).length === 0 ? (
               <div style={{ background: '#fff', borderRadius: 12, padding: 20, marginBottom: 10 }}>
                 <Typography.Text type="secondary">You have no saved addresses yet.</Typography.Text>
               </div>
             ) : null}
-            <Button type="primary" icon={<PlusOutlined />} size="large" block onClick={() => { setEditing(null); setOpen(true); }}>
-              Add new address
-            </Button>
+            <div className="mobile-only">
+              <Button type="primary" icon={<PlusOutlined />} size="large" block onClick={() => { setEditing(null); setOpen(true); }}>
+                Add new address
+              </Button>
+            </div>
           </>
         )}
+      </div>
       </div>
 
       <AddressFormModal

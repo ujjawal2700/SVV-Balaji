@@ -7,6 +7,7 @@ import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { creditApi, TERMS_LABEL, type CreditBill, type CreditPayment, type MyCreditAccount, type StatementLine } from '../api/credit';
 import { formatInr } from '../utils/money';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const METHOD_LABEL: Record<CreditPayment['method'], string> = {
   CASH: 'Cash',
   UPI: 'UPI',
@@ -45,13 +46,20 @@ export function WalletPage() {
   return (
     <div style={{ background: '#f1f5f9', minHeight: '100vh', paddingBottom: 40 }}>
       <header
+        className="mobile-flex"
         style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 }}
       >
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} />
         <Typography.Title level={5} style={{ margin: 0 }}>Mandi Ledger &amp; Credit</Typography.Title>
       </header>
+      <DesktopPageHeader
+        title="Mandi Ledger & Credit"
+        subtitle="Your credit limit, what is due, and every bill and payment on your account."
+        crumbs={[{ label: 'Store Profile', to: '/profile' }, { label: 'Ledger & Credit' }]}
+      />
 
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="dk-container">
+      <div className="dk-wide dk-readable" style={{ maxWidth: 760, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {account.isLoading ? (
           <div style={{ ...card, padding: 20 }}><Skeleton active paragraph={{ rows: 4 }} /></div>
         ) : account.error || !a ? (
@@ -101,6 +109,7 @@ export function WalletPage() {
             </Typography.Text>
           </>
         )}
+      </div>
       </div>
     </div>
   );

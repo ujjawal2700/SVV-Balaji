@@ -5,6 +5,8 @@ import { BottomNav } from './BottomNav';
 import { DesktopFooter } from './DesktopFooter';
 import { DesktopHeader } from './DesktopHeader';
 
+import { useCustomerAuth } from '../auth/CustomerAuthContext';
+import { PageSkeleton } from './PageSkeleton';
 /**
  * Pages whose first element is a full-bleed coloured banner that should reach
  * the top edge. They skip the phone top gap (the white strip would sit above
@@ -28,6 +30,9 @@ const FULL_BLEED_ROUTES = ['/profile'];
 export function StoreShell() {
   const location = useLocation();
   const fullBleed = FULL_BLEED_ROUTES.includes(location.pathname);
+  // Signed-in session still being restored: hold the page (a skeleton in its shape) so nobody
+  // sees a guest view or consumer prices flash first. Guests have nothing to restore - no wait.
+  const { initialising } = useCustomerAuth();
 
   return (
     <Layout style={{ minHeight: '100dvh', background: '#fafaf9', display: 'flex', flexDirection: 'column' }}>
@@ -42,15 +47,7 @@ export function StoreShell() {
         className={fullBleed ? 'store-content store-content--bleed' : 'store-content'}
         style={{ flex: '1 0 auto' }}
       >
-        <Suspense
-          fallback={
-            <div className="store-container" style={{ color: '#78716c', padding: 40, textAlign: 'center' }}>
-              Loading Storefront…
-            </div>
-          }
-        >
-          <Outlet />
-        </Suspense>
+        <Suspense fallback={<PageSkeleton />}>{initialising ? <PageSkeleton /> : <Outlet />}</Suspense>
       </Layout.Content>
 
       {/* Mobile App Bottom Tab Bar — on every page (hidden on desktop) */}

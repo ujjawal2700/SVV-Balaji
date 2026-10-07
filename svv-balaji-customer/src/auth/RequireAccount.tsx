@@ -1,8 +1,8 @@
-import { Spin } from 'antd';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useCustomerAuth } from './CustomerAuthContext';
 
+import { PageSkeleton } from '../layout/PageSkeleton';
 /**
  * The gate for the three screens that need to know who you are: checkout, order
  * history and order tracking.
@@ -24,13 +24,7 @@ export function RequireAccount({ children }: { children: ReactNode }) {
   const { isLoggedIn, initialising } = useCustomerAuth();
   const location = useLocation();
 
-  if (initialising) {
-    return (
-      <div style={{ display: 'grid', placeItems: 'center', minHeight: '50dvh' }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
+  if (initialising) return <PageSkeleton kind="account" />;
 
   if (!isLoggedIn) {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;

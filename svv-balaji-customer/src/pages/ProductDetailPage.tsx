@@ -43,6 +43,7 @@ import { formatInr } from '../utils/money';
 import { ProductReviews, RatingBadge } from '../components/ProductReviews';
 
 
+import { PageSkeleton } from '../layout/PageSkeleton';
 /** One buyable pack size: the product's own pack, or one of its variants. */
 interface Pack {
   /** What the cart keys on - the product id for the primary pack, the variant id otherwise. */
@@ -417,13 +418,7 @@ export function ProductDetailPage() {
   };
 
   // All hooks are above this line, so these early returns cannot change hook order.
-  if (catalogue.isLoading) {
-    return (
-      <div className="pdp-wrapper" style={{ padding: '96px 0', textAlign: 'center' }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
+  if (catalogue.isLoading) return <PageSkeleton kind="detail" />;
 
   if (catalogue.isError || !detail) {
     return (
@@ -499,7 +494,7 @@ export function ProductDetailPage() {
 
       {/* Breadcrumbs (Desktop Enhanced) */}
       <div style={{ padding: '12px 20px', background: '#fff', fontSize: 13, color: '#878787', borderBottom: '1px solid #e2e8f0' }}>
-        <div style={{ maxWidth: 1340, margin: '0 auto' }}>
+        <div className="pdp-crumbs-inner" style={{ maxWidth: 1340, margin: '0 auto' }}>
           <Link to="/" style={{ color: '#878787', textDecoration: 'none' }}>Home</Link> &gt;{' '}
           {parentCategory && (
             <>
@@ -1501,7 +1496,7 @@ export function ProductDetailPage() {
       {/* More from the same category - real products, hidden when there are none (full width on desktop) */}
       {related.length > 0 && (
       <div style={{ marginTop: 16, background: '#fff', padding: '24px 0 32px', borderTop: '1px solid #e2e8f0' }}>
-        <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 20px' }}>
+        <div className="dk-align" style={{ maxWidth: 1340, margin: '0 auto', padding: '0 20px' }}>
           <Typography.Text strong style={{ display: 'block', fontSize: 18, marginBottom: 16, color: '#0f172a' }}>
             You May Also Like
           </Typography.Text>

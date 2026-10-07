@@ -5,6 +5,7 @@ import type { LoyaltyHistoryItem } from '../api/loyalty';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useLoyalty } from '../loyalty/useLoyalty';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const inr = (value: number) => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -69,6 +70,7 @@ export function LoyaltyPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
       <header
+        className="mobile-flex"
         style={{
           background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center',
           boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100,
@@ -81,8 +83,14 @@ export function LoyaltyPage() {
           {isRetailer ? 'Wholesaler Rewards' : 'Desi Rewards'}
         </Typography.Text>
       </header>
+      <DesktopPageHeader
+        title={isRetailer ? 'Wholesaler Rewards' : 'Desi Rewards'}
+        subtitle="Your points balance, how to earn more, and every point earned or used."
+        crumbs={[{ label: isRetailer ? 'Store Profile' : 'My Account', to: '/profile' }, { label: 'Rewards' }]}
+      />
 
-      <div style={{ padding: '12px', maxWidth: 720, margin: '0 auto' }}>
+      <div className="dk-container">
+      <div className="dk-wide dk-readable" style={{ padding: '12px', maxWidth: 720, margin: '0 auto' }}>
         {/* Balance */}
         <div
           style={{
@@ -192,6 +200,7 @@ export function LoyaltyPage() {
             )}
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   );

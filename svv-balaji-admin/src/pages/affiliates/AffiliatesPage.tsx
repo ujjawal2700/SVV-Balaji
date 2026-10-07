@@ -1,15 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  App as AntApp, Badge, Button, Card, Descriptions, Drawer, Input, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography,
-} from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Badge, Button, Card, Input, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AFFILIATE_STATUS_COLOR, affiliatesApi, COMMISSION_STATUS_COLOR, COMMISSION_STATUS_LABEL, FRAUD_REASON_LABEL, type AffiliateListRow, type AffiliateStatus,
   type AttributionRow, type CommissionRow, type CommissionStatus,
 } from '@shared/api/affiliates';
-import { apiErrorMessage } from '@shared/api/client';
-import { useCan } from '@shared/auth/useCan';
 import { PageHeader } from '@shared/components/PageHeader';
 import { EM_DASH, formatCurrency, formatDate, formatDateTime } from '@shared/utils/format';
 
@@ -40,7 +37,8 @@ export function AffiliatesPage() {
 function AffiliateTable({ fixedStatus }: { fixedStatus?: AffiliateStatus }) {
   const [status, setStatus] = useState<AffiliateStatus | undefined>(fixedStatus);
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState<AffiliateListRow | null>(null);
+  const navigate = useNavigate();
+  const open = (a: AffiliateListRow) => navigate(`/affiliates/${a.id}`);
   const q = useQuery({ queryKey: ['affiliates', 'list', status ?? 'ALL', search], queryFn: () => affiliatesApi.list({ status, search: search || undefined }) });
 
   const columns: ColumnsType<AffiliateListRow> = [
@@ -64,7 +62,7 @@ function AffiliateTable({ fixedStatus }: { fixedStatus?: AffiliateStatus }) {
     { title: 'Payable', key: 'payable', align: 'right', render: (_, a) => formatCurrency(a.balances.payable) },
     { title: 'Paid', key: 'paid', align: 'right', render: (_, a) => formatCurrency(a.balances.paid) },
     { title: 'Applied', dataIndex: 'appliedAt', render: formatDate },
-    { title: '', key: 'open', render: (_, a) => <Button size="small" onClick={() => setOpen(a)}>{a.status === 'PENDING' ? 'Review' : 'Open'}</Button> },
+    { title: '', key: 'open', render: (_, a) => <Button size="small" type={a.status === 'PENDING' ? 'primary' : 'default'} onClick={(e) => { e.stopPropagation(); open(a); }}>{a.status === 'PENDING' ? 'Review' : 'Open'}</Button> },
   ];
 
   return (
@@ -77,94 +75,21 @@ function AffiliateTable({ fixedStatus }: { fixedStatus?: AffiliateStatus }) {
         )}
       </Space>
       <Table rowKey="id" size="middle" loading={q.isLoading} dataSource={q.data ?? []} columns={columns} scroll={{ x: 1000 }}
+        onRow={(a) => ({ onClick: () => open(a), style: { cursor: 'pointer' } })}
         locale={{ emptyText: fixedStatus ? 'No applications waiting' : 'No affiliates yet' }} />
-      <AffiliateDrawer row={open} onClose={() => setOpen(null)} />
     </Card>
   );
 }
 
-function AffiliateDrawer({ row, onClose }: { row: AffiliateListRow | null; onClose: () => void }) {
-  const { message } = AntApp.useApp();
-  const qc = useQueryClient();
-  const canReview = useCan('AFFILIATES_REVIEW');
-  const [busy, setBusy] = useState(false);
-  const [reasonFor, setReasonFor] = useState<'reject' | 'suspend' | null>(null);
-  const [reason, setReason] = useState('');
-
-  const act = async (fn: () => Promise<unknown>, done: string) => {
-    setBusy(true);
-    try {
-      await fn();
-      message.success(done);
-      void qc.invalidateQueries({ queryKey: ['affiliates'] });
-      setReasonFor(null);
-      setReason('');
-      onClose();
-    } catch (e) {
-      message.error(apiErrorMessage(e, 'Could not update the affiliate'), 6);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (!row) return null;
-  const a = row;
-  return (
-    <Drawer open width={560} title={<Space>{a.fullName}<Tag color={AFFILIATE_STATUS_COLOR[a.status]}>{a.status}</Tag></Space>} onClose={onClose}
-      extra={canReview ? (
-        <Space>
-          {a.status === 'PENDING' ? (
-            <>
-              <Button danger onClick={() => setReasonFor('reject')}>Reject</Button>
-              <Button type="primary" loading={busy} onClick={() => act(() => affiliatesApi.approve(a.id), `${a.fullName} approved - their links now earn`)}>Approve</Button>
-            </>
-          ) : null}
-          {a.status === 'APPROVED' ? <Button danger onClick={() => setReasonFor('suspend')}>Suspend</Button> : null}
-          {a.status === 'SUSPENDED' ? <Button loading={busy} onClick={() => act(() => affiliatesApi.reactivate(a.id), 'Reactivated')}>Reactivate</Button> : null}
-        </Space>
-      ) : null}
-    >
-      <Descriptions column={1} size="small" bordered>
-        <Descriptions.Item label="Code">{a.code}</Descriptions.Item>
-        <Descriptions.Item label="Phone">{a.phone}</Descriptions.Item>
-        <Descriptions.Item label="Email">{a.email ?? EM_DASH}</Descriptions.Item>
-        <Descriptions.Item label="Shopper account">{a.customerId ? 'Yes (own purchases never earn)' : 'No'}</Descriptions.Item>
-        <Descriptions.Item label="Promotes on">{a.promotionUrl ?? EM_DASH}</Descriptions.Item>
-        <Descriptions.Item label="Audience">{a.audienceSize ?? EM_DASH}</Descriptions.Item>
-        <Descriptions.Item label="Plan">{a.promotionPlan ?? EM_DASH}</Descriptions.Item>
-        <Descriptions.Item label="PAN">{a.pan ?? EM_DASH}</Descriptions.Item>
-        <Descriptions.Item label="Payout">
-          {a.payoutMethod === 'UPI' ? `UPI ${a.payoutUpiId ?? EM_DASH}` : `${a.payoutBankName ?? 'Bank'} · ${a.payoutAccountName ?? ''} · ${a.payoutAccountNumber ?? ''} · ${a.payoutIfsc ?? ''}`}
-        </Descriptions.Item>
-        <Descriptions.Item label="Applied">{formatDateTime(a.appliedAt)}</Descriptions.Item>
-        {a.rejectionReason ? <Descriptions.Item label="Rejected because">{a.rejectionReason}</Descriptions.Item> : null}
-        {a.suspendedReason ? <Descriptions.Item label="Suspended because">{a.suspendedReason}</Descriptions.Item> : null}
-      </Descriptions>
-      <Descriptions column={2} size="small" style={{ marginTop: 16 }} title="Performance">
-        <Descriptions.Item label="Clicks">{a.clicks}</Descriptions.Item>
-        <Descriptions.Item label="Successful orders">{a.successfulOrders}</Descriptions.Item>
-        <Descriptions.Item label="On hold">{formatCurrency(a.balances.pending)}</Descriptions.Item>
-        <Descriptions.Item label="Payable now">{formatCurrency(a.balances.payable)}</Descriptions.Item>
-        <Descriptions.Item label="Paid">{formatCurrency(a.balances.paid)}</Descriptions.Item>
-        <Descriptions.Item label="Taken back (returns)">{formatCurrency(a.balances.reversed)}</Descriptions.Item>
-      </Descriptions>
-      <Modal open={reasonFor !== null} title={reasonFor === 'reject' ? 'Reject application' : 'Suspend affiliate'} okText={reasonFor === 'reject' ? 'Reject' : 'Suspend'}
-        okButtonProps={{ danger: true, disabled: reason.trim().length < 3, loading: busy }} onCancel={() => setReasonFor(null)}
-        onOk={() => act(
-          () => (reasonFor === 'reject' ? affiliatesApi.reject(a.id, reason) : affiliatesApi.suspend(a.id, reason)),
-          reasonFor === 'reject' ? 'Application rejected' : 'Affiliate suspended - links stop tracking',
-        )}>
-        <Text type="secondary">{reasonFor === 'reject' ? 'The applicant sees this reason and can apply again.' : 'Commission already earned is still owed and paid.'}</Text>
-        <Input.TextArea rows={3} style={{ marginTop: 8 }} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="Reason" />
-      </Modal>
-    </Drawer>
-  );
-}
-
-function CommissionLedger() {
+/** The per-item commission ledger - every affiliate, or one (`affiliateId`, on the affiliate's page). */
+export function CommissionLedger({ affiliateId, bare }: { affiliateId?: string; bare?: boolean } = {}) {
   const [status, setStatus] = useState<CommissionStatus | undefined>();
   const [page, setPage] = useState(1);
-  const q = useQuery({ queryKey: ['affiliates', 'commissions', status, page], queryFn: () => affiliatesApi.commissions({ status, page, pageSize: 50 }) });
-  const columns: ColumnsType<CommissionRow> = [
+  const q = useQuery({
+    queryKey: ['affiliates', 'commissions', affiliateId ?? 'ALL', status, page],
+    queryFn: () => affiliatesApi.commissions({ affiliateId, status, page, pageSize: 50 }),
+  });
+  const allColumns: ColumnsType<CommissionRow> = [
     { title: 'Order', key: 'order', render: (_, c) => <div><Text strong>{c.orderNumber}</Text><div style={{ fontSize: 12, color: '#78716c' }}>{formatDate(c.orderDate)} · {c.orderStatus}</div></div> },
     { title: 'Affiliate', key: 'aff', render: (_, c) => <span>{c.affiliateName} <Tag>{c.affiliateCode}</Tag></span> },
     { title: 'Item', key: 'item', render: (_, c) => <div>{c.productName} × {c.quantity}<div style={{ fontSize: 12, color: '#78716c' }}>{c.categoryName ?? 'No category'}</div></div> },
@@ -187,14 +112,17 @@ function CommissionLedger() {
       ),
     },
   ];
-  return (
-    <Card>
+  const columns = affiliateId ? allColumns.filter((c) => c.key !== 'aff') : allColumns;
+  const body = (
+    <>
       <Select allowClear placeholder="Any status" style={{ width: 180, marginBottom: 12 }} value={status} onChange={(v) => { setStatus(v); setPage(1); }}
         options={(Object.keys(COMMISSION_STATUS_LABEL) as CommissionStatus[]).map((s) => ({ value: s, label: COMMISSION_STATUS_LABEL[s] }))} />
-      <Table rowKey="id" size="middle" loading={q.isLoading} dataSource={q.data?.data ?? []} columns={columns} scroll={{ x: 1100 }}
-        pagination={{ current: page, pageSize: 50, total: q.data?.total ?? 0, onChange: setPage, showSizeChanger: false }} />
-    </Card>
+      <Table rowKey="id" size="middle" loading={q.isLoading} dataSource={q.data?.data ?? []} columns={columns} scroll={{ x: 1000 }}
+        locale={{ emptyText: 'No commission yet' }}
+        pagination={{ current: page, pageSize: 50, total: q.data?.total ?? 0, onChange: setPage, showSizeChanger: false, hideOnSinglePage: true }} />
+    </>
   );
+  return bare ? body : <Card>{body}</Card>;
 }
 
 function FraudLog() {

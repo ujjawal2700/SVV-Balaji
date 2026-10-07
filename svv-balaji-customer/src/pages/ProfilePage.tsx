@@ -22,20 +22,7 @@ import {
   WalletOutlined,
   ShareAltOutlined,
 } from '@ant-design/icons';
-import {
-  Avatar,
-  Badge,
-  Breadcrumb,
-  Button,
-  Card,
-  Divider,
-  Modal,
-  Switch,
-  Tabs,
-  Tag,
-  Typography,
-  message,
-} from 'antd';
+import { Avatar, Badge, Breadcrumb, Button, Card, Divider, Modal, Switch, Tabs, Tag, Typography, message, Skeleton } from 'antd';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
@@ -486,14 +473,14 @@ export function ProfilePage() {
               <>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {loyalty.points.toLocaleString('en-IN')}
+                    {loyalty.isLoading ? <StatSkeleton /> : loyalty.points.toLocaleString('en-IN')}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Reward Pts</Typography.Text>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {stats.orderCount}
+                    {stats.loading ? <StatSkeleton /> : stats.orderCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Orders</Typography.Text>
                 </div>
@@ -516,7 +503,7 @@ export function ProfilePage() {
               <>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {loyalty.points.toLocaleString('en-IN')}
+                    {loyalty.isLoading ? <StatSkeleton /> : loyalty.points.toLocaleString('en-IN')}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
                     Reward Points
@@ -525,7 +512,7 @@ export function ProfilePage() {
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {stats.orderCount}
+                    {stats.loading ? <StatSkeleton /> : stats.orderCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
                     My Orders
@@ -534,7 +521,7 @@ export function ProfilePage() {
                 <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    {stats.couponCount}
+                    {stats.loading ? <StatSkeleton /> : stats.couponCount}
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 500 }}>
                     Active Offers
@@ -910,7 +897,7 @@ export function ProfilePage() {
                     {isRetailer ? 'REWARD POINTS' : 'DESI REWARDS'}
                   </Typography.Text>
                   <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
-                    {loyalty.points.toLocaleString('en-IN')} pts
+                    {loyalty.isLoading ? <StatSkeleton /> : `${loyalty.points.toLocaleString('en-IN')} pts`}
                   </Typography.Text>
                   <Link to="/loyalty" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
                     View rewards &rarr;
@@ -922,7 +909,7 @@ export function ProfilePage() {
                     MY ORDERS
                   </Typography.Text>
                   <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
-                    {isRetailer ? stats.orderCount : stats.orderCount}
+                    {stats.loading ? <StatSkeleton /> : stats.orderCount}
                   </Typography.Text>
                   <Link to="/orders" style={{ fontSize: 11.5, color: '#ea580c', fontWeight: 600 }}>
                     View Order History &rarr;
@@ -961,7 +948,7 @@ export function ProfilePage() {
                       ACTIVE COUPONS
                     </Typography.Text>
                     <Typography.Text strong style={{ fontSize: 18, color: '#16a34a', display: 'block', marginTop: 2 }}>
-                      {stats.couponCount} Offers
+                      {stats.loading ? <StatSkeleton /> : `${stats.couponCount} Offers`}
                     </Typography.Text>
                     <Typography.Text style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
                       Apply at Checkout
@@ -1177,4 +1164,9 @@ export function ProfilePage() {
       </div>
     </div>
   );
+}
+
+/** Placeholder for a number that is still loading - never show a misleading 0. */
+function StatSkeleton() {
+  return <Skeleton.Input active size="small" style={{ width: 48, minWidth: 48, height: 16, verticalAlign: 'middle' }} />;
 }

@@ -250,6 +250,7 @@ export function ReferralPage() {
       {/* 📱 HEADER NAVIGATION                                                      */}
       {/* ========================================================================= */}
       <header
+        className="mobile-flex"
         style={{
           background: '#ffffff',
           padding: '14px 20px',

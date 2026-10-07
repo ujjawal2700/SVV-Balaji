@@ -7,6 +7,7 @@ import { checkoutError } from '../api/checkout';
 import { RETURN_STATUS_COLOR, REFUND_METHOD_LABEL, returnsApi, type DifferencePayment, type ReturnDetail } from '../api/returns';
 import { formatInr } from '../utils/money';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 declare global {
@@ -26,15 +27,18 @@ function loadRazorpay(): Promise<void> {
   });
 }
 
-function Shell({ title, children }: { title: string; children: React.ReactNode }) {
+function Shell({ title, children, crumbs }: { title: string; children: React.ReactNode; crumbs?: Array<{ label: string; to?: string }> }) {
   const navigate = useNavigate();
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 90 }}>
-      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
         <Typography.Text strong style={{ fontSize: 16 }}>{title}</Typography.Text>
       </header>
-      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      <DesktopPageHeader title={title} crumbs={crumbs ?? [{ label: 'My Account', to: '/profile' }, { label: title }]} />
+      <div className="dk-container">
+        <div className="dk-wide dk-readable" style={{ padding: 12, maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      </div>
     </div>
   );
 }

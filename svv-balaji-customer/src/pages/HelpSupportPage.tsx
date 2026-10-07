@@ -42,6 +42,7 @@ import { useCreateSupportTicket, useSupportTickets } from '../hooks/useSupportTi
 import type { SupportTicketCategory } from '../api/supportTickets';
 import { TicketChat } from '../components/TicketChat';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const TICKET_STATUS_COLOUR: Record<string, string> = {
   OPEN: 'gold',
   IN_PROGRESS: 'blue',
@@ -156,8 +157,14 @@ export function HelpSupportPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 80 }}>
+      <DesktopPageHeader
+        title="Help & Support"
+        subtitle="Call, chat on WhatsApp or raise a ticket - and find quick answers below."
+        crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Help & Support' }]}
+      />
       {/* Sticky Top Header Bar - Optimized for 320px Mobile S */}
       <header
+        className="mobile-only"
         style={{
           background: '#ffffff',
           borderBottom: '1px solid #e2e8f0',

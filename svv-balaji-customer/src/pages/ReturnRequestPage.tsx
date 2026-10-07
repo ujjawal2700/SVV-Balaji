@@ -7,6 +7,7 @@ import { checkoutError } from '../api/checkout';
 import { REFUND_METHOD_LABEL, returnsApi, type RefundMethod, type ReturnType } from '../api/returns';
 import { formatInr } from '../utils/money';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const newKey = () => `ret-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
@@ -228,11 +229,18 @@ export function ReturnRequestPage() {
 function Shell({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 90 }}>
-      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
         <Typography.Text strong style={{ fontSize: 16 }}>Return or exchange</Typography.Text>
       </header>
-      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      <DesktopPageHeader
+        title="Return or exchange"
+        subtitle="Choose the item, tell us what went wrong, and pick how you want your refund."
+        crumbs={[{ label: 'My Orders', to: '/orders' }, { label: 'Return or exchange' }]}
+      />
+      <div className="dk-container">
+        <div className="dk-wide dk-form" style={{ padding: 12, maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      </div>
     </div>
   );
 }

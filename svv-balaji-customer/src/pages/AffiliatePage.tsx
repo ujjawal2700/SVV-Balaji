@@ -37,6 +37,7 @@ import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { buildAffiliateLink } from '../utils/affiliateLink';
 import { formatInr } from '../utils/money';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const card = { background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' } as const;
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const QUERY_KEY = ['storefront', 'affiliate', 'me'];
@@ -114,7 +115,12 @@ export function AffiliatePage() {
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: 48 }}>
       <style>{INLINE_STYLES}</style>
-      <header style={{ background: '#fff', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 }}>
+      <DesktopPageHeader
+        title="Affiliate Program"
+        subtitle="Your links, clicks, earnings and payouts as a Desi Tokri creator partner."
+        crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Affiliate Program' }]}
+      />
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 100 }}>
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} aria-label="Back" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Typography.Title level={5} style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>Affiliate Program</Typography.Title>
@@ -123,7 +129,7 @@ export function AffiliatePage() {
           </Tag>
         </div>
       </header>
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '16px 16px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="dk-readable" style={{ maxWidth: 860, margin: '0 auto', padding: '16px 16px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {me.isLoading ? (
           <div style={{ ...card, padding: 24 }}><Skeleton active paragraph={{ rows: 6 }} /></div>
         ) : me.error || !me.data ? (

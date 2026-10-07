@@ -7,6 +7,7 @@ import { checkoutApi, type OrderSummaryRow } from '../api/checkout';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { formatInr } from '../utils/money';
 import { statusLabel } from './orderStatus';
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 import { useReorder } from './useReorder';
 
 function EmptyOrders({
@@ -471,12 +472,18 @@ export function OrdersPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
-      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}><ArrowLeftOutlined style={{ fontSize: 20 }} /></button>
         <Typography.Text strong style={{ fontSize: 16 }}>My Orders</Typography.Text>
       </header>
+      <DesktopPageHeader
+        title={isRetailer ? 'My Bulk Orders' : 'My Orders'}
+        subtitle="Track deliveries, download invoices, reorder or get help with any order."
+        crumbs={[{ label: isRetailer ? 'Store Profile' : 'My Account', to: '/profile' }, { label: 'My Orders' }]}
+      />
 
-      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
+      <div className="dk-container">
+      <div className="dk-wide" style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
         {role === 'GUEST' ? (
           <EmptyOrders
             accent={accent}
@@ -594,7 +601,8 @@ export function OrdersPage() {
                 </Button>
               </div>
             ) : (
-              visible.map((o) => (
+              <div className="dk-cards">
+              {visible.map((o) => (
             <OrderCard
               key={o.orderNumber}
               order={o}
@@ -604,7 +612,8 @@ export function OrdersPage() {
               onReorder={() => reorder(o.lines)}
               onSupport={() => navigate(`/orders/${o.orderNumber}/support`)}
             />
-              ))
+              ))}
+              </div>
             )}
 
             <FiltersSheet
@@ -621,6 +630,7 @@ export function OrdersPage() {
             />
           </>
         )}
+      </div>
       </div>
     </div>
   );

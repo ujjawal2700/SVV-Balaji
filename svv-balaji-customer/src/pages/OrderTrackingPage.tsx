@@ -23,6 +23,7 @@ import { getProgressSteps, progressIndex, progressSteps, statusColor, statusLabe
 import { useReorder } from './useReorder';
 import { OrderReturnsCard } from '../components/OrderReturnsCard';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 type Item = OrderDetail['items'][number];
 
 const fullDate = (iso: string) =>
@@ -151,16 +152,58 @@ export function OrderTrackingPage() {
     message.success('Order id copied');
   };
 
+  // Rendered inline on phones / tablets and in the sticky side column on wide screens.
+  const renderDetails = (od: NonNullable<typeof o>) => {
+    const o = od;
+    return (
+            <Card title="Order details">
+              <Detail label="Order id">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {o.orderNumber}
+                  <CopyOutlined onClick={copyOrderId} style={{ color: '#64748b', cursor: 'pointer' }} />
+                </span>
+              </Detail>
+              <Detail label="Payment">
+                {o.payment.mode === 'COD' ? 'Cash on delivery' : o.payment.mode === 'CREDIT' ? 'On account (credit)' : 'Paid online'}
+                {o.payment.status === 'PAID' ? '' : ` · ${o.payment.status.toLowerCase()}`}
+              </Detail>
+              <Detail label="Deliver to">
+                {o.address.fullName} · {o.address.phone}
+                <br />
+                {[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, {o.address.city}, {o.address.state} {o.address.pincode}
+              </Detail>
+              <Detail label="Order placed">placed on {placedOn(o.placedAt)}</Detail>
+              {delivered && o.deliveredAt ? <Detail label="Delivered">on {placedOn(o.deliveredAt)}</Detail> : null}
+              <Detail label="Delivery" last={!shipped}>
+                {o.fulfillment.method === 'LOCAL' ? 'Express local delivery' : 'Standard courier delivery'}
+              </Detail>
+              {shipped ? (
+                <Detail label="Tax invoice" last>
+                  <Button icon={<FileTextOutlined />} loading={invoiceLoading} onClick={() => void openInvoice()} style={{ borderRadius: 10 }}>
+                    Download GST invoice
+                  </Button>
+                </Detail>
+              ) : null}
+            </Card>
+    );
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#f1f3f6', paddingBottom: 80 }}>
-      <header style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <header className="mobile-flex" style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 }}>
         <button onClick={handleBack} style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 12 }}>
           <ArrowLeftOutlined style={{ fontSize: 20 }} />
         </button>
         <Typography.Text strong style={{ fontSize: 16 }}>Order details</Typography.Text>
       </header>
+      <DesktopPageHeader
+        title={o ? `Order ${o.orderNumber}` : 'Order details'}
+        subtitle={o ? `Placed on ${placedOn(o.placedAt)}` : undefined}
+        crumbs={[{ label: 'My Orders', to: '/orders' }, { label: o?.orderNumber ?? 'Order' }]}
+      />
 
-      <div style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
+      <div className="dk-container">
+      <div className="dk-wide" style={{ padding: 12, maxWidth: 720, margin: '0 auto' }}>
         {order.isLoading ? (
           <Card>
             <Skeleton active paragraph={{ rows: 8 }} />
@@ -168,7 +211,8 @@ export function OrderTrackingPage() {
         ) : order.error ? (
           <Alert type="error" showIcon message={checkoutError(order.error).message} />
         ) : o ? (
-          <>
+          <div className="dk-grid-2">
+          <div>
             {justPlaced ? <Alert type="success" showIcon message="Thank you! Your order has been placed." style={{ marginBottom: 12, borderRadius: 12 }} /> : null}
 
             {/* Status */}
@@ -274,38 +318,10 @@ export function OrderTrackingPage() {
 
             {delivered ? <OrderReturnsCard orderNumber={o.orderNumber} /> : null}
 
-            <BillCard order={o} />
-
-            {/* Order details */}
-            <Card title="Order details">
-              <Detail label="Order id">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  {o.orderNumber}
-                  <CopyOutlined onClick={copyOrderId} style={{ color: '#64748b', cursor: 'pointer' }} />
-                </span>
-              </Detail>
-              <Detail label="Payment">
-                {o.payment.mode === 'COD' ? 'Cash on delivery' : o.payment.mode === 'CREDIT' ? 'On account (credit)' : 'Paid online'}
-                {o.payment.status === 'PAID' ? '' : ` · ${o.payment.status.toLowerCase()}`}
-              </Detail>
-              <Detail label="Deliver to">
-                {o.address.fullName} · {o.address.phone}
-                <br />
-                {[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, {o.address.city}, {o.address.state} {o.address.pincode}
-              </Detail>
-              <Detail label="Order placed">placed on {placedOn(o.placedAt)}</Detail>
-              {delivered && o.deliveredAt ? <Detail label="Delivered">on {placedOn(o.deliveredAt)}</Detail> : null}
-              <Detail label="Delivery" last={!shipped}>
-                {o.fulfillment.method === 'LOCAL' ? 'Express local delivery' : 'Standard courier delivery'}
-              </Detail>
-              {shipped ? (
-                <Detail label="Tax invoice" last>
-                  <Button icon={<FileTextOutlined />} loading={invoiceLoading} onClick={() => void openInvoice()} style={{ borderRadius: 10 }}>
-                    Download GST invoice
-                  </Button>
-                </Detail>
-              ) : null}
-            </Card>
+            <div className="dk-inline-only">
+              <BillCard order={o} />
+              {renderDetails(o)}
+            </div>
 
             {!delivered && o.timeline.length > 0 ? (
               <Card title="Order history">
@@ -342,8 +358,14 @@ export function OrderTrackingPage() {
             </div>
 
             <HelpModal open={helpOpen} orderNumber={o.orderNumber} onClose={() => setHelpOpen(false)} />
-          </>
+          </div>
+          <div className="dk-side-only dk-sticky">
+            <BillCard order={o} />
+            {renderDetails(o)}
+          </div>
+          </div>
         ) : null}
+      </div>
       </div>
     </div>
   );

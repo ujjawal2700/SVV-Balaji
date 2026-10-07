@@ -316,7 +316,7 @@ export function CheckoutPage() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
         }}
       >
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="dk-align" style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <button
               onClick={() => navigate(-1)}
@@ -353,7 +353,7 @@ export function CheckoutPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className="checkout-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
+      <main className="checkout-main dk-align" style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 16px' }}>
         {hasMoqViolation && (
           <div style={{ marginBottom: 20, padding: '14px 18px', background: '#fef2f2', borderRadius: 12, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
@@ -728,7 +728,7 @@ export function CheckoutPage() {
 
           {/* Right Column: Sticky Order Summary & Price Breakdown */}
           <Col xs={24} lg={9} xl={8}>
-            <div style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="dk-sticky" style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Items in Order */}
               {quote ? (
                 <Card

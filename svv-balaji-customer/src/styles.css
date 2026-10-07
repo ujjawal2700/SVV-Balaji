@@ -1286,3 +1286,170 @@ select {
     z-index: 100;
   }
 }
+
+/* ========================================================================= */
+/* 🖥️ DESKTOP + MID-SIZE (>= 768px) LAYOUT SYSTEM                             */
+/* Mobile (< 768px) is untouched: every rule below sits in a min-width query. */
+/* ========================================================================= */
+
+/* --- Header: trim secondary content so it never overflows 768-1199px --- */
+@media (min-width: 768px) and (max-width: 1099px) {
+  .hdr-top-left { display: none !important; }
+  .hdr-top-right { margin-left: auto; }
+  .hdr-account-text { display: none !important; }
+  .hdr-cart-label, .hdr-cart-arrow { display: none !important; }
+  [data-hdr-main] { gap: 12px !important; }
+  .hdr-logo { height: 30px !important; }
+}
+@media (min-width: 768px) and (max-width: 899px) {
+  .hdr-phone { display: none !important; }
+}
+
+/* --- Desktop page header (breadcrumb + title), replaces the phone app bar --- */
+.dk-head {
+  background: #ffffff;
+  border-bottom: 1px solid #ece9e4;
+}
+.dk-head .store-container {
+  padding-top: 16px;
+  padding-bottom: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dk-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #78716c;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.dk-crumbs a { color: #78716c; text-decoration: none; }
+.dk-crumbs a:hover { color: #ea580c; }
+.dk-crumbs .dk-crumb-current { color: #1c1917; font-weight: 500; }
+.dk-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1c1917;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.dk-subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: #78716c;
+}
+.dk-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* --- Page body that lines up with the header's container --- */
+@media (min-width: 768px) {
+  .dk-page { background: #f6f5f3; min-height: calc(100vh - 100px); }
+  .dk-body.store-container { padding-top: 20px; padding-bottom: 48px; }
+  /* The phone pages capped themselves at 720px; on desktop they use the header width. */
+  .dk-wide { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+}
+
+/* --- Two columns (content + side panel); side panel sticks while scrolling --- */
+@media (min-width: 1024px) {
+  .dk-grid-2 {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 380px !important;
+    gap: 24px;
+    align-items: start;
+  }
+  .dk-grid-2 > * { min-width: 0; }
+  .dk-sticky { position: sticky; top: 116px; }
+}
+@media (min-width: 1200px) {
+  .dk-grid-2 { grid-template-columns: minmax(0, 1fr) 400px !important; gap: 28px !important; }
+}
+.dk-col { display: flex; flex-direction: column; gap: 14px; }
+
+/* --- Responsive card grids --- */
+@media (min-width: 768px) {
+  .dk-cards {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .dk-cards > * { margin: 0 !important; min-width: 0; }
+}
+
+/* Desktop-only container (same widths as .store-container); does nothing on phones. */
+@media (min-width: 768px) {
+  .dk-container { width: 100%; max-width: 1240px; margin: 0 auto; padding: 20px 24px 48px; }
+}
+@media (min-width: 1200px) {
+  .dk-container { max-width: 1320px; padding: 24px 32px 56px; }
+}
+
+/* Content that lives in the side column on wide screens (>= 1024px) and inline below that. */
+.dk-side-only { display: none; }
+@media (min-width: 1024px) {
+  .dk-side-only { display: block; }
+  .dk-inline-only { display: none !important; }
+}
+
+/* Readable column for text / ledger pages, and a narrower one for forms (desktop only). */
+@media (min-width: 768px) {
+  .dk-readable { max-width: 960px !important; margin-left: auto !important; margin-right: auto !important; }
+  .dk-form { max-width: 760px !important; margin-left: auto !important; margin-right: auto !important; }
+}
+
+/* Align a page's own inner container with the header container (same max width and side padding). */
+@media (min-width: 768px) {
+  .dk-align { max-width: 1240px !important; padding-left: 24px !important; padding-right: 24px !important; }
+  .pdp-crumbs-inner { max-width: 1240px !important; padding: 0 4px; }
+  .pdp-desktop-container { max-width: 1240px !important; padding: 0 24px !important; }
+}
+@media (min-width: 1200px) {
+  .dk-align { max-width: 1320px !important; padding-left: 32px !important; padding-right: 32px !important; }
+  .pdp-crumbs-inner { max-width: 1320px !important; padding: 0 12px; }
+  .pdp-desktop-container { max-width: 1320px !important; padding: 0 32px !important; }
+}
+/* Sticky side panels clear the sticky desktop header (inline `top` values were set for the phone app bar). */
+@media (min-width: 1024px) {
+  .dk-sticky { top: 116px !important; }
+}
+
+/* Wishlist: phone = 2-up hairline grid; desktop = card grid in the page container. */
+@media (min-width: 768px) {
+  .wl-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important; gap: 16px !important; background: transparent !important; }
+  .wl-grid > * { border: 1px solid #ece9e4; border-radius: 14px; overflow: hidden; background: #fff; }
+  /* Search: the page's own box sits in the content column instead of a full-width app bar. */
+  .search-page-bar { position: static !important; max-width: 960px; margin: 16px auto 0; padding: 0 24px !important; border: none !important; background: transparent !important; }
+  .search-page-bar form { height: 46px !important; background: #fff !important; }
+}
+
+/* ---- Loading skeletons (layout/PageSkeleton.tsx) ---- */
+.pskel { min-height: 70vh; }
+.pskel .ant-skeleton-node, .pskel .ant-skeleton-element { width: 100%; }
+.pskel-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pskel-detail, .pskel-account { display: flex; flex-direction: column; gap: 16px; }
+.pskel-side { display: none; }
+@media (min-width: 768px) {
+  .pskel-tiles { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+}
+@media (min-width: 1024px) {
+  .pskel-detail { display: grid; grid-template-columns: 460px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .pskel-account { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+  .pskel-side { display: block; }
+}
+
+/* ---- Footer never rides up under the header ----
+   On desktop the page area is at least one screen tall (minus the ~100px sticky header),
+   so while a page is short or still loading the footer stays below the fold instead of
+   jumping up and then back down when the data arrives. */
+@media (min-width: 768px) {
+  .store-content { min-height: calc(100dvh - 100px); }
+}
+.pskel-banner, .pskel-banner .ant-skeleton-image { height: 180px !important; }
+@media (min-width: 768px) {
+  .pskel-banner, .pskel-banner .ant-skeleton-image { height: 300px !important; }
+}

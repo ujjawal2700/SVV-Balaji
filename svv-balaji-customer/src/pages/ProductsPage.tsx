@@ -20,6 +20,7 @@ import { formatInr } from '../utils/money';
 import { RatingBadge } from '../components/ProductReviews';
 
 
+import { ProductTiles } from '../layout/PageSkeleton';
 export function ProductsPage() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
@@ -54,8 +55,8 @@ export function ProductsPage() {
 
   /** Shared by both layouts so loading / empty / failed read the same on a phone and a desktop. */
   const listState = catalogue.isLoading ? (
-    <div style={{ padding: '48px 0', textAlign: 'center' }}>
-      <Spin />
+    <div style={{ padding: '12px 0' }}>
+      <ProductTiles n={8} />
     </div>
   ) : catalogue.isError ? (
     <div style={{ padding: '32px 16px', textAlign: 'center' }}>

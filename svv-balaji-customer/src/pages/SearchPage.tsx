@@ -9,6 +9,7 @@ import { useCatalogueProducts, type ShelfProduct } from '../hooks/useCatalogue';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { formatInr } from '../utils/money';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 const RECENT_KEY = 'recent_searches';
 const MAX_RECENT = 8;
 
@@ -143,11 +144,16 @@ export function SearchPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 80 }}>
       {/* Header: back · search box · cart */}
+      <DesktopPageHeader
+        title={query ? `Results for “${query}”` : 'Search'}
+        subtitle={query ? undefined : 'Find atta, dal, spices, snacks and more.'}
+        crumbs={[{ label: 'Search' }]}
+      />
       <header
-        className="store-safe-top"
+        className="store-safe-top search-page-bar"
         style={{ position: 'sticky', top: 0, zIndex: 100, background: '#fff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e2e8f0' }}
       >
-        <button onClick={() => navigate(-1)} aria-label="Back" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+        <button className="mobile-flex" onClick={() => navigate(-1)} aria-label="Back" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
           <ArrowLeftOutlined style={{ fontSize: 20, color: '#1e293b' }} />
         </button>
         <form
@@ -179,14 +185,14 @@ export function SearchPage() {
             />
           ) : null}
         </form>
-        <div style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate('/cart')} aria-label="Cart">
+        <div className="mobile-only" style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate('/cart')} aria-label="Cart">
           <Badge count={cart.count} size="small" offset={[-2, 2]} color={accent}>
             <ShoppingCartOutlined style={{ fontSize: 22, color: '#1e293b' }} />
           </Badge>
         </div>
       </header>
 
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '12px 12px 0' }}>
+      <div className="dk-readable" style={{ maxWidth: 760, margin: '0 auto', padding: '12px 12px 0' }}>
         {!query ? (
           <>
             {recent.length > 0 ? (

@@ -1,12 +1,13 @@
 import { ArrowLeftOutlined, BellOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Empty, Spin } from 'antd';
+import { Button, Empty, Spin, Skeleton } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { INBOX_KEY, notificationsApi, type InboxItem } from '../api/notifications';
 import { useInbox } from '../notifications/useUnreadNotifications';
 import { enablePush, pushPermission, type PushState } from '../push';
 
+import { DesktopPageHeader } from '../layout/DesktopPageHeader';
 function when(iso: string) {
   const d = new Date(iso);
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
@@ -40,8 +41,21 @@ export function NotificationsPage() {
 
   const items = inbox.data?.items ?? [];
   return (
-    <div className="store-container" style={{ maxWidth: 720, margin: '0 auto', padding: '16px 16px 96px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+    <>
+    <DesktopPageHeader
+      title="Notifications"
+      subtitle="Order updates, offers and messages from Desi Tokri."
+      crumbs={[{ label: 'My Account', to: '/profile' }, { label: 'Notifications' }]}
+      actions={
+        inbox.data?.unread ? (
+          <Button onClick={() => markRead.mutate(undefined)} style={{ borderRadius: 10, fontWeight: 600, color: '#059669', borderColor: '#a7f3d0' }}>
+            Mark all read
+          </Button>
+        ) : undefined
+      }
+    />
+    <div className="store-container dk-readable" style={{ maxWidth: 720, margin: '0 auto', padding: '16px 16px 96px' }}>
+      <div className="mobile-flex" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <button aria-label="Back" onClick={() => navigate(-1)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 4 }}>
           <ArrowLeftOutlined style={{ fontSize: 18 }} />
         </button>
@@ -81,8 +95,12 @@ export function NotificationsPage() {
       ) : null}
 
       {inbox.isLoading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ background: '#fff', borderRadius: 12, border: '1px solid #ece9e4', padding: 16 }}>
+              <Skeleton active avatar={{ size: 40 }} title={{ width: '45%' }} paragraph={{ rows: 1 }} />
+            </div>
+          ))}
         </div>
       ) : items.length === 0 ? (
         <Empty description="No notifications yet" style={{ padding: 48 }} />
@@ -119,5 +137,6 @@ export function NotificationsPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
