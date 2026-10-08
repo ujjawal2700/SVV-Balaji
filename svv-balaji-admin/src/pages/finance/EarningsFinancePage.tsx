@@ -194,6 +194,9 @@ function FinanceBody({ d }: { d: FinanceReport }) {
               {Object.entries(d.refunds.returns.byMethod).map(([k, v]) => (
                 <Descriptions.Item key={k} label={`Returns - ${REFUND_LABEL[k] ?? k}`}>{inr(v)}</Descriptions.Item>
               ))}
+              {d.refunds.undelivered.count ? (
+                <Descriptions.Item label={`Undelivered orders (${d.refunds.undelivered.count})`}>{inr(d.refunds.undelivered.amount)}</Descriptions.Item>
+              ) : null}
               <Descriptions.Item label={`POS bill refunds (${d.refunds.posRefunds.count})`}>{inr(d.refunds.posRefunds.amount)}</Descriptions.Item>
               <Descriptions.Item label="Return refunds issued">{d.refunds.returns.count}</Descriptions.Item>
             </Descriptions>

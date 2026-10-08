@@ -9,7 +9,6 @@ import {
   TeamOutlined,
   AppstoreOutlined,
   TagsOutlined,
-  CreditCardOutlined,
   LineChartOutlined,
   UsergroupAddOutlined,
   FolderOutlined,
@@ -17,7 +16,6 @@ import {
   CustomerServiceOutlined,
   ShopOutlined,
   GiftOutlined,
-  TrophyOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';

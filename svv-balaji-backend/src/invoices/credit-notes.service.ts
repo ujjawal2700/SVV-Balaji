@@ -105,7 +105,6 @@ export const CREDIT_NOTE_REASON_LABEL: Record<CreditNoteReason, string> = {
 const num = (d: Prisma.Decimal | number | null | undefined) => (d === null || d === undefined ? 0 : Number(d));
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 const MAX_BACKOFF_MS = 6 * 3600_000;
-const IRN_CANCEL_WINDOW_MS = 24 * 3600_000;
 const LINES = { lines: { orderBy: { lineNo: 'asc' } } } satisfies Prisma.CreditNoteInclude;
 
 /**
@@ -461,6 +460,9 @@ export class CreditNotesService implements OnModuleInit, OnModuleDestroy {
         creditNote: null,
         order: { invoices: { some: { status: InvoiceStatus.ISSUED } } },
       },
+      // Newest first: a return that can never get a note (past the deadline, nothing left
+      // to credit) must not hold the 50 slots and starve new ones.
+      orderBy: { refundedAt: 'desc' },
       select: { id: true },
       take: 50,
     });

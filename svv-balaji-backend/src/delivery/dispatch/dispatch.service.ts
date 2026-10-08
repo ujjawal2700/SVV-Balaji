@@ -742,8 +742,14 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       });
       for (const o of packed) await this.ensureTaskForOrder(o.id);
 
+      // Only orders still out (not closed as undelivered or delivered) with no attempt already in progress,
+      // newest first - otherwise tasks that can never be re-attempted fill the 20 slots every sweep.
       const autoBack = await this.prisma.deliveryTask.findMany({
-        where: { status: 'RETURNED_TO_STORE', failureReasonCode: { not: null }, kind: 'ORDER_DELIVERY' },
+        where: {
+          status: 'RETURNED_TO_STORE', failureReasonCode: { not: null }, kind: 'ORDER_DELIVERY',
+          order: { status: OrderStatus.DISPATCHED, deliveryTasks: { none: { status: { in: [...LIVE_STATUSES] } } } },
+        },
+        orderBy: { returnedAt: 'desc' },
         select: { id: true, orderId: true, failureReasonCode: true, returnedAt: true }, take: 20,
       });
       for (const t of autoBack) {

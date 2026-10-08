@@ -234,11 +234,6 @@ const CustomerAccountsPage = lazy(() =>
     default: m.CustomerAccountsPage,
   })),
 );
-const ComplaintsPage = lazy(() =>
-  import('./pages/complaints/ComplaintsPage').then((m) => ({
-    default: m.ComplaintsPage,
-  })),
-);
 const OutletsPage = lazy(() =>
   import('./pages/outlets/OutletsPage').then((m) => ({
     default: m.OutletsPage,
@@ -291,9 +286,6 @@ const RolesPermissionsPage = lazy(() =>
 );
 const CheckoutSettingsPage = lazy(() =>
   import('./pages/checkout/CheckoutSettingsPage').then((m) => ({ default: m.CheckoutSettingsPage })),
-);
-const CouponsPage = lazy(() =>
-  import('./pages/checkout/CouponsPage').then((m) => ({ default: m.CouponsPage })),
 );
 const LoyaltySettingsPage = lazy(() =>
   import('./pages/loyalty/LoyaltySettingsPage').then((m) => ({ default: m.LoyaltySettingsPage })),

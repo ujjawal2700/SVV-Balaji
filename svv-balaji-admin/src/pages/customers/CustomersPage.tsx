@@ -3,12 +3,8 @@ import {
   CreditCardOutlined,
   EditOutlined,
   EyeOutlined,
-  FilterOutlined,
   MoreOutlined,
   PlusOutlined,
-  SearchOutlined,
-  ShoppingOutlined,
-  TeamOutlined,
   UserOutlined,
   UsergroupAddOutlined,
   WhatsAppOutlined,
@@ -16,7 +12,6 @@ import {
 import {
   App as AntApp,
   Avatar,
-  Badge,
   Button,
   Card,
   Col,
@@ -40,20 +35,15 @@ import type {
   Customer,
   CustomerQuery,
   CustomerStatus,
-  SalesChannel,
 } from '../../api/types';
-import { CUSTOMER_TYPES, SALES_CHANNELS } from '../../api/types';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
-import { BranchSelect } from '../../components/pickers';
 import { useCustomers, useSetCustomerStatus } from '@shared/hooks/useCustomers';
-import { EM_DASH, formatCurrency } from '../../utils/format';
+import { EM_DASH } from '../../utils/format';
 import { CustomerCreditDrawer } from './CustomerCreditDrawer';
 import { CustomerFormModal } from './CustomerFormModal';
 
-const { Text, Title } = Typography;
-
-const CHANNEL_COLOUR: Record<SalesChannel, string> = { B2B: 'blue', B2C: 'purple' };
+const { Text } = Typography;
 
 const STATUS_COLOUR: Record<CustomerStatus, string> = {
   ACTIVE: 'green',

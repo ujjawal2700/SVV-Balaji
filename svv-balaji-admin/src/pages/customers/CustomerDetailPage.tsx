@@ -2,12 +2,10 @@ import {
   ArrowLeftOutlined,
   CopyOutlined,
   CreditCardOutlined,
-  CustomerServiceOutlined,
   EditOutlined,
   EnvironmentOutlined,
   EyeOutlined,
   GiftOutlined,
-  HeartOutlined,
   MailOutlined,
   PhoneOutlined,
   ShoppingOutlined,
@@ -17,7 +15,6 @@ import {
 } from '@ant-design/icons';
 import {
   App as AntApp,
-  Avatar,
   Button,
   Card,
   Col,
@@ -40,7 +37,7 @@ import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
-import type { Customer, CustomerStatus } from '../../api/types';
+import type { CustomerStatus } from '../../api/types';
 import { Can } from '../../components/Can';
 import { COIN_TRANSACTION_REASON_LABELS } from '@shared/api/types';
 import {
@@ -58,13 +55,7 @@ import { CustomerFormModal } from './CustomerFormModal';
 import { ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from '../sales/orderStatus';
 import { InfoRow, StatCard } from './detailPageParts';
 
-const { Text, Title } = Typography;
-
-const STATUS_COLOUR: Record<CustomerStatus, string> = {
-  ACTIVE: 'green',
-  INACTIVE: 'default',
-  BLACKLISTED: 'red',
-};
+const { Text } = Typography;
 
 const STATUS_ACTIONS: Record<CustomerStatus, { next: CustomerStatus; label: string; warning?: string }[]> = {
   ACTIVE: [

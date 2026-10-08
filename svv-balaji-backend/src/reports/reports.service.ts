@@ -67,9 +67,11 @@ export class ReportsService {
       }
     }
     const today = istDate(new Date());
-    const defFrom = istDate(new Date(Date.now() - 29 * 24 * 3600_000));
+    // Missing `to` means today; missing `from` means the 30 days ending at `to`.
+    const end = to ?? today;
+    const start = from ?? istDate(new Date(Date.parse(`${end}T00:00:00.000Z`) - 29 * 24 * 3600_000 - 330 * 60_000));
     try {
-      return istRange(from ?? (to ? undefined : defFrom), to ?? (from ? undefined : today));
+      return istRange(start, end);
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
@@ -382,7 +384,7 @@ export class ReportsService {
 
     const [
       orders, posSales, onlinePayments, cod, creditReceipts, refunds, posRefunds, walletPaid, invoices, invoiceLines,
-      affiliatePayable, riderEarnings, receivables, creditNotes,
+      affiliatePayable, riderEarnings, receivables, creditNotes, undeliveredRefunds,
     ] = await Promise.all([
       this.prisma.order.findMany({
         where: { orderDate: inRange, status: SOLD, ...orderBranch },
@@ -456,6 +458,11 @@ export class ReportsService {
         _sum: { taxableTotal: true, cgstTotal: true, sgstTotal: true, igstTotal: true, taxTotal: true, grandTotal: true },
         _count: { _all: true },
       }),
+      // Prepaid orders closed as undelivered: the money went back to the customer's Refund Wallet.
+      this.prisma.refundWalletTransaction.findMany({
+        where: { reason: 'UNDELIVERED_REFUND', createdAt: inRange, ...(branchId ? { order: { branchId } } : {}) },
+        select: { amount: true, order: { select: { channel: true } } },
+      }),
     ]);
 
     // --- per channel (accrual: what was billed in the range, and how much of it is paid)
@@ -488,6 +495,7 @@ export class ReportsService {
       ch.POS.collected += paise(s.total);
     }
     for (const x of refunds) ch[x.channel].refunds += paise(x.refundAmount);
+    for (const x of undeliveredRefunds) ch[x.order?.channel ?? 'B2C'].refunds += paise(x.amount);
     ch.POS.refunds += posRefunds.reduce((s, x) => s + paise(x.total), 0);
 
     const channels = Object.values(ch).map((c) => ({
@@ -609,6 +617,7 @@ export class ReportsService {
       refunds: {
         total: totals.refunds,
         returns: { count: refunds.length, byMethod: refundsByMethod },
+        undelivered: { count: undeliveredRefunds.length, amount: rupees(sumOf(undeliveredRefunds, (x) => x.amount)) },
         posRefunds: { count: posRefunds.length, amount: rupees(sumOf(posRefunds, (x) => x.total)) },
       },
       gst,

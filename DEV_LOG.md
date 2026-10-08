@@ -3741,3 +3741,18 @@ masked calling (provider decision), FRD34 production cost / machine utilisation 
 `DATABASE_URL` exported; its Prisma cleanup steps read `.env` (hosted Render DB). Every statement targeted a UUID created
 seconds earlier on the local test DB and failed, so nothing on the hosted DB could have matched - but check if anything
 looks odd there.
+
+## 2026-10-08 (later) — Review fixes on the "not built or still fake" pass (Raunak, via agent)
+
+- **Sweep starvation (real bug):** the credit-note sweep took 50 refunded returns without a note, unordered; returns that can
+  never get one (past the s.34(2) deadline, nothing left to credit) would hold those slots forever and new returns would never
+  be credited. Now newest first. The dispatch sweep's auto re-attempt had the same shape (pre-existing, worsened by closed-
+  undelivered orders): now only orders still DISPATCHED with no live attempt, newest first.
+- **Finance MIS** now counts refunds of orders closed as undelivered (Refund Wallet `UNDELIVERED_REFUND`) under Refunds, per
+  channel. `refunds.undelivered` added to `GET /reports/finance`.
+- **Report date defaults:** only `to` given used to report one day; now the 30 days ending at `to` (only `from` -> to today).
+- Lint: unused imports / dead lazy imports removed (admin App, navigation, customer pages, OrderDetailParts; backend
+  fulfillment, credit notes). No behaviour change.
+
+Verified: jest reports/invoices/delivery/sales 180/180; `e2e-reports-flow.py`, `e2e-undelivered-flow.py` ALL PASSED; sweeps run
+with no errors in the API log; admin + backend tsc and eslint clean on touched files. No migration.

@@ -13,7 +13,7 @@ import {
   UserOutlined,
   WhatsAppOutlined,
 } from '@ant-design/icons';
-import { Avatar, Button, Card, Col, Descriptions, Divider, Row, Space, Statistic, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { Avatar, Button, Card, Col, Divider, Row, Space, Statistic, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { formatCurrency, formatDate, formatDateTime } from '../../utils/format';
 
 const { Text, Title } = Typography;

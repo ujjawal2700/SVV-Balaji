@@ -98,6 +98,8 @@ export interface FinanceReport {
   refunds: {
     total: number;
     returns: { count: number; byMethod: Record<string, number> };
+    /** Prepaid orders closed as undelivered, refunded to the Refund Wallet. */
+    undelivered: { count: number; amount: number };
     posRefunds: { count: number; amount: number };
   };
   gst: {
