@@ -592,6 +592,8 @@ const EVENT_TITLE: Record<string, string> = {
   DELIVERED: 'Delivered to Recipient',
   CANCELLED: 'Order Cancelled',
   OTP_FAILED: 'Wrong delivery OTP entered',
+  CLOSED_UNDELIVERED: 'Closed as undelivered - stock back in',
+  GST_REVERSED: 'Tax invoice reversed',
 };
 
 /** The order's own event log, oldest first - not a template. */

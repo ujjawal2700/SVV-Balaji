@@ -129,6 +129,15 @@ export class StorefrontCheckoutController {
     return this.orders.detail((await this.ctx.forAccount(s.sub)).id, orderNumber);
   }
 
+  @Get('orders/:orderNumber/live-location')
+  @ApiOperation({
+    summary: 'Where the rider carrying my order is (local deliveries on their way only; tracking:false otherwise)',
+    description: 'Poll every ~10 s. stale=true when the last fix is over 2 minutes old.',
+  })
+  async myOrderLiveLocation(@CurrentCustomer() s: CustomerJwtPayload, @Param('orderNumber') orderNumber: string) {
+    return this.orders.liveLocation((await this.ctx.forAccount(s.sub)).id, orderNumber);
+  }
+
   @Post('orders/:orderNumber/reviews')
   @HttpCode(200)
   @ApiOperation({ summary: 'Rate a product from one of my delivered orders (one review per product, replaces an earlier one)' })

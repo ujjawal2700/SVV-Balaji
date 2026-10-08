@@ -53,8 +53,21 @@ export function useLive(enabled: boolean, online: boolean) {
       if (socketRef.current?.connected) socketRef.current.emit(p ? 'location' : 'heartbeat', p ?? {});
       else await riderApi.location(p ?? {}).catch(() => undefined);
     };
-    void send();
-    const t = setInterval(() => void send(), 30_000);
-    return () => clearInterval(t);
-  }, [enabled, online]);
+    // Every 10 s while carrying an order (the customer is watching the map), 30 s otherwise.
+    const carrying = () =>
+      (qc.getQueryData<{ active?: Array<{ status: string }> }>(['dashboard'])?.active ?? []).some((t) =>
+        ['PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'].includes(t.status),
+      );
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      await send();
+      if (!stopped) timer = setTimeout(() => void loop(), carrying() ? 10_000 : 30_000);
+    };
+    void loop();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [enabled, online, qc]);
 }

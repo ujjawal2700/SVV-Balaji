@@ -72,6 +72,11 @@ const RiderPayRulesPage = lazy(() => import('./pages/delivery/DeliverySettingsPa
 const PendingRidersPage = lazy(() => import('./pages/delivery/riders/PendingRidersPage').then((m) => ({ default: m.PendingRidersPage })));
 const RiderDetailPage = lazy(() => import('./pages/delivery/riders/RiderDetailPage').then((m) => ({ default: m.RiderDetailPage })));
 const LiveRidersPage = lazy(() => import('./pages/delivery/riders/LiveRidersPage').then((m) => ({ default: m.LiveRidersPage })));
+const RiderPayoutsPage = lazy(() =>
+  import('./pages/delivery/riders/RiderPayoutsPage').then((m) => ({
+    default: m.RiderPayoutsPage,
+  })),
+);
 const RiderEarningsPage = lazy(() => import('./pages/delivery/riders/RiderEarningsPage').then((m) => ({ default: m.RiderEarningsPage })));
 const RiderCashPage = lazy(() => import('./pages/delivery/riders/RiderCashPage').then((m) => ({ default: m.RiderCashPage })));
 const RiderVerificationQueuePage = lazy(() => import('./pages/delivery/riders/RiderVerificationQueuePage').then((m) => ({ default: m.RiderVerificationQueuePage })));
@@ -254,6 +259,16 @@ const PosReportsPage = lazy(() =>
     default: m.PosReportsPage,
   })),
 );
+const Gstr1Page = lazy(() =>
+  import('./pages/invoices/Gstr1Page').then((m) => ({
+    default: m.Gstr1Page,
+  })),
+);
+const SalesAnalyticsPage = lazy(() =>
+  import('./pages/reports/SalesAnalyticsPage').then((m) => ({
+    default: m.SalesAnalyticsPage,
+  })),
+);
 const EarningsFinancePage = lazy(() =>
   import('./pages/finance/EarningsFinancePage').then((m) => ({
     default: m.EarningsFinancePage,
@@ -344,6 +359,7 @@ const SCREENS: Record<string, ReactElement> = {
   '/riders/pending': <PendingRidersPage />,
   '/riders/live': <LiveRidersPage />,
   '/riders/earnings': <RiderEarningsPage />,
+  '/riders/payouts': <RiderPayoutsPage />,
   '/riders/cash': <RiderCashPage />,
   '/riders/verification': <RiderVerificationQueuePage />,
   '/riders/pay-rules': <RiderPayRulesPage />,
@@ -395,6 +411,8 @@ const SCREENS: Record<string, ReactElement> = {
   '/b2b-accounts': <CustomerAccountsPage />,
   '/earnings': <EarningsFinancePage />,
   '/finance': <EarningsFinancePage />,
+  '/reports': <SalesAnalyticsPage />,
+  '/gst-returns': <Gstr1Page />,
   // Farm-to-fork trace (FRD Section 30)
   '/trace': <TracePage />,
   '/recall': <RecallPage />,

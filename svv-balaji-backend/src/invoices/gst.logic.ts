@@ -346,12 +346,22 @@ const party = (s: PartySnapshot) => ({
  * The request body every GSP forwards to the IRP (e-invoice schema v1.1). Built
  * here, once, so a GSP adapter only has to authenticate and post it.
  */
-export function buildEInvoicePayload(src: EInvoiceSource) {
+/**
+ * `doc` makes it a credit note (Typ CRN) referring back to the invoice it
+ * corrects; omitted, it is the invoice itself.
+ */
+export function buildEInvoicePayload(
+  src: EInvoiceSource,
+  doc?: { type: 'CRN'; precedingInvoiceNumber: string; precedingInvoiceDate: Date },
+) {
   const interState = src.seller.stateCode !== src.placeOfSupply;
   return {
     Version: '1.1',
     TranDtls: { TaxSch: 'GST', SupTyp: 'B2B', RegRev: 'N', IgstOnIntra: 'N' },
-    DocDtls: { Typ: 'INV', No: src.invoiceNumber, Dt: ddmmyyyy(src.invoiceDate) },
+    DocDtls: { Typ: doc?.type ?? 'INV', No: src.invoiceNumber, Dt: ddmmyyyy(src.invoiceDate) },
+    ...(doc
+      ? { RefDtls: { PrecDocDtls: [{ InvNo: doc.precedingInvoiceNumber, InvDt: ddmmyyyy(doc.precedingInvoiceDate) }] } }
+      : {}),
     SellerDtls: party(src.seller),
     BuyerDtls: { ...party(src.buyer), Pos: src.placeOfSupply },
     ItemList: src.lines.map((l) => ({

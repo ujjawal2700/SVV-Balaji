@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
 import { PricingService } from '../pricing/pricing.service';
 import { ReferralService } from '../common/referral.service';
+import { CreditNotesService } from '../invoices/credit-notes.service';
 import { InvoicesService } from '../invoices/invoices.service';
 
 /**
@@ -363,6 +364,7 @@ describe('SalesService', () => {
       events as unknown as OrderEventsService,
       invoices as unknown as InvoicesService,
       { reverseOrderSpend: jest.fn(async () => 0) } as unknown as RefundWalletService,
+      { reverseInvoice: jest.fn() } as unknown as CreditNotesService,
     );
   });
 

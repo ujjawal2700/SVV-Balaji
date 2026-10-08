@@ -7,7 +7,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SalesModule } from '../sales/sales.module';
 import { DeliveryEventsService, DeliverySettingsService, FailureReasonsService } from './core/delivery-core';
-import { DeliveryAdminController, RidersAdminController } from './delivery-admin.controller';
+import { DeliveryAdminController, RiderPayoutsController, RidersAdminController } from './delivery-admin.controller';
+import { RiderPayoutsService } from './earnings/payouts.service';
 import { DispatchService } from './dispatch/dispatch.service';
 import { TaskFlowService } from './dispatch/task-flow.service';
 import { EarningsService } from './earnings/earnings.service';
@@ -30,10 +31,10 @@ import { DeliveryZonesModule } from './zones/zones.module';
  */
 @Module({
   imports: [DeliveryZonesModule, forwardRef(() => CheckoutModule), SalesModule, RealtimeModule, CommonModule, NotificationsModule, PassportModule, JwtModule.register({})],
-  controllers: [RiderAppController, RidersAdminController, DeliveryAdminController],
+  controllers: [RiderAppController, RidersAdminController, RiderPayoutsController, DeliveryAdminController],
   providers: [
     DeliverySettingsService, FailureReasonsService, DeliveryEventsService,
-    EarningsService, DispatchService, TaskFlowService,
+    EarningsService, RiderPayoutsService, DispatchService, TaskFlowService,
     RiderAuthService, RiderJwtStrategy, RidersService, RiderGateway, RiderVerificationService,
   ],
   exports: [DispatchService, EarningsService, DeliverySettingsService, FailureReasonsService, RiderVerificationService],

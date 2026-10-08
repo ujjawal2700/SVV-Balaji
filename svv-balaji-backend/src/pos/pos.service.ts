@@ -7,7 +7,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  EInvoiceStatus,
   InvoiceStatus,
   PosPaymentMode,
   PosSaleStatus,
@@ -15,6 +14,7 @@ import {
   Prisma,
   SalesChannel,
 } from '@prisma/client';
+import { CreditNotesService } from '../invoices/credit-notes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { SequenceService } from '../common/sequence.service';
@@ -45,7 +45,6 @@ import {
 } from './pos.logic';
 
 const num = (d: Prisma.Decimal | number | null | undefined) => (d === null || d === undefined ? 0 : Number(d));
-const IRN_CANCEL_WINDOW_MS = 24 * 3600_000;
 const MODES: PosPaymentMode[] = [PosPaymentMode.CASH, PosPaymentMode.UPI, PosPaymentMode.CARD];
 
 const SALE_DETAIL = {
@@ -82,6 +81,7 @@ export class PosService {
     private readonly sequence: SequenceService,
     private readonly invoices: InvoicesService,
     private readonly outlets: PosOutletsService,
+    private readonly creditNotes: CreditNotesService,
   ) {}
 
   // --- Catalogue --------------------------------------------------------------------
@@ -464,10 +464,10 @@ export class PosService {
 
   /**
    * Refund the whole bill: stock goes back into the exact batches it came from,
-   * the invoice is cancelled, and a cash refund comes out of the refunding
-   * cashier's open drawer. A B2B e-invoice older than 24 hours can no longer be
-   * cancelled - that correction is a credit note, which does not exist yet, so
-   * the refund is refused rather than leaving tax declared on money given back.
+   * the invoice is reversed, and a cash refund comes out of the refunding
+   * cashier's open drawer. Reversed means cancelled while that is still allowed
+   * (same month, inside the IRN window); after that, a credit note for the whole
+   * bill, so tax is never left declared on money given back.
    */
   async refundSale(user: JwtPayload, id: string, dto: RefundPosSaleDto) {
     const sale = await this.prisma.posSale.findUnique({ where: { id }, include: { lines: { include: { allocations: true } } } });
@@ -481,12 +481,10 @@ export class PosService {
     }
 
     const invoice = await this.prisma.invoice.findFirst({ where: { posSaleId: id, status: InvoiceStatus.ISSUED } });
-    if (invoice?.eInvoiceStatus === EInvoiceStatus.GENERATED && (!invoice.ackDate || Date.now() - invoice.ackDate.getTime() > IRN_CANCEL_WINDOW_MS)) {
-      throw new BadRequestException(`Invoice ${invoice.invoiceNumber} has an IRN older than 24 hours; it needs a credit note, which is not available yet`);
-    }
-    // First, because it is the step that can fail outside our control. If the
-    // refund below then failed, the sweep would simply re-invoice the sale.
-    if (invoice) await this.invoices.cancel(invoice.id, { reasonCode: '3', remark: `Refunded: ${dto.reason}`.slice(0, 100) }, user.sub);
+    // First, because it is the step that can fail outside our control (the IRP).
+    // If the refund below then failed after a cancellation, the sweep would simply
+    // re-invoice the sale; after a credit note, the note stands and staff retry.
+    if (invoice) await this.creditNotes.reverseInvoice(invoice.id, `Refunded: ${dto.reason}`, user.sub);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM pos_sales WHERE id = ${id} FOR UPDATE`;

@@ -10,6 +10,7 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { DeliverySettingsService, FailureReasonDto, FailureReasonsService, UpdateDeliverySettingsDto } from './core/delivery-core';
 import { DispatchService } from './dispatch/dispatch.service';
 import { EarningAdjustmentDto, EarningRuleDto, EarningsService } from './earnings/earnings.service';
+import { RecordRiderPayoutDto, RiderPayoutsService, VoidRiderPayoutDto } from './earnings/payouts.service';
 import { ApproveRiderDto, CashDepositDto, ReasonDto, RidersService, UpdateRiderDto } from './riders/riders.service';
 import { DocumentTypeDto, RecordDepositDto, RejectDocumentDto, ReviewDocumentDto, RiderVerificationService } from './verification/verification.service';
 
@@ -34,6 +35,7 @@ export class RidersAdminController {
   constructor(
     private readonly riders: RidersService,
     private readonly earnings: EarningsService,
+    private readonly payouts: RiderPayoutsService,
     private readonly verification: RiderVerificationService,
   ) {}
 
@@ -187,6 +189,61 @@ export class RidersAdminController {
   @RequirePermission('deliverySettings.manage')
   adjust(@Param('id') id: string, @Body() dto: EarningAdjustmentDto, @CurrentUser() u: JwtPayload) {
     return this.earnings.adjust(id, dto, u.sub);
+  }
+
+  @Get(':id/payouts/preview')
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: 'What a payout up to a date (upTo=YYYY-MM-DD) would settle: unpaid lines, total, cash held, the most cash that can be set off' })
+  payoutPreview(@Param('id') id: string, @Query('upTo') upTo: string) {
+    return this.payouts.preview(id, upTo);
+  }
+
+  @Post(':id/payouts')
+  @RequirePermission('riderPayouts.record')
+  @ApiOperation({
+    summary: 'Record rider pay as paid: every unpaid line up to the date, by bank / UPI (reference required) or cash',
+    description: 'cashOffset (optional) keeps that much of the COD cash the rider holds against the pay; it lowers both what is paid and their cash held.',
+  })
+  recordPayout(@Param('id') id: string, @Body() dto: RecordRiderPayoutDto, @CurrentUser() u: JwtPayload) {
+    return this.payouts.record(id, dto, u.sub);
+  }
+}
+
+@ApiTags('delivery')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Controller('rider-payouts')
+export class RiderPayoutsController {
+  constructor(private readonly payouts: RiderPayoutsService) {}
+
+  @Get('due')
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: 'Every rider with unpaid pay up to a date (default today), with the COD cash they hold' })
+  due(@Query('upTo') upTo?: string, @Query('warehouseId') warehouseId?: string) {
+    return this.payouts.due(upTo, warehouseId);
+  }
+
+  @Get()
+  @RequirePermission('riders.view')
+  @ApiOperation({ summary: 'Payouts recorded, newest first. Filters: riderId, status, from / to (paid date, IST)' })
+  list(
+    @Query('riderId') riderId?: string, @Query('status') status?: 'PAID' | 'VOIDED', @Query('from') from?: string, @Query('to') to?: string,
+    @Query('page') page?: string, @Query('limit') limit?: string,
+  ) {
+    return this.payouts.list({ riderId, status, from, to, page: Number(page) || 1, limit: Number(limit) || 20 });
+  }
+
+  @Get(':id')
+  @RequirePermission('riders.view')
+  get(@Param('id') id: string) {
+    return this.payouts.get(id);
+  }
+
+  @Post(':id/void')
+  @RequirePermission('riderPayouts.record')
+  @ApiOperation({ summary: 'Void a payout recorded in error: its lines are owed again and any cash set-off returns to cash held' })
+  void(@Param('id') id: string, @Body() dto: VoidRiderPayoutDto, @CurrentUser() u: JwtPayload) {
+    return this.payouts.void(id, dto, u.sub);
   }
 }
 

@@ -8,6 +8,7 @@ import { StorageService, type UploadedFileLike } from '../uploads/storage.servic
 import { FailureReasonsService } from './core/delivery-core';
 import { DispatchService } from './dispatch/dispatch.service';
 import { CollectCodDto, DeliverDto, FailDto, LocationDto, ReleaseDto, TaskFlowService } from './dispatch/task-flow.service';
+import { RiderPayoutsService } from './earnings/payouts.service';
 import { EarningsService } from './earnings/earnings.service';
 import {
   CurrentRider,
@@ -54,6 +55,7 @@ export class RiderAppController {
     private readonly dispatch: DispatchService,
     private readonly flow: TaskFlowService,
     private readonly earnings: EarningsService,
+    private readonly payouts: RiderPayoutsService,
     private readonly reasons: FailureReasonsService,
     private readonly storage: StorageService,
     private readonly prisma: PrismaService,
@@ -387,6 +389,14 @@ export class RiderAppController {
   @ApiOperation({ summary: 'Today / this week / range totals and lines' })
   myEarnings(@CurrentRider() r: RiderJwtPayload, @Query('from') from?: string, @Query('to') to?: string) {
     return this.earnings.summary(r.sub, { from, to });
+  }
+
+  @Get('payouts')
+  @UseGuards(RiderJwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'My pay settled so far and what is still unpaid' })
+  myPayouts(@CurrentRider() r: RiderJwtPayload) {
+    return this.payouts.forRider(r.sub);
   }
 
   @Get('cash')

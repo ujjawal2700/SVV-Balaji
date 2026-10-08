@@ -7,13 +7,17 @@ import { branchScopeFor } from '../common/branch-scope';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { DashboardService } from './dashboard.service';
+import { ReportsService } from '../reports/reports.service';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly reports: ReportsService,
+  ) {}
 
   @Get('summary')
   @RequirePermission('dashboard.view')
@@ -32,5 +36,15 @@ export class DashboardController {
      * `branchScopeFor` refuses them instead.
      */
     return this.dashboardService.getSummary(branchScopeFor(user));
+  }
+
+  @Get('commerce')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({
+    summary: 'Customer & Retail dashboard: today and this month by channel, orders to fulfil, approvals, tickets, returns, receivables, low stock',
+    description: 'Today / this month are IST calendar days. Branch staff see their own branch.',
+  })
+  getCommerce(@CurrentUser() user: JwtPayload) {
+    return this.reports.commerceDashboard(user);
   }
 }

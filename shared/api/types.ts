@@ -2379,6 +2379,9 @@ export interface Customer {
   /** Set if a referral code was used at this customer's signup. Null for staff-created or unreferred customers. */
   referredAs?: { referrer: { id: string; name: string; customerCode: string; referralCode: string } } | null;
 
+  /** Rupee refund wallet (returns), Decimal as a string. */
+  refundWalletBalance?: string;
+
   /** Running coin total — see ReferralSettings and CoinTransaction. */
   coinBalance: number;
 
@@ -2390,7 +2393,18 @@ export interface Customer {
     status: OrderStatus;
     total: string;
     paymentStatus: PaymentStatus;
+    _count?: { items: number };
   }[];
+
+  /** Lifetime figures. Only present on the single-customer GET, not the list. */
+  stats?: {
+    orderCount: number;
+    billedOrderCount: number;
+    lifetimeValue: number;
+    lastOrderDate: string | null;
+    reviewCount: number;
+    averageRating: number | null;
+  };
 
   createdAt: string;
   updatedAt: string;

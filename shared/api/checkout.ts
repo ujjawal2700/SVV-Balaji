@@ -147,6 +147,11 @@ export const checkoutAdminApi = {
   /** Staff override (orders.override): any status, with a reason. */
   overrideStatus: (orderId: string, status: OrderStatus, reason: string) =>
     api.post<OverrideStatusResult>(`/orders/${orderId}/override-status`, { status, reason }).then((r) => r.data),
+  /** Undelivered close (orders.closeUndelivered): goods back in stock, prepaid money to the Refund Wallet, invoice reversed. */
+  closeUndelivered: (orderId: string, reason: string, goodsInHand?: boolean) =>
+    api
+      .post<{ refundedToWallet: number; packsReturned: number; gst: string | null }>(`/orders/${orderId}/close-undelivered`, { reason, goodsInHand })
+      .then((r) => r.data),
 
   syncSince: (since: string) => api.get<OrderSyncResult>('/orders-sync', { params: { since } }).then((r) => r.data),
   pushKey: () => api.get<{ publicKey: string | null }>('/notifications/push/key').then((r) => r.data),

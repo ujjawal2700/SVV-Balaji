@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { distanceKm } from '../delivery/zones/zone.logic';
 import { PrismaService } from '../prisma/prisma.service';
 import type { StoredQuote } from './checkout.service';
 
@@ -79,6 +80,56 @@ export class StorefrontOrdersService {
       update: { orderId: order.id, rating: input.rating, comment },
     });
     return { productId: review.productId, rating: review.rating, comment: review.comment };
+  }
+
+  /**
+   * Where the rider carrying this order is, for the shopper's tracking map.
+   *
+   * Only for the customer's own order, only for a local delivery that is on its
+   * way (picked up, out for delivery, at the door) - never before pickup or after
+   * delivery, so a shopper cannot follow a rider around. `stale` says the last
+   * fix is old (app in the background, no signal), so the map can say so rather
+   * than show a confident wrong position.
+   */
+  async liveLocation(customerId: string, orderNumber: string) {
+    const o = await this.prisma.order.findFirst({
+      where: { orderNumber, customerId },
+      select: { id: true, status: true, fulfillmentMethod: true, addressSnapshot: true },
+    });
+    if (!o) throw new NotFoundException('Order not found');
+    const off = { tracking: false as const };
+    if (o.status !== 'DISPATCHED' || o.fulfillmentMethod !== 'LOCAL') return off;
+    const task = await this.prisma.deliveryTask.findFirst({
+      where: { orderId: o.id, kind: 'ORDER_DELIVERY', status: { in: ['PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'] } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        status: true, dropLatitude: true, dropLongitude: true,
+        rider: { select: { fullName: true, vehicleType: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true } },
+      },
+    });
+    if (!task?.rider || task.rider.lastLatitude === null || task.rider.lastLongitude === null || !task.rider.lastLocationAt) return off;
+
+    const snap = o.addressSnapshot as { latitude?: number; longitude?: number } | null;
+    const dropLat = task.dropLatitude !== null ? Number(task.dropLatitude) : snap?.latitude ?? null;
+    const dropLng = task.dropLongitude !== null ? Number(task.dropLongitude) : snap?.longitude ?? null;
+    const rider = { lat: Number(task.rider.lastLatitude), lng: Number(task.rider.lastLongitude) };
+    const ageSeconds = Math.max(0, Math.round((Date.now() - task.rider.lastLocationAt.getTime()) / 1000));
+    const km = dropLat !== null && dropLng !== null ? distanceKm(rider, { lat: dropLat, lng: dropLng }) : null;
+    return {
+      tracking: true as const,
+      status: task.status,
+      rider: {
+        firstName: task.rider.fullName.split(' ')[0],
+        vehicleType: task.rider.vehicleType,
+        latitude: rider.lat,
+        longitude: rider.lng,
+        updatedAt: task.rider.lastLocationAt,
+        ageSeconds,
+        stale: ageSeconds > 120,
+      },
+      drop: dropLat !== null && dropLng !== null ? { latitude: dropLat, longitude: dropLng } : null,
+      distanceKm: km === null ? null : Math.round(km * 10) / 10,
+    };
   }
 
   async detail(customerId: string, orderNumber: string) {
@@ -174,7 +225,7 @@ export class StorefrontOrdersService {
 }
 
 /** Staff-side steps a shopper never sees (STATUS_OVERRIDE carries the staff member's reason). */
-const INTERNAL_EVENTS = ['SCANNED', 'OTP_FAILED', 'STATUS_OVERRIDE', 'READY_FOR_PICKUP'];
+const INTERNAL_EVENTS = ['SCANNED', 'OTP_FAILED', 'STATUS_OVERRIDE', 'READY_FOR_PICKUP', 'GST_REVERSED'];
 /** The same step with the same detail again within this window is a repeat click / retry, not news. */
 const REPEAT_WINDOW_MS = 30 * 60_000;
 

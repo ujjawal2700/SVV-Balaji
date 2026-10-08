@@ -57,7 +57,17 @@ function party(title: string, p: InvoiceParty) {
     </div>`;
 }
 
-export function taxInvoiceHtml(inv: Invoice): string {
+/**
+ * How the document reads when it is not a tax invoice. A credit note prints with
+ * the same layout, its own badge, and the invoice it reduces (Rule 53).
+ */
+export interface PrintAs {
+  badge: string;
+  totalLabel: string;
+  reference?: string;
+}
+
+export function taxInvoiceHtml(inv: Invoice, as: PrintAs = { badge: 'Tax Invoice', totalLabel: 'Invoice total' }): string {
   const footerNote = inv.seller.footerNote;
   const inter = inv.isInterState;
   const taxHead = inter ? '<th class="num">IGST</th>' : '<th class="num">CGST</th><th class="num">SGST</th>';
@@ -104,10 +114,11 @@ export function taxInvoiceHtml(inv: Invoice): string {
         <div class="muted">GSTIN ${esc(inv.seller.gstin)}</div>
       </div>
       <div class="right">
-        <div class="badge">Tax Invoice</div>
+        <div class="badge">${esc(as.badge)}</div>
         <div class="strong">${esc(inv.invoiceNumber)}</div>
         <div>Date: ${esc(date(inv.invoiceDate))}</div>
         <div>${inv.order ? `Order: ${esc(inv.order.orderNumber)}` : inv.posSale ? `Counter sale: ${esc(inv.posSale.saleNumber)}` : ''}</div>
+        ${as.reference ? `<div class="strong">${esc(as.reference)}</div>` : ''}
       </div>
     </div>
     ${irn}
@@ -129,7 +140,7 @@ export function taxInvoiceHtml(inv: Invoice): string {
         ${inter ? `<tr><td>IGST</td><td class="num">₹${money(inv.igstTotal)}</td></tr>`
           : `<tr><td>CGST</td><td class="num">₹${money(inv.cgstTotal)}</td></tr><tr><td>SGST</td><td class="num">₹${money(inv.sgstTotal)}</td></tr>`}
         ${inv.roundOff ? `<tr><td>Round off</td><td class="num">₹${money(inv.roundOff)}</td></tr>` : ''}
-        <tr class="grand"><td>Invoice total</td><td class="num">₹${money(inv.grandTotal)}</td></tr>
+        <tr class="grand"><td>${esc(as.totalLabel)}</td><td class="num">₹${money(inv.grandTotal)}</td></tr>
       </table>
     </div>
     <div class="words">${esc(amountInWords(inv.grandTotal))}</div>
@@ -142,7 +153,7 @@ export function taxInvoiceHtml(inv: Invoice): string {
 
     <div class="foot">
       ${footerNote ? `<div>${esc(footerNote)}</div>` : ''}
-      <div>This is a computer-generated invoice and does not require a signature.</div>
+      <div>This is a computer-generated ${esc(as.badge.toLowerCase())} and does not require a signature.</div>
     </div>`;
 }
 
@@ -181,20 +192,20 @@ const CSS = `
 `;
 
 /** The complete printable page - what the print window shows. */
-export function taxInvoiceDocument(inv: Invoice): string {
+export function taxInvoiceDocument(inv: Invoice, as?: PrintAs): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>${esc(inv.invoiceNumber.replace(/\//g, '-'))}</title><style>${CSS}</style></head>
     <body><div class="bar"><button onclick="window.print()">Print / Save as PDF</button></div>
-    <div class="page">${taxInvoiceHtml(inv)}</div>
+    <div class="page">${taxInvoiceHtml(inv, as)}</div>
     <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`;
 }
 
 /** Open the invoice in a new window and bring up the print dialog (Save as PDF works there). */
-export function printTaxInvoice(inv: Invoice): boolean {
+export function printTaxInvoice(inv: Invoice, as?: PrintAs): boolean {
   const w = window.open('', '_blank', 'width=960,height=1000');
   if (!w) return false;
   w.document.open();
-  w.document.write(taxInvoiceDocument(inv));
+  w.document.write(taxInvoiceDocument(inv, as));
   w.document.close();
   return true;
 }

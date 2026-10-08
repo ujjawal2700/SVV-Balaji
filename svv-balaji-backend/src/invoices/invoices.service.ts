@@ -678,6 +678,13 @@ export class InvoicesService implements OnModuleInit, OnModuleDestroy {
     const inv = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
     if (!inv) throw new NotFoundException('Invoice not found');
     if (inv.status === InvoiceStatus.CANCELLED) throw new BadRequestException('This invoice is already cancelled');
+    const liveNotes = await this.prisma.creditNote.count({ where: { invoiceId, status: InvoiceStatus.ISSUED } });
+    if (liveNotes > 0) {
+      // The notes reduce this invoice; cancelling it would leave them reducing nothing.
+      throw new BadRequestException(
+        `${inv.invoiceNumber} has ${liveNotes} credit note(s) against it and cannot be cancelled. Credit what is left on it instead.`,
+      );
+    }
 
     if (inv.eInvoiceStatus === EInvoiceStatus.GENERATED) {
       if (!inv.ackDate || Date.now() - inv.ackDate.getTime() > IRN_CANCEL_WINDOW_MS) {

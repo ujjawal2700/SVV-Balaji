@@ -5,9 +5,11 @@ import {
   PaymentStatus,
   PaymentTerms,
   Prisma,
+  RefundWalletReason,
   SalesChannel,
 } from '@prisma/client';
 import { InvoicesService } from '../invoices/invoices.service';
+import { CreditNotesService } from '../invoices/credit-notes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -83,6 +85,7 @@ export class SalesService {
     private readonly events: OrderEventsService,
     private readonly invoices: InvoicesService,
     private readonly refundWallet: RefundWalletService,
+    private readonly creditNotes: CreditNotesService,
     @Optional() private readonly affiliates?: AffiliateLedgerService,
   ) {}
 
@@ -1195,6 +1198,139 @@ export class SalesService {
         },
       });
     });
+  }
+
+  /**
+   * Close a dispatched order that was never delivered and whose goods are back
+   * (rider returned them to the store, or the courier's RTO reached us).
+   *
+   * Everything a delivery would have settled is unwound in one transaction:
+   * the packs go back into the very batches they left from (with a STOCK_IN
+   * ledger row, so the pack still traces to its farmer), the allocations are
+   * released, a prepaid amount goes to the customer's Refund Wallet, coins /
+   * wallet spend / coupon are given back and affiliate commission is cancelled.
+   * Then the tax invoice is reversed - cancelled while still in its month,
+   * otherwise a credit note.
+   *
+   * Refused while the goods could still be out: a delivery task in progress, or
+   * a courier shipment not back at origin (unless staff confirm they have the
+   * goods in hand). A B2B bill with receipts applied must have them voided first,
+   * exactly as for an ordinary cancellation.
+   */
+  async closeUndelivered(id: string, dto: { reason: string; goodsInHand?: boolean }, userId: string) {
+    const reason = dto.reason?.trim();
+    if (!reason || reason.length < 3) throw new BadRequestException('Say why the order is being closed as undelivered');
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        allocations: { where: { releasedAt: null } },
+        shipment: { select: { status: true } },
+        deliveryTasks: { where: { kind: 'ORDER_DELIVERY' }, orderBy: { createdAt: 'desc' }, select: { status: true, taskNumber: true } },
+        creditAllocations: { where: { receipt: { voidedAt: null } }, select: { id: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status !== OrderStatus.DISPATCHED) {
+      throw new BadRequestException(`Only a dispatched order can be closed as undelivered; ${order.orderNumber} is ${order.status}`);
+    }
+
+    const latestTask = order.deliveryTasks[0];
+    const BACK = ['RETURNED_TO_STORE', 'CANCELLED'];
+    if (latestTask && !BACK.includes(latestTask.status)) {
+      throw new BadRequestException(
+        `Delivery ${latestTask.taskNumber} is ${latestTask.status.toLowerCase().replace(/_/g, ' ')}. ` +
+          'The goods have to be back at the store first (rider marks them returned), or re-attempt the delivery.',
+      );
+    }
+    const rtoDone = /^RTO.*DELIVERED$/.test(order.shipment?.status ?? '');
+    if (!latestTask && !rtoDone && !dto.goodsInHand) {
+      throw new BadRequestException(
+        order.shipment
+          ? `The courier shipment is "${order.shipment.status ?? 'unknown'}", not back at origin. Confirm the goods are in hand to close it anyway.`
+          : 'Confirm the goods are back in hand to close this order as undelivered.',
+      );
+    }
+    if (order.creditAllocations.length > 0) {
+      throw new BadRequestException(
+        `${order.orderNumber} has payments recorded against it under Receivables. Void those receipts first, so the money is not left on a closed order.`,
+      );
+    }
+
+    // Money the customer actually paid up front (gateway). Wallet spend and coins are given back by their own helpers below.
+    const prepaid =
+      order.paymentMode === 'ONLINE' && order.paymentStatus === PaymentStatus.PAID
+        ? Math.max(0, Math.round((Number(order.total) - Number(order.refundWalletPaidInr)) * 100) / 100)
+        : 0;
+
+    const closed = await this.prisma.$transaction(async (tx) => {
+      // Same lock order as dispatch: the order first, so two closes cannot both re-inward the stock.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`;
+      const fresh = await tx.order.findUniqueOrThrow({ where: { id }, select: { status: true } });
+      if (fresh.status !== OrderStatus.DISPATCHED) throw new BadRequestException(`${order.orderNumber} is already ${fresh.status}`);
+
+      for (const a of order.allocations) {
+        await tx.finishedGoodsStock.upsert({
+          where: { warehouseId_fgBatchId: { warehouseId: a.warehouseId, fgBatchId: a.fgBatchId } },
+          update: { quantity: { increment: a.quantity } },
+          create: { warehouseId: a.warehouseId, fgBatchId: a.fgBatchId, quantity: a.quantity },
+        });
+        await tx.stockMovement.create({
+          data: {
+            fgBatchId: a.fgBatchId,
+            toWarehouseId: a.warehouseId,
+            movementType: 'STOCK_IN',
+            quantity: a.quantity,
+            unit: 'PACK',
+            reason: `Undelivered - back from order ${order.orderNumber}: ${reason}`.slice(0, 500),
+            reference: order.orderNumber,
+            performedById: userId,
+          },
+        });
+      }
+      await tx.orderAllocation.updateMany({
+        where: { orderId: id, releasedAt: null },
+        data: { releasedAt: new Date(), releasedReason: `Undelivered - returned to stock: ${reason}`.slice(0, 500) },
+      });
+
+      if (prepaid > 0) {
+        await this.refundWallet.credit(tx, {
+          customerId: order.customerId, amount: prepaid, reason: RefundWalletReason.UNDELIVERED_REFUND, orderId: id,
+          performedById: userId, note: `Order ${order.orderNumber} could not be delivered`,
+        });
+      }
+      await this.wallet.refundRedemptionForOrder(tx, id);
+      await this.refundWallet.reverseOrderSpend(tx, id);
+      await refundCouponForOrder(tx, id);
+      await this.affiliates?.onOrderCancelled(tx, id);
+
+      return tx.order.update({
+        where: { id },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelledReason: `Undelivered: ${reason}`.slice(0, 500),
+          ...(prepaid > 0 ? { paymentStatus: PaymentStatus.REFUNDED } : {}),
+        },
+      });
+    }, LONG_TX);
+
+    await this.record(id, 'CLOSED_UNDELIVERED', userId,
+      `${reason}${prepaid > 0 ? ` · ₹${prepaid.toFixed(2)} to Refund Wallet` : ''} · ${order.allocations.reduce((n, a) => n + a.quantity, 0)} pack(s) back in stock`);
+
+    // GST: the supply did not happen. Outside the transaction - the IRP may be slow - and never silently.
+    let gst: string | null = null;
+    const invoice = await this.prisma.invoice.findFirst({ where: { orderId: id, status: 'ISSUED' }, select: { id: true, invoiceNumber: true } });
+    if (invoice) {
+      try {
+        const r = await this.creditNotes.reverseInvoice(invoice.id, `Undelivered: ${reason}`, userId);
+        gst = r.route === 'CANCELLED' ? `Invoice ${invoice.invoiceNumber} cancelled` : r.route === 'CREDIT_NOTE' ? `Credit note ${r.documentNumber} issued` : `${invoice.invoiceNumber} already fully credited`;
+      } catch (err) {
+        gst = `Invoice ${invoice.invoiceNumber} could NOT be reversed (${err instanceof Error ? err.message : String(err)}) - issue a credit note from Tax Invoices`;
+        this.logger.error(`Undelivered close ${order.orderNumber}: ${gst}`);
+      }
+      await this.record(id, 'GST_REVERSED', userId, gst);
+    }
+    return { order: closed, refundedToWallet: prepaid, packsReturned: order.allocations.reduce((n, a) => n + a.quantity, 0), gst };
   }
 
   /**

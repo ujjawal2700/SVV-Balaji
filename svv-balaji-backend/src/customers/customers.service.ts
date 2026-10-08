@@ -261,12 +261,38 @@ export class CustomersService {
             status: true,
             total: true,
             paymentStatus: true,
+            _count: { select: { items: true } },
           },
         },
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');
-    return customer;
+
+    // Lifetime figures for the detail page. `orders` above is only the last 20,
+    // so counting it would understate a regular customer.
+    const [orderCount, value, lastOrder, rating] = await Promise.all([
+      this.prisma.order.count({ where: { customerId: id } }),
+      this.prisma.order.aggregate({
+        where: { customerId: id, status: { notIn: ['CANCELLED', 'DRAFT'] } },
+        _sum: { total: true },
+        _count: { _all: true },
+      }),
+      this.prisma.order.findFirst({ where: { customerId: id }, orderBy: { orderDate: 'desc' }, select: { orderDate: true } }),
+      this.prisma.productReview.aggregate({ where: { customerId: id }, _avg: { rating: true }, _count: { _all: true } }),
+    ]);
+
+    return {
+      ...customer,
+      stats: {
+        orderCount,
+        /** Orders that were not cancelled, and what they were worth (GST-inclusive). */
+        billedOrderCount: value._count._all,
+        lifetimeValue: Number(value._sum.total ?? 0),
+        lastOrderDate: lastOrder?.orderDate ?? null,
+        reviewCount: rating._count._all,
+        averageRating: rating._avg.rating === null ? null : Math.round(rating._avg.rating * 10) / 10,
+      },
+    };
   }
 
   async update(id: string, dto: UpdateCustomerDto) {

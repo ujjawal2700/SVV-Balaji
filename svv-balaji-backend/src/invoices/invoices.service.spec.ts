@@ -78,6 +78,8 @@ function make(opts: { gsp?: EInvoiceProvider; settings?: Record<string, unknown>
     product: {
       findMany: async ({ where }: any) => [...db.products.values()].filter((p) => where.id.in.includes(p.id) && p.hsnCode),
     },
+    // No credit notes in these scenarios; cancel() checks for live ones first.
+    creditNote: { count: jest.fn(async () => 0) },
     invoice: {
       findFirst: async ({ where }: any) =>
         withLines(db.invoices.find((i) =>

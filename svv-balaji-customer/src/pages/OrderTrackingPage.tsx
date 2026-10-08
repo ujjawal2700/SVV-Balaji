@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Input, Modal, Rate, Select, Skeleton, Steps, Tag, Typography, message } from 'antd';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { checkoutApi, checkoutError, type OrderDetail } from '../api/checkout';
+import { LiveRiderMap } from '../components/LiveRiderMap';
 import type { SupportTicketCategory } from '../api/supportTickets';
 import { useCreateSupportTicket } from '../hooks/useSupportTickets';
 import { formatInr } from '../utils/money';
@@ -297,6 +298,8 @@ export function OrderTrackingPage() {
                 </div>
               </Card>
             ) : null}
+
+            {o.status === 'DISPATCHED' && o.fulfillment.method === 'LOCAL' ? <LiveRiderMap orderNumber={o.orderNumber} /> : null}
 
             {!delivered && o.rider?.name ? (
               <Card title="Your delivery partner">

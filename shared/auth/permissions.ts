@@ -171,6 +171,8 @@ export const PERMISSIONS = {
   INVOICES_VIEW: 'invoices.view',
   INVOICES_ISSUE: 'invoices.issue',
   INVOICES_CANCEL: 'invoices.cancel',
+  CREDIT_NOTES_ISSUE: 'creditNotes.issue',
+  GST_RETURNS_VIEW: 'gstReturns.view',
   GST_SETTINGS_VIEW: 'gstSettings.view',
   GST_SETTINGS_MANAGE: 'gstSettings.manage',
   POS_OUTLETS_VIEW: 'posOutlets.view',
@@ -184,6 +186,7 @@ export const PERMISSIONS = {
   RIDERS_VIEW: 'riders.view',
   RIDERS_MANAGE: 'riders.manage',
   RIDER_CASH_RECORD: 'riderCash.record',
+  RIDER_PAYOUTS_RECORD: 'riderPayouts.record',
   RIDERS_VERIFY: 'riders.verify',
   RIDER_DEPOSIT_RECORD: 'riderDeposit.record',
   DELIVERY_TASKS_VIEW: 'deliveryTasks.view',
@@ -202,6 +205,7 @@ export const PERMISSIONS = {
   ORDER_DELIVER: 'orders.deliver',
   ORDER_CANCEL: 'orders.cancel',
   ORDER_OVERRIDE: 'orders.override',
+  ORDER_CLOSE_UNDELIVERED: 'orders.closeUndelivered',
   ORDER_PAYMENT: 'orders.payment',
 
   // --- Storefront -------------------------------------------------------------
@@ -244,6 +248,8 @@ export const PERMISSIONS = {
   HOME_SECTION_CREATE: 'homeSections.create',
   HOME_SECTION_MANAGE: 'homeSections.edit',
   HOME_SECTION_DELETE: 'homeSections.delete',
+  REPORTS_SALES: 'reports.sales',
+  REPORTS_FINANCE: 'reports.finance',
 
   // --- Screens with no endpoint of their own --------------------------------
   DASHBOARD_VIEW: 'dashboard.view',

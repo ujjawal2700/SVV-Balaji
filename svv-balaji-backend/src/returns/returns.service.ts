@@ -14,6 +14,7 @@ import { availableByProduct, OutOfStockException } from '../checkout/stock-holds
 import { DispatchService, LIVE_STATUSES } from '../delivery/dispatch/dispatch.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { PricingService } from '../pricing/pricing.service';
+import { CreditNotesService } from '../invoices/credit-notes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { statusAfter } from '../receivables/receivables.logic';
 import { SalesService } from '../sales/sales.service';
@@ -81,6 +82,7 @@ export class ReturnsService implements OnModuleInit {
     @Inject(SHIPPING_PROVIDER) private readonly shipping: ShippingProvider,
     @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
     private readonly affiliates: AffiliateLedgerService,
+    private readonly creditNotes: CreditNotesService,
     @Optional() private readonly staffAlerts?: StaffAlertsService,
   ) {}
 
@@ -828,6 +830,8 @@ export class ReturnsService implements OnModuleInit {
     }, { timeout: 20_000 });
 
     await this.log(req.id, 'REFUND_SUMMARY', actor, summary.join('; ') || 'Nothing to refund');
+    // GST: goods came back, so the invoice's tax is reduced by a credit note. Best-effort; the sweep retries.
+    await this.creditNotes.onReturnRefunded(req.id, actor.id ?? null);
     await this.notify(req, S.COMPLETED, actor, summary[0]);
     return this.staffView(await this.load(id));
   }

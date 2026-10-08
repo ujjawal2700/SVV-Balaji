@@ -283,6 +283,8 @@ export const riderApi = {
   failureReasons: () => d<FailureReason[]>(api.get('/rider/failure-reasons')),
 
   earnings: (from?: string, to?: string) => d<Earnings>(api.get('/rider/earnings', { params: { from, to } })),
+  payouts: () =>
+    d<{ unpaid: number; payouts: Array<{ id: string; payoutNumber: string; paidAt: string; upTo: string; grossAmount: number; cashOffset: number; netPaid: number; method: 'BANK_TRANSFER' | 'UPI' | 'CASH'; reference: string | null; lineCount: number }> }>(api.get('/rider/payouts')),
   cash: () => d<{ balance: number; entries: Array<{ id: string; type: string; amount: number; reference: string | null; note: string | null; createdAt: string }> }>(api.get('/rider/cash')),
   createSettlementOrder: (amount?: number) => d<{ gatewayOrderId: string; clientConfig: any; amount: number; balance: number }>(api.post('/rider/cash/settle-order', { amount })),
   verifyCashSettlement: (input: { amount: number; gatewayOrderId: string; paymentId: string; signature: string }) => d<{ success: boolean; settledAmount: number; newBalance: number }>(api.post('/rider/cash/settle-verify', input)),

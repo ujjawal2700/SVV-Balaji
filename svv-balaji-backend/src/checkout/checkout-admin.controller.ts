@@ -2,7 +2,7 @@ import {
   Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, RawBodyRequest, Req, UnauthorizedException, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsEnum, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { OrderStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { timingSafeEqual } from 'node:crypto';
@@ -28,6 +28,14 @@ class AssignRiderDto {
 }
 class VerifyOtpDto {
   @ApiProperty({ example: '4821' }) @Matches(/^\d{4,6}$/, { message: 'The OTP is 4-6 digits' }) otp!: string;
+}
+
+class CloseUndeliveredDto {
+  @ApiProperty({ example: 'Customer refused delivery twice and is unreachable' })
+  @IsString() @MinLength(3) @MaxLength(300) reason!: string;
+
+  @ApiProperty({ required: false, description: 'Courier orders: staff confirm the goods are physically back even though the RTO scan has not arrived' })
+  @IsOptional() @IsBoolean() goodsInHand?: boolean;
 }
 
 class OverrideStatusDto {
@@ -125,6 +133,20 @@ export class FulfillmentController {
   })
   override(@Param('id') id: string, @Body() dto: OverrideStatusDto, @CurrentUser() user: JwtPayload) {
     return this.fulfillment.overrideStatus(id, dto.status, dto.reason, user.sub);
+  }
+
+  @Post(':id/close-undelivered')
+  @HttpCode(200)
+  @RequirePermission('orders.closeUndelivered')
+  @ApiOperation({
+    summary: 'Close a dispatched order that could not be delivered, with its goods back in stock',
+    description:
+      'Packs go back into the batches they left from (STOCK_IN), a prepaid amount goes to the Refund Wallet, coins / wallet spend / ' +
+      'coupon / affiliate commission are reversed and the order is CANCELLED. The tax invoice is then cancelled (same month) or ' +
+      'credited in full. Refused while a delivery is still in progress or a courier shipment is not back (unless goodsInHand).',
+  })
+  closeUndelivered(@Param('id') id: string, @Body() dto: CloseUndeliveredDto, @CurrentUser() user: JwtPayload) {
+    return this.fulfillment.closeUndelivered(id, dto, user.sub);
   }
 }
 

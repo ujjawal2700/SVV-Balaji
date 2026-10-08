@@ -276,6 +276,11 @@ export class FulfillmentService {
    * courier reports delivery, closes the order (which is what credits loyalty).
    * Idempotent: the same payload twice changes nothing the second time.
    */
+  /** Undelivered close - see SalesService.closeUndelivered. The returned delivery task keeps its RETURNED_TO_STORE history. */
+  closeUndelivered(orderId: string, dto: { reason: string; goodsInHand?: boolean }, userId: string) {
+    return this.sales.closeUndelivered(orderId, dto, userId);
+  }
+
   async handleShiprocketWebhook(payload: Record<string, unknown>) {
     const awb = String(payload.awb ?? payload.awb_code ?? '');
     if (!awb) throw new BadRequestException('No AWB in webhook');

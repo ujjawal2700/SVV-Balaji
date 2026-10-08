@@ -1,3 +1,4 @@
+import { InvoicesModule } from '../invoices/invoices.module';
 import { Module } from '@nestjs/common';
 import { CheckoutModule } from '../checkout/checkout.module';
 import { CustomerContextService } from '../checkout/customer-context.service';
@@ -22,7 +23,7 @@ import { ReturnsService } from './returns.service';
  * trips through the shared DeliveryTask table.
  */
 @Module({
-  imports: [SalesModule, CheckoutModule, DeliveryModule, LoyaltyModule, PricingModule, WalletModule],
+  imports: [SalesModule, CheckoutModule, DeliveryModule, LoyaltyModule, PricingModule, WalletModule, InvoicesModule],
   controllers: [StorefrontReturnsController, CustomerReturnsController, RetailerReturnsController, ReturnSettingsController, RiderReturnTasksController],
   providers: [ReturnsService, ReturnSettingsService, ReturnRiderFlowService, CustomerContextService],
 })

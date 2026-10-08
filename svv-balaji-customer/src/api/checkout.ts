@@ -189,6 +189,16 @@ export interface OrderDetail {
   timeline: Array<{ type: string; at: string; note: string | null }>;
 }
 
+export type LiveLocation =
+  | { tracking: false }
+  | {
+      tracking: true;
+      status: 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'AT_DROP';
+      rider: { firstName: string; vehicleType: string | null; latitude: number; longitude: number; updatedAt: string; ageSeconds: number; stale: boolean };
+      drop: { latitude: number; longitude: number } | null;
+      distanceKm: number | null;
+    };
+
 export const checkoutApi = {
   addresses: () => api.get<Address[]>('/storefront/addresses').then((r) => r.data),
   createAddress: (input: AddressInput) => api.post<Address>('/storefront/addresses', input).then((r) => r.data),
@@ -205,6 +215,9 @@ export const checkoutApi = {
   coupons: () => api.get<OfferCoupon[]>('/storefront/coupons').then((r) => r.data),
   orders: () => api.get<OrderSummaryRow[]>('/storefront/orders').then((r) => r.data),
   order: (orderNumber: string) => api.get<OrderDetail>(`/storefront/orders/${encodeURIComponent(orderNumber)}`).then((r) => r.data),
+  /** Where the rider carrying the order is - only while a local delivery is on its way. */
+  liveLocation: (orderNumber: string) =>
+    api.get<LiveLocation>(`/storefront/orders/${encodeURIComponent(orderNumber)}/live-location`).then((r) => r.data),
   /** The GST tax invoice, issued when the order is dispatched. 404 until then. */
   invoice: (orderNumber: string) => api.get<Invoice>(`/storefront/orders/${encodeURIComponent(orderNumber)}/invoice`).then((r) => r.data),
   reviewProduct: (orderNumber: string, body: { productId: string; rating: number; comment?: string }) =>

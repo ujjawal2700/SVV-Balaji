@@ -43,25 +43,14 @@ const TYPE_LABEL: Record<string, string> = {
 export function EarningsScreen() {
   const q = useQuery({ queryKey: ['earnings'], queryFn: () => riderApi.earnings() });
   const cashQ = useQuery({ queryKey: ['cash'], queryFn: riderApi.cash });
-  const toast = useToast();
+  const payoutsQ = useQuery({ queryKey: ['payouts'], queryFn: riderApi.payouts });
   const [filterTab, setFilterTab] = useState<'all' | 'earnings' | 'withdrawals'>('all');
-  const [timeframe, setTimeframe] = useState<'Weekly' | 'Monthly'>('Weekly');
-  const [withdrawing, setWithdrawing] = useState(false);
 
   const e = q.data;
   const cash = cashQ.data;
-
-  const handleWithdraw = () => {
-    if (!e || e.thisWeek <= 0) {
-      toast('No available earnings to withdraw right now.', 'info');
-      return;
-    }
-    setWithdrawing(true);
-    setTimeout(() => {
-      setWithdrawing(false);
-      toast(`Withdrawal request of ${inr(e.thisWeek)} submitted! Payout will transfer to your bank account within 24h.`, 'success');
-    }, 800);
-  };
+  const payouts = payoutsQ.data;
+  const lastPayout = payouts?.payouts[0];
+  const paidOut = (payouts?.payouts ?? []).reduce((s, p) => s + p.netPaid + p.cashOffset, 0);
 
   // Dynamically aggregate daily earnings totals for S M T W T F S from real API lines
   const dayTotals = [0, 0, 0, 0, 0, 0, 0]; // 0=Sun, 1=Mon, ..., 6=Sat
@@ -77,11 +66,10 @@ export function EarningsScreen() {
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   const bars = dayTotals.map((tot, idx) => {
-    const hasData = maxDaySum > 1;
-    const heightPercent = hasData
-      ? Math.max(16, Math.round((tot / maxDaySum) * 100))
-      : (idx === currentDayIndex ? 80 : 25 + ((idx * 11) % 35));
-    const isHighlight = hasData ? (tot === maxDaySum && tot > 0) : (idx === currentDayIndex);
+    const hasData = dayTotals.some((t) => t > 0);
+    // Nothing earned yet: every bar sits flat - never an invented shape.
+    const heightPercent = hasData ? Math.max(6, Math.round((Math.max(0, tot) / maxDaySum) * 100)) : 6;
+    const isHighlight = hasData ? tot === maxDaySum && tot > 0 : idx === currentDayIndex;
 
     return {
       day: dayLabels[idx],
@@ -101,16 +89,26 @@ export function EarningsScreen() {
     dateObj: new Date(l.earnedAt),
   }));
 
-  const cashItems = (cash?.entries ?? []).filter((c) => c.type === 'DEPOSITED' || c.amount < 0).map((c) => ({
+  // Pay settled to the rider: money received (and any COD cash they were allowed to keep).
+  const payoutItems = (payouts?.payouts ?? []).map((p) => ({
+    id: p.id,
+    type: 'WITHDRAWAL' as const,
+    title: `Pay settled · ${p.payoutNumber}`,
+    subtitle: `${date(p.paidAt)} · ${p.method === 'BANK_TRANSFER' ? 'Bank' : p.method === 'UPI' ? 'UPI' : 'Cash'}${p.reference ? ` ${p.reference}` : ''}${p.cashOffset ? ` · ${inr(p.cashOffset)} cash kept` : ''}`,
+    amount: p.netPaid + p.cashOffset,
+    dateObj: new Date(p.paidAt),
+  }));
+
+  const cashItems = (cash?.entries ?? []).filter((c) => c.type === 'DEPOSITED').map((c) => ({
     id: c.id,
     type: 'WITHDRAWAL' as const,
-    title: c.type === 'DEPOSITED' ? 'Store cash deposit' : 'Cash withdrawal',
+    title: 'COD cash handed in',
     subtitle: date(c.createdAt),
     amount: -Math.abs(c.amount),
     dateObj: new Date(c.createdAt),
   }));
 
-  const allTransactions = [...earningItems, ...cashItems].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+  const allTransactions = [...earningItems, ...payoutItems, ...cashItems].sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
 
   const filteredTransactions = allTransactions.filter((item) => {
     if (filterTab === 'earnings') return item.type === 'EARNING';
@@ -135,21 +133,21 @@ export function EarningsScreen() {
           <>
             {/* 4 Stat Summary Cards in Rider Theme (2x2 Grid) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-              {/* Available */}
+              {/* Owed to the rider and not yet paid */}
               <div className="card" style={{ padding: '14px 16px' }}>
                 <div className="between">
-                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Available</span>
+                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Unpaid</span>
                   <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--orange-soft)', color: 'var(--orange-dark)', display: 'grid', placeItems: 'center' }}>
                     <Wallet size={16} />
                   </div>
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(e.thisWeek || e.today || 0)}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>{inr(payouts?.unpaid ?? 0)}</div>
               </div>
 
-              {/* Pending */}
+              {/* Today */}
               <div className="card" style={{ padding: '14px 16px' }}>
                 <div className="between">
-                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Pending</span>
+                  <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Today</span>
                   <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--orange-soft)', color: 'var(--orange-dark)', display: 'grid', placeItems: 'center' }}>
                     <Coin size={16} />
                   </div>
@@ -159,8 +157,8 @@ export function EarningsScreen() {
 
               {/* Range Total */}
               <div className="card" style={{ padding: '14px 16px' }}>
-                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>This Period</span>
-                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr(e.range?.total || e.thisWeek || 0)}</div>
+                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>This week</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr(e.thisWeek || 0)}</div>
                 <div style={{ marginTop: 6 }}>
                   <span className="chip green" style={{ fontSize: 11, padding: '2px 8px', height: 20 }}>
                     <TrendingUp size={11} /> {e.range.deliveries} deliveries
@@ -170,8 +168,8 @@ export function EarningsScreen() {
 
               {/* Total Earned */}
               <div className="card" style={{ padding: '14px 16px' }}>
-                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Total Earned</span>
-                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr((e.range?.total || e.thisWeek) + e.today)}</div>
+                <span className="muted" style={{ fontSize: 13, fontWeight: 500 }}>Paid out so far</span>
+                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 4 }}>{inr(paidOut)}</div>
               </div>
             </div>
 
@@ -179,14 +177,7 @@ export function EarningsScreen() {
             <div className="card" style={{ padding: 18, marginBottom: 14 }}>
               <div className="between" style={{ marginBottom: 16 }}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>Earnings activity</span>
-                <select
-                  value={timeframe}
-                  onChange={(ev) => setTimeframe(ev.target.value as any)}
-                  style={{ background: 'var(--bg)', border: 'none', borderRadius: 10, padding: '4px 10px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', outline: 'none' }}
-                >
-                  <option value="Weekly">Weekly</option>
-                  <option value="Monthly">Monthly</option>
-                </select>
+                <span className="muted" style={{ fontSize: 12 }}>This week</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center' }}>
@@ -223,22 +214,16 @@ export function EarningsScreen() {
               </div>
             </div>
 
-            {/* Withdraw Funds Primary Action Button (Rider Theme) */}
-            <button
-              className="btn primary block"
-              style={{
-                borderRadius: 999,
-                height: 52,
-                fontSize: 16,
-                fontWeight: 600,
-                marginTop: 4,
-                marginBottom: 20,
-              }}
-              onClick={handleWithdraw}
-              disabled={withdrawing}
-            >
-              {withdrawing ? 'Processing...' : 'Withdraw funds'}
-            </button>
+            {/* How pay reaches the rider: settled by the company, not requested here */}
+            <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                {lastPayout ? `Last paid ${inr(lastPayout.netPaid)} on ${date(lastPayout.paidAt)}` : 'No pay settled yet'}
+              </div>
+              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                Your outlet settles your pay and records it here with its reference.
+                {(payouts?.unpaid ?? 0) > 0 ? ` ${inr(payouts!.unpaid)} is earned and not paid yet.` : ''}
+              </div>
+            </div>
 
             {/* Transactions Section */}
             <div className="section-title" style={{ marginTop: 6, marginBottom: 12 }}>Transactions</div>
@@ -262,7 +247,7 @@ export function EarningsScreen() {
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {tab === 'all' ? 'All' : tab === 'earnings' ? 'Earnings' : 'Withdrawals'}
+                    {tab === 'all' ? 'All' : tab === 'earnings' ? 'Earnings' : 'Pay & cash'}
                   </button>
                 ))}
               </div>

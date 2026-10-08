@@ -42,9 +42,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
 import type { Customer, CustomerStatus } from '../../api/types';
 import { Can } from '../../components/Can';
+import { COIN_TRANSACTION_REASON_LABELS } from '@shared/api/types';
 import {
+  useCustomer,
   useCustomerCredit,
-  useCustomers,
+  useCustomerReviews,
   useCustomerSupportTickets,
   useCustomerWallet,
   useCustomerWishlist,
@@ -53,7 +55,7 @@ import {
 import { EM_DASH, formatCurrency } from '../../utils/format';
 import { CustomerCreditDrawer } from './CustomerCreditDrawer';
 import { CustomerFormModal } from './CustomerFormModal';
-import { MOCK_CUSTOMERS } from './CustomersPage';
+import { ORDER_STATUS_COLOUR, ORDER_STATUS_LABEL } from '../sales/orderStatus';
 import { InfoRow, StatCard } from './detailPageParts';
 
 const { Text, Title } = Typography;
@@ -81,15 +83,9 @@ export function CustomerDetailPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [creditOpen, setCreditOpen] = useState(false);
 
-  const customersQuery = useCustomers();
+  const customerQuery = useCustomer(id);
   const setStatusMutation = useSetCustomerStatus();
-
-  const rawCustomers = useMemo(() => customersQuery.data?.data ?? [], [customersQuery.data]);
-  const allCustomers = useMemo(() => (rawCustomers.length > 0 ? rawCustomers : MOCK_CUSTOMERS), [rawCustomers]);
-
-  const customer = useMemo(() => {
-    return allCustomers.find((c) => c.id === id || c.customerCode === id) ?? null;
-  }, [allCustomers, id]);
+  const customer = customerQuery.data ?? null;
 
   const isB2B = customer?.channel === 'B2B';
   const creditQuery = useCustomerCredit(customer?.id, isB2B);
@@ -101,82 +97,26 @@ export function CustomerDetailPage() {
   const wishlistQuery = useCustomerWishlist(customer?.id);
   const wishlistItems = wishlistQuery.data ?? [];
 
-  const mockReviews = useMemo(() => {
-    if (!customer) return [];
-    return [
-      {
-        id: 'rev-1',
-        productName: 'A2 Cow Ghee 500ml',
-        rating: 5,
-        comment: 'Excellent quality, tastes just like homemade ghee.',
-        date: '2026-09-16',
-      },
-      {
-        id: 'rev-2',
-        productName: 'Organic Toor Dal 1kg',
-        rating: 4,
-        comment: 'Good product, packaging could be better.',
-        date: '2026-09-03',
-      },
-    ];
-  }, [customer]);
+  const reviewsQuery = useCustomerReviews(customer?.id);
+  const reviews = reviewsQuery.data ?? [];
 
   const ticketsQuery = useCustomerSupportTickets(customer?.id);
   const supportTickets = ticketsQuery.data ?? [];
 
-  const mockOrders = useMemo(() => {
-    if (!customer) return [];
-    return [
-      {
-        id: 'ord-101',
-        orderNumber: 'ORD-2026-8812',
-        date: '2026-09-15',
-        itemCount: 3,
-        total: 1450,
-        paymentStatus: 'PAID',
-        fulfillmentStatus: 'DELIVERED',
-      },
-      {
-        id: 'ord-102',
-        orderNumber: 'ORD-2026-7940',
-        date: '2026-09-02',
-        itemCount: 1,
-        total: 620,
-        paymentStatus: 'PAID',
-        fulfillmentStatus: 'DELIVERED',
-      },
-    ];
-  }, [customer]);
+  const orders = customer?.orders ?? [];
+  const orderBase = isB2B ? '/b2b-orders' : '/b2c-orders';
 
-  const mockWalletLedger = useMemo(() => {
-    if (!customer) return [];
-    return [
-      {
-        id: 'tx-101',
-        date: '2026-09-15 14:30',
-        description: 'Order #ORD-2026-8812 Delivered Cashback',
-        type: 'CREDIT',
-        coins: 250,
-        balanceAfter: walletData?.balance ?? customer.coinBalance ?? 1250,
-      },
-      {
-        id: 'tx-102',
-        date: '2026-09-02 11:15',
-        description: 'Redeemed Discount on Order #ORD-2026-7940',
-        type: 'DEBIT',
-        coins: 500,
-        balanceAfter: 1000,
-      },
-      {
-        id: 'tx-103',
-        date: '2026-06-10 10:00',
-        description: 'Referral Welcome Bonus Coins',
-        type: 'CREDIT',
-        coins: 1500,
-        balanceAfter: 1500,
-      },
-    ];
-  }, [customer, walletData]);
+  // Newest first; the balance after each row is today's balance minus every
+  // movement that came later.
+  const walletLedger = useMemo(() => {
+    const rows = walletData?.transactions ?? [];
+    let running = walletData?.balance ?? customer?.coinBalance ?? 0;
+    return rows.map((t) => {
+      const balanceAfter = running;
+      running -= t.amount;
+      return { ...t, balanceAfter };
+    });
+  }, [walletData, customer]);
 
   const handleStatusChange = (next: CustomerStatus, warning?: string) => {
     if (!customer) return;
@@ -201,7 +141,7 @@ export function CustomerDetailPage() {
     message.success(`${label} copied to clipboard`);
   };
 
-  if (customersQuery.isLoading && !customer) {
+  if (customerQuery.isLoading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
         <Spin size="large" />
@@ -235,7 +175,7 @@ export function CustomerDetailPage() {
 
   const memberSince = customer.createdAt
     ? dayjs(customer.createdAt).format('MMM YYYY').toUpperCase()
-    : 'SEPT 2026';
+    : EM_DASH;
 
   return (
     <div style={{ padding: '16px 8px 32px 8px', maxWidth: 1400, margin: '0 auto' }}>
@@ -390,14 +330,24 @@ export function CustomerDetailPage() {
                 </Space>
               </Card>
 
-              {/* Dark Styled Admin Notes Card */}
+              {/* Account summary - real figures only */}
               <div className="page-dark-card" style={{ position: 'relative', overflow: 'hidden' }}>
                 <Space direction="vertical" size={10} style={{ width: '100%', position: 'relative', zIndex: 1 }}>
                   <Text style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
-                    ADMIN NOTES
+                    ACCOUNT SUMMARY
                   </Text>
-                  <Text style={{ color: '#cbd5e1', fontSize: 13, fontStyle: 'italic', lineHeight: 1.5, display: 'block', fontWeight: 400 }}>
-                    &ldquo;Customer is highly active on the SVV Balaji platform. Coin wallet is synced and monitored.&rdquo;
+                  <Text style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 1.6, display: 'block' }}>
+                    Last order: {customer.stats?.lastOrderDate ? dayjs(customer.stats.lastOrderDate).format('DD MMM YYYY') : 'none yet'}
+                    <br />
+                    Refund wallet: {formatCurrency(customer.refundWalletBalance ?? 0)}
+                    <br />
+                    Assigned to: {customer.assignedTo?.fullName ?? 'nobody'}
+                    {customer.referredAs ? (
+                      <>
+                        <br />
+                        Referred by: {customer.referredAs.referrer.name} ({customer.referredAs.referrer.customerCode})
+                      </>
+                    ) : null}
                   </Text>
                 </Space>
               </div>
@@ -410,14 +360,14 @@ export function CustomerDetailPage() {
               {/* Top Stats Cards Row */}
               <Row gutter={[16, 16]}>
                 <Col xs={12} sm={6}>
-                  <StatCard icon={<ShoppingOutlined style={{ fontSize: 18 }} />} tone="slate" label="TOTAL ORDERS" value={mockOrders.length} />
+                  <StatCard icon={<ShoppingOutlined style={{ fontSize: 18 }} />} tone="slate" label="TOTAL ORDERS" value={customer.stats?.orderCount ?? orders.length} />
                 </Col>
                 <Col xs={12} sm={6}>
                   <StatCard
                     icon={<WalletOutlined style={{ fontSize: 18 }} />}
                     tone="green"
                     label="LTV (REVENUE)"
-                    value={`₹${customer.channel === 'B2C' ? '2,070' : '85,000'}`}
+                    value={formatCurrency(customer.stats?.lifetimeValue ?? 0)}
                   />
                 </Col>
                 <Col xs={12} sm={6}>
@@ -429,7 +379,7 @@ export function CustomerDetailPage() {
                   />
                 </Col>
                 <Col xs={12} sm={6}>
-                  <StatCard icon={<StarOutlined style={{ fontSize: 18 }} />} tone="pink" label="AVG RATING" value="4.8 ★" />
+                  <StatCard icon={<StarOutlined style={{ fontSize: 18 }} />} tone="pink" label="AVG RATING" value={customer.stats?.averageRating != null ? `${customer.stats.averageRating} ★` : EM_DASH} />
                 </Col>
               </Row>
 
@@ -441,12 +391,12 @@ export function CustomerDetailPage() {
                   items={[
                     {
                       key: 'orders',
-                      label: `ORDERS (${mockOrders.length})`,
+                      label: `ORDERS (${customer.stats?.orderCount ?? orders.length})`,
                       children: (
                         <div style={{ paddingTop: 12 }}>
-                          {mockOrders.length > 0 ? (
+                          {orders.length > 0 ? (
                             <Table
-                              dataSource={mockOrders}
+                              dataSource={orders}
                               rowKey="id"
                               pagination={false}
                               size="small"
@@ -455,18 +405,23 @@ export function CustomerDetailPage() {
                                   title: 'Order No',
                                   dataIndex: 'orderNumber',
                                   key: 'orderNumber',
-                                  render: (num) => (
+                                  render: (num, row) => (
                                     <Text
                                       code
-                                      style={{ fontWeight: 500, cursor: 'pointer', color: '#1677ff' }}
-                                      onClick={() => navigate(`/b2c-orders?search=${encodeURIComponent(num)}`)}
+                                      style={{ fontWeight: 500, cursor: 'pointer', color: '#1677ff', whiteSpace: 'nowrap' }}
+                                      onClick={() => navigate(`${orderBase}/${row.id}`)}
                                     >
                                       {num}
                                     </Text>
                                   ),
                                 },
-                                { title: 'Date', dataIndex: 'date', key: 'date' },
-                                { title: 'Items', dataIndex: 'itemCount', key: 'itemCount' },
+                                {
+                                  title: 'Date',
+                                  dataIndex: 'orderDate',
+                                  key: 'orderDate',
+                                  render: (d: string) => dayjs(d).format('DD MMM YYYY'),
+                                },
+                                { title: 'Items', key: 'items', render: (_, row) => row._count?.items ?? EM_DASH },
                                 {
                                   title: 'Total (₹)',
                                   dataIndex: 'total',
@@ -477,13 +432,21 @@ export function CustomerDetailPage() {
                                   title: 'Payment',
                                   dataIndex: 'paymentStatus',
                                   key: 'paymentStatus',
-                                  render: (st) => <Tag color="green" style={{ borderRadius: 4, fontWeight: 500 }}>{st}</Tag>,
+                                  render: (st) => (
+                                    <Tag color={st === 'PAID' ? 'green' : st === 'PARTIAL' ? 'gold' : 'default'} style={{ borderRadius: 4, fontWeight: 500 }}>
+                                      {st}
+                                    </Tag>
+                                  ),
                                 },
                                 {
                                   title: 'Fulfillment',
-                                  dataIndex: 'fulfillmentStatus',
-                                  key: 'fulfillmentStatus',
-                                  render: (st) => <Tag color="blue" style={{ borderRadius: 4, fontWeight: 500 }}>{st}</Tag>,
+                                  dataIndex: 'status',
+                                  key: 'status',
+                                  render: (st: keyof typeof ORDER_STATUS_LABEL) => (
+                                    <Tag color={ORDER_STATUS_COLOUR[st]} style={{ borderRadius: 4, fontWeight: 500 }}>
+                                      {ORDER_STATUS_LABEL[st]}
+                                    </Tag>
+                                  ),
                                 },
                                 {
                                   title: 'Action',
@@ -493,7 +456,7 @@ export function CustomerDetailPage() {
                                       size="small"
                                       type="link"
                                       icon={<EyeOutlined />}
-                                      onClick={() => navigate(`/b2c-orders?search=${encodeURIComponent(row.orderNumber)}`)}
+                                      onClick={() => navigate(`${orderBase}/${row.id}`)}
                                     >
                                       View Order
                                     </Button>
@@ -527,7 +490,7 @@ export function CustomerDetailPage() {
                               <Card size="small" style={{ background: '#f0f5ff', borderColor: '#adc6ff', borderRadius: 12 }}>
                                 <Statistic
                                   title="Total Coins Earned"
-                                  value={walletData?.totalEarned ?? 2400}
+                                  value={walletData?.totalEarned ?? 0}
                                   prefix="🪙"
                                   valueStyle={{ color: '#1d39c4', fontSize: 18, fontWeight: 600 }}
                                 />
@@ -537,7 +500,7 @@ export function CustomerDetailPage() {
                               <Card size="small" style={{ background: '#fff1f0', borderColor: '#ffa39e', borderRadius: 12 }}>
                                 <Statistic
                                   title="Total Coins Used / Redeemed"
-                                  value={walletData?.totalUsed ?? 1150}
+                                  value={walletData?.totalUsed ?? 0}
                                   prefix="🪙"
                                   valueStyle={{ color: '#cf1322', fontSize: 18, fontWeight: 600 }}
                                 />
@@ -546,25 +509,38 @@ export function CustomerDetailPage() {
                           </Row>
 
                           <Table
-                            dataSource={mockWalletLedger}
+                            dataSource={walletLedger}
                             rowKey="id"
-                            pagination={false}
+                            loading={walletQuery.isLoading}
+                            pagination={walletLedger.length > 20 ? { pageSize: 20 } : false}
                             size="small"
+                            locale={{ emptyText: 'No coin movements yet' }}
                             columns={[
-                              { title: 'Date & Time', dataIndex: 'date', key: 'date' },
+                              {
+                                title: 'Date & Time',
+                                dataIndex: 'createdAt',
+                                key: 'createdAt',
+                                render: (d: string) => dayjs(d).format('DD MMM YYYY, HH:mm'),
+                              },
                               {
                                 title: 'Description / Event',
-                                dataIndex: 'description',
                                 key: 'description',
-                                render: (txt) => <Text style={{ fontWeight: 500 }}>{txt}</Text>,
+                                render: (_, row) => (
+                                  <Space direction="vertical" size={0}>
+                                    <Text style={{ fontWeight: 500 }}>
+                                      {COIN_TRANSACTION_REASON_LABELS[row.reason as keyof typeof COIN_TRANSACTION_REASON_LABELS] ?? row.reason}
+                                      {row.order ? ` · ${row.order.orderNumber}` : ''}
+                                    </Text>
+                                    {row.note ? <Text type="secondary" style={{ fontSize: 12 }}>{row.note}</Text> : null}
+                                  </Space>
+                                ),
                               },
                               {
                                 title: 'Type',
-                                dataIndex: 'type',
                                 key: 'type',
-                                render: (type) => (
-                                  <Tag color={type === 'CREDIT' ? 'green' : 'volcano'} style={{ borderRadius: 4, fontWeight: 500 }}>
-                                    {type}
+                                render: (_, row) => (
+                                  <Tag color={row.amount >= 0 ? 'green' : 'volcano'} style={{ borderRadius: 4, fontWeight: 500 }}>
+                                    {row.amount >= 0 ? 'CREDIT' : 'DEBIT'}
                                   </Tag>
                                 ),
                               },
@@ -572,8 +548,8 @@ export function CustomerDetailPage() {
                                 title: 'Coins Amount',
                                 key: 'coins',
                                 render: (_, row) => (
-                                  <Text style={{ fontWeight: 600, color: row.type === 'CREDIT' ? '#389e0d' : '#cf1322' }}>
-                                    {row.type === 'CREDIT' ? `+${row.coins}` : `-${row.coins}`} 🪙
+                                  <Text style={{ fontWeight: 600, color: row.amount >= 0 ? '#389e0d' : '#cf1322' }}>
+                                    {row.amount >= 0 ? `+${row.amount}` : row.amount} 🪙
                                   </Text>
                                 ),
                               },
@@ -656,27 +632,27 @@ export function CustomerDetailPage() {
                     },
                     {
                       key: 'reviews',
-                      label: `REVIEWS (${mockReviews.length})`,
+                      label: `REVIEWS (${reviews.length})`,
                       children: (
                         <div style={{ paddingTop: 12 }}>
-                          {mockReviews.length > 0 ? (
+                          {reviews.length > 0 ? (
                             <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                              {mockReviews.map((rev) => (
+                              {reviews.map((rev) => (
                                 <Card key={rev.id} size="small" style={{ borderRadius: 12, background: '#f8fafc' }}>
                                   <Row justify="space-between" align="middle">
                                     <Col>
                                       <Space size={8}>
                                         <Text
                                           style={{ fontSize: 14, fontWeight: 600, cursor: 'pointer', color: '#1677ff' }}
-                                          onClick={() => navigate(`/products?search=${encodeURIComponent(rev.productName)}`)}
+                                          onClick={() => navigate(`/products?search=${encodeURIComponent(rev.product.name)}`)}
                                         >
-                                          {rev.productName}
+                                          {rev.product.name}
                                         </Text>
                                         <Button
                                           size="small"
                                           type="link"
                                           icon={<EyeOutlined />}
-                                          onClick={() => navigate(`/products?search=${encodeURIComponent(rev.productName)}`)}
+                                          onClick={() => navigate(`/products?search=${encodeURIComponent(rev.product.name)}`)}
                                         >
                                           View Product
                                         </Button>
@@ -686,12 +662,17 @@ export function CustomerDetailPage() {
                                       </div>
                                     </Col>
                                     <Col>
-                                      <Text type="secondary" style={{ fontSize: 12 }}>{rev.date}</Text>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>
+                                        {dayjs(rev.createdAt).format('DD MMM YYYY')}
+                                        {rev.order ? ` · ${rev.order.orderNumber}` : ''}
+                                      </Text>
                                     </Col>
                                   </Row>
-                                  <Text style={{ marginTop: 8, display: 'block', color: '#475569' }}>
-                                    &ldquo;{rev.comment}&rdquo;
-                                  </Text>
+                                  {rev.comment ? (
+                                    <Text style={{ marginTop: 8, display: 'block', color: '#475569' }}>
+                                      &ldquo;{rev.comment}&rdquo;
+                                    </Text>
+                                  ) : null}
                                 </Card>
                               ))}
                             </Space>

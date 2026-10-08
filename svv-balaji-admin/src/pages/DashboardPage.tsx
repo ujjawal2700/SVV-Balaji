@@ -15,15 +15,12 @@ import {
   FileDoneOutlined,
   DatabaseOutlined,
   RightOutlined,
-  LineChartOutlined,
-  ShoppingCartOutlined,
-  ShopOutlined,
-  CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { useAdminZone } from '../layout/useAdminZone';
 import { dashboardApi, DashboardSummary } from '@shared/api/dashboard';
+import { CommerceDashboard } from './CommerceDashboard';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -217,112 +214,7 @@ export function DashboardPage() {
                 </Row>
               </>
             ) : (
-              <>
-                <Row gutter={[24, 24]}>
-                  <Col xs={24} sm={12} lg={6}>
-                    {renderMetricCard(
-                      'Revenue (B2B / B2C)',
-                      '₹12.4L / ₹3.2L',
-                      <LineChartOutlined />,
-                      '#1890ff',
-                      '#0050b3'
-                    )}
-                  </Col>
-                  <Col xs={24} sm={12} lg={6}>
-                    {renderMetricCard(
-                      'Active Carts',
-                      '234',
-                      <ShoppingCartOutlined />,
-                      '#eb2f96',
-                      '#c41d7f'
-                    )}
-                  </Col>
-                  <Col xs={24} sm={12} lg={6}>
-                    {renderMetricCard(
-                      'Pending B2B Approvals',
-                      '18',
-                      <ShopOutlined />,
-                      '#faad14',
-                      '#d48806'
-                    )}
-                  </Col>
-                  <Col xs={24} sm={12} lg={6}>
-                    {renderMetricCard(
-                      'Open Support Tickets',
-                      '7',
-                      <CustomerServiceOutlined />,
-                      '#f5222d',
-                      '#cf1322'
-                    )}
-                  </Col>
-                </Row>
-
-                <Row gutter={[24, 24]}>
-                  <Col xs={24} lg={16}>
-                    <Card
-                      title={<span style={{ fontSize: 18, fontWeight: 600 }}>Low Stock Alerts</span>}
-                      style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
-                      bodyStyle={{ padding: '24px 24px 0 24px' }}
-                    >
-                      <Timeline>
-                        <Timeline.Item color="red">
-                          <Typography.Text strong style={{ display: 'block', fontSize: 15 }}>
-                            Premium Turmeric Powder (250g)
-                          </Typography.Text>
-                          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                            Critical: Only 12 units remaining across 3 warehouses
-                          </Typography.Text>
-                        </Timeline.Item>
-                        <Timeline.Item color="orange">
-                          <Typography.Text strong style={{ display: 'block', fontSize: 15 }}>
-                            Classic Salted Potato Wafers (50g)
-                          </Typography.Text>
-                          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                            Warning: Stock dropped below 50 units (Current: 45)
-                          </Typography.Text>
-                        </Timeline.Item>
-                      </Timeline>
-                    </Card>
-                  </Col>
-
-                  <Col xs={24} lg={8}>
-                    <Card
-                      title={<span style={{ fontSize: 18, fontWeight: 600 }}>Commerce Actions</span>}
-                      style={{ borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', height: '100%' }}
-                    >
-                      <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                        <Button
-                          block
-                          size="large"
-                          style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                          onClick={() => navigate('/orders')}
-                        >
-                          <span>Manage Active Orders</span>
-                          <RightOutlined style={{ color: '#bfbfbf' }} />
-                        </Button>
-                        <Button
-                          block
-                          size="large"
-                          style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                          onClick={() => navigate('/retailers')}
-                        >
-                          <span>Review B2B Registrations</span>
-                          <RightOutlined style={{ color: '#bfbfbf' }} />
-                        </Button>
-                        <Button
-                          block
-                          size="large"
-                          style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                          onClick={() => navigate('/products')}
-                        >
-                          <span>Update Catalog Pricing</span>
-                          <RightOutlined style={{ color: '#bfbfbf' }} />
-                        </Button>
-                      </Space>
-                    </Card>
-                  </Col>
-                </Row>
-              </>
+              <CommerceDashboard renderMetricCard={renderMetricCard} />
             )}
           </>
         )}

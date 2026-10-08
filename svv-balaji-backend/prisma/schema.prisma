@@ -225,11 +225,15 @@ model User {
   creditReceiptsRecorded    CreditReceipt[]         @relation("CreditReceiptRecordedBy")
   ridersReviewed            Rider[]                 @relation("RiderReviewedBy")
   riderCashRecorded         RiderCashEntry[]        @relation("RiderCashRecordedBy")
+  riderPayoutsRecorded      RiderPayout[]           @relation("RiderPayoutRecordedBy")
+  riderPayoutsVoided        RiderPayout[]           @relation("RiderPayoutVoidedBy")
   riderDocumentsReviewed    RiderDocument[]         @relation("RiderDocumentReviewedBy")
   riderDepositsRecorded     RiderDepositEntry[]     @relation("RiderDepositRecordedBy")
   creditReceiptsVoided      CreditReceipt[]         @relation("CreditReceiptVoidedBy")
   invoicesIssued            Invoice[]               @relation("InvoiceIssuedBy")
   invoicesCancelled         Invoice[]               @relation("InvoiceCancelledBy")
+  creditNotesIssued         CreditNote[]            @relation("CreditNoteIssuedBy")
+  creditNotesCancelled      CreditNote[]            @relation("CreditNoteCancelledBy")
   posShiftsOpened           PosShift[]              @relation("PosShiftCashier")
   posShiftsClosed           PosShift[]              @relation("PosShiftClosedBy")
   posSales                  PosSale[]               @relation("PosSaleCashier")
@@ -1972,6 +1976,7 @@ model Customer {
   paymentTerms   PaymentTerms    @default(PREPAID)
   creditReceipts CreditReceipt[]
   invoices       Invoice[]
+  creditNotes    CreditNote[]
 
   status CustomerStatus @default(ACTIVE)
 
@@ -4085,6 +4090,7 @@ model Rider {
   codCollections CodCollection[]
   cashEntries    RiderCashEntry[]
   earnings       RiderEarning[]
+  payouts        RiderPayout[]
   notifications  RiderNotification[]
   pushDevices    PushDevice[]
 
@@ -4607,13 +4613,77 @@ model RiderEarning {
   rule         RiderEarningRule? @relation(fields: [ruleId], references: [id])
   /// Makes crediting idempotent: task:<id>:<rule>, bonus:<rider>:<rule>:<period>:<target>, ...
   dedupeKey    String?           @unique
+
+  /// Set once the line has been paid out. A line belongs to at most one live
+  /// payout; voiding the payout releases it for the next one.
+  payoutId String?
+  payout   RiderPayout? @relation(fields: [payoutId], references: [id])
   detail       Json?
   note         String?
   recordedById String?
   earnedAt     DateTime          @default(now())
 
   @@index([riderId, earnedAt])
+  @@index([payoutId])
   @@map("rider_earnings")
+}
+
+enum RiderPayoutMethod {
+  BANK_TRANSFER
+  UPI
+  CASH
+}
+
+enum RiderPayoutStatus {
+  PAID
+  VOIDED
+}
+
+/// Rider pay settled: every unpaid earning line up to a cut-off, paid by bank,
+/// UPI or cash and recorded after the money moved (with its reference). COD
+/// cash the rider still holds can be set off against it - that deduction is a
+/// RiderCashEntry, so cash held and pay owed stay reconciled.
+model RiderPayout {
+  id           String @id @default(uuid())
+  /// RPO-YYYYMMDD-NNN
+  payoutNumber String @unique
+
+  riderId String
+  rider   Rider  @relation(fields: [riderId], references: [id])
+
+  /// Lines earned before this instant (start of the IST day after the chosen date) are included.
+  upTo DateTime
+
+  status RiderPayoutStatus @default(PAID)
+
+  /// Sum of the earning lines settled (clawbacks included, so it can be lower than the deliveries alone).
+  grossAmount Decimal @db.Decimal(14, 2)
+  /// COD cash held by the rider and kept out of the payment instead of being handed in.
+  cashOffset  Decimal @default(0) @db.Decimal(14, 2)
+  /// What actually left the bank / till: gross - cashOffset.
+  netPaid     Decimal @db.Decimal(14, 2)
+  lineCount   Int
+
+  method    RiderPayoutMethod
+  reference String?
+  note      String?
+  paidAt    DateTime
+
+  recordedById String
+  recordedBy   User   @relation("RiderPayoutRecordedBy", fields: [recordedById], references: [id])
+
+  voidedAt     DateTime?
+  voidReason   String?
+  voidedById   String?
+  voidedBy     User?     @relation("RiderPayoutVoidedBy", fields: [voidedById], references: [id])
+
+  earnings RiderEarning[]
+
+  createdAt DateTime @default(now())
+
+  @@index([riderId, paidAt])
+  @@index([status])
+  @@map("rider_payouts")
 }
 
 model RiderNotification {
@@ -4798,6 +4868,10 @@ model GstSettings {
   /// restarting each financial year, never more than the 16 characters GST Rule 46 allows.
   invoicePrefix String @default("INV")
 
+  /// Same rules as invoicePrefix, its own series: CN/2627-000001. GSTR-1 reports
+  /// credit notes as a separate document series (table 13).
+  creditNotePrefix String @default("CN")
+
   /// Only turn on once the company is notified for e-invoicing and the GSP
   /// credentials are in place (A-11). Applies to B2B invoices only.
   eInvoiceEnabled Boolean @default(false)
@@ -4912,6 +4986,8 @@ model Invoice {
   cancelledById String?
   cancelledBy   User?     @relation("InvoiceCancelledBy", fields: [cancelledById], references: [id])
 
+  creditNotes CreditNote[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4928,6 +5004,8 @@ model InvoiceLine {
   id        String  @id @default(uuid())
   invoiceId String
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  creditNoteLines CreditNoteLine[]
   lineNo    Int
 
   /// Null on the delivery-charge line.
@@ -4955,6 +5033,130 @@ model InvoiceLine {
 
   @@unique([invoiceId, lineNo])
   @@map("invoice_lines")
+}
+
+/// Why a credit note was issued. The first six are the reasons the GST portal
+/// has used for notes; most here are SALES_RETURN.
+enum CreditNoteReason {
+  SALES_RETURN
+  POST_SALE_DISCOUNT
+  DEFICIENCY_IN_SERVICES
+  CORRECTION_IN_INVOICE
+  CHANGE_IN_POS
+  FINALIZATION_OF_PROVISIONAL_ASSESSMENT
+  OTHERS
+}
+
+/// A GST credit note (CGST Act s.34) against one issued invoice: goods came
+/// back, the price was reduced after supply, or the invoice over-charged. It
+/// reduces the tax declared on that invoice, so it is reported in GSTR-1 for
+/// the month it is issued in (CDNR / CDNUR, or netted into B2CS).
+///
+/// Separate from Invoice on purpose - everything that asks "does this order
+/// have a live invoice" keeps meaning exactly that. Amounts are positive; the
+/// document type is what makes them a reduction.
+model CreditNote {
+  id String @id @default(uuid())
+
+  /// CN/2627-000001 - its own series, restarting each financial year.
+  noteNumber    String   @unique
+  noteDate      DateTime
+  financialYear String
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  /// The return this note was raised for, if any. One note per return.
+  returnRequestId String?        @unique
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id])
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  channel    SalesChannel
+  supplyType InvoiceSupplyType
+  status     InvoiceStatus     @default(ISSUED)
+  reason     CreditNoteReason
+  remark     String?
+
+  /// Copied from the invoice - a note always mirrors the parties and place of
+  /// supply of the invoice it corrects.
+  seller        Json
+  buyer         Json
+  placeOfSupply String
+  isInterState  Boolean
+
+  taxableTotal Decimal @db.Decimal(14, 2)
+  cgstTotal    Decimal @db.Decimal(14, 2)
+  sgstTotal    Decimal @db.Decimal(14, 2)
+  igstTotal    Decimal @db.Decimal(14, 2)
+  taxTotal     Decimal @db.Decimal(14, 2)
+  grandTotal   Decimal @db.Decimal(14, 2)
+
+  lines CreditNoteLine[]
+
+  /// Same e-invoice handling as Invoice (document type CRN) - B2B only.
+  eInvoiceStatus        EInvoiceStatus @default(NOT_APPLICABLE)
+  irn                   String?        @unique
+  ackNo                 String?
+  ackDate               DateTime?
+  signedQrCode          String?
+  eInvoiceProvider      String?
+  eInvoiceError         String?
+  eInvoiceAttempts      Int            @default(0)
+  eInvoiceNextAttemptAt DateTime?
+
+  issuedById String?
+  issuedBy   User?   @relation("CreditNoteIssuedBy", fields: [issuedById], references: [id])
+
+  cancelledAt   DateTime?
+  cancelReason  String?
+  cancelledById String?
+  cancelledBy   User?     @relation("CreditNoteCancelledBy", fields: [cancelledById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([noteDate])
+  @@index([status])
+  @@index([eInvoiceStatus])
+  @@map("credit_notes")
+}
+
+/// One line of a credit note, always tied to the invoice line it reduces, so
+/// the total ever credited on a line can be checked against what was invoiced.
+model CreditNoteLine {
+  id           String     @id @default(uuid())
+  creditNoteId String
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  lineNo       Int
+
+  invoiceLineId String
+  invoiceLine   InvoiceLine @relation(fields: [invoiceLineId], references: [id], onDelete: Restrict)
+
+  productId   String?
+  description String
+  sku         String?
+  hsnSac      String?
+  isService   Boolean @default(false)
+
+  /// Packs coming back. 0 for a value-only note (a discount after the sale).
+  quantity  Decimal @db.Decimal(12, 3)
+  uqc       String
+  unitPrice Decimal @db.Decimal(12, 2)
+
+  taxableValue   Decimal @db.Decimal(14, 2)
+  gstRatePercent Decimal @db.Decimal(5, 2)
+  cgstAmount     Decimal @db.Decimal(14, 2)
+  sgstAmount     Decimal @db.Decimal(14, 2)
+  igstAmount     Decimal @db.Decimal(14, 2)
+  lineTotal      Decimal @db.Decimal(14, 2)
+
+  @@unique([creditNoteId, lineNo])
+  @@index([invoiceLineId])
+  @@map("credit_note_lines")
 }
 
 // --- POS: company-owned stores selling over the counter ------------------------
@@ -5464,6 +5666,7 @@ model ReturnRequest {
   batchLines             ReturnBatchLine[]
   replacementAllocations ReturnReplacementAllocation[]
   walletTransactions     RefundWalletTransaction[]
+  creditNote             CreditNote?
   /// The loyalty-reversal record, once the goods are back (or lost in transit).
   orderReturn            OrderReturn?
 
@@ -5569,6 +5772,8 @@ model ReturnReplacementAllocation {
 }
 
 enum RefundWalletReason {
+  /// + A prepaid order that could not be delivered and was closed with its goods back in stock.
+  UNDELIVERED_REFUND
   /// + Refund for a completed return.
   RETURN_REFUND
   /// + An exchange's replacement was cheaper.

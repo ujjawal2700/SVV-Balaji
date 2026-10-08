@@ -3669,3 +3669,75 @@ and per order). New:
 **Verified:** new `e2e-coin-ledger-flow.py` (run after `e2e-loyalty-flow.py` on the same fresh DB) ALL PASSED - paging
 covers every row, summary equals the sum of rows, every filter, CSV line count, 400s, Branch Manager 200 / Logistics
 403; backend + admin tsc, admin build; screenshot of the page. No migration.
+
+## 2026-10-08 — "Not built or still fake" pass: reports, finance, credit notes + GSTR-1, rider payouts, undelivered close, live rider map (Raunak, via agent)
+
+Went through everything that was missing or showing made-up data and built it against real data. **Three migrations;
+deploy them in order.** Every new screen is behind a new permission key (registry + `shared/auth/permissions.ts`); A-14
+backfills them onto configured roles on boot.
+
+**Fakes removed**
+- Admin **Customers** list no longer falls back to `MOCK_CUSTOMERS` when empty. **Customer detail** read every customer
+  and searched them (broke past page 1) and showed invented orders, coins, reviews, "₹2,070 LTV", "4.8 ★" and an "admin
+  note": now `GET /customers/:id` (adds `stats`: orderCount, lifetimeValue, lastOrderDate, averageRating, reviewCount;
+  order rows carry `_count.items`) + the existing wallet / reviews endpoints.
+- **Commerce dashboard** ("₹12.4L / ₹3.2L", "234 active carts", fake low-stock list) -> new `GET /dashboard/commerce`.
+- **Earnings & Financial MIS** (`/earnings`, 1,480 lines of mock) rewritten on `GET /reports/finance`.
+- Rider app **Earnings**: the "Withdraw funds" button only showed a toast; "Available" was this week's earnings,
+  "Total earned" double-counted, Weekly/Monthly did nothing and the bars had invented heights with no data. Now: Unpaid /
+  Today / This week / Paid out so far from `GET /rider/payouts`, payouts in the history, flat bars when empty.
+- `pages/complaints/ComplaintsPage.tsx` (mock) is dead code - `/complaints` already redirects to Support Tickets. Left in
+  place (agent could not delete files); safe to delete.
+
+**New backend** (`src/reports/`, `src/invoices/credit-notes.*`, `gstr1.*`, `src/delivery/earnings/payouts.service.ts`)
+- `GET /reports/sales` (+ `/export` CSV) - `reports.sales` (BM, ST): KPIs vs previous period, trend (day/week/month),
+  sources, top products, categories, states, status mix, B2B reorder cycles (due / overdue at 1.5x usual gap), monthly
+  cohorts. Gross margin explicitly unavailable (no product cost - FRD34 Q1).
+- `GET /reports/finance` - `reports.finance` (BM): billed vs paid per channel (B2C / B2B / POS), money received by mode
+  (online, COD cash/UPI, credit receipts, POS), refunds, GST net of credit notes, receivables ageing, payables. Note:
+  `Order.amountPaid` only tracks credit receipts; online / COD-paid orders are PAID without it - the report uses status.
+- `GET /dashboard/commerce` (dashboard.view).
+- **GST credit notes** (migration `20261008120000_credit_notes`: `credit_notes`, `credit_note_lines`,
+  `gst_settings.creditNotePrefix` default CN). `POST /invoices/:id/credit-notes` (`creditNotes.issue`, BM) - per line a
+  quantity, an amount, or both; never beyond what was invoiced; s.34(2) deadline (30 Nov after FY end) enforced; B2B notes
+  get an IRN (type CRN) when the invoice has one. `GET /credit-notes`, `/credit-notes/:id`, `/invoices/:id/creditable`,
+  `POST /credit-notes/:id/cancel` (own month only). **Automatic:** refunded returns get a note (net of return shipping /
+  restocking kept); **POS refunds** now cancel the invoice only in the same IST month (and IRN window), otherwise issue a
+  full credit note (they used to be refused). **An invoice with live credit notes can no longer be cancelled.**
+- **GSTR-1** `GET /gst-returns/gstr1?month=YYYY-MM` (+ `/download` JSON) - `gstReturns.view` (Super Admin only by
+  default): b2b, b2cl (inter-state B2C over ₹1 lakh), b2cs net of notes, cdnr, cdnur, nil, HSN split B2B/B2C, doc_issue,
+  warnings. For review in the offline tool - nothing is filed.
+- **Rider payouts** (migration `20261008140000_rider_payouts`: `rider_payouts`, `rider_earnings.payoutId`).
+  `GET /rider-payouts/due`, `GET /riders/:id/payouts/preview`, `POST /riders/:id/payouts` (`riderPayouts.record`, BM:
+  every unpaid line up to a date, bank/UPI need a reference, optional COD cash set-off written to the cash ledger),
+  `GET /rider-payouts[/:id]`, `POST /rider-payouts/:id/void`, rider `GET /rider/payouts`.
+- **Close undelivered** (migration `20261008160000_undelivered_refund`: RefundWalletReason UNDELIVERED_REFUND).
+  `POST /orders/:id/close-undelivered` (`orders.closeUndelivered`, BM): DISPATCHED order whose goods are back (task
+  RETURNED_TO_STORE, courier RTO delivered, or `goodsInHand`) -> packs STOCK_IN to their original batches, allocations
+  released, online prepaid amount to the Refund Wallet, coins / wallet / coupon / affiliate reversed, CANCELLED, then the
+  invoice cancelled or credited. Timeline events CLOSED_UNDELIVERED, GST_REVERSED (hidden from shoppers).
+- **Live rider location** `GET /storefront/orders/:no/live-location` - own LOCAL order only, only while PICKED_UP /
+  OUT_FOR_DELIVERY / AT_DROP; first name, last fix, distance, `stale` > 2 min. Rider app now sends location every 10 s
+  while carrying (30 s otherwise).
+
+**New admin screens:** Sales Analytics (`/reports`), GSTR-1 (`/gst-returns`), Rider Payouts (`/riders/payouts`), Credit
+notes tab + panel in Tax Invoices, "Could not be delivered - close order" on the order page. Small SVG chart kit
+`components/charts.tsx` (no new dependency). **Customer app:** live map card on order tracking - **adds `leaflet@1.9.4`**
+(same version as admin / rider).
+
+**Verified** (throwaway local DB + API on :3110): new `e2e-reports-flow.py` 44/44 (figures cross-checked against the DB,
+branch scoping, 403s), `e2e-credit-notes-flow.py` 41/41, `e2e-rider-payouts-flow.py` 27/27 (incl. a 3-way race),
+`e2e-undelivered-flow.py` all pass (incl. the FG pack tracing to the same farmer before and after), `e2e-live-location-
+flow.py` 8/8; `e2e-pos-flow.py`, `e2e-returns-flow.py`, `e2e-receivables-flow.py`, `e2e-loyalty-flow.py` still pass.
+Jest 810/811 (only the known pending-retailer test). tsc + `vite build` for admin, customer, rider. Headless-Edge
+screenshots of every new screen at 1440. **Not click-tested by hand; admin panel at phone width not checked.**
+
+**Deploy:** `prisma migrate deploy` (3 migrations) + generate + API restart + admin, customer (npm install) and rider apps.
+
+**Still open (blocked, not built):** real GSP + e-way bills (A-11), franchise module (future scope), in-app chat /
+masked calling (provider decision), FRD34 production cost / machine utilisation reports (client answers).
+
+**Agent incident, logged for honesty:** while seeding test data, `e2e-receivables-flow.py` was run twice without
+`DATABASE_URL` exported; its Prisma cleanup steps read `.env` (hosted Render DB). Every statement targeted a UUID created
+seconds earlier on the local test DB and failed, so nothing on the hosted DB could have matched - but check if anything
+looks odd there.

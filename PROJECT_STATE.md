@@ -1,6 +1,6 @@
 # SVV Balaji — Project State
 
-**Last updated:** 7 October 2026 · **Updated by:** Raunak (via agent)
+**Last updated:** 8 October 2026 · **Updated by:** Raunak (via agent)
 **Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
@@ -16,7 +16,9 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**7 Oct (latest) — Coin & Points Ledger.** Super Admin page `/loyalty/ledger`: every loyalty point and referral coin given, used, taken back, expired or adjusted by staff, across all customers, with totals, filters and CSV export. Read-only API `GET /loyalty/ledger` (+ `/export`). See `DEV_LOG.md` 2026-10-07.
+**8 Oct (latest) — Missing / fake features built.** Sales Analytics (`/reports`), Earnings & Financial MIS and the commerce dashboard now run on real data (new `src/reports`); customer screens lost their mock data; **GST credit notes** (automatic for refunded returns and late POS refunds, manual from Tax Invoices) and **GSTR-1** preparation (`/gst-returns`, JSON for the offline tool); **rider payouts** with optional COD cash set-off (`/riders/payouts`, rider app shows paid / unpaid - its fake "Withdraw" is gone); **close undelivered orders** (stock back to its batches, prepaid to Refund Wallet, invoice reversed); **live rider location** on the customer's tracking page. **Deploy:** 3 migrations (`20261008120000_credit_notes`, `20261008140000_rider_payouts`, `20261008160000_undelivered_refund`) + generate + API restart + admin, customer (`npm install`, adds leaflet) and rider apps. Still blocked: real GSP / e-way bill (A-11), franchise (future scope), in-app chat (provider), FRD34 cost reports (client). See `DEV_LOG.md` 2026-10-08.
+
+**7 Oct — Coin & Points Ledger.** Super Admin page `/loyalty/ledger`: every loyalty point and referral coin given, used, taken back, expired or adjusted by staff, across all customers, with totals, filters and CSV export. Read-only API `GET /loyalty/ledger` (+ `/export`). See `DEV_LOG.md` 2026-10-07.
 
 **7 Oct — Storefront loading states.** Pages show skeleton placeholders while loading, the desktop footer no longer jumps up under the header, and signed-in users no longer see a guest view (or retailers consumer prices) for a moment while their session restores. UI only; see `DEV_LOG.md` 2026-10-07.
 

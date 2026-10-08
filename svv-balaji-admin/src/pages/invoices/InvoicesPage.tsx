@@ -1,6 +1,6 @@
 import { PrinterOutlined, ReloadOutlined, SettingOutlined, StopOutlined } from '@ant-design/icons';
 import {
-  Alert, App as AntApp, Button, Card, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Table, Tag, Typography,
+  Alert, App as AntApp, Button, Card, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
@@ -25,6 +25,7 @@ import { BranchSelect } from '@shared/components/pickers';
 import { useCancelInvoice, useGstSettings, useInvoice, useInvoices, useRetryEInvoice } from '@shared/hooks/useInvoices';
 import { formatCurrency, formatDate, formatDateTime, toIsoDay } from '@shared/utils/format';
 import { printTaxInvoice } from '@shared/utils/taxInvoicePrint';
+import { CreditNoteDrawer, CreditNotesList, InvoiceCreditNotes } from './CreditNotes';
 import { EInvoiceTag } from './invoiceTags';
 
 const { Text } = Typography;
@@ -55,7 +56,15 @@ export function InvoicesPage() {
     from: toIsoDay(range?.[0]), to: toIsoDay(range?.[1]), ...page,
   });
   const openId = params.get('open') ?? undefined;
-  const open = (id?: string) => setParams(id ? { open: id } : {}, { replace: true });
+  const noteId = params.get('note') ?? undefined;
+  const tab = params.get('tab') === 'credit-notes' ? 'credit-notes' : 'invoices';
+  const setParam = (patch: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(patch)) (v ? next.set(k, v) : next.delete(k));
+    setParams(next, { replace: true });
+  };
+  const open = (id?: string) => setParam({ open: id });
+  const openNote = (id?: string) => setParam({ note: id });
 
   const columns: ColumnsType<InvoiceRow> = [
     {
@@ -127,6 +136,16 @@ export function InvoicesPage() {
         />
       ) : null}
 
+      <Tabs
+        activeKey={tab}
+        onChange={(k) => setParam({ tab: k === 'credit-notes' ? k : undefined })}
+        items={[{ key: 'invoices', label: 'Invoices' }, { key: 'credit-notes', label: 'Credit notes' }]}
+        style={{ marginBottom: -8 }}
+      />
+
+      {tab === 'credit-notes' ? <CreditNotesList onOpen={(id) => openNote(id)} /> : null}
+
+      {tab === 'invoices' ? <>
       <Card size="small" style={{ borderRadius: 10 }}>
         <Space wrap size={12}>
           <Input.Search allowClear placeholder="Invoice, order, customer or GSTIN" onSearch={(v) => { setSearch(v.trim()); setPage((p) => ({ ...p, page: 1 })); }} style={{ width: 280 }} />
@@ -155,13 +174,15 @@ export function InvoicesPage() {
         onRetry={() => void q.refetch()}
         emptyText="No invoices yet - they are issued when orders are dispatched"
       />
+      </> : null}
 
-      <InvoiceDrawer id={openId} onClose={() => open()} />
+      <InvoiceDrawer id={openId} onClose={() => open()} onOpenNote={(id) => openNote(id)} />
+      <CreditNoteDrawer id={noteId} onClose={() => openNote()} />
     </Space>
   );
 }
 
-function InvoiceDrawer({ id, onClose }: { id?: string; onClose: () => void }) {
+function InvoiceDrawer({ id, onClose, onOpenNote }: { id?: string; onClose: () => void; onOpenNote: (id: string) => void }) {
   const { message } = AntApp.useApp();
   const q = useInvoice(id);
   const canIssue = useCan('INVOICES_ISSUE');
@@ -247,6 +268,8 @@ function InvoiceDrawer({ id, onClose }: { id?: string; onClose: () => void }) {
             {inv.roundOff ? <Descriptions.Item label="Round off">{formatCurrency(inv.roundOff)}</Descriptions.Item> : null}
             <Descriptions.Item label={<b>Total</b>}><b>{formatCurrency(inv.grandTotal)}</b></Descriptions.Item>
           </Descriptions>
+
+          <InvoiceCreditNotes invoice={inv} onOpenNote={onOpenNote} />
         </Space>
       ) : null}
 
@@ -280,7 +303,8 @@ function CancelModal({ invoice, open, onClose }: { invoice: Invoice; open: boole
       }}
     >
       <Typography.Paragraph type="secondary">
-        The number is never reused. {invoice.irn ? 'The IRN is cancelled with the GSP too - only possible within 24 hours of issue; after that, a credit note is the correction.' : ''}
+        The number is never reused. {invoice.irn ? 'The IRN is cancelled with the GSP too - only possible within 24 hours of issue.' : ''}{' '}
+        If the goods were supplied and only part of the invoice is wrong, or the invoice is from a month already reported, issue a credit note instead.
       </Typography.Paragraph>
       <Form form={form} layout="vertical" initialValues={{ reasonCode: '2' }}>
         <Form.Item name="reasonCode" label="Reason" rules={[{ required: true }]}>

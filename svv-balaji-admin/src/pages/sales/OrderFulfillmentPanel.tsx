@@ -1,4 +1,4 @@
-import { Alert, App as AntApp, Button, Card, Descriptions, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
@@ -35,7 +35,67 @@ const TASK_LABEL: Record<string, { label: string; color: string }> = {
   OUT_FOR_DELIVERY: { label: 'On the way', color: 'cyan' },
   AT_DROP: { label: 'At customer', color: 'cyan' },
   FAILED: { label: 'Failed - returning to store', color: 'red' },
+  RETURNED_TO_STORE: { label: 'Back at the store', color: 'volcano' },
 };
+
+/**
+ * A dispatched order that will not be delivered after all: once the goods are
+ * back, close it - stock back in, prepaid money to the Refund Wallet, invoice
+ * reversed. The server refuses while a delivery is still in progress.
+ */
+function CloseUndelivered({ order, courier }: { order: OrderLite; courier: boolean }) {
+  const { message, modal } = AntApp.useApp();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [inHand, setInHand] = useState(false);
+  const action = useFulfillmentAction((v: { reason: string; inHand: boolean }) => checkoutAdminApi.closeUndelivered(order.id, v.reason, v.inHand || undefined));
+  const prepaid = order.paymentMode === 'ONLINE' && order.paymentStatus === 'PAID';
+
+  return (
+    <Can do="ORDER_CLOSE_UNDELIVERED">
+      <Button danger onClick={() => setOpen(true)}>Could not be delivered - close order</Button>
+      <Modal
+        open={open}
+        title="Close as undelivered?"
+        okText="Close order"
+        okButtonProps={{ danger: true, loading: action.isPending, disabled: reason.trim().length < 3 || (courier && !inHand) }}
+        onCancel={() => setOpen(false)}
+        onOk={async () => {
+          try {
+            const r = (await action.mutateAsync({ reason: reason.trim(), inHand })) as Awaited<ReturnType<typeof checkoutAdminApi.closeUndelivered>>;
+            setOpen(false);
+            modal.success({
+              title: 'Order closed as undelivered',
+              content: (
+                <Space direction="vertical" size={4}>
+                  <Text>{r.packsReturned} pack(s) are back in stock in their original batches.</Text>
+                  {r.refundedToWallet > 0 ? <Text>₹{r.refundedToWallet.toFixed(2)} went to the customer&apos;s Refund Wallet.</Text> : null}
+                  {r.gst ? <Text>{r.gst}.</Text> : null}
+                </Space>
+              ),
+            });
+          } catch (e) {
+            message.error(apiErrorMessage(e, 'Could not close the order'), 8);
+          }
+        }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Text type="secondary">
+            Only when the goods are physically back. The packs go back into the batches they left from, the order is cancelled
+            and its tax invoice is cancelled or credited.
+            {prepaid ? ' The amount paid online goes to the Refund Wallet of the customer.' : ''}
+          </Text>
+          {courier ? (
+            <Checkbox checked={inHand} onChange={(e) => setInHand(e.target.checked)}>
+              The courier has returned the parcel and we have the goods in hand
+            </Checkbox>
+          ) : null}
+          <Input.TextArea rows={2} maxLength={300} placeholder="Why - e.g. customer refused twice, phone switched off" value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Space>
+      </Modal>
+    </Can>
+  );
+}
 
 /** Counts down from the server-measured seconds, so a wrong PC clock cannot show the wrong time left. */
 function SecondsLeft({ seconds }: { seconds: number }) {
@@ -397,7 +457,15 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
         </Can>
       ) : null}
 
-      {order.status === 'DISPATCHED' && local ? (
+      {order.status === 'DISPATCHED' && local && order.deliveryTask?.status === 'RETURNED_TO_STORE' && !task ? (
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <DeliveryTaskCard task={order.deliveryTask} />
+          <Alert type="warning" showIcon message="The delivery failed and the goods are back at the store." description="Re-attempt it from the Delivery Board, or close the order if it will not be delivered." />
+          <CloseUndelivered order={order} courier={false} />
+        </Space>
+      ) : null}
+
+      {order.status === 'DISPATCHED' && local && !(order.deliveryTask?.status === 'RETURNED_TO_STORE' && !task) ? (
         <Space direction="vertical" size={10} style={{ width: '100%' }}>
           {task ? <DeliveryTaskCard task={task} /> : null}
           <Can do="ORDER_DELIVER">
@@ -417,7 +485,10 @@ export function OrderFulfillmentPanel({ order }: { order: OrderLite }) {
       ) : null}
 
       {order.status === 'DISPATCHED' && !local ? (
-        <Alert type="info" showIcon message="With the courier. The order closes automatically when Shiprocket reports delivery." />
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Alert type="info" showIcon message="With the courier. The order closes automatically when Shiprocket reports delivery." />
+          <CloseUndelivered order={order} courier />
+        </Space>
       ) : null}
       {order.status === 'DELIVERED' ? <Alert type="success" showIcon message="Delivered. Loyalty points were credited on delivery." /> : null}
     </Space>

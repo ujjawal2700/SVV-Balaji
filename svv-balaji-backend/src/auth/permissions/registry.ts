@@ -95,6 +95,39 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    key: 'salesReports',
+    label: 'Sales Analytics',
+    path: '/reports',
+    viewKey: 'reports.sales',
+    permissions: [
+      {
+        key: 'reports.sales',
+        label: 'View sales analytics',
+        description:
+          'Revenue, orders and customers against the previous period, trend by channel, top products, ' +
+          'categories and regions, B2B reorder cycles and customer cohorts, with an order CSV export. ' +
+          'Branch staff only see their own branch.',
+        defaultRoles: [BM, ST],
+      },
+    ],
+  },
+  {
+    key: 'financeReports',
+    label: 'Earnings & Financial MIS',
+    path: '/earnings',
+    viewKey: 'reports.finance',
+    permissions: [
+      {
+        key: 'reports.finance',
+        label: 'View earnings and financial MIS',
+        description:
+          'Billed vs collected per channel, collections by payment mode, refunds, GST liability from issued ' +
+          'invoices, receivables ageing and amounts owed to affiliates and riders. Read-only.',
+        defaultRoles: [BM],
+      },
+    ],
+  },
+  {
     key: 'trace',
     label: 'Trace a Pack',
     path: '/trace',
@@ -1155,6 +1188,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         defaultRoles: [],
       },
       {
+        key: 'orders.closeUndelivered',
+        label: 'Close undelivered orders',
+        description:
+          'Close a dispatched order whose goods came back without being delivered: stock back into its batches, prepaid ' +
+          'money to the Refund Wallet, rewards reversed, tax invoice cancelled or credited.',
+        defaultRoles: [BM],
+      },
+      {
         key: 'orders.payment',
         label: 'Change order payment status',
         description: 'Records what has actually been received.',
@@ -1303,6 +1344,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         defaultRoles: [BM],
       },
       {
+        key: 'riderPayouts.record',
+        label: 'Record rider pay as paid',
+        description:
+          'Settle unpaid rider earnings up to a date - bank / UPI with its reference, or cash - optionally keeping COD ' +
+          'cash the rider holds against it, and void a payout recorded in error.',
+        defaultRoles: [BM],
+      },
+      {
         key: 'riders.verify',
         label: 'Verify rider documents and PCC',
         description: 'Approve or reject the documents a rider uploads, including the Police Clearance Certificate. A rider gets no orders until every mandatory one is approved.',
@@ -1412,7 +1461,23 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: 'Cancel invoices',
         description:
           'Cancel a wrong invoice so the order can be invoiced again. An IRN can only be cancelled within ' +
-          '24 hours. Super Admin only by default.',
+          '24 hours. Also cancels a credit note issued in error, in its own month. Super Admin only by default.',
+        defaultRoles: [],
+      },
+      {
+        key: 'creditNotes.issue',
+        label: 'Issue credit notes',
+        description:
+          'Raise a GST credit note against an invoice - goods back, or a discount after the sale - never beyond ' +
+          'what was invoiced. Returns get theirs automatically when the refund is completed.',
+        defaultRoles: [BM],
+      },
+      {
+        key: 'gstReturns.view',
+        label: 'Prepare GSTR-1',
+        description:
+          'See the GSTR-1 tables for a month (B2B, B2C, credit notes, HSN, documents issued) and download the JSON ' +
+          'for the GST offline tool. Organisation-wide: a return is filed per GSTIN.',
         defaultRoles: [],
       },
     ],
