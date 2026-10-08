@@ -11,6 +11,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LONG_TX } from '../common/tx-options';
 import { FcmService, type FcmMessage } from './fcm.service';
 import {
   AudienceDto,
@@ -116,7 +117,7 @@ export class NotificationsService {
         create: { token: dto.token, ...ownerFields },
         update: ownerFields,
       });
-    });
+    }, LONG_TX);
     return { registered: true, pushEnabled: this.fcm.enabled };
   }
 
@@ -462,7 +463,7 @@ export class NotificationsService {
         });
       }
       return b;
-    });
+    }, LONG_TX);
 
     const devices = await this.liveDevices(r);
     const result = await this.fcm.send(
@@ -571,7 +572,7 @@ export class NotificationsService {
         page: Math.max(page, 1),
         pageSize: take,
       };
-    });
+    }, LONG_TX);
   }
 
   /** Filter choices for the compose form. */

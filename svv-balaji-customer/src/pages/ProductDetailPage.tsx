@@ -32,6 +32,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { affiliateApi } from '../api/affiliate';
+import { checkoutApi, checkoutError } from '../api/checkout';
 import { buildAffiliateLink } from '../utils/affiliateLink';
 import { useToggleWishlist, useWishlist } from '../hooks/useWishlist';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
@@ -123,10 +124,12 @@ export function ProductDetailPage() {
   };
 
 
-  // Pincode mock state
+  // Pincode check - the same routing checkout uses (src/checkout/delivery-check.service.ts).
   const [pincode, setPincode] = useState('');
   const [deliveryStatus, setDeliveryStatus] = useState<'IDLE' | 'CHECKING' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [deliveryInfo, setDeliveryInfo] = useState<{ mode: 'QUICK' | 'STANDARD'; eta: string; charge: number } | null>(null);
+  const [deliveryInfo, setDeliveryInfo] = useState<{ mode: 'QUICK' | 'STANDARD'; eta: string; charge: number; note?: string } | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [codAvailable, setCodAvailable] = useState<boolean | null>(null);
 
   // Toggle states
   const [showAllHighlights, setShowAllHighlights] = useState(false);
@@ -331,29 +334,43 @@ export function ProductDetailPage() {
   const category = detail?.category ?? null;
   const parentCategory = category?.parent ?? null;
 
-  const handleCheckPincode = () => {
-    if (pincode.length !== 6) return;
+  const handleCheckPincode = async () => {
+    if (!/^[1-9]\d{5}$/.test(pincode)) {
+      message.warning('Enter a valid 6-digit pincode');
+      return;
+    }
     setDeliveryStatus('CHECKING');
-    setTimeout(() => {
-      if (pincode.startsWith('500') || pincode.startsWith('506')) {
-        const info = { mode: 'QUICK' as const, eta: isRetailer ? 'Tomorrow Morning (6 AM - 10 AM)' : 'Today by 7:30 PM (24 Mins)', charge: 0 };
-        setDeliveryInfo(info);
-        setDeliveryStatus('SUCCESS');
-        cart.setDelivery(pincode, info);
-        message.success('Delivery available at your location!');
-      } else if (pincode.startsWith('400') || pincode.startsWith('501')) {
-        const info = { mode: 'STANDARD' as const, eta: 'Expected in 2 business days', charge: isRetailer ? 0 : 40 };
-        setDeliveryInfo(info);
-        setDeliveryStatus('SUCCESS');
-        cart.setDelivery(pincode, info);
-        message.success('Standard dispatch serviceable!');
-      } else {
+    setDeliveryError(null);
+    try {
+      const r = await checkoutApi.deliveryCheck(pincode, activePack?.id, isRetailer ? wholesaleQty : selectedUnits, isRetailer);
+      setCodAvailable(r.cod.available);
+      const freeNote = (freeAbove: number | null) => (freeAbove !== null ? ` (free above ${formatInr(freeAbove)})` : '');
+      let info: { mode: 'QUICK' | 'STANDARD'; eta: string; charge: number; note?: string } | null = null;
+      if (r.quick?.available && r.quick.etaLabel) {
+        info = { mode: 'QUICK', eta: `Arrives in ${r.quick.etaLabel}`, charge: r.quick.fee ?? 0, note: freeNote(r.quick.freeAbove) };
+      } else if (r.standard) {
+        info = {
+          mode: 'STANDARD',
+          eta: r.standard.method === 'LOCAL' ? `Same day from ${r.standard.from} (${r.standard.etaLabel})` : `Delivered by courier in ${r.standard.etaLabel}`,
+          charge: r.standard.fee,
+          note: `${freeNote(r.standard.freeAbove)}${r.quick && !r.quick.available ? ` · ${r.quick.reason}` : ''}`,
+        };
+      }
+      if (!info) {
         setDeliveryInfo(null);
         setDeliveryStatus('ERROR');
+        setDeliveryError(r.unavailableReason ?? 'Delivery to this pincode is not available right now.');
         cart.setDelivery(null, null);
-        message.error('Delivery not serviceable at this pincode');
+        return;
       }
-    }, 600);
+      setDeliveryInfo(info);
+      setDeliveryStatus('SUCCESS');
+      cart.setDelivery(pincode, { mode: info.mode, eta: info.eta, charge: info.charge });
+    } catch (e) {
+      setDeliveryInfo(null);
+      setDeliveryStatus('ERROR');
+      setDeliveryError(checkoutError(e).message);
+    }
   };
 
   const handleAddToCart = () => {
@@ -1296,7 +1313,7 @@ export function ProductDetailPage() {
               prefix={<EnvironmentOutlined style={{ color: '#878787' }} />}
               style={{ borderRadius: 4, border: 'none', borderBottom: '2px solid #f97316', background: '#fff', boxShadow: 'none' }}
             />
-            <Button type="text" style={{ color: '#f97316', fontWeight: 600 }} onClick={handleCheckPincode} loading={deliveryStatus === 'CHECKING'}>
+            <Button type="text" style={{ color: '#f97316', fontWeight: 600 }} onClick={() => void handleCheckPincode()} loading={deliveryStatus === 'CHECKING'}>
               Check
             </Button>
           </div>
@@ -1316,6 +1333,7 @@ export function ProductDetailPage() {
                   setPincode('');
                   setDeliveryStatus('IDLE');
                   setDeliveryInfo(null);
+                  setDeliveryError(null);
                 }}
               >
                 Change
@@ -1324,18 +1342,21 @@ export function ProductDetailPage() {
 
             {deliveryStatus === 'SUCCESS' && deliveryInfo && (
               <div style={{ marginTop: 8 }}>
+                <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11, marginBottom: 6 }}>
+                  Estimated for this pincode. Confirmed at checkout for your exact address.
+                </Typography.Text>
                 {deliveryInfo.mode === 'QUICK' ? (
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ fontSize: 16 }}>⚡</div>
                     <div>
                       <Typography.Text strong style={{ display: 'block', color: '#16a34a', fontSize: 14 }}>
-                        {isRetailer ? 'Morning Store Freight' : 'Quick Delivery'}
+                        Quick Delivery
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#212121', fontSize: 13 }}>
                         {deliveryInfo.eta}
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#616161', fontSize: 12 }}>
-                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}
+                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}{deliveryInfo.note ?? ''}
                       </Typography.Text>
                     </div>
                   </div>
@@ -1344,13 +1365,13 @@ export function ProductDetailPage() {
                     <div style={{ fontSize: 16 }}>🚚</div>
                     <div>
                       <Typography.Text strong style={{ display: 'block', color: '#2563eb', fontSize: 14 }}>
-                        Standard Dispatch
+                        {deliveryInfo.eta.startsWith('Same day') ? 'Same-day delivery' : 'Standard Delivery'}
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#212121', fontSize: 13 }}>
                         {deliveryInfo.eta}
                       </Typography.Text>
                       <Typography.Text style={{ display: 'block', color: '#616161', fontSize: 12 }}>
-                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}
+                        Delivery charge: {deliveryInfo.charge === 0 ? 'Free' : formatInr(deliveryInfo.charge)}{deliveryInfo.note ?? ''}
                       </Typography.Text>
                     </div>
                   </div>
@@ -1361,10 +1382,10 @@ export function ProductDetailPage() {
             {deliveryStatus === 'ERROR' && (
               <div style={{ marginTop: 8, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4 }}>
                 <Typography.Text strong style={{ display: 'block', color: '#dc2626', fontSize: 13 }}>
-                  Delivery not available at this location
+                  Not deliverable right now
                 </Typography.Text>
                 <Typography.Text style={{ fontSize: 12, color: '#7f1d1d' }}>
-                  Please try entering a different pincode.
+                  {deliveryError ?? 'Please try entering a different pincode.'}
                 </Typography.Text>
               </div>
             )}
@@ -1380,6 +1401,7 @@ export function ProductDetailPage() {
               {(activeProduct as any).returnPolicy || '7 Days Return'}
             </Typography.Text>
           </div>
+          {isRetailer || codAvailable !== false ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff7ed', color: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <CheckCircleOutlined />
@@ -1388,6 +1410,7 @@ export function ProductDetailPage() {
               {isRetailer ? 'B2B Net Credit' : 'Cash on Delivery'}
             </Typography.Text>
           </div>
+          ) : null}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff7ed', color: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <SafetyCertificateOutlined />

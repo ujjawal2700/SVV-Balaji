@@ -38,6 +38,7 @@ import { LoyaltyModule } from './loyalty/loyalty.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { ReceivablesModule } from './receivables/receivables.module';
 import { ReportsModule } from './reports/reports.module';
+import { MapsModule } from './maps/maps.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { PosModule } from './pos/pos.module';
 import { DeliveryModule } from './delivery/delivery.module';
@@ -108,6 +109,7 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
     DeliveryModule, // zones & Quick Delivery (riders, tasks, COD, earnings to follow)
     ReceivablesModule, // B2B credit: due dates, ageing, payments received, statement of account
     ReportsModule, // Sales Analytics, Earnings & Financial MIS, commerce dashboard figures
+    MapsModule, // Google Maps Platform (server key): address search, reverse geocode, road routes - degrades to none
     InvoicesModule, // GST tax invoices at dispatch, CGST/SGST vs IGST, e-invoice (IRN) queue via the GSP adapter
     PosModule, // company-store POS counters: outlets, shifts, FIFO counter sales with batch traceability, refunds, reports
     RecallModule, // forward/backward trace + batch freeze/recall (Super Admin & QA)

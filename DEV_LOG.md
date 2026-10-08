@@ -3756,3 +3756,57 @@ looks odd there.
 
 Verified: jest reports/invoices/delivery/sales 180/180; `e2e-reports-flow.py`, `e2e-undelivered-flow.py` ALL PASSED; sweeps run
 with no errors in the API log; admin + backend tsc and eslint clean on touched files. No migration.
+
+## 2026-10-08 (later) — Google Maps: address search + live tracking map (Raunak, via agent)
+
+**Env (keys are NOT in git):** backend `GOOGLE_MAPS_API_KEY` (server: Places, Geocoding, Routes); customer
+`VITE_GOOGLE_MAPS_API_KEY` (browser: Maps JavaScript). Both blank in `.env.example`; blank = everything falls back to
+OpenStreetMap / straight-line distance / typing the address. The key currently used is one unrestricted key for both -
+**restrict it** (browser: HTTP referrers; server: separate key, IP-restricted) before production.
+
+**What the key's Google project has enabled (checked 8 Oct):** Maps JavaScript, Geocoding, Places (legacy) - yes.
+**Routes API and Places API (New) - NOT enabled.** Enable both in Cloud console for road routes / ETA and the newer Places.
+
+- Backend `src/maps/` (global `MapsModule`, `MapsService`): Places autocomplete + details (tries New, falls back to legacy;
+  backs off 10 min from an API that says "not enabled"), reverse geocode, Routes `computeRoutes` (TWO_WHEELER, traffic aware,
+  cached 90 s per key). Every call has a 4 s timeout and returns empty / null instead of throwing.
+- New storefront routes (customer sign-in required, so the quota cannot be spent anonymously):
+  `GET /storefront/maps/autocomplete?input&session[&lat&lng]`, `GET /storefront/maps/place/:placeId?session`,
+  `GET /storefront/maps/reverse?lat&lng`. `session` = one UUID per address search (Google bills it as one session).
+- `GET /storefront/orders/:no/live-location` adds `route: { etaMinutes, distanceMeters, polyline } | null` (null until Routes
+  is enabled; not computed from a stale fix). `distanceKm` is by road when a route exists.
+- Customer app: `src/maps/googleMaps.ts` loader (lazy, key-less / blocked / `gm_authFailure` -> Leaflet fallback);
+  `LiveRiderMap` on Google Maps (rider marker glides between fixes, POIs hidden, road route drawn when available, dashed
+  straight line otherwise, "~N min" ETA); address form gets a Google search box ("powered by Google") that fills area,
+  city, state, pincode and pins the location; "Use my current location" now fills empty fields by reverse geocode.
+  Adds dev dependency `@types/google.maps@3.58.1`.
+
+**Verified live against Google** with the key: autocomplete (legacy fallback) returns Arera Colony suggestions, place
+details and reverse geocode fill city / state / pincode, 401 without sign-in, 400 on a bad session; headless-Edge: Google map
+renders on order tracking, typing "Arera Colony E" lists suggestions, choosing one filled E-7 Arera Colony / Bhopal /
+462016 / Madhya Pradesh. `src/maps` unit tests 7/7 (fallback New -> legacy, Routes disabled -> null and cached, no key -> no
+calls). `e2e-live-location-flow.py` still ALL PASSED. customer tsc + build, backend tsc + eslint clean.
+
+**Not done:** dispatch ranking by road distance (needs Routes enabled to verify; `MapsService.route` is ready), Advanced
+Markers (needs a Map ID - legacy `google.maps.Marker` used, deprecated but supported), admin / rider / field maps (still
+OpenStreetMap by design). Google ToS: Google route / Places data is shown only on Google maps; the Leaflet fallback draws
+straight lines only.
+
+## 2026-10-08 (later) — Product page pincode check was a mock; now real (Raunak, via agent)
+
+`ProductDetailPage.tsx` decided delivery by pincode prefix (500/506 = "Quick, today 7:30 PM", 400/501 = "Standard ₹40",
+everything else "Delivery not available") - so e.g. 452001 Indore showed "not available". Replaced with
+`GET /storefront/delivery-check?pincode&productId&quantity[&b2b=true]` (public, `src/checkout/delivery-check.service.ts`):
+the pincode is located with Google Geocoding (cached in memory per pincode; `MapsService.geocodePincode`), then the SAME
+decisions as checkout run - Quick zone (`ZonesService.quickDecision`), same-day outlet in range with stock, else courier from
+the central warehouse (`FulfillmentRouterService.resolve`), ETA via `etaWindow`, fee rule from Checkout Settings, COD from
+settings. Response is marked `approximate` (pincode area, not a door); checkout re-decides on the exact pin.
+`unavailableReason` explains a no (e.g. "Not in stock for delivery to this pincode right now"). The page's Cash on
+Delivery badge now hides when COD is switched off.
+
+Verified on the throwaway DB: 452001 -> same day from Indore City Express Outlet (29-44 min, free above ₹499); 110001 ->
+not in stock (product only stocked at the Indore outlet, none at the central warehouse - checkout refuses the same way);
+invalid pincode -> 400; repeat pincode answered from cache (7 ms). Screenshot of the product page. jest maps + checkout 34/34.
+
+**Still fake, not touched:** the header "Delivering to Central Hub, Sec 18" (HomePage.tsx:221, DesktopHeader.tsx) is
+hard-coded text; the cart's pre-quote delivery estimate falls back to an invented "₹50 under ₹500" before an address is chosen.

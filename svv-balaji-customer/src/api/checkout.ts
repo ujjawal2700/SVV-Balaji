@@ -189,6 +189,27 @@ export interface OrderDetail {
   timeline: Array<{ type: string; at: string; note: string | null }>;
 }
 
+export interface GeoAddress {
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  formatted: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface DeliveryCheck {
+  pincode: string;
+  located: boolean;
+  approximate: boolean;
+  quick: { available: boolean; reason: string; etaLabel: string | null; fee: number | null; freeAbove: number | null; from: string | null } | null;
+  standard: { method: 'LOCAL' | 'SHIPROCKET'; from: string; etaLabel: string; fee: number; freeAbove: number | null } | null;
+  unavailableReason: string | null;
+  cod: { available: boolean; maxAmount: number | null };
+}
+
 export type LiveLocation =
   | { tracking: false }
   | {
@@ -197,6 +218,8 @@ export type LiveLocation =
       rider: { firstName: string; vehicleType: string | null; latitude: number; longitude: number; updatedAt: string; ageSeconds: number; stale: boolean };
       drop: { latitude: number; longitude: number } | null;
       distanceKm: number | null;
+      /** Road route + traffic ETA (Google Routes); null when unavailable - distanceKm is then straight-line. */
+      route: { etaMinutes: number; distanceMeters: number; polyline: string | null } | null;
     };
 
 export const checkoutApi = {
@@ -215,6 +238,22 @@ export const checkoutApi = {
   coupons: () => api.get<OfferCoupon[]>('/storefront/coupons').then((r) => r.data),
   orders: () => api.get<OrderSummaryRow[]>('/storefront/orders').then((r) => r.data),
   order: (orderNumber: string) => api.get<OrderDetail>(`/storefront/orders/${encodeURIComponent(orderNumber)}`).then((r) => r.data),
+  /** Address search (Google Places via our API; the key stays on the server). One `session` UUID per search. */
+  placeSuggestions: (input: string, session: string, near?: { latitude: number; longitude: number }) =>
+    api
+      .get<Array<{ placeId: string; main: string; secondary: string | null }>>('/storefront/maps/autocomplete', {
+        params: { input, session, ...(near ? { lat: near.latitude, lng: near.longitude } : {}) },
+      })
+      .then((r) => r.data),
+  placeAddress: (placeId: string, session: string) =>
+    api.get<GeoAddress | null>(`/storefront/maps/place/${encodeURIComponent(placeId)}`, { params: { session } }).then((r) => r.data),
+  reverseGeocode: (latitude: number, longitude: number) =>
+    api.get<GeoAddress | null>('/storefront/maps/reverse', { params: { lat: latitude, lng: longitude } }).then((r) => r.data),
+  /** Product page pincode check (no sign-in): the same routing checkout uses, decided on the pincode area. */
+  deliveryCheck: (pincode: string, productId?: string, quantity?: number, b2b?: boolean) =>
+    api
+      .get<DeliveryCheck>('/storefront/delivery-check', { params: { pincode, productId, quantity, ...(b2b ? { b2b: 'true' } : {}) } })
+      .then((r) => r.data),
   /** Where the rider carrying the order is - only while a local delivery is on its way. */
   liveLocation: (orderNumber: string) =>
     api.get<LiveLocation>(`/storefront/orders/${encodeURIComponent(orderNumber)}/live-location`).then((r) => r.data),

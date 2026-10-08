@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { distanceKm } from '../delivery/zones/zone.logic';
+import { MapsService } from '../maps/maps.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { StoredQuote } from './checkout.service';
 
@@ -8,7 +9,10 @@ const num = (d: unknown) => (d === null || d === undefined ? null : Number(d));
 /** What the customer sees of their own orders. Never staff-only fields. */
 @Injectable()
 export class StorefrontOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly maps: MapsService,
+  ) {}
 
   async list(customerId: string) {
     const [rows, reviews] = await Promise.all([
@@ -103,7 +107,7 @@ export class StorefrontOrdersService {
       where: { orderId: o.id, kind: 'ORDER_DELIVERY', status: { in: ['PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'] } },
       orderBy: { createdAt: 'desc' },
       select: {
-        status: true, dropLatitude: true, dropLongitude: true,
+        id: true, status: true, dropLatitude: true, dropLongitude: true,
         rider: { select: { fullName: true, vehicleType: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true } },
       },
     });
@@ -115,6 +119,12 @@ export class StorefrontOrdersService {
     const rider = { lat: Number(task.rider.lastLatitude), lng: Number(task.rider.lastLongitude) };
     const ageSeconds = Math.max(0, Math.round((Date.now() - task.rider.lastLocationAt.getTime()) / 1000));
     const km = dropLat !== null && dropLng !== null ? distanceKm(rider, { lat: dropLat, lng: dropLng }) : null;
+    // Road route + traffic ETA from Google (cached per delivery, so every refresh by the shopper shares one call).
+    // Not for a stale fix - a route from where the rider was 5 minutes ago is worse than none.
+    const route =
+      dropLat !== null && dropLng !== null && ageSeconds <= 120
+        ? await this.maps.route(`task:${task.id}`, rider, { lat: dropLat, lng: dropLng })
+        : null;
     return {
       tracking: true as const,
       status: task.status,
@@ -128,7 +138,9 @@ export class StorefrontOrdersService {
         stale: ageSeconds > 120,
       },
       drop: dropLat !== null && dropLng !== null ? { latitude: dropLat, longitude: dropLng } : null,
-      distanceKm: km === null ? null : Math.round(km * 10) / 10,
+      distanceKm: route ? Math.round(route.distanceMeters / 100) / 10 : km === null ? null : Math.round(km * 10) / 10,
+      /** Road route when Google Routes is available; null -> distance above is straight-line. */
+      route: route ? { etaMinutes: Math.max(1, Math.round(route.durationSeconds / 60)), distanceMeters: route.distanceMeters, polyline: route.polyline } : null,
     };
   }
 

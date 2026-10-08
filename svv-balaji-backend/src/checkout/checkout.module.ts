@@ -1,3 +1,4 @@
+import { DeliveryCheckService, StorefrontDeliveryCheckController } from './delivery-check.service';
 import { forwardRef, Module } from '@nestjs/common';
 import { DeliveryZonesModule } from '../delivery/zones/zones.module';
 import { DeliveryModule } from '../delivery/delivery.module';
@@ -25,9 +26,10 @@ import { StorefrontOrdersService } from './storefront-orders.service';
  */
 @Module({
   imports: [SalesModule, PricingModule, WalletModule, DeliveryZonesModule, forwardRef(() => DeliveryModule)],
-  controllers: [StorefrontCheckoutController, CheckoutSettingsController, CouponsAdminController, FulfillmentController, WebhooksController],
+  controllers: [StorefrontCheckoutController, StorefrontDeliveryCheckController, CheckoutSettingsController, CouponsAdminController, FulfillmentController, WebhooksController],
   providers: [
     CheckoutService,
+    DeliveryCheckService,
     CheckoutSettingsService,
     FulfillmentRouterService,
     FulfillmentService,

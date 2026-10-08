@@ -1,7 +1,11 @@
-import { AimOutlined } from '@ant-design/icons';
-import { Button, Form, Input, Modal, Switch, Typography, message } from 'antd';
-import { useEffect, useState } from 'react';
-import { checkoutApi, checkoutError, type Address, type AddressInput } from '../api/checkout';
+import { AimOutlined, EnvironmentOutlined, SearchOutlined } from '@ant-design/icons';
+import { AutoComplete, Button, Form, Input, Modal, Switch, Typography, message } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { checkoutApi, checkoutError, type Address, type AddressInput, type GeoAddress } from '../api/checkout';
+import { googleMapsAvailable } from '../maps/googleMaps';
+
+const newSession = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
  * Add / edit a delivery address. The pin ("use my current location") matters:
@@ -23,6 +27,53 @@ export function AddressFormModal({
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Google address search. One session token per search: Google bills the
+  // keystrokes and the chosen place as a single session.
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<Array<{ placeId: string; main: string; secondary: string | null }>>([]);
+  const session = useRef(newSession());
+  const debounce = useRef<number | undefined>(undefined);
+
+  /** Fill from Google: everything when choosing a search result, only empty fields after "use my location". */
+  const applyGeo = (g: GeoAddress, overwrite: boolean) => {
+    const current = form.getFieldsValue();
+    const set = (k: 'line1' | 'line2' | 'city' | 'state' | 'pincode', v: string | null) =>
+      v && (overwrite || !current[k]) ? { [k]: v } : {};
+    form.setFieldsValue({ ...set('line1', g.line1), ...set('line2', g.line2), ...set('city', g.city), ...set('state', g.state), ...set('pincode', g.pincode) });
+    if (g.latitude !== null && g.longitude !== null) setCoords({ latitude: g.latitude, longitude: g.longitude });
+  };
+
+  const search = (text: string) => {
+    setQuery(text);
+    window.clearTimeout(debounce.current);
+    if (text.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    debounce.current = window.setTimeout(() => {
+      checkoutApi
+        .placeSuggestions(text, session.current, coords ?? undefined)
+        .then(setSuggestions)
+        .catch(() => setSuggestions([]));
+    }, 300);
+  };
+
+  const choose = async (placeId: string) => {
+    const s = session.current;
+    session.current = newSession(); // the session ends with the place lookup
+    setSuggestions([]);
+    try {
+      const g = await checkoutApi.placeAddress(placeId, s);
+      if (!g) {
+        message.warning('Could not read that address - please type it in');
+        return;
+      }
+      applyGeo(g, true);
+      message.success('Address filled in and pinned - check the flat / house number');
+    } catch {
+      message.warning('Could not read that address - please type it in');
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -38,6 +89,9 @@ export function AddressFormModal({
       form.setFieldsValue({ label: 'Home' });
       setCoords(null);
     }
+    setQuery('');
+    setSuggestions([]);
+    session.current = newSession();
   }, [open, address, form]);
 
   const locate = () => {
@@ -48,8 +102,13 @@ export function AddressFormModal({
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setCoords({ latitude: +pos.coords.latitude.toFixed(6), longitude: +pos.coords.longitude.toFixed(6) });
+        const c = { latitude: +pos.coords.latitude.toFixed(6), longitude: +pos.coords.longitude.toFixed(6) };
+        setCoords(c);
         setLocating(false);
+        // Fill whatever the shopper has not typed yet from the pin.
+        if (googleMapsAvailable()) {
+          void checkoutApi.reverseGeocode(c.latitude, c.longitude).then((g) => g && applyGeo({ ...g, ...c }, false)).catch(() => undefined);
+        }
       },
       () => {
         message.warning('Could not get your location. You can still save the address; it will ship by courier.');
@@ -88,6 +147,37 @@ export function AddressFormModal({
       styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto', paddingRight: 8 } }}
     >
       <Form form={form} layout="vertical" requiredMark={false}>
+        {googleMapsAvailable() ? (
+          <div style={{ marginBottom: 16 }}>
+            <AutoComplete
+              value={query}
+              onSearch={search}
+              onChange={setQuery}
+              onSelect={(v: string) => {
+                setQuery(suggestions.find((x) => x.placeId === v)?.main ?? '');
+                void choose(v);
+              }}
+              options={suggestions.map((x) => ({
+                value: x.placeId,
+                label: (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '2px 0' }}>
+                    <EnvironmentOutlined style={{ marginTop: 4, color: '#64748b' }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, whiteSpace: 'normal' }}>{x.main}</div>
+                      {x.secondary ? <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'normal' }}>{x.secondary}</div> : null}
+                    </div>
+                  </div>
+                ),
+              }))}
+              style={{ width: '100%' }}
+            >
+              <Input size="large" prefix={<SearchOutlined />} placeholder="Search your area, street or building" allowClear />
+            </AutoComplete>
+            <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'right', marginTop: 2 }}>
+              powered by Google
+            </Typography.Text>
+          </div>
+        ) : null}
         <Form.Item name="label" label="Save as"><Input placeholder="Home / Office" maxLength={30} /></Form.Item>
         <Form.Item name="fullName" label="Full name" rules={[{ required: true, min: 2, message: 'Enter the name' }]}><Input /></Form.Item>
         <Form.Item name="phone" label="Mobile number" rules={[{ required: true, pattern: /^[6-9]\d{9}$/, message: 'Enter a valid 10-digit mobile number' }]}><Input maxLength={10} inputMode="numeric" /></Form.Item>
