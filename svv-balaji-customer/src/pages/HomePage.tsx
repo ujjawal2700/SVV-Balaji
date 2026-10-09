@@ -20,7 +20,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { Badge, Button, Carousel, Input, InputNumber, Typography } from 'antd';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStorefrontBanners } from '@shared/hooks/useBanners';
 import { useStorefrontSchemes } from '@shared/hooks/useSchemes';
@@ -28,7 +28,8 @@ import { useStorefrontHomeSections } from '@shared/hooks/useHomeSections';
 import { api as storefrontApi } from '../api/client';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
 import { useCart } from '../cart/useCart';
-import { useCatalogueProducts } from '../hooks/useCatalogue';
+import { toShelfProduct, useCatalogueProducts, type ShelfProduct } from '../hooks/useCatalogue';
+import type { StorefrontHomeSection } from '@shared/api/types';
 import { useCategoryTree } from '../hooks/useCategoryTree';
 import { useRetailerCredit } from '../hooks/useRetailerCredit';
 // Order history is still mock (no storefront order backend yet). Only its
@@ -38,6 +39,8 @@ import { buyAgainProducts as buyAgainHistory } from '../mock/homeMockData';
 import { formatInr } from '../utils/money';
 import { RatingBadge } from '../components/ProductReviews';
 import { useUnreadNotifications } from '../notifications/useUnreadNotifications';
+import { LocationPicker } from '../location/LocationPicker';
+import { locationLine, useShopperLocation } from '../location/useShopperLocation';
 
 
 interface HeroSlide {
@@ -87,13 +90,24 @@ export function HomePage() {
   const credit = useRetailerCredit();
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
+  const shopperLocation = useShopperLocation();
+  const [pickingLocation, setPickingLocation] = useState(false);
+  // A retailer with no location yet is asked once per visit; the browser's own
+  // permission prompt only appears if they tap "Use my current location".
+  useEffect(() => {
+    if (!isRetailer || shopperLocation) return;
+    try {
+      if (sessionStorage.getItem('svv.locationAsked')) return;
+      sessionStorage.setItem('svv.locationAsked', '1');
+    } catch {
+      // storage blocked: still ask, just not remembered
+    }
+    setPickingLocation(true);
+  }, [isRetailer, shopperLocation]);
   const categories = useCategoryTree();
 
-  // The three product shelves, all live. A shelf with nothing in it renders
-  // nothing (no mock fallback): the products that used to be hardcoded here are
-  // real catalogue rows now, so a fallback would resurrect deleted ones.
-  const staples = useCatalogueProducts({ dailyStaple: true, limit: 12 }).products;
-  const popular = useCatalogueProducts({ topPick: true, limit: 12 }).products;
+  // Product shelves come from Admin > Homepage Sections (below); the whole
+  // catalogue is still read here to re-price the Buy Again history.
   const wholeCatalogue = useCatalogueProducts({ limit: 100 }).products;
   const buyAgain = buyAgainHistory.flatMap((entry) => {
     const live = wholeCatalogue.find((p) => p.slug === entry.id || p.id === entry.id);
@@ -110,7 +124,7 @@ export function HomePage() {
   // gap, so the section renders nothing rather than substituting placeholder
   // content. See shared/hooks/useSchemes.ts.
   const { data: schemes = [] } = useStorefrontSchemes(isRetailer ? 'B2B' : 'B2C', storefrontApi);
-  const { data: dynamicHomeSections = [] } = useStorefrontHomeSections(isRetailer ? 'B2B' : 'B2C', storefrontApi);
+  const { data: managedSections = [] } = useStorefrontHomeSections(isRetailer ? 'B2B' : 'B2C', storefrontApi);
   const heroSlides: HeroSlide[] =
     publishedBanners && publishedBanners.length > 0
       ? publishedBanners.map((banner) => ({
@@ -186,24 +200,30 @@ export function HomePage() {
                   >
                     {retailerProfile?.storeName || 'My Store'}
                   </Typography.Title>
-                  <div
-                    className="brand-title-font"
+                  <button
+                    type="button"
+                    onClick={() => setPickingLocation(true)}
+                    aria-label="Change location"
                     style={{
-                      fontSize: 10,
-                      color: '#b45309',
-                      fontWeight: 700,
-                      letterSpacing: '0.5px',
-                      marginTop: 2,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, padding: 0, border: 'none', background: 'none',
+                      cursor: 'pointer', maxWidth: '100%', minWidth: 0,
                     }}
                   >
-                    GST: {retailerProfile?.gstin || '—'}
-                  </div>
+                    <EnvironmentOutlined style={{ color: '#ea580c', fontSize: 12, flexShrink: 0 }} />
+                    <span
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: shopperLocation ? '#334155' : '#ea580c',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {shopperLocation ? locationLine(shopperLocation) : 'Set your location'}
+                    </span>
+                    <span style={{ fontSize: 10, color: '#64748b', flexShrink: 0 }}>▾</span>
+                  </button>
                 </>
               ) : (
-                <Link to="/addresses" style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}>
+                <div role="button" tabIndex={0} onClick={() => setPickingLocation(true)} onKeyDown={(e) => e.key === 'Enter' && setPickingLocation(true)}
+                  style={{ display: 'block', minWidth: 0, cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                     <EnvironmentOutlined style={{ color: '#ea580c', fontSize: 13, flexShrink: 0 }} />
                     <Typography.Text
@@ -218,7 +238,7 @@ export function HomePage() {
                         display: 'block',
                       }}
                     >
-                      Deliver to Central Hub, Sec 18 ▾
+                      {shopperLocation ? `Deliver to ${locationLine(shopperLocation)}` : 'Set delivery location'} ▾
                     </Typography.Text>
                   </div>
                   <div
@@ -261,7 +281,7 @@ export function HomePage() {
                       100% Farm Traceable
                     </span>
                   </div>
-                </Link>
+                </div>
               )}
             </div>
           </div>
@@ -286,6 +306,8 @@ export function HomePage() {
             </Badge>
           </div>
         </div>
+
+        <LocationPicker open={pickingLocation} onClose={() => setPickingLocation(false)} />
 
         {/* Mobile Search input */}
         <div className="store-container home-search-container" style={{ paddingTop: 0, paddingBottom: 14 }}>
@@ -893,626 +915,14 @@ export function HomePage() {
         )}
 
         {/* ======================================================================= */}
-        {/* DYNAMIC SUPER ADMIN MANAGED HOMEPAGE SECTIONS                           */}
+        {/* SUPER ADMIN MANAGED SECTIONS (Admin > Homepage Sections)                */}
+        {/* "Best of the Basics", the price strip and "Popular Products" used to be */}
+        {/* hard-coded here; they are seeded rows now, so admin can edit, reorder  */}
+        {/* or hide them. The API drops empty sections, so there is no fallback.   */}
         {/* ======================================================================= */}
-        {dynamicHomeSections.map((sec) => {
-          if (!sec.products || sec.products.length === 0) return null;
-          return (
-            <section key={sec.id}>
-              <SectionHeader
-                title={sec.title}
-                subtitle={sec.subtitle ?? undefined}
-                to="/products"
-              />
-
-              {/* Mobile horizontal scroll */}
-              <div className="mobile-only">
-                <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
-                  {sec.products.map((product) => {
-                    const price = typeof product.price === 'number' ? product.price : product.price ? product.price.unitPriceInclGst : null;
-                    const img = (product.images && product.images[0]) || '/images/cat_namkeen.jpg';
-                    const weight = product.packLabel || product.unit || '';
-                    return (
-                      <div
-                        key={product.id}
-                        style={{
-                          flex: '0 0 auto',
-                          width: 140,
-                          borderRadius: 14,
-                          padding: 10,
-                          background: '#ffffff',
-                          border: '1px solid #e7e5e4',
-                          display: 'flex',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        <Link to={`/product-detail/${product.slug || product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ height: 85, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#f8f7f5', borderRadius: 8 }}>
-                            <img src={img} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                          </div>
-                          <Typography.Text style={{ fontSize: 12, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                            {product.name}
-                          </Typography.Text>
-                          {product.rating && product.reviewCount ? (
-                            <div style={{ marginTop: 3 }}>
-                              <RatingBadge rating={product.rating} count={product.reviewCount} />
-                            </div>
-                          ) : null}
-                          <Typography.Text style={{ fontSize: 11, color: '#78716c', marginTop: 2 }}>
-                            {weight}
-                          </Typography.Text>
-                        </Link>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                          <Typography.Text style={{ fontSize: 14, fontWeight: 800, color: '#1c1917' }}>
-                            {price !== null ? formatInr(price) : 'N/A'}
-                          </Typography.Text>
-                          <button
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: '50%',
-                              background: '#ea580c',
-                              color: '#ffffff',
-                              border: 'none',
-                              display: 'grid',
-                              placeItems: 'center',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => {
-                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                              cart.add({
-                                productId: product.id,
-                                productName: product.name,
-                                unit: weight,
-                                displayUnitPrice: price,
-                                imageUrl: img,
-                                mrp: product.mrp,
-                                moqB2B: (product as any).moqB2B ?? 1,
-                                minOrderQuantity: (product as any).minOrderQuantity ?? 1,
-                              }, moq);
-                            }}
-                          >
-                            <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Desktop 6-column product grid */}
-              <div className="desktop-only">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
-                  {sec.products.map((product) => {
-                    const cartLine = cart.lines.find((line) => line.productId === product.id);
-                    const price = typeof product.price === 'number' ? product.price : product.price ? product.price.unitPriceInclGst : null;
-                    const img = (product.images && product.images[0]) || '/images/cat_namkeen.jpg';
-                    const weight = product.packLabel || product.unit || '';
-                    return (
-                      <div
-                        key={product.id}
-                        className="product-card-hover"
-                        style={{
-                          borderRadius: 14,
-                          background: '#ffffff',
-                          border: '1px solid #e7e5e4',
-                          padding: 12,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <Link to={`/product-detail/${product.slug || product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
-                          <div
-                            style={{
-                              height: 120,
-                              borderRadius: 10,
-                              background: '#f8f7f5',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginBottom: 10,
-                              padding: 8,
-                            }}
-                          >
-                            <img src={img} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                          </div>
-                          <Typography.Text strong style={{ fontSize: 13, lineHeight: 1.25, height: 32, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', color: '#1c1917' }}>
-                            {product.name}
-                          </Typography.Text>
-                          {product.rating && product.reviewCount ? (
-                            <div style={{ marginTop: 3 }}>
-                              <RatingBadge rating={product.rating} count={product.reviewCount} />
-                            </div>
-                          ) : null}
-                          <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
-                            {weight}
-                          </Typography.Text>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '8px 0 10px' }}>
-                            <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
-                              {price !== null ? formatInr(price) : 'N/A'}
-                            </Typography.Text>
-                            {product.mrp && (
-                              <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
-                                {formatInr(product.mrp)}
-                              </Typography.Text>
-                            )}
-                          </div>
-                        </Link>
-
-                        <div>
-                          {cartLine ? (
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                background: '#fff7ed',
-                                borderRadius: 8,
-                                padding: '2px 4px',
-                                border: '1px solid #fed7aa',
-                              }}
-                            >
-                              <Button
-                                size="small"
-                                type="text"
-                                icon={<MinusOutlined />}
-                                onClick={() => {
-                                  const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                                  if (cartLine.quantity <= moq) {
-                                    cart.remove(product.id);
-                                  } else {
-                                    cart.setQuantity(product.id, cartLine.quantity - 1);
-                                  }
-                                }}
-                              />
-                              <InputNumber
-                                size="small"
-                                min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
-                                value={cartLine.quantity}
-                                controls={false}
-                                onChange={(val) => {
-                                  const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                                  cart.setQuantity(product.id, Math.max(moq, val || moq));
-                                }}
-                                style={{ width: 44, textAlign: 'center', background: 'transparent', border: 'none' }}
-                              />
-                              <Button
-                                size="small"
-                                type="text"
-                                icon={<PlusOutlined />}
-                                onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
-                              />
-                            </div>
-                          ) : (
-                            <Button
-                              block
-                              style={{
-                                borderRadius: 8,
-                                background: '#ea580c',
-                                borderColor: '#ea580c',
-                                color: '#ffffff',
-                                fontWeight: 700,
-                              }}
-                              onClick={() => {
-                                const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                                cart.add({
-                                  productId: product.id,
-                                  productName: product.name,
-                                  unit: weight,
-                                  displayUnitPrice: price,
-                                  imageUrl: img,
-                                  mrp: product.mrp,
-                                  moqB2B: (product as any).moqB2B ?? 1,
-                                  minOrderQuantity: (product as any).minOrderQuantity ?? 1,
-                                }, moq);
-                              }}
-                            >
-                              Add to Cart
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          );
-        })}
-
-        {/* ======================================================================= */}
-        {/* 5. BEST OF THE BASICS (DAILY STAPLES)                                    */}
-        {/* ======================================================================= */}
-        {staples.length > 0 && (
-        <section>
-          <SectionHeader
-            title="Best of the Basics"
-            to="/products/atta-flour"
-            subtitle="Farm-fresh flour, namkeen, spices &amp; kitchen essentials"
-          />
-
-          {/* Mobile horizontal scroll */}
-          <div className="mobile-only">
-            <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
-              {staples.map((product) => (
-                <div
-                  key={product.id}
-                  style={{
-                    flex: '0 0 auto',
-                    width: 140,
-                    borderRadius: 14,
-                    padding: 10,
-                    background: '#ffffff',
-                    border: '1px solid #e7e5e4',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                >
-                  <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ height: 85, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#f8f7f5', borderRadius: 8 }}>
-                      <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                    </div>
-                    <Typography.Text style={{ fontSize: 12, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {product.name}
-                    </Typography.Text>
-                    {product.rating && product.reviewCount ? (
-                      <div style={{ marginTop: 3 }}>
-                        <RatingBadge rating={product.rating} count={product.reviewCount} />
-                      </div>
-                    ) : null}
-                    <Typography.Text style={{ fontSize: 11, color: '#78716c', marginTop: 2 }}>
-                      {product.weight}
-                    </Typography.Text>
-                  </Link>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                    <Typography.Text style={{ fontSize: 14, fontWeight: 800, color: '#1c1917' }}>
-                      {product.price !== null ? formatInr(product.price) : 'N/A'}
-                    </Typography.Text>
-                    <button
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: '#f97316',
-                        color: '#ffffff',
-                        border: 'none',
-                        display: 'grid',
-                        placeItems: 'center',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() =>
-                        cart.add({
-                          productId: product.id,
-                          productName: product.name,
-                          unit: product.weight,
-                          displayUnitPrice: product.price,
-                          imageUrl: product.image,
-                          mrp: product.mrp,
-                        }, isRetailer ? ((product as any).moqB2B ?? 1) : 1)
-                      }
-                    >
-                      <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Desktop 6-column product grid */}
-          <div className="desktop-only">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
-              {staples.map((product) => {
-                const cartLine = cart.lines.find((line) => line.productId === product.id);
-                return (
-                  <div
-                    key={product.id}
-                    className="product-card-hover"
-                    style={{
-                      borderRadius: 14,
-                      background: '#ffffff',
-                      border: '1px solid #e7e5e4',
-                      padding: 12,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
-                      <div
-                        style={{
-                          height: 120,
-                          borderRadius: 10,
-                          background: '#f8f7f5',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginBottom: 10,
-                          padding: 8,
-                        }}
-                      >
-                        <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                      </div>
-                      <Typography.Text strong style={{ fontSize: 13, lineHeight: 1.25, height: 32, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', color: '#1c1917' }}>
-                        {product.name}
-                      </Typography.Text>
-                      {product.rating && product.reviewCount ? (
-                        <div style={{ marginTop: 3 }}>
-                          <RatingBadge rating={product.rating} count={product.reviewCount} />
-                        </div>
-                      ) : null}
-                      <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
-                        {product.weight}
-                      </Typography.Text>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '8px 0 10px' }}>
-                        <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
-                          {product.price !== null ? formatInr(product.price) : 'N/A'}
-                        </Typography.Text>
-                        {product.mrp && (
-                          <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
-                            {formatInr(product.mrp)}
-                          </Typography.Text>
-                        )}
-                      </div>
-                    </Link>
-
-                    <div>
-                      {cartLine ? (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            background: '#fff7ed',
-                            borderRadius: 8,
-                            padding: '2px 4px',
-                            border: '1px solid #fed7aa',
-                          }}
-                        >
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<MinusOutlined />}
-                            onClick={() => {
-                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                              if (cartLine.quantity <= moq) {
-                                cart.remove(product.id);
-                              } else {
-                                cart.setQuantity(product.id, cartLine.quantity - 1);
-                              }
-                            }}
-                          />
-                          <InputNumber
-                            size="small"
-                            min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
-                            value={cartLine.quantity}
-                            controls={false}
-                            onChange={(value) => {
-                              const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                              cart.setQuantity(product.id, Math.max(moq, value ?? moq));
-                            }}
-                            style={{ width: 36, textAlign: 'center' }}
-                          />
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<PlusOutlined />}
-                            onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
-                          />
-                        </div>
-                      ) : (
-                        <Button
-                          block
-                          style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 8 }}
-                          onClick={() => {
-                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                            cart.add({
-                              productId: product.id,
-                              productName: product.name,
-                              unit: product.weight,
-                              displayUnitPrice: product.price,
-                              imageUrl: product.image,
-                              mrp: product.mrp,
-                              moqB2B: (product as any).moqB2B ?? 1,
-                              minOrderQuantity: (product as any).minOrderQuantity ?? 1,
-                            }, moq);
-                          }}
-                        >
-                          Add to Cart
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-        )}
-
-        {/* ======================================================================= */}
-        {/* 6. PRICE RANGE QUICK BANNERS                                            */}
-        {/* ======================================================================= */}
-        {/* 6. STARTING FROM PRICE DEALS / CATEGORY SLABS                           */}
-        {/* ======================================================================= */}
-        <div>
-          <div className="price-deals-scroll hide-scrollbar">
-            {[
-              { label: 'Starting from', price: 25, sub: 'Salt, Spices & masalas', bg: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', emoji: '🧂' },
-              { label: 'Starting from', price: 79, sub: 'Namkeens & snacks', bg: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)', emoji: '🍟' },
-              { label: 'Starting from', price: 199, sub: 'Atta, Flour & grains', bg: 'linear-gradient(135deg, #059669 0%, #047857 100%)', emoji: '🌾' },
-              { label: 'Starting from', price: 499, sub: 'Premium cold pressed oils', bg: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', emoji: '⭐' },
-            ].map(({ label, price, sub, bg, emoji }) => (
-              <div
-                key={price}
-                onClick={() => navigate(`/products/atta-dal?maxPrice=${price * 10}`)}
-                className="price-deal-card category-pill-hover"
-                style={{
-                  background: bg,
-                  borderRadius: 16,
-                  padding: '16px 16px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  color: '#ffffff',
-                }}
-              >
-                <div style={{ position: 'absolute', bottom: -10, right: -10, fontSize: 54, opacity: 0.2 }}>{emoji}</div>
-                <Typography.Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)', display: 'block', marginBottom: 2 }}>{label}</Typography.Text>
-                <Typography.Text strong style={{ fontSize: 24, color: '#fff', display: 'block', lineHeight: 1.1 }}>₹{price}</Typography.Text>
-                <Typography.Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', display: 'block', marginTop: 6, lineHeight: 1.25 }}>{sub}</Typography.Text>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ======================================================================= */}
-        {/* 7. POPULAR PRODUCTS / BEST SELLERS                                      */}
-        {/* ======================================================================= */}
-        {popular.length > 0 && (
-        <section>
-          <SectionHeader title="Popular Products" to="/products/atta-flour" subtitle="Highest demand products among local grocery retailers" />
-
-          {/* Grid adapts: 2 columns on mobile, 4 columns on desktop */}
-          <div
-            className="home-products-grid"
-          >
-            {popular.map((product) => {
-              const cartLine = cart.lines.find((line) => line.productId === product.id);
-              return (
-                <div
-                  key={product.id}
-                  className="product-card-hover"
-                  style={{
-                    border: '1px solid #e7e5e4',
-                    borderRadius: 16,
-                    background: '#ffffff',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ position: 'relative' }}>
-                      <ProductThumb image={product.image} square />
-                      {product.badge && (
-                        <Typography.Text
-                          style={{
-                            position: 'absolute',
-                            top: 10,
-                            left: 10,
-                            background: '#dcfce7',
-                            color: '#166534',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          {product.badge}
-                        </Typography.Text>
-                      )}
-                    </div>
-                    <div style={{ padding: '14px 14px 0' }}>
-                      <Typography.Text strong style={{ display: 'block', fontSize: 14, color: '#1c1917', lineHeight: 1.3 }}>
-                        {product.name}
-                      </Typography.Text>
-                      {product.rating && product.reviewCount ? (
-                        <div style={{ marginTop: 3 }}>
-                          <RatingBadge rating={product.rating} count={product.reviewCount} />
-                        </div>
-                      ) : null}
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {product.variant}
-                      </Typography.Text>
-                      <div style={{ margin: '6px 0 10px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                        <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
-                          {product.price !== null ? formatInr(product.price) : 'N/A'}
-                        </Typography.Text>
-                        {product.mrp && (
-                          <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
-                            {formatInr(product.mrp)}
-                          </Typography.Text>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-
-                  <div style={{ padding: '0 14px 14px' }}>
-                    {cartLine ? (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          background: '#fff7ed',
-                          borderRadius: 10,
-                          padding: '3px 6px',
-                          border: '1px solid #fed7aa',
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<MinusOutlined />}
-                          onClick={() => {
-                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                            if (cartLine.quantity <= moq) {
-                              cart.remove(product.id);
-                            } else {
-                              cart.setQuantity(product.id, cartLine.quantity - 1);
-                            }
-                          }}
-                        />
-                        <InputNumber
-                          size="small"
-                          min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
-                          value={cartLine.quantity}
-                          controls={false}
-                          onChange={(value) => {
-                            const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                            cart.setQuantity(product.id, Math.max(moq, value ?? moq));
-                          }}
-                          style={{ width: 44, textAlign: 'center' }}
-                        />
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<PlusOutlined />}
-                          onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
-                        />
-                      </div>
-                    ) : (
-                      <Button
-                        block
-                        style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10, height: 40 }}
-                        onClick={() => {
-                          const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
-                          cart.add({
-                            productId: product.id,
-                            productName: product.name,
-                            unit: product.variant,
-                            displayUnitPrice: product.price,
-                            imageUrl: product.image,
-                            mrp: product.mrp,
-                            moqB2B: (product as any).moqB2B ?? 1,
-                            minOrderQuantity: (product as any).minOrderQuantity ?? 1,
-                          }, moq);
-                        }}
-                      >
-                        Add to Cart
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        )}
+        {managedSections.map((sec) => (
+          <ManagedSection key={sec.id} section={sec} isRetailer={isRetailer} />
+        ))}
 
         {/* ======================================================================= */}
         {/* 8. BUY AGAIN / REPEAT ORDERS                                            */}
@@ -1692,6 +1102,419 @@ export function HomePage() {
         )}
 
       </div>
+    </div>
+  );
+}
+
+/** One admin-managed homepage section, drawn by its kind and layout. */
+function ManagedSection({ section, isRetailer }: { section: StorefrontHomeSection; isRetailer: boolean }) {
+  const navigate = useNavigate();
+  const subtitle = section.subtitle ?? undefined;
+
+  if (section.kind === 'PRICE_DEALS') {
+    return (
+      <section>
+        <SectionHeader title={section.title} subtitle={subtitle} />
+        <div className="price-deals-scroll hide-scrollbar">
+          {section.tiles.map((tile, i) => {
+            const to = tile.categorySlug
+              ? tile.parentCategorySlug
+                ? `/products/${tile.parentCategorySlug}?sub=${tile.categorySlug}`
+                : `/products/${tile.categorySlug}`
+              : '/categories';
+            return (
+              <div
+                key={i}
+                role="link"
+                tabIndex={0}
+                onClick={() => navigate(to)}
+                onKeyDown={(e) => e.key === 'Enter' && navigate(to)}
+                className="price-deal-card category-pill-hover"
+                style={{
+                  background: PRICE_TILE_GRADIENTS[tile.color] ?? PRICE_TILE_GRADIENTS.orange,
+                  borderRadius: 16,
+                  padding: '16px 16px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  color: '#ffffff',
+                }}
+              >
+                <div style={{ position: 'absolute', bottom: -10, right: -10, fontSize: 54, opacity: 0.2 }}>{tile.emoji}</div>
+                <Typography.Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)', display: 'block', marginBottom: 2 }}>{tile.label}</Typography.Text>
+                <Typography.Text strong style={{ fontSize: 24, color: '#fff', display: 'block', lineHeight: 1.1 }}>{formatInr(tile.price)}</Typography.Text>
+                <Typography.Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', display: 'block', marginTop: 6, lineHeight: 1.25 }}>{tile.subtitle}</Typography.Text>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
+  const products = section.products.map(toShelfProduct);
+  return (
+    <section>
+      <SectionHeader title={section.title} subtitle={subtitle} />
+      {section.layout === 'GRID' ? (
+        <GridCards products={products} isRetailer={isRetailer} />
+      ) : (
+        <ShelfCards products={products} isRetailer={isRetailer} />
+      )}
+    </section>
+  );
+}
+
+const PRICE_TILE_GRADIENTS: Record<string, string> = {
+  purple: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+  orange: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
+  green: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+  blue: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+  red: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+  teal: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+};
+
+/** Compact cards: horizontal scroll on mobile, 6 across on desktop. */
+function ShelfCards({ products, isRetailer }: { products: ShelfProduct[]; isRetailer: boolean }) {
+  const cart = useCart();
+  return (
+    <>
+    {/* Mobile horizontal scroll */}
+    <div className="mobile-only">
+      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
+        {products.map((product) => (
+          <div
+            key={product.id}
+            style={{
+              flex: '0 0 auto',
+              width: 140,
+              borderRadius: 14,
+              padding: 10,
+              background: '#ffffff',
+              border: '1px solid #e7e5e4',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ height: 85, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, background: '#f8f7f5', borderRadius: 8 }}>
+                <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+              </div>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 700, color: '#292524', lineHeight: 1.2, height: 28, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                {product.name}
+              </Typography.Text>
+              {product.rating && product.reviewCount ? (
+                <div style={{ marginTop: 3 }}>
+                  <RatingBadge rating={product.rating} count={product.reviewCount} />
+                </div>
+              ) : null}
+              <Typography.Text style={{ fontSize: 11, color: '#78716c', marginTop: 2 }}>
+                {product.weight}
+              </Typography.Text>
+            </Link>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <Typography.Text style={{ fontSize: 14, fontWeight: 800, color: '#1c1917' }}>
+                {product.price !== null ? formatInr(product.price) : 'N/A'}
+              </Typography.Text>
+              <button
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: '#f97316',
+                  color: '#ffffff',
+                  border: 'none',
+                  display: 'grid',
+                  placeItems: 'center',
+                  cursor: 'pointer',
+                }}
+                onClick={() =>
+                  cart.add({
+                    productId: product.id,
+                    productName: product.name,
+                    unit: product.weight,
+                    displayUnitPrice: product.price,
+                    imageUrl: product.image,
+                    mrp: product.mrp,
+                  }, isRetailer ? ((product as any).moqB2B ?? 1) : 1)
+                }
+              >
+                <PlusOutlined style={{ fontSize: 13, fontWeight: 'bold' }} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Desktop 6-column product grid */}
+    <div className="desktop-only">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16 }}>
+        {products.map((product) => {
+          const cartLine = cart.lines.find((line) => line.productId === product.id);
+          return (
+            <div
+              key={product.id}
+              className="product-card-hover"
+              style={{
+                borderRadius: 14,
+                background: '#ffffff',
+                border: '1px solid #e7e5e4',
+                padding: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+                <div
+                  style={{
+                    height: 120,
+                    borderRadius: 10,
+                    background: '#f8f7f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                    padding: 8,
+                  }}
+                >
+                  <img src={product.image} alt={product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                </div>
+                <Typography.Text strong style={{ fontSize: 13, lineHeight: 1.25, height: 32, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', color: '#1c1917' }}>
+                  {product.name}
+                </Typography.Text>
+                {product.rating && product.reviewCount ? (
+                  <div style={{ marginTop: 3 }}>
+                    <RatingBadge rating={product.rating} count={product.reviewCount} />
+                  </div>
+                ) : null}
+                <Typography.Text type="secondary" style={{ fontSize: 11, marginTop: 2 }}>
+                  {product.weight}
+                </Typography.Text>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '8px 0 10px' }}>
+                  <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
+                    {product.price !== null ? formatInr(product.price) : 'N/A'}
+                  </Typography.Text>
+                  {product.mrp && (
+                    <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
+                      {formatInr(product.mrp)}
+                    </Typography.Text>
+                  )}
+                </div>
+              </Link>
+
+              <div>
+                {cartLine ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: '#fff7ed',
+                      borderRadius: 8,
+                      padding: '2px 4px',
+                      border: '1px solid #fed7aa',
+                    }}
+                  >
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<MinusOutlined />}
+                      onClick={() => {
+                        const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                        if (cartLine.quantity <= moq) {
+                          cart.remove(product.id);
+                        } else {
+                          cart.setQuantity(product.id, cartLine.quantity - 1);
+                        }
+                      }}
+                    />
+                    <InputNumber
+                      size="small"
+                      min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
+                      value={cartLine.quantity}
+                      controls={false}
+                      onChange={(value) => {
+                        const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                        cart.setQuantity(product.id, Math.max(moq, value ?? moq));
+                      }}
+                      style={{ width: 36, textAlign: 'center' }}
+                    />
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<PlusOutlined />}
+                      onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
+                    />
+                  </div>
+                ) : (
+                  <Button
+                    block
+                    style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 8 }}
+                    onClick={() => {
+                      const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                      cart.add({
+                        productId: product.id,
+                        productName: product.name,
+                        unit: product.weight,
+                        displayUnitPrice: product.price,
+                        imageUrl: product.image,
+                        mrp: product.mrp,
+                        moqB2B: (product as any).moqB2B ?? 1,
+                        minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                      }, moq);
+                    }}
+                  >
+                    Add to Cart
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    </>
+  );
+}
+
+/** Large cards: 2 across on mobile, 4 across on desktop. */
+function GridCards({ products, isRetailer }: { products: ShelfProduct[]; isRetailer: boolean }) {
+  const cart = useCart();
+  return (
+    <div className="home-products-grid">
+      {products.map((product) => {
+        const cartLine = cart.lines.find((line) => line.productId === product.id);
+        return (
+          <div
+            key={product.id}
+            className="product-card-hover"
+            style={{
+              border: '1px solid #e7e5e4',
+              borderRadius: 16,
+              background: '#ffffff',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Link to={`/product-detail/${product.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ position: 'relative' }}>
+                <ProductThumb image={product.image} square />
+                {product.badge && (
+                  <Typography.Text
+                    style={{
+                      position: 'absolute',
+                      top: 10,
+                      left: 10,
+                      background: '#dcfce7',
+                      color: '#166534',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    {product.badge}
+                  </Typography.Text>
+                )}
+              </div>
+              <div style={{ padding: '14px 14px 0' }}>
+                <Typography.Text strong style={{ display: 'block', fontSize: 14, color: '#1c1917', lineHeight: 1.3 }}>
+                  {product.name}
+                </Typography.Text>
+                {product.rating && product.reviewCount ? (
+                  <div style={{ marginTop: 3 }}>
+                    <RatingBadge rating={product.rating} count={product.reviewCount} />
+                  </div>
+                ) : null}
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {product.variant}
+                </Typography.Text>
+                <div style={{ margin: '6px 0 10px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <Typography.Text strong style={{ fontSize: 16, color: '#c2410c' }}>
+                    {product.price !== null ? formatInr(product.price) : 'N/A'}
+                  </Typography.Text>
+                  {product.mrp && (
+                    <Typography.Text delete type="secondary" style={{ fontSize: 12 }}>
+                      {formatInr(product.mrp)}
+                    </Typography.Text>
+                  )}
+                </div>
+              </div>
+            </Link>
+
+            <div style={{ padding: '0 14px 14px' }}>
+              {cartLine ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: '#fff7ed',
+                    borderRadius: 10,
+                    padding: '3px 6px',
+                    border: '1px solid #fed7aa',
+                  }}
+                >
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<MinusOutlined />}
+                    onClick={() => {
+                      const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                      if (cartLine.quantity <= moq) {
+                        cart.remove(product.id);
+                      } else {
+                        cart.setQuantity(product.id, cartLine.quantity - 1);
+                      }
+                    }}
+                  />
+                  <InputNumber
+                    size="small"
+                    min={isRetailer ? ((product as any).moqB2B ?? 1) : 1}
+                    value={cartLine.quantity}
+                    controls={false}
+                    onChange={(value) => {
+                      const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                      cart.setQuantity(product.id, Math.max(moq, value ?? moq));
+                    }}
+                    style={{ width: 44, textAlign: 'center' }}
+                  />
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<PlusOutlined />}
+                    onClick={() => cart.setQuantity(product.id, cartLine.quantity + 1)}
+                  />
+                </div>
+              ) : (
+                <Button
+                  block
+                  style={{ background: '#f97316', borderColor: '#f97316', color: '#fff', fontWeight: 600, borderRadius: 10, height: 40 }}
+                  onClick={() => {
+                    const moq = isRetailer ? ((product as any).moqB2B ?? 1) : 1;
+                    cart.add({
+                      productId: product.id,
+                      productName: product.name,
+                      unit: product.variant,
+                      displayUnitPrice: product.price,
+                      imageUrl: product.image,
+                      mrp: product.mrp,
+                      moqB2B: (product as any).moqB2B ?? 1,
+                      minOrderQuantity: (product as any).minOrderQuantity ?? 1,
+                    }, moq);
+                  }}
+                >
+                  Add to Cart
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,190 +1,81 @@
+import { api } from './client';
+import type { ServerCoupon, ServerCouponInput } from './checkout';
 import type { Coupon, CreateCouponInput } from './types';
 
-const STORAGE_KEY = 'svv_balaji_coupons_v1';
+/**
+ * Cart coupons, backed by the server (`/coupons`) - the same table checkout
+ * validates against. (This used to keep coupons in the admin's localStorage,
+ * so a coupon created in Admin never reached the storefront and every code
+ * was rejected as "invalid or expired".)
+ *
+ * The admin screens speak the older `Coupon` shape; it is mapped here.
+ */
 
-const INITIAL_COUPONS: Coupon[] = [
-  {
-    id: 'cpn-1',
-    code: 'BALAJI50',
-    title: 'Super Saver Discount',
-    description: 'Flat ₹50 OFF on orders above ₹499',
-    discountType: 'FIXED',
-    discountValue: 50,
-    minOrderValue: 499,
-    targetAudience: 'ALL',
-    expiryDate: '2026-12-31',
-    usageLimit: 1000,
-    usedCount: 142,
-    isActive: true,
-    createdAt: '2026-09-01T00:00:00.000Z',
-    updatedAt: '2026-09-01T00:00:00.000Z',
-  },
-  {
-    id: 'cpn-2',
-    code: 'WELCOME100',
-    title: 'Welcome First Order',
-    description: 'Flat ₹100 OFF on your cart above ₹799',
-    discountType: 'FIXED',
-    discountValue: 100,
-    minOrderValue: 799,
-    targetAudience: 'B2C',
-    expiryDate: '2026-11-30',
-    usageLimit: 500,
-    usedCount: 89,
-    isActive: true,
-    createdAt: '2026-09-05T00:00:00.000Z',
-    updatedAt: '2026-09-05T00:00:00.000Z',
-  },
-  {
-    id: 'cpn-3',
-    code: 'FARM10',
-    title: 'Farm Fresh 10% Off',
-    description: '10% instant discount up to ₹250 on orders above ₹999',
-    discountType: 'PERCENTAGE',
-    discountValue: 10,
-    minOrderValue: 999,
-    maxDiscount: 250,
-    targetAudience: 'ALL',
-    expiryDate: '2026-10-31',
-    usageLimit: 2000,
-    usedCount: 310,
-    isActive: true,
-    createdAt: '2026-09-10T00:00:00.000Z',
-    updatedAt: '2026-09-10T00:00:00.000Z',
-  },
-  {
-    id: 'cpn-4',
-    code: 'BULK200',
-    title: 'B2B Wholesale Saver',
-    description: 'Flat ₹200 OFF on wholesale orders above ₹2,500',
-    discountType: 'FIXED',
-    discountValue: 200,
-    minOrderValue: 2500,
-    targetAudience: 'B2B',
-    expiryDate: '2026-12-31',
-    usageLimit: 500,
-    usedCount: 45,
-    isActive: true,
-    createdAt: '2026-09-12T00:00:00.000Z',
-    updatedAt: '2026-09-12T00:00:00.000Z',
-  },
-];
+/** The admin picks a date; the coupon works until the end of that day in India. */
+const endOfDayIst = (date: string) => `${date}T23:59:59.999+05:30`;
+const istDate = (iso: string) => new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 10);
 
-function loadStoredCoupons(): Coupon[] {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch {
-    // Ignore JSON error and return defaults
-  }
-  return INITIAL_COUPONS;
+function fromServer(c: ServerCoupon & { createdAt?: string; updatedAt?: string }): Coupon {
+  return {
+    id: c.id,
+    code: c.code,
+    title: c.title,
+    description: c.description ?? '',
+    discountType: c.type === 'PERCENT' ? 'PERCENTAGE' : 'FIXED',
+    discountValue: Number(c.value),
+    minOrderValue: Number(c.minOrderValue ?? 0),
+    maxDiscount: c.maxDiscount !== null && c.maxDiscount !== undefined ? Number(c.maxDiscount) : undefined,
+    targetAudience: c.audience,
+    expiryDate: c.expiresAt ? istDate(c.expiresAt) : undefined,
+    usageLimit: c.usageLimit ?? undefined,
+    usedCount: c.usedCount,
+    isActive: c.isActive,
+    createdAt: c.createdAt ?? '',
+    updatedAt: c.updatedAt ?? '',
+  };
 }
 
-function persistCoupons(coupons: Coupon[]): void {
-  try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(coupons));
-      // Dispatch storage event for same-window updates
-      window.dispatchEvent(new Event('coupons_updated'));
-    }
-  } catch {
-    // Ignore error
-  }
+function toServer(input: Partial<CreateCouponInput>): Partial<ServerCouponInput> {
+  const out: Partial<ServerCouponInput> = {};
+  if (input.code !== undefined) out.code = input.code.trim().toUpperCase();
+  if (input.title !== undefined) out.title = input.title.trim();
+  if (input.description !== undefined) out.description = input.description.trim();
+  if (input.discountType !== undefined) out.type = input.discountType === 'PERCENTAGE' ? 'PERCENT' : 'FIXED';
+  if (input.discountValue !== undefined) out.value = Number(input.discountValue);
+  if (input.minOrderValue !== undefined) out.minOrderValue = Number(input.minOrderValue ?? 0);
+  if (input.maxDiscount !== undefined) out.maxDiscount = input.maxDiscount ? Number(input.maxDiscount) : null;
+  if (input.targetAudience !== undefined) out.audience = input.targetAudience;
+  if (input.expiryDate !== undefined) out.expiresAt = input.expiryDate ? endOfDayIst(input.expiryDate) : null;
+  if (input.usageLimit !== undefined) out.usageLimit = input.usageLimit ? Number(input.usageLimit) : null;
+  if (input.isActive !== undefined) out.isActive = input.isActive;
+  return out;
 }
 
 export const couponsApi = {
-  list(includeInactive = true): Coupon[] {
-    const all = loadStoredCoupons();
-    if (includeInactive) return all;
-    return all.filter((c) => c.isActive);
+  async list(includeInactive = true): Promise<Coupon[]> {
+    const rows = (await api.get<ServerCoupon[]>('/coupons')).data.map(fromServer);
+    return includeInactive ? rows : rows.filter((c) => c.isActive);
   },
 
-  get(id: string): Coupon | undefined {
-    return loadStoredCoupons().find((c) => c.id === id);
+  async create(input: CreateCouponInput): Promise<Coupon> {
+    return fromServer((await api.post<ServerCoupon>('/coupons', toServer(input))).data);
   },
 
-  getByCode(code: string): Coupon | undefined {
-    const normalized = code.trim().toUpperCase();
-    return loadStoredCoupons().find((c) => c.code.toUpperCase() === normalized);
+  async update(id: string, input: Partial<CreateCouponInput>): Promise<Coupon> {
+    const { code: _code, ...rest } = input; // a code never changes once customers may hold it
+    return fromServer((await api.patch<ServerCoupon>(`/coupons/${id}`, toServer(rest))).data);
   },
 
-  create(input: CreateCouponInput): Coupon {
-    const all = loadStoredCoupons();
-    const code = input.code.trim().toUpperCase();
-
-    if (all.some((c) => c.code.toUpperCase() === code)) {
-      throw new Error(`Coupon code "${code}" already exists.`);
-    }
-
-    const newCoupon: Coupon = {
-      id: `cpn-${Date.now()}`,
-      code,
-      title: input.title.trim(),
-      description: input.description.trim(),
-      discountType: input.discountType,
-      discountValue: Number(input.discountValue),
-      minOrderValue: Number(input.minOrderValue || 0),
-      maxDiscount: input.maxDiscount ? Number(input.maxDiscount) : undefined,
-      targetAudience: input.targetAudience || 'ALL',
-      expiryDate: input.expiryDate,
-      usageLimit: input.usageLimit ? Number(input.usageLimit) : undefined,
-      usedCount: 0,
-      isActive: input.isActive ?? true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const updated = [newCoupon, ...all];
-    persistCoupons(updated);
-    return newCoupon;
-  },
-
-  update(id: string, input: Partial<CreateCouponInput>): Coupon {
-    const all = loadStoredCoupons();
-    const index = all.findIndex((c) => c.id === id);
-    if (index === -1) {
-      throw new Error('Coupon not found');
-    }
-
-    const existing = all[index];
-    const code = input.code ? input.code.trim().toUpperCase() : existing.code;
-
-    if (all.some((c) => c.id !== id && c.code.toUpperCase() === code)) {
-      throw new Error(`Coupon code "${code}" is already in use.`);
-    }
-
-    const updatedCoupon: Coupon = {
-      ...existing,
-      code,
-      title: input.title !== undefined ? input.title.trim() : existing.title,
-      description: input.description !== undefined ? input.description.trim() : existing.description,
-      discountType: input.discountType ?? existing.discountType,
-      discountValue: input.discountValue !== undefined ? Number(input.discountValue) : existing.discountValue,
-      minOrderValue: input.minOrderValue !== undefined ? Number(input.minOrderValue) : existing.minOrderValue,
-      maxDiscount: input.maxDiscount !== undefined ? (input.maxDiscount ? Number(input.maxDiscount) : undefined) : existing.maxDiscount,
-      targetAudience: input.targetAudience ?? existing.targetAudience,
-      expiryDate: input.expiryDate !== undefined ? input.expiryDate : existing.expiryDate,
-      usageLimit: input.usageLimit !== undefined ? (input.usageLimit ? Number(input.usageLimit) : undefined) : existing.usageLimit,
-      isActive: input.isActive ?? existing.isActive,
-      updatedAt: new Date().toISOString(),
-    };
-
-    all[index] = updatedCoupon;
-    persistCoupons(all);
-    return updatedCoupon;
-  },
-
-  setActive(id: string, isActive: boolean): Coupon {
+  setActive(id: string, isActive: boolean): Promise<Coupon> {
     return this.update(id, { isActive });
   },
 
-  remove(id: string): void {
-    const all = loadStoredCoupons().filter((c) => c.id !== id);
-    persistCoupons(all);
+  /** Refused by the server once the coupon has been used on an order - switch it off instead. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/coupons/${id}`);
   },
 
+  /** Indicative only (cart before a quote); checkout's server quote is what is charged. */
   calculateDiscount(coupon: Coupon, orderSubtotal: number): number {
     if (!coupon.isActive) return 0;
     if (orderSubtotal < coupon.minOrderValue) return 0;

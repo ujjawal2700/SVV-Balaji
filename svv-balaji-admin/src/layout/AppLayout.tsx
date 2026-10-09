@@ -3,11 +3,13 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MutedOutlined,
   SearchOutlined,
   ShopOutlined,
+  SoundOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { App as AntApp, Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Segmented, Spin, Tag, Typography } from 'antd';
+import { App as AntApp, Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Segmented, Spin, Tag, Tooltip, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -20,6 +22,7 @@ import { useAuth } from '../auth/useAuth';
 import { BellOutlined } from '@ant-design/icons';
 import { enableOrderAlerts, orderAlertSupport } from '../live/orderAlerts';
 import { useLiveOrders } from '../live/useLiveOrders';
+import { installOrderSoundUnlock, playOrderSound, setOrderSoundMuted, useOrderSoundMuted } from '../live/orderSound';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { NAV_SECTIONS, findNavItem, type AdminZone, type NavItem } from './navigation';
 import { useAdminZone } from './useAdminZone';
@@ -82,23 +85,34 @@ export function AppLayout() {
 
   // The whole panel listens for orders: any screen gets notified, and every orders view refreshes.
   const live = useLiveOrders(can('ORDER_VIEW'), (path) => navigate(path));
+  const soundMuted = useOrderSoundMuted();
+  useEffect(() => installOrderSoundUnlock(), []);
   // Browser alerts (new orders, rider sign-ups, returns, approvals...) for every staff member.
   // Already allowed on this browser -> (re)register silently; not decided yet -> offer the button.
   const [alertsReady, setAlertsReady] = useState(false);
+  // The panel raises system notifications itself (src/live/systemNotify.ts), so the button is
+  // offered whenever this browser has not decided yet - even if server web push is not configured.
   useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') setAlertsReady(true);
     void orderAlertSupport()
       .then(async (s) => {
-        if (s !== 'ready') return;
-        if (Notification.permission === 'granted') await enableOrderAlerts();
-        else setAlertsReady(true);
+        if (s === 'ready' && Notification.permission === 'granted') await enableOrderAlerts();
       })
       .catch(() => undefined);
   }, [user?.id]);
   const turnOnAlerts = async () => {
     try {
-      const ok = await enableOrderAlerts();
-      message[ok ? 'success' : 'warning'](ok ? 'Alerts are on for this browser' : 'Alerts were not enabled - allow notifications for this site');
-      if (ok) setAlertsReady(false);
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        message.warning('Notifications are blocked - allow them for this site in the browser (lock icon in the address bar)');
+        return;
+      }
+      setAlertsReady(false);
+      // Server push as well (alerts with the tab closed), when configured; the open panel works without it.
+      const push = await orderAlertSupport().catch(() => 'unsupported' as const);
+      if (push === 'ready') await enableOrderAlerts().catch(() => undefined);
+      message.success('Alerts are on for this browser');
     } catch {
       message.error('Could not enable alerts');
     }
@@ -356,6 +370,20 @@ export function AppLayout() {
               <Tag color={live === 'live' ? 'green' : live === 'connecting' ? 'default' : 'red'} title="Live order feed">
                 ● {live === 'live' ? 'Live' : live === 'connecting' ? 'Connecting' : 'Offline (catching up on reconnect)'}
               </Tag>
+            ) : null}
+            {can('ORDER_VIEW') ? (
+              <Tooltip title={soundMuted ? 'New-order sound is off - click to turn on' : 'New-order sound is on - click to mute'}>
+                <Button
+                  size="small"
+                  type="text"
+                  aria-label={soundMuted ? 'Turn new-order sound on' : 'Mute new-order sound'}
+                  icon={soundMuted ? <MutedOutlined /> : <SoundOutlined style={{ color: '#059669' }} />}
+                  onClick={() => {
+                    setOrderSoundMuted(!soundMuted);
+                    if (soundMuted) playOrderSound(true); // a preview, and it unlocks audio in this browser
+                  }}
+                />
+              </Tooltip>
             ) : null}
             {alertsReady ? (
               <Button size="small" icon={<BellOutlined />} onClick={() => void turnOnAlerts()}>Turn on alerts</Button>

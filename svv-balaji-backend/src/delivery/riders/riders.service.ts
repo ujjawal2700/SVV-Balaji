@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { createPaymentGateway } from '../../checkout/payment/payment-gateway';
 import { DispatchService, HELD_STATUSES, stripPhone } from '../dispatch/dispatch.service';
 import { TaskFlowService } from '../dispatch/task-flow.service';
+import { EarningsService } from '../earnings/earnings.service';
 import { isVerifiedNow } from '../verification/verification.logic';
 import { RiderVerificationService } from '../verification/verification.service';
 
@@ -66,7 +67,7 @@ const itemPreview = (items?: Array<{ quantity: number; product: { name: string; 
 
 /** A return pickup / exchange replacement trip: what the rider carries, from the request. */
 const RETURN_SELECT = {
-  requestNumber: true, type: true, quantity: true,
+  requestNumber: true, type: true, quantity: true, reasonLabel: true,
   order: { select: { orderNumber: true } },
   orderItem: { select: { nameSnapshot: true, product: { select: { name: true, images: true } } } },
   replacementProduct: { select: { name: true, images: true } },
@@ -79,7 +80,7 @@ const returnItems = (kind: string, r: ReturnBrief | null) => {
     : { name: r.orderItem.nameSnapshot ?? r.orderItem.product.name, images: r.orderItem.product.images };
   return [{ name: product.name, quantity: r.quantity, image: product.images?.[0] ?? null }];
 };
-const returnInfo = (r: ReturnBrief | null) => (r ? { requestNumber: r.requestNumber, type: r.type } : null);
+const returnInfo = (r: ReturnBrief | null) => (r ? { requestNumber: r.requestNumber, type: r.type, reason: r.reasonLabel } : null);
 
 const mapsLink = (lat: unknown, lng: unknown, fallback: string) =>
   lat !== null && lng !== null && lat !== undefined && lng !== undefined
@@ -95,6 +96,7 @@ export class RidersService {
     private readonly dispatch: DispatchService,
     private readonly flow: TaskFlowService,
     private readonly verification: RiderVerificationService,
+    private readonly earnings: EarningsService,
   ) {}
 
   // ================================================================ staff
@@ -378,6 +380,7 @@ export class RidersService {
         warehouse: { select: { id: true, name: true } },
         zone: { select: { id: true, name: true, code: true } },
         order: { select: { id: true, orderNumber: true, status: true, paymentMode: true, paymentStatus: true, total: true } },
+        returnRequest: { select: { id: true, requestNumber: true, type: true, channel: true } },
       },
       orderBy: [{ needsManualAssignment: 'desc' }, { readyAt: 'desc' }],
       take: 300,
@@ -392,6 +395,7 @@ export class RidersService {
         warehouse: { select: { id: true, name: true, location: true } },
         zone: { select: { id: true, name: true, code: true } },
         order: { select: { id: true, orderNumber: true, status: true, paymentMode: true, paymentStatus: true, total: true } },
+        returnRequest: { select: { id: true, requestNumber: true, type: true, channel: true } },
         events: { orderBy: { createdAt: 'asc' } },
         offers: { orderBy: { offeredAt: 'asc' }, include: { rider: { select: { fullName: true } } } },
         cod: true,
@@ -478,7 +482,7 @@ export class RidersService {
           select: {
             id: true, taskNumber: true, speed: true, dropAddress: true, distanceKm: true, codAmount: true, promisedBy: true,
             warehouse: { select: { name: true, location: true } },
-            kind: true,
+            kind: true, zoneId: true,
             order: { select: { orderNumber: true, items: { select: ITEM_PREVIEW_SELECT } } },
             returnRequest: { select: RETURN_SELECT },
           },
@@ -487,8 +491,12 @@ export class RidersService {
       orderBy: { offeredAt: 'desc' },
     });
     const now = Date.now();
+    // Never let a pay-rule problem hide the offers themselves.
+    const pay = await this.earnings.estimate(offers.map((o) => o.task), riderId).catch(() => new Map<string, number | null>());
     return offers.map((o) => ({
       offerId: o.id,
+      /** What completing it pays under the current Super Admin rules (excl. waiting and target bonuses). */
+      estimatedEarning: pay.get(o.task.id) ?? null,
       expiresAt: o.expiresAt,
       /** Server-clock seconds to the deadline. Phones' clocks drift; the app counts down from this, not from expiresAt. */
       secondsLeft: Math.max(0, Math.round((o.expiresAt.getTime() - now) / 1000)),

@@ -37,8 +37,14 @@ export function useOrderTraceability(orderNumber: string | undefined) {
  * small, cached, rarely-more-than-a-page queries; being precise here would buy
  * nothing and would eventually be wrong.
  */
+/**
+ * Returned from onSuccess, so the mutation stays pending (button spinning)
+ * until the order on screen has been re-read. Without that the button came
+ * back while the page still showed the old step, and staff clicked again.
+ * Everything else refreshes in the background.
+ */
 function invalidateOrderWorld(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+  const orders = queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
   // Outstanding and available credit both move with order status.
   void queryClient.invalidateQueries({ queryKey: queryKeys.customers.all });
   // Credit bills, due dates and statements follow order status (dispatch starts the clock).
@@ -47,6 +53,7 @@ function invalidateOrderWorld(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.finishedGoods.all });
   // Occupancy and the movement ledger.
   void queryClient.invalidateQueries({ queryKey: queryKeys.warehouses.all });
+  return orders;
 }
 
 export function useCreateOrder() {
@@ -100,8 +107,8 @@ export function useReallocateOrder() {
   return useMutation({
     mutationFn: (id: string) => salesApi.reallocate(id),
     onSuccess: () => {
-      invalidateOrderWorld(queryClient);
       void queryClient.invalidateQueries({ queryKey: queryKeys.recall.all });
+      return invalidateOrderWorld(queryClient);
     },
   });
 }

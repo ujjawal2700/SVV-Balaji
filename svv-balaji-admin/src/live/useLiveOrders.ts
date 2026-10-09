@@ -1,13 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { notification } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { checkoutAdminApi, type OrderSummary } from '@shared/api/checkout';
 import { PUSH_KEYS } from '@shared/api/pushNotifications';
 import { queryKeys } from '@shared/api/queryKeys';
 import { tokenStore } from '@shared/api/tokenStore';
+import { playOrderSound } from './orderSound';
+import { showSystemNotification } from './systemNotify';
 
 const LAST_FETCHED_KEY = 'svv.orders.lastFetchedAt';
+const LOGO = `${import.meta.env.BASE_URL}svv-balaji.png`;
+const logoIcon = () =>
+  createElement('img', { src: LOGO, alt: '', style: { width: 32, height: 32, borderRadius: 6, objectFit: 'contain', marginTop: -4 } });
 const SEEN_LIMIT = 500;
 
 export type LiveStatus = 'connecting' | 'live' | 'offline';
@@ -77,13 +82,28 @@ export function useLiveOrders(enabled: boolean, onOpen: (path: string) => void):
       if (seen.current.has(key)) return;
       seen.current.add(key);
       if (seen.current.size > SEEN_LIMIT) seen.current = new Set([...seen.current].slice(-SEEN_LIMIT / 2));
-      notification.info({
+      playOrderSound();
+      const link = `/${o.channel === 'B2B' ? 'b2b' : 'b2c'}-orders/${o.id}`;
+      // Outside the app too (OS notification centre), with the logo - same tag as the server push.
+      // A catch-up after hours away does not flood the tray: only orders from the last 10 minutes.
+      const recent = !fromCatchUp || Date.now() - new Date(o.createdAt).getTime() < 10 * 60_000;
+      if (recent) void showSystemNotification(
+        {
+          title: `New ${o.channel === 'B2B' ? 'retailer ' : ''}order ${o.orderNumber}`,
+          body: `${o.customerName} · ₹${o.total.toFixed(2)} · ${o.fulfillmentMethod ?? o.channel} · ${o.nodeName}`,
+          tag: `new_order-${o.id}`,
+          link,
+        },
+        (path) => openRef.current(path),
+      );
+      notification.open({
         key: o.id,
+        icon: logoIcon(),
         message: `${fromCatchUp ? 'Order received while you were away' : 'New order'}: ${o.orderNumber}`,
         description: `${o.customerName} · ₹${o.total.toFixed(2)} · ${o.channel}${o.fulfillmentMethod ? ` · ${o.fulfillmentMethod}` : ''} · ${o.nodeName}`,
         placement: 'bottomRight',
         duration: 8,
-        onClick: () => openRef.current(`/${o.channel === 'B2B' ? 'b2b' : 'b2c'}-orders/${o.id}`),
+        onClick: () => openRef.current(link),
       });
     };
 

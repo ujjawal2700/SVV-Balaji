@@ -111,12 +111,24 @@ export interface ReturnDetail {
     id: string; direction: 'REVERSE' | 'FORWARD'; provider: string; awb: string | null; courier: string | null; trackingUrl: string | null;
     labelUrl: string | null; externalStatus: string; isActive: boolean; events: Array<{ at: string; status: string; note?: string }>; createdAt: string;
   }>;
-  riderTasks: Array<{ id: string; taskNumber: string; kind: string; status: string; attempt: number; failureReasonCode: string | null; failureNote: string | null; createdAt: string; rider: { fullName: string; phone: string } | null }>;
+  riderTasks: Array<{
+    id: string; taskNumber: string; kind: string; status: string; attempt: number; failureReasonCode: string | null; failureNote: string | null; createdAt: string;
+    rider: { fullName: string; phone: string } | null;
+    /** Broadcast round reached (0 = not offered yet). */
+    offerRound: number;
+    /** No rider accepted / none available - staff must assign. */
+    needsManualAssignment: boolean;
+    autoDispatchPaused: boolean;
+    /** Riders currently being offered it. */
+    openOffers: number;
+  }>;
   walletTransactions: Array<{ amount: number; reason: string; note: string | null; at: string }>;
   stamps: Record<string, string | null>;
   timeline: Array<{ type: string; fromStatus: ReturnStatus | null; toStatus: ReturnStatus | null; note: string | null; actorKind: string; actor: string; at: string }>;
   actions: string[];
   warning?: string;
+  /** Set when a schedule-pickup call found the pickup already booked (retry / double click). */
+  alreadyScheduled?: boolean;
 }
 
 export interface ReturnListQuery {

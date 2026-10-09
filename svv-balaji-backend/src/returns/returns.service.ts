@@ -584,17 +584,31 @@ export class ReturnsService implements OnModuleInit {
     };
   }
 
-  /** Book the collection: a rider task (Quick) or a Shiprocket reverse pickup. Also the reschedule after a failure. */
+  /**
+   * Book the collection: a rider task (Quick) or a Shiprocket reverse pickup.
+   * Also the reschedule after a failure.
+   *
+   * Safe to call twice. The request row is locked for the whole booking, so a
+   * double click, a second tab or a client retry waits for the first call and
+   * then finds the pickup already booked - it gets the current state back
+   * (`alreadyScheduled`) instead of a second rider trip or a second courier
+   * AWB. The courier call sits inside the lock for the same reason.
+   */
   async schedulePickup(channel: SalesChannel, id: string, actor: Actor) {
     const req = await this.forChannel(channel, id);
-    if (req.status !== S.APPROVED && req.status !== S.PICKUP_FAILED) {
-      throw new ConflictException(`A pickup can be scheduled for an approved request (this one is ${STATUS_LABEL[req.status].toLowerCase()})`);
-    }
     const drop = this.dropFor(req);
 
-    if (req.logistics === ReturnLogistics.QUICK_DELIVERY) {
-      const prior = await this.prisma.deliveryTask.count({ where: { returnRequestId: req.id, kind: 'RETURN_PICKUP' } });
-      const task = await this.prisma.$transaction(async (tx) => {
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM return_requests WHERE id = ${req.id} FOR UPDATE`;
+      const fresh = await tx.returnRequest.findUniqueOrThrow({ where: { id: req.id }, select: { status: true, logistics: true, pickupOtp: true } });
+      if (fresh.status === S.PICKUP_SCHEDULED) return { replay: true as const };
+      if (fresh.status !== S.APPROVED && fresh.status !== S.PICKUP_FAILED) {
+        throw new ConflictException(`A pickup can be scheduled for an approved request (this one is ${STATUS_LABEL[fresh.status].toLowerCase()})`);
+      }
+      req.status = fresh.status;
+
+      if (fresh.logistics === ReturnLogistics.QUICK_DELIVERY) {
+        const prior = await tx.deliveryTask.count({ where: { returnRequestId: req.id, kind: 'RETURN_PICKUP' } });
         const t = await tx.deliveryTask.create({
           data: {
             taskNumber: await this.sequence.next(tx, 'DT', new Date()),
@@ -615,15 +629,13 @@ export class ReturnsService implements OnModuleInit {
         });
         await this.dispatch.log(t.id, 'READY', { note: `Return pickup for ${req.requestNumber} (attempt ${t.attempt})`, actorUserId: actor.kind === 'STAFF' ? actor.id : null }, tx);
         await this.move(tx, req, S.PICKUP_SCHEDULED, actor, {
-          note: `Rider pickup ${t.taskNumber}`,
-          data: { pickupScheduledAt: new Date(), pickupOtp: req.pickupOtp ?? otp4(), pickupOtpAttempts: 0, failureReason: null },
+          note: `Rider pickup ${t.taskNumber} - offered to the nearest riders`,
+          data: { pickupScheduledAt: new Date(), pickupOtp: fresh.pickupOtp ?? otp4(), pickupOtpAttempts: 0, failureReason: null },
         });
-        return t;
-      });
-      this.dispatch.changed(task);
-      await this.dispatch.dispatch(task.id).catch((e) => this.logger.warn(`dispatch ${task.taskNumber}: ${String(e)}`));
-    } else {
-      const prior = await this.prisma.returnShipment.count({ where: { requestId: req.id, direction: ReturnShipmentDirection.REVERSE } });
+        return { task: t };
+      }
+
+      const prior = await tx.returnShipment.count({ where: { requestId: req.id, direction: ReturnShipmentDirection.REVERSE } });
       const item = req.orderItem;
       let booked;
       try {
@@ -638,20 +650,27 @@ export class ReturnsService implements OnModuleInit {
       } catch (e) {
         throw new BadGatewayException(`The courier could not book the pickup: ${e instanceof Error ? e.message : String(e)}`);
       }
-      await this.prisma.$transaction(async (tx) => {
-        await tx.returnShipment.updateMany({ where: { requestId: req.id, direction: ReturnShipmentDirection.REVERSE, isActive: true }, data: { isActive: false } });
-        await tx.returnShipment.create({
-          data: {
-            requestId: req.id, direction: ReturnShipmentDirection.REVERSE, provider: booked.provider, awb: booked.awb, courier: booked.courier,
-            trackingUrl: booked.trackingUrl, labelUrl: booked.labelUrl, providerRef: booked.providerRef,
-            events: [{ at: new Date().toISOString(), status: 'CREATED', note: `${booked.courier} reverse AWB ${booked.awb}` }],
-          },
-        });
-        await this.move(tx, req, S.PICKUP_SCHEDULED, actor, {
-          note: `${booked.courier} reverse pickup, AWB ${booked.awb}`,
-          data: { pickupScheduledAt: new Date(), failureReason: null },
-        });
+      await tx.returnShipment.updateMany({ where: { requestId: req.id, direction: ReturnShipmentDirection.REVERSE, isActive: true }, data: { isActive: false } });
+      await tx.returnShipment.create({
+        data: {
+          requestId: req.id, direction: ReturnShipmentDirection.REVERSE, provider: booked.provider, awb: booked.awb, courier: booked.courier,
+          trackingUrl: booked.trackingUrl, labelUrl: booked.labelUrl, providerRef: booked.providerRef,
+          events: [{ at: new Date().toISOString(), status: 'CREATED', note: `${booked.courier} reverse AWB ${booked.awb}` }],
+        },
       });
+      await this.move(tx, req, S.PICKUP_SCHEDULED, actor, {
+        note: `${booked.courier} reverse pickup, AWB ${booked.awb}`,
+        data: { pickupScheduledAt: new Date(), failureReason: null },
+      });
+      return { task: null };
+    }, { timeout: 45_000 });
+
+    if ('replay' in outcome) return { ...(await this.staffView(await this.load(id))), alreadyScheduled: true };
+    if (outcome.task) {
+      // Broadcast after commit, exactly as for an order: the outlet's nearest
+      // free riders get it at once, first to accept wins; nobody -> staff assign.
+      this.dispatch.changed(outcome.task);
+      await this.dispatch.dispatch(outcome.task.id).catch((e) => this.logger.warn(`dispatch ${outcome.task.taskNumber}: ${String(e)}`));
     }
     await this.notify(req, S.PICKUP_SCHEDULED, actor);
     return this.staffView(await this.load(id));
@@ -1317,7 +1336,13 @@ export class ReturnsService implements OnModuleInit {
       this.prisma.returnShipment.findMany({ where: { requestId: r.id }, orderBy: { createdAt: 'asc' } }),
       this.prisma.deliveryTask.findMany({
         where: { returnRequestId: r.id }, orderBy: { createdAt: 'asc' },
-        select: { id: true, taskNumber: true, kind: true, status: true, attempt: true, failureReasonCode: true, failureNote: true, createdAt: true, rider: { select: { fullName: true, phone: true } } },
+        select: {
+          id: true, taskNumber: true, kind: true, status: true, attempt: true, failureReasonCode: true, failureNote: true, createdAt: true,
+          offerRound: true, needsManualAssignment: true, autoDispatchPaused: true,
+          rider: { select: { fullName: true, phone: true } },
+          // Riders currently looking at the offer (broadcast still open).
+          _count: { select: { offers: { where: { status: 'PENDING', expiresAt: { gt: new Date() } } } } },
+        },
       }),
       this.prisma.returnBatchLine.findMany({ where: { requestId: r.id }, include: { fgBatch: { select: { fgBatchNumber: true } } } }),
       this.prisma.returnReplacementAllocation.findMany({ where: { requestId: r.id }, include: { fgBatch: { select: { fgBatchNumber: true, expiryDate: true } } } }),
@@ -1367,7 +1392,7 @@ export class ReturnsService implements OnModuleInit {
         id: x.id, direction: x.direction, provider: x.provider, awb: x.awb, courier: x.courier, trackingUrl: x.trackingUrl, labelUrl: x.labelUrl,
         externalStatus: x.externalStatus, isActive: x.isActive, events: x.events, createdAt: x.createdAt,
       })),
-      riderTasks: tasks,
+      riderTasks: tasks.map(({ _count, ...t }) => ({ ...t, openOffers: _count.offers })),
       walletTransactions: walletTx.map((w) => ({ amount: Number(w.amount), reason: w.reason, note: w.note, at: w.createdAt })),
       stamps: {
         approvedAt: r.approvedAt, pickupScheduledAt: r.pickupScheduledAt, pickedUpAt: r.pickedUpAt, receivedAt: r.receivedAt,

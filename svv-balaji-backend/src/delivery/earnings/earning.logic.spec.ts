@@ -1,4 +1,4 @@
-import { inWindows, slabAmount, targetBonuses, taskEarnings, validateConfig, weekKey, type Rule, type TaskContext } from './earning.logic';
+import { estimateEarning, inWindows, slabAmount, targetBonuses, taskEarnings, validateConfig, weekKey, type Rule, type TaskContext } from './earning.logic';
 
 const rule = (over: Partial<Rule> & Pick<Rule, 'kind' | 'config'>): Rule => ({
   id: over.id ?? `${over.kind}-${Math.random().toString(36).slice(2, 7)}`,
@@ -92,6 +92,33 @@ describe('rider earning rules', () => {
       expect(total(taskEarnings([w], ctx({ waitPickupMinutes: 4, waitDropMinutes: 3 })))).toBe(3); // 7 - 5 = 2 min x 1.5
       expect(total(taskEarnings([w], ctx({ waitPickupMinutes: 30 })))).toBe(20);
       expect(total(taskEarnings([w], ctx({ waitPickupMinutes: null, waitDropMinutes: null })))).toBe(0); // unverified = none
+    });
+  });
+
+  describe('return pickups', () => {
+    const base = rule({ id: 'base', kind: 'BASE_PER_DELIVERY', config: { amount: 20 } });
+    const ret = rule({ id: 'ret', kind: 'RETURN_PICKUP_PAY', config: { amount: 35 } });
+    const retZone = rule({ id: 'retZ', kind: 'RETURN_PICKUP_PAY', zoneId: 'zA', config: { amount: 45 } });
+
+    it('pays the return pickup rate instead of base pay; distance still adds', () => {
+      const lines = taskEarnings([base, ret, SLABS], ctx({ kind: 'RETURN_PICKUP' }));
+      expect(lines.map((l) => [l.ruleId, l.amount])).toEqual([['ret', 35], ['slabs', 25]]);
+    });
+    it("a zone's return rate beats the all-zones one", () => {
+      expect(total(taskEarnings([ret, retZone], ctx({ kind: 'RETURN_PICKUP' })))).toBe(45);
+    });
+    it('falls back to base pay when no return rate is set', () => {
+      expect(total(taskEarnings([base], ctx({ kind: 'RETURN_PICKUP' })))).toBe(20);
+    });
+    it('never applies the return rate to an order delivery', () => {
+      expect(total(taskEarnings([base, ret], ctx()))).toBe(20);
+    });
+    it('estimates the offer from the same rules', () => {
+      expect(estimateEarning([base, ret, SLABS], { taskId: 't', riderId: 'r', zoneId: 'zA', kind: 'RETURN_PICKUP', distanceKm: 1.4, at: EVENING, timeZone: 'Asia/Kolkata' })).toBe(60);
+    });
+    it('validates the amount', () => {
+      expect(validateConfig('RETURN_PICKUP_PAY', { amount: -1 }, null)).toMatch(/amount/);
+      expect(validateConfig('RETURN_PICKUP_PAY', { amount: 30 }, null)).toBeNull();
     });
   });
 

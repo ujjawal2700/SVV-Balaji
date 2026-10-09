@@ -20,6 +20,10 @@ const KIND: Record<EarningRuleKind, { label: string; help: string }> = {
   WEEKLY_TARGET: { label: 'Weekly target bonus', help: 'One-off bonus when a rider reaches N deliveries in a week (Mon-Sun).' },
   WAITING_TIME: { label: 'Waiting-time pay', help: 'Pay for waiting beyond a free allowance - only when arrival was location-verified.' },
   OUTCOME_COMPENSATION: { label: 'Cancelled / failed trip pay', help: 'What a cancelled or failed trip pays. With no rule it pays nothing.' },
+  RETURN_PICKUP_PAY: {
+    label: 'Return pickup pay',
+    help: 'Flat amount for collecting a customer return and bringing it to the store. Used instead of base pay on return pickups (distance, peak, zone and waiting rules still add). Shown to riders on the offer card. With no rule, a return pickup pays like a delivery.',
+  },
 };
 const OUTCOMES: Record<string, string> = {
   CANCELLED_AFTER_ASSIGNMENT: 'Cancelled after the rider accepted', CANCELLED_AT_PICKUP: 'Cancelled with the rider at the store',
@@ -32,6 +36,7 @@ function describe(r: EarningRule): string {
   const c = r.config as Record<string, any>;
   switch (r.kind) {
     case 'BASE_PER_DELIVERY': return `₹${c.amount}`;
+    case 'RETURN_PICKUP_PAY': return `₹${c.amount} per return pickup`;
     case 'DISTANCE_SLAB': return (c.slabs as any[]).map((s, i, a) => `${i ? a[i - 1].uptoKm : 0}${s.uptoKm === null ? '+' : `-${s.uptoKm}`} km ₹${s.amount}`).join(' · ');
     case 'PEAK_HOUR': return `₹${c.amount} · ${(c.windows as any[]).map((w) => `${w.days?.length ? w.days.map((d: number) => DAYS[d]).join('/') : 'daily'} ${w.start}-${w.end}`).join(', ')}`;
     case 'ZONE_INCENTIVE': return `₹${c.amount}${c.windows?.length ? ` at set times` : ''}`;
@@ -125,7 +130,8 @@ function toForm(r: EarningRule | null): Partial<RuleForm> {
 function toConfig(v: RuleForm): Record<string, unknown> {
   const windows = (v.windows ?? []).map((w) => ({ days: w.days ?? [], start: w.time[0].format('HH:mm'), end: w.time[1].format('HH:mm') }));
   switch (v.kind) {
-    case 'BASE_PER_DELIVERY': return { amount: v.amount };
+    case 'BASE_PER_DELIVERY':
+    case 'RETURN_PICKUP_PAY': return { amount: v.amount };
     case 'DISTANCE_SLAB': return { slabs: v.slabs, ...(v.unknownDistanceAmount != null ? { unknownDistanceAmount: v.unknownDistanceAmount } : {}) };
     case 'PEAK_HOUR': return { amount: v.amount, windows };
     case 'ZONE_INCENTIVE': return { amount: v.amount, ...(windows.length ? { windows } : {}) };
@@ -189,7 +195,9 @@ function RuleModal({ rule, onClose }: { rule: EarningRule | null; onClose: () =>
         </Row>
         <Alert type="info" showIcon style={{ marginBottom: 12 }} message={KIND[kind].help} />
 
-        {kind === 'BASE_PER_DELIVERY' || kind === 'PEAK_HOUR' || kind === 'ZONE_INCENTIVE' ? money('amount', kind === 'BASE_PER_DELIVERY' ? 'Amount per delivery' : 'Extra per delivery') : null}
+        {kind === 'BASE_PER_DELIVERY' || kind === 'PEAK_HOUR' || kind === 'ZONE_INCENTIVE' || kind === 'RETURN_PICKUP_PAY'
+          ? money('amount', kind === 'BASE_PER_DELIVERY' ? 'Amount per delivery' : kind === 'RETURN_PICKUP_PAY' ? 'Amount per return pickup' : 'Extra per delivery')
+          : null}
 
         {kind === 'DISTANCE_SLAB' ? (
           <>

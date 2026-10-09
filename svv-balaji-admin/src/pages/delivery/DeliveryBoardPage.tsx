@@ -24,6 +24,9 @@ const RIDER_STATE: Record<RiderState, { label: string; color: string }> = {
   NOT_RESPONDING: { label: 'Not responding', color: 'gold' }, OFFLINE: { label: 'Offline', color: 'default' },
 };
 const waitingForRider = (t: Pick<DeliveryTaskRow, 'status' | 'rider'>) => ['READY_FOR_PICKUP', 'OFFERED'].includes(t.status) && !t.rider;
+/** Return pickups / exchange deliveries have no order of their own - name them by their request. */
+export const taskRef = (t: Pick<DeliveryTaskRow, 'kind' | 'order' | 'returnRequest'>) =>
+  t.returnRequest ? `${t.kind === 'REPLACEMENT_DELIVERY' ? 'Exchange delivery' : 'Return pickup'} · ${t.returnRequest.requestNumber}` : t.order?.orderNumber ?? '';
 const inr = (v: string | number) => `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 /** Every local / Quick delivery: who has it, where it is, and the ones waiting on staff. */
@@ -47,7 +50,7 @@ export function DeliveryBoardPage() {
       render: (_, t) => (
         <div>
           <a onClick={() => setOpen(t.id)} style={{ fontWeight: 600 }}>{t.taskNumber}</a> {t.speed === 'QUICK' ? <Tag color="orange" icon={<ThunderboltOutlined />}>Quick</Tag> : null}{t.attempt > 1 ? <Tag>Attempt {t.attempt}</Tag> : null}
-          <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{t.order?.orderNumber} · {t.warehouse.name}</Typography.Text></div>
+          <div>{t.returnRequest ? <Tag color="volcano" style={{ marginRight: 4 }}>{t.kind === 'REPLACEMENT_DELIVERY' ? 'Exchange' : 'Return pickup'}</Tag> : null}<Typography.Text type="secondary" style={{ fontSize: 12 }}>{t.returnRequest?.requestNumber ?? t.order?.orderNumber} · {t.warehouse.name}</Typography.Text></div>
         </div>
       ),
     },
@@ -105,7 +108,7 @@ function TaskDrawer({ id, onClose }: { id: string | null; onClose: () => void })
 
   if (!id) return null;
   return (
-    <Drawer open width={Math.min(640, window.innerWidth)} onClose={onClose} title={t ? `${t.taskNumber} · ${t.order?.orderNumber ?? ''}` : 'Delivery'} loading={q.isLoading}>
+    <Drawer open width={Math.min(640, window.innerWidth)} onClose={onClose} title={t ? `${t.taskNumber} · ${taskRef(t)}` : 'Delivery'} loading={q.isLoading}>
       {t ? (
         <Space direction="vertical" size={14} style={{ width: '100%' }}>
           <Space wrap>
@@ -227,7 +230,7 @@ function CandidatesCard({ taskId, canManage, onAssign }: { taskId: string; canMa
 }
 
 /** Manual assignment - the staff override. Any active rider of the outlet; one the dispatcher would skip gets a warning, not a block. */
-function AssignModal({ open, task, initialRiderId, onClose }: { open: boolean; task: DeliveryTaskRow | null; initialRiderId?: string; onClose: () => void }) {
+export function AssignModal({ open, task, initialRiderId, onClose, onAssigned }: { open: boolean; task: Pick<DeliveryTaskRow, 'id' | 'warehouse'> | null; initialRiderId?: string; onClose: () => void; onAssigned?: () => void }) {
   const q = useTaskCandidates(open && task ? task.id : null);
   const [riderId, setRiderId] = useState<string>();
   const chosen = riderId ?? initialRiderId;
@@ -240,7 +243,7 @@ function AssignModal({ open, task, initialRiderId, onClose }: { open: boolean; t
   };
   return (
     <Modal open={open} title="Assign a rider" okText="Assign" okButtonProps={{ disabled: !chosen }} confirmLoading={m.isPending} onCancel={close} destroyOnClose
-      onOk={() => m.mutate(undefined, { onSuccess: () => { message.success('Assigned - the rider has been notified'); close(); }, onError: (e) => message.error(apiErrorMessage(e)) })}>
+      onOk={() => m.mutate(undefined, { onSuccess: () => { message.success('Assigned - the rider has been notified'); onAssigned?.(); close(); }, onError: (e) => message.error(apiErrorMessage(e)) })}>
       <Typography.Paragraph type="secondary">Active riders of {task?.warehouse.name}, best first. Requests already showing to riders are withdrawn.</Typography.Paragraph>
       <Select style={{ width: '100%' }} placeholder="Choose a rider" value={chosen} onChange={setRiderId} loading={q.isLoading} showSearch optionFilterProp="label"
         options={(q.data?.riders ?? []).map((r) => ({

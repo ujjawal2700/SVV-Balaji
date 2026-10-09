@@ -49,6 +49,8 @@ describe('state and financial year', () => {
     expect(stateCodeFromName('  telangana ')).toBe('36');
     expect(stateCodeFromName('Orissa')).toBe('21');
     expect(stateCodeFromName('New Delhi')).toBe('07');
+    expect(stateCodeFromName('Delhi (NCT)')).toBe('07');
+    expect(stateCodeFromName('Chandigarh (UT)')).toBe('04');
     expect(stateCodeFromName('Atlantis')).toBeNull();
     expect(stateCodeFromName(null)).toBeNull();
   });

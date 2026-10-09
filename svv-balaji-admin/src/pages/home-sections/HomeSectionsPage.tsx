@@ -2,12 +2,14 @@ import {
   AppstoreOutlined,
   DeleteOutlined,
   EditOutlined,
-  EyeOutlined,
   PlusOutlined,
   OrderedListOutlined,
   CheckCircleOutlined,
   ShoppingOutlined,
-  SearchOutlined,
+  ThunderboltOutlined,
+  TagsOutlined,
+  StarOutlined,
+  SelectOutlined,
 } from '@ant-design/icons';
 import {
   Alert,
@@ -32,9 +34,10 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { apiErrorMessage } from '../../api/client';
-import type { CreateHomeSectionInput, HomeSection } from '@shared/api/types';
+import type { CreateHomeSectionInput, HomeSection, HomeSectionKind } from '@shared/api/types';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '@shared/auth/useCan';
@@ -46,8 +49,42 @@ import {
   useUpdateHomeSection,
 } from '@shared/hooks/useHomeSections';
 import { useProducts } from '@shared/hooks/useProduction';
+import { useCategories } from '@shared/hooks/useCategories';
+import { ProductPicker } from './ProductPicker';
+import { PRICE_TILE_GRADIENTS, PriceTilesEditor } from './PriceTilesEditor';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text } = Typography;
+
+const KIND_META: Record<HomeSectionKind, { label: string; short: string; color: string; icon: ReactNode; help: string }> = {
+  PRODUCTS: {
+    label: 'Hand-picked products',
+    short: 'Hand-picked',
+    color: 'volcano',
+    icon: <SelectOutlined />,
+    help: 'You choose exactly which products appear, and in what order.',
+  },
+  DAILY_STAPLES: {
+    label: 'Auto: Daily Staples',
+    short: 'Auto · Daily Staples',
+    color: 'green',
+    icon: <ThunderboltOutlined />,
+    help: 'Shows every product with "Daily staple" ticked in its product form. Tick or untick it there to change this section.',
+  },
+  TOP_PICKS: {
+    label: 'Auto: Top Picks',
+    short: 'Auto · Top Picks',
+    color: 'gold',
+    icon: <StarOutlined />,
+    help: 'Shows every product with "Top pick" ticked in its product form. Tick or untick it there to change this section.',
+  },
+  PRICE_DEALS: {
+    label: 'Price deal tiles',
+    short: 'Price tiles',
+    color: 'purple',
+    icon: <TagsOutlined />,
+    help: 'Colourful "Starting from ₹X" tiles that each open a category.',
+  },
+};
 
 interface HomeSectionDrawerProps {
   open: boolean;
@@ -57,59 +94,66 @@ interface HomeSectionDrawerProps {
   onSave: (values: CreateHomeSectionInput) => void;
 }
 
-function HomeSectionFormDrawer({
-  open,
-  section,
-  saving,
-  onClose,
-  onSave,
-}: HomeSectionDrawerProps) {
+const DEFAULT_VALUES: CreateHomeSectionInput = {
+  title: '',
+  subtitle: '',
+  kind: 'PRODUCTS',
+  layout: 'SHELF',
+  targetAudience: 'ALL',
+  displayOrder: 0,
+  isActive: true,
+  productIds: [],
+  productLimit: 12,
+  tiles: [],
+};
+
+function HomeSectionFormDrawer({ open, section, saving, onClose, onSave }: HomeSectionDrawerProps) {
   const [form] = Form.useForm<CreateHomeSectionInput>();
   const isEdit = Boolean(section);
+  const kind: HomeSectionKind = Form.useWatch('kind', form) ?? 'PRODUCTS';
   const productsQuery = useProducts();
   const allProducts = productsQuery.data?.data ?? (Array.isArray(productsQuery.data) ? productsQuery.data : []);
-
-  const defaultValues: CreateHomeSectionInput = {
-    title: '',
-    subtitle: '',
-    targetAudience: 'ALL',
-    displayOrder: 0,
-    isActive: true,
-    productIds: [],
-  };
+  const categoriesQuery = useCategories();
+  const allCategories = categoriesQuery.data?.data ?? [];
 
   useEffect(() => {
-    if (open) {
-      if (section) {
-        form.setFieldsValue({
-          title: section.title,
-          subtitle: section.subtitle ?? '',
-          targetAudience: section.targetAudience,
-          displayOrder: section.displayOrder,
-          isActive: section.isActive,
-          productIds: section.productIds ?? [],
-        });
-      } else {
-        form.setFieldsValue(defaultValues);
-      }
+    if (!open) return;
+    form.resetFields();
+    if (section) {
+      form.setFieldsValue({
+        title: section.title,
+        subtitle: section.subtitle ?? '',
+        kind: section.kind,
+        layout: section.layout,
+        targetAudience: section.targetAudience,
+        displayOrder: section.displayOrder,
+        isActive: section.isActive,
+        productIds: section.productIds ?? [],
+        productLimit: section.productLimit ?? 12,
+        tiles: section.tiles ?? [],
+      });
+    } else {
+      form.setFieldsValue(DEFAULT_VALUES);
     }
   }, [open, section, form]);
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      onSave(values);
+      // Validated fields only include what's mounted; carry the rest so a
+      // switch of kind never wipes the hidden settings.
+      onSave({ ...form.getFieldsValue(true), ...values });
     } catch {
       // Form validation error handled inline
     }
   };
 
-  const productOptions = useMemo(() => {
-    return allProducts.map((p) => ({
-      value: p.id,
-      label: `${p.name} (${p.packLabel || p.unit || 'Standard'}) - ${p.category?.name || 'Unassigned'}`,
-    }));
-  }, [allProducts]);
+  const autoCount =
+    kind === 'DAILY_STAPLES'
+      ? allProducts.filter((p) => p.isDailyStaple && p.showOnStorefront).length
+      : kind === 'TOP_PICKS'
+        ? allProducts.filter((p) => p.isTopPick && p.showOnStorefront).length
+        : 0;
 
   return (
     <Drawer
@@ -119,7 +163,7 @@ function HomeSectionFormDrawer({
           <span>{isEdit ? 'Edit Homepage Section' : 'Create New Homepage Section'}</span>
         </Space>
       }
-      width={600}
+      width={760}
       open={open}
       onClose={onClose}
       extra={
@@ -133,7 +177,30 @@ function HomeSectionFormDrawer({
         </Space>
       }
     >
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" initialValues={DEFAULT_VALUES}>
+        <Form.Item name="kind" label="Section Type">
+          <Radio.Group style={{ width: '100%' }}>
+            <Row gutter={[8, 8]}>
+              {(Object.keys(KIND_META) as HomeSectionKind[]).map((k) => (
+                <Col span={12} key={k}>
+                  <Radio.Button
+                    value={k}
+                    style={{ width: '100%', height: 'auto', padding: '8px 12px', lineHeight: 1.3, borderRadius: 8 }}
+                  >
+                    <Space size={6}>
+                      {KIND_META[k].icon}
+                      <Text strong style={{ color: 'inherit' }}>
+                        {KIND_META[k].label}
+                      </Text>
+                    </Space>
+                  </Radio.Button>
+                </Col>
+              ))}
+            </Row>
+          </Radio.Group>
+        </Form.Item>
+        <Alert type="info" showIcon message={KIND_META[kind].help} style={{ marginTop: -12, marginBottom: 16 }} />
+
         <Form.Item
           name="title"
           label="Section Title"
@@ -143,59 +210,102 @@ function HomeSectionFormDrawer({
           <Input placeholder="e.g. Best of the Basics" maxLength={100} />
         </Form.Item>
 
-        <Form.Item
-          name="subtitle"
-          label="Subtitle / Description"
-          extra="Short subtitle description displayed under the section header."
-        >
-          <Input.TextArea
-            rows={2}
-            placeholder="e.g. Farm-fresh flour, namkeen, spices & kitchen essentials"
-            maxLength={250}
-          />
+        <Form.Item name="subtitle" label="Subtitle / Description" extra="Short line shown under the section header.">
+          <Input.TextArea rows={2} placeholder="e.g. Farm-fresh flour, namkeen, spices & kitchen essentials" maxLength={250} />
         </Form.Item>
 
         <Row gutter={16}>
-          <Col span={12}>
-            <Form.Item
-              name="displayOrder"
-              label="Display Order (Position Rank)"
-              extra="Lower numbers appear higher on the homepage."
-            >
+          <Col span={kind === 'PRICE_DEALS' ? 12 : 8}>
+            <Form.Item name="displayOrder" label="Position" extra="Lower numbers appear higher.">
               <InputNumber min={0} max={99} style={{ width: '100%' }} placeholder="0" />
             </Form.Item>
           </Col>
-          <Col span={12}>
-            <Form.Item
-              name="targetAudience"
-              label="Target Audience"
-              extra="Channel filter for storefront."
-            >
-              <Select>
-                <Select.Option value="ALL">🌐 All Customers (B2C + B2B)</Select.Option>
-                <Select.Option value="B2C">🛒 Retail Customers (B2C Only)</Select.Option>
-                <Select.Option value="B2B">🏪 Retailer Partners (B2B Only)</Select.Option>
-              </Select>
+          <Col span={kind === 'PRICE_DEALS' ? 12 : 8}>
+            <Form.Item name="targetAudience" label="Target Audience">
+              <Select
+                options={[
+                  { value: 'ALL', label: '🌐 All (B2C + B2B)' },
+                  { value: 'B2C', label: '🛒 Retail customers' },
+                  { value: 'B2B', label: '🏪 Retailer partners' },
+                ]}
+              />
             </Form.Item>
           </Col>
+          {kind !== 'PRICE_DEALS' && (
+            <Col span={8}>
+              <Form.Item name="layout" label="Card Style">
+                <Radio.Group optionType="button" buttonStyle="solid" style={{ display: 'flex' }}>
+                  <Tooltip title="Compact cards - scroll sideways on mobile, 6 per row on desktop">
+                    <Radio.Button value="SHELF" style={{ flex: 1, textAlign: 'center' }}>
+                      Shelf
+                    </Radio.Button>
+                  </Tooltip>
+                  <Tooltip title="Large cards - 2 per row on mobile, 4 per row on desktop">
+                    <Radio.Button value="GRID" style={{ flex: 1, textAlign: 'center' }}>
+                      Grid
+                    </Radio.Button>
+                  </Tooltip>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+          )}
         </Row>
 
-        <Form.Item
-          name="productIds"
-          label="Select Products to Display"
-          extra="Pick products from your catalogue that will appear as cards in this section."
-        >
-          <Select
-            mode="multiple"
-            allowClear
-            style={{ width: '100%' }}
-            placeholder="Search and pick products..."
-            optionFilterProp="label"
-            options={productOptions}
-            loading={productsQuery.isLoading}
-            maxTagCount="responsive"
-          />
-        </Form.Item>
+        {kind === 'PRODUCTS' && (
+          <Form.Item
+            name="productIds"
+            label="Products to Display"
+            extra="Search or filter by category and sub-category, then tick the products to show in this section."
+          >
+            <ProductPicker
+              products={allProducts}
+              categories={allCategories}
+              loading={productsQuery.isLoading || categoriesQuery.isLoading}
+            />
+          </Form.Item>
+        )}
+
+        {(kind === 'DAILY_STAPLES' || kind === 'TOP_PICKS') && (
+          <Row gutter={16} align="middle">
+            <Col span={8}>
+              <Form.Item name="productLimit" label="Show up to" extra="products">
+                <InputNumber min={1} max={48} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={16}>
+              <Alert
+                type={autoCount ? 'success' : 'warning'}
+                showIcon
+                style={{ marginBottom: 24 }}
+                message={
+                  autoCount
+                    ? `${autoCount} storefront product${autoCount === 1 ? ' is' : 's are'} currently marked "${kind === 'DAILY_STAPLES' ? 'Daily staple' : 'Top pick'}".`
+                    : `No storefront product is marked "${kind === 'DAILY_STAPLES' ? 'Daily staple' : 'Top pick'}" yet - the section stays hidden until one is.`
+                }
+                description={<Link to="/products">Manage in Products →</Link>}
+              />
+            </Col>
+          </Row>
+        )}
+
+        {kind === 'PRICE_DEALS' && (
+          <Form.Item
+            name="tiles"
+            label="Price Tiles"
+            rules={[
+              {
+                validator: (_, v: CreateHomeSectionInput['tiles']) =>
+                  !v?.length
+                    ? Promise.reject(new Error('Add at least one tile'))
+                    : v.some((t) => !t.subtitle?.trim())
+                      ? Promise.reject(new Error('Every tile needs a subtitle'))
+                      : Promise.resolve(),
+              },
+            ]}
+          >
+            <PriceTilesEditor categories={allCategories} />
+          </Form.Item>
+        )}
 
         <Form.Item
           name="isActive"
@@ -213,7 +323,7 @@ function HomeSectionFormDrawer({
 export function HomeSectionsPage() {
   const { message } = AntApp.useApp();
   const canEditSections = useCan('HOME_SECTION_MANAGE');
-  const { data, isLoading, isError } = useHomeSections(true);
+  const { data, isLoading } = useHomeSections(true);
   const sections: HomeSection[] = data?.data ?? (Array.isArray(data) ? data : []);
 
   const createMutation = useCreateHomeSection();
@@ -273,6 +383,7 @@ export function HomeSectionsPage() {
   };
 
   const activeCount = sections.filter((s) => s.isActive).length;
+  const featuredCount = sections.reduce((acc, s) => acc + (s.kind === 'PRICE_DEALS' ? 0 : (s.products?.length ?? 0)), 0);
 
   const columns: ColumnsType<HomeSection> = [
     {
@@ -305,26 +416,72 @@ export function HomeSectionsPage() {
       ),
     },
     {
+      title: 'Type',
+      key: 'kind',
+      width: 190,
+      filters: (Object.keys(KIND_META) as HomeSectionKind[]).map((k) => ({ text: KIND_META[k].label, value: k })),
+      onFilter: (v, sec) => sec.kind === v,
+      render: (_, sec) => (
+        <Space direction="vertical" size={2}>
+          <Tag icon={KIND_META[sec.kind].icon} color={KIND_META[sec.kind].color}>
+            {KIND_META[sec.kind].short}
+          </Tag>
+          {sec.kind !== 'PRICE_DEALS' && (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {sec.layout === 'GRID' ? 'Grid · large cards' : 'Shelf · compact cards'}
+            </Text>
+          )}
+        </Space>
+      ),
+    },
+    {
       title: 'Target Audience',
       dataIndex: 'targetAudience',
       key: 'targetAudience',
-      width: 140,
+      width: 120,
       render: (audience: string) => {
         const color = audience === 'B2B' ? 'purple' : audience === 'B2C' ? 'blue' : 'green';
         return <Tag color={color}>{audience}</Tag>;
       },
     },
     {
-      title: 'Selected Products',
+      title: 'Content',
       key: 'products',
       render: (_, sec) => {
-        const count = sec.productIds?.length || 0;
+        if (sec.kind === 'PRICE_DEALS') {
+          const tiles = sec.tiles ?? [];
+          return (
+            <Space size={4} wrap>
+              {tiles.map((t, i) => (
+                <span
+                  key={i}
+                  style={{
+                    background: PRICE_TILE_GRADIENTS[t.color] ?? PRICE_TILE_GRADIENTS.orange,
+                    color: '#fff',
+                    borderRadius: 6,
+                    padding: '1px 8px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  ₹{t.price} · {t.subtitle}
+                </span>
+              ))}
+              {tiles.length === 0 && <Text type="secondary">No tiles</Text>}
+            </Space>
+          );
+        }
         const productsList = sec.products || [];
         return (
           <div>
-            <Tag icon={<ShoppingOutlined />} color="volcano" style={{ fontWeight: 600 }}>
-              {count} Products
+            <Tag icon={<ShoppingOutlined />} color={productsList.length ? 'volcano' : 'default'} style={{ fontWeight: 600 }}>
+              {productsList.length} Products
             </Tag>
+            {sec.kind !== 'PRODUCTS' && (
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                auto, up to {sec.productLimit}
+              </Text>
+            )}
             <div style={{ marginTop: 4 }}>
               {productsList.slice(0, 3).map((p) => (
                 <Tag key={p.id} style={{ fontSize: 11, marginBottom: 2 }}>
@@ -336,6 +493,11 @@ export function HomeSectionsPage() {
                   +{productsList.length - 3} more
                 </Text>
               )}
+              {productsList.length === 0 && (
+                <Text type="warning" style={{ fontSize: 11 }}>
+                  Hidden on the homepage until it has products
+                </Text>
+              )}
             </div>
           </div>
         );
@@ -345,7 +507,7 @@ export function HomeSectionsPage() {
       title: 'Status',
       dataIndex: 'isActive',
       key: 'isActive',
-      width: 120,
+      width: 110,
       render: (isActive: boolean, sec) => (
         <Switch
           checked={isActive}
@@ -359,16 +521,12 @@ export function HomeSectionsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 100,
       render: (_, sec) => (
         <Space size="small">
           <Can do="HOME_SECTION_MANAGE">
             <Tooltip title="Edit section">
-              <Button
-                type="text"
-                icon={<EditOutlined style={{ color: '#ea580c' }} />}
-                onClick={() => handleOpenEdit(sec)}
-              />
+              <Button type="text" icon={<EditOutlined style={{ color: '#ea580c' }} />} onClick={() => handleOpenEdit(sec)} />
             </Tooltip>
           </Can>
           <Can do="HOME_SECTION_DELETE">
@@ -394,7 +552,7 @@ export function HomeSectionsPage() {
     <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
       <PageHeader
         title="Homepage Sections Management"
-        subtitle="Create and organize dynamic product sections for the customer homepage (e.g. Best of the Basics, Trending Staples, Festive Offers)."
+        subtitle="Every product shelf and price strip on the customer homepage. Add, reorder, hide or edit them here."
         extra={
           <Can do="HOME_SECTION_CREATE">
             <Button
@@ -433,7 +591,7 @@ export function HomeSectionsPage() {
           <Card>
             <Statistic
               title="Total Products Featured"
-              value={sections.reduce((acc, s) => acc + (s.productIds?.length || 0), 0)}
+              value={featuredCount}
               prefix={<ShoppingOutlined style={{ color: '#2563eb' }} />}
             />
           </Card>
@@ -444,16 +602,24 @@ export function HomeSectionsPage() {
         title={
           <Space>
             <AppstoreOutlined style={{ color: '#ea580c' }} />
-            <span>Configured Homepage Product Sections</span>
+            <span>Configured Homepage Sections</span>
           </Space>
         }
       >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Homepage order: banners → Shop by Category → Today's Schemes → the sections below (by position) → Buy Again."
+          description="Banners and schemes are managed on their own pages. Buy Again is personal to each shopper's order history."
+        />
         <Table
           dataSource={sections}
           columns={columns}
           rowKey="id"
           loading={isLoading}
           pagination={false}
+          scroll={{ x: 960 }}
           locale={{ emptyText: 'No homepage sections created yet. Click "Add New Section" to create one.' }}
         />
       </Card>

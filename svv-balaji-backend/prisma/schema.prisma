@@ -10,6 +10,10 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Load relations (include / nested select) in the SAME SQL query via joins instead of one extra
+  // query per relation. Each query is a network round trip, so this cuts most endpoints' latency
+  // when the API and the database are not side by side.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -3126,15 +3130,36 @@ model Scheme {
 }
 
 /// Super Admin managed homepage product sections (e.g. "Best of the Basics").
+/// What fills a homepage section. The two auto kinds follow the product-level
+/// "Daily staple" / "Top pick" flags, so ticking a product in the product form
+/// still reaches the homepage without editing the section.
+enum HomeSectionKind {
+  PRODUCTS // hand-picked `productIds`, in that order
+  DAILY_STAPLES // products with isDailyStaple
+  TOP_PICKS // products with isTopPick
+  PRICE_DEALS // "Starting from ₹X" tiles in `tiles`
+}
+
+enum HomeSectionLayout {
+  SHELF // compact cards, horizontal scroll on mobile, 6 across on desktop
+  GRID // large cards, 2 across on mobile, 4 across on desktop
+}
+
 model HomeSection {
   id String @id @default(uuid())
 
   title          String
   subtitle       String?
-  targetAudience BannerAudience @default(ALL)
-  displayOrder   Int            @default(0)
-  isActive       Boolean        @default(true)
-  productIds     String[]       @default([])
+  kind           HomeSectionKind   @default(PRODUCTS)
+  layout         HomeSectionLayout @default(SHELF)
+  targetAudience BannerAudience    @default(ALL)
+  displayOrder   Int               @default(0)
+  isActive       Boolean           @default(true)
+  productIds     String[]          @default([])
+  /// Max products an auto kind (DAILY_STAPLES / TOP_PICKS) shows.
+  productLimit   Int               @default(12)
+  /// PRICE_DEALS only: [{ label, price, subtitle, emoji, color, categoryId }].
+  tiles          Json              @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4513,7 +4538,7 @@ model DeliverySettings {
   id                       String   @id @default(uuid())
   /// Offer tasks to riders automatically; off = staff assign every task.
   autoOffer                Boolean  @default(true)
-  offerTimeoutSeconds      Int      @default(45)
+  offerTimeoutSeconds      Int      @default(60)
   /// Riders tried before a task is handed to staff.
   maxOfferRounds           Int      @default(5)
   /// Rider location older than this is ignored when ranking candidates.
@@ -4564,6 +4589,9 @@ enum EarningRuleKind {
   WAITING_TIME
   /// Pay for a cancelled or failed task, by stage / reason.
   OUTCOME_COMPENSATION
+  /// Flat amount per completed return pickup. Replaces BASE_PER_DELIVERY for
+  /// RETURN_PICKUP tasks; distance / peak / zone / waiting rules still add.
+  RETURN_PICKUP_PAY
 }
 
 /// Super Admin-configured rider pay rules. `config` shape depends on `kind`

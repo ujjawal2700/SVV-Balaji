@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  Alert, Button, Descriptions, Drawer, Form, Image, Input, InputNumber, Modal, Radio, Select, Skeleton, Space, Table, Tag, Timeline, Typography, message,
+  Alert, Button, Descriptions, Drawer, Form, Image, Input, InputNumber, Modal, Radio, Select, Skeleton, Space, Switch, Table, Tag, Timeline, Typography, message,
 } from 'antd';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,20 +8,25 @@ import { apiErrorMessage } from '@shared/api/client';
 import {
   REFUND_METHOD_LABEL, RETURN_STATUS_COLOR, RETURN_STATUS_LABEL, returnsApi, type RefundMethod, type ReturnChannel, type ReturnDetail,
 } from '@shared/api/returns';
+import { deliveryApi } from '@shared/api/delivery';
 import { useCanKey } from '@shared/auth/useCan';
+import { AssignModal } from '../delivery/DeliveryBoardPage';
 
 const { Text } = Typography;
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const when = (d: string | null | undefined) => (d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '—');
 
-type Field = 'note' | 'reason' | 'reference' | 'logistics' | 'qc' | 'refund';
+type Field = 'note' | 'reason' | 'reference' | 'logistics' | 'schedule' | 'qc' | 'refund';
 
 /** Every action the server may list in `actions`, how it is posted and what it asks for. */
 const ACTIONS: Record<string, { label: string; path: string; fields: Field[]; danger?: boolean; primary?: boolean; perm: 'manage' | 'qc' | 'refund'; confirm?: string }> = {
-  approve: { label: 'Approve', path: 'approve', fields: ['note', 'logistics'], primary: true, perm: 'manage' },
+  approve: { label: 'Approve', path: 'approve', fields: ['logistics', 'schedule', 'note'], primary: true, perm: 'manage' },
   reject: { label: 'Reject', path: 'reject', fields: ['reason'], danger: true, perm: 'manage' },
   cancel: { label: 'Cancel request', path: 'cancel', fields: ['reason'], danger: true, perm: 'manage' },
-  schedulePickup: { label: 'Schedule pickup', path: 'schedule-pickup', fields: [], primary: true, perm: 'manage', confirm: 'Book the rider / courier pickup now?' },
+  schedulePickup: {
+    label: 'Schedule pickup', path: 'schedule-pickup', fields: [], primary: true, perm: 'manage',
+    confirm: 'Rider pickups are offered to the nearest free riders of this store (first to accept gets it); Shiprocket pickups are booked with the courier.',
+  },
   markPickedUp: { label: 'Mark picked up', path: 'picked-up', fields: ['note'], perm: 'manage' },
   markPickupFailed: { label: 'Pickup failed', path: 'pickup-failed', fields: ['reason'], danger: true, perm: 'manage' },
   receive: { label: 'Received at warehouse', path: 'receive', fields: ['note'], primary: true, perm: 'qc' },
@@ -52,6 +57,7 @@ export function ReturnDetailDrawer({ channel, id, onClose, onChanged }: { channe
     try {
       const next = await returnsApi.act(channel, r!.id, ACTIONS[name].path, body);
       if (next.warning) message.warning(next.warning, 8);
+      else if (next.alreadyScheduled) message.info('The pickup was already booked - nothing new was created.');
       else message.success(`${ACTIONS[name].label}: done`);
       setAction(null);
       form.resetFields();
@@ -71,6 +77,7 @@ export function ReturnDetailDrawer({ channel, id, onClose, onChanged }: { channe
       return;
     }
     form.resetFields();
+    if (name === 'approve' && r) form.setFieldsValue({ schedulePickup: true, logistics: r.logistics });
     if (name === 'qc' && r) form.setFieldsValue({ decision: 'ACCEPT', goodQuantity: r.quantity, damagedQuantity: 0 });
     if (name === 'completeRefund' && r) {
       form.setFieldsValue({
@@ -185,13 +192,15 @@ export function ReturnDetailDrawer({ channel, id, onClose, onChanged }: { channe
               ]} />
           ) : null}
 
+          <LiveRiderTrip r={r} onChanged={() => { onChanged(); void q.refetch(); }} />
+
           {r.riderTasks.length ? (
             <Table size="small" pagination={false} rowKey="id" title={() => 'Rider trips'}
               dataSource={r.riderTasks}
               columns={[
                 { title: 'Task', dataIndex: 'taskNumber' },
                 { title: 'Kind', dataIndex: 'kind', render: (k: string) => (k === 'RETURN_PICKUP' ? 'Pickup' : 'Replacement') },
-                { title: 'Rider', key: 'rider', render: (_, t) => t.rider?.fullName ?? <Text type="secondary">waiting</Text> },
+                { title: 'Rider', key: 'rider', render: (_, t) => (t.rider ? `${t.rider.fullName} · ${t.rider.phone}` : <Text type="secondary">—</Text>) },
                 { title: 'Status', dataIndex: 'status', render: (s: string) => <Tag>{s.replace(/_/g, ' ').toLowerCase()}</Tag> },
                 { title: 'Failure', key: 'f', render: (_, t) => t.failureReasonCode ? `${t.failureReasonCode}${t.failureNote ? ` - ${t.failureNote}` : ''}` : '' },
               ]} />
@@ -225,6 +234,12 @@ export function ReturnDetailDrawer({ channel, id, onClose, onChanged }: { channe
           {fields.includes('logistics') ? (
             <Form.Item name="logistics" label="Collect via" extra="Defaults to how the order was delivered">
               <Select allowClear options={[{ value: 'QUICK_DELIVERY', label: 'Rider (Quick Delivery)' }, { value: 'SHIPROCKET', label: 'Shiprocket reverse pickup' }]} />
+            </Form.Item>
+          ) : null}
+          {fields.includes('schedule') ? (
+            <Form.Item name="schedulePickup" label="Schedule pickup now" valuePropName="checked"
+              extra="On: a rider pickup is broadcast to the store's nearest free riders straight away (or the courier is booked). Off: approve only - use Schedule pickup later.">
+              <Switch />
             </Form.Item>
           ) : null}
           {fields.includes('note') ? <Form.Item name="note" label="Note"><Input.TextArea rows={2} maxLength={500} /></Form.Item> : null}
@@ -268,5 +283,73 @@ export function ReturnDetailDrawer({ channel, id, onClose, onChanged }: { channe
         </Form>
       </Modal>
     </Drawer>
+  );
+}
+
+const LIVE = ['READY_FOR_PICKUP', 'OFFERED', 'ASSIGNED', 'AT_PICKUP', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'AT_DROP'];
+
+/**
+ * The rider trip still in play: who it is offered to, or that nobody took it -
+ * with the staff override (assign a rider by hand, or broadcast again) right
+ * here instead of on the Delivery Board.
+ */
+function LiveRiderTrip({ r, onChanged }: { r: ReturnDetail; onChanged: () => void }) {
+  const can = useCanKey();
+  const [assigning, setAssigning] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const t = [...r.riderTasks].reverse().find((x) => LIVE.includes(x.status));
+  if (!t) return null;
+  const canManage = can('deliveryTasks.manage');
+  const waiting = !t.rider && ['READY_FOR_PICKUP', 'OFFERED'].includes(t.status);
+  const what = t.kind === 'RETURN_PICKUP' ? 'Return pickup' : 'Replacement delivery';
+
+  const rebroadcast = async () => {
+    setBusy(true);
+    try {
+      await deliveryApi.redispatch(t.id);
+      message.success('Offered to riders again');
+      onChanged();
+    } catch (e) {
+      message.error(apiErrorMessage(e), 6);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  let alert: { type: 'info' | 'warning' | 'success'; message: string; description?: string };
+  if (t.rider) {
+    alert = { type: 'success', message: `${what} ${t.taskNumber}: ${t.rider.fullName} (${t.rider.phone}) · ${t.status.replace(/_/g, ' ').toLowerCase()}` };
+  } else if (t.autoDispatchPaused) {
+    alert = { type: 'warning', message: `${what} ${t.taskNumber}: auto-offer paused - assign a rider` };
+  } else if (t.needsManualAssignment) {
+    alert = {
+      type: 'warning',
+      message: `${what} ${t.taskNumber}: no rider accepted`,
+      description: t.offerRound ? `Offered in ${t.offerRound} round${t.offerRound === 1 ? '' : 's'} with no taker. Assign a rider yourself or broadcast it again.` : 'No rider of this store is available right now. Assign one yourself or broadcast again later.',
+    };
+  } else {
+    alert = {
+      type: 'info',
+      message: `${what} ${t.taskNumber}: ${t.openOffers ? `showing to ${t.openOffers} nearby rider${t.openOffers === 1 ? '' : 's'}` : 'finding the nearest rider'}${t.offerRound ? ` · round ${t.offerRound}` : ''}`,
+      description: 'The first rider to accept gets it. If nobody does, it comes back here for you to assign.',
+    };
+  }
+
+  return (
+    <>
+      <Alert
+        type={alert.type}
+        showIcon
+        message={alert.message}
+        description={alert.description}
+        action={canManage && waiting ? (
+          <Space direction="vertical">
+            <Button size="small" type="primary" onClick={() => setAssigning(true)}>Assign rider</Button>
+            {t.needsManualAssignment || t.autoDispatchPaused ? <Button size="small" loading={busy} onClick={() => void rebroadcast()}>Broadcast again</Button> : null}
+          </Space>
+        ) : undefined}
+      />
+      <AssignModal open={assigning} task={{ id: t.id, warehouse: { id: '', name: r.warehouse.name } }} onClose={() => setAssigning(false)} onAssigned={onChanged} />
+    </>
   );
 }

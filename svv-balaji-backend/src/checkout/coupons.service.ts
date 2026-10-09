@@ -59,6 +59,16 @@ export class CouponsService {
     return this.prisma.coupon.update({ where: { id }, data: this.data(rest) });
   }
 
+  /** Only a coupon nobody has used: redemptions are part of order history (switch a used one off instead). */
+  async remove(id: string) {
+    const existing = await this.prisma.coupon.findUnique({ where: { id }, include: { _count: { select: { redemptions: true } } } });
+    if (!existing) throw new NotFoundException('Coupon not found');
+    if (existing._count.redemptions > 0) {
+      throw new ConflictException(`${existing.code} has been used on ${existing._count.redemptions} order(s) - switch it off instead of deleting it`);
+    }
+    await this.prisma.coupon.delete({ where: { id } });
+  }
+
   private data(dto: Partial<CreateCouponDto>): Prisma.CouponUncheckedCreateInput {
     return {
       ...(dto as Prisma.CouponUncheckedCreateInput),

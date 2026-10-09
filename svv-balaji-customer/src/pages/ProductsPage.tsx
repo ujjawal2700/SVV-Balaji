@@ -33,7 +33,8 @@ export function ProductsPage() {
   const maxPriceParam = searchParams.get('maxPrice');
   const maxPrice = maxPriceParam ? Number(maxPriceParam) : null;
 
-  const [selectedSub, setSelectedSub] = useState<string>('top-picks');
+  // `?sub=<slug>` opens straight on a subcategory (homepage price tiles link here).
+  const [selectedSub, setSelectedSub] = useState<string>(() => searchParams.get('sub') || 'top-picks');
 
   const mainCategory = categories.find((c) => c.id === categoryId);
 

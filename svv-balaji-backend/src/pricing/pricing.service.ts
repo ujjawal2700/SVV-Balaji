@@ -143,6 +143,84 @@ export class PricingService {
    * Anything expired, deactivated, not yet effective, or belonging to the other
    * channel is excluded by the query itself.
    */
+  /** The rules that could price a line - shared by resolve() and resolveMany(). */
+  private candidateWhere(params: {
+    channel: SalesChannel;
+    customerType?: CustomerType;
+    quantity: number;
+    on: Date;
+    variantId?: string | null;
+  }): Prisma.PriceListWhereInput {
+    return {
+      // Null is a value here, not a wildcard. A caller that did not name a
+      // variant gets product-level rules only, so a 5kg rate can never be
+      // charged for a line that asked for the product itself.
+      variantId: params.variantId ?? null,
+      channel: params.channel,
+      isActive: true,
+      minQuantity: { lte: params.quantity },
+      effectiveFrom: { lte: params.on },
+      AND: [
+        // still in force on the date being priced
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gt: params.on } }] },
+        // a rule for this customer type, or a channel-wide one
+        params.customerType
+          ? { OR: [{ customerType: params.customerType }, { customerType: null }] }
+          : { customerType: null },
+      ],
+    };
+  }
+
+  /** Most specific customer type, then the highest quantity break, then the newest. */
+  private static winner<T extends { customerType: CustomerType | null; minQuantity: number; effectiveFrom: Date }>(candidates: T[]): T {
+    return [...candidates].sort((a, b) => {
+      const specificity = Number(b.customerType !== null) - Number(a.customerType !== null);
+      if (specificity !== 0) return specificity;
+      if (b.minQuantity !== a.minQuantity) return b.minQuantity - a.minQuantity;
+      return b.effectiveFrom.getTime() - a.effectiveFrom.getTime();
+    })[0];
+  }
+
+  private static toResolved(winner: { id: string; unitPrice: Prisma.Decimal; gstRatePercent: Prisma.Decimal; currency: string; channel: SalesChannel; customerType: CustomerType | null; minQuantity: number; effectiveFrom: Date }): ResolvedPrice {
+    return {
+      priceListId: winner.id,
+      unitPrice: Number(winner.unitPrice),
+      gstRatePercent: Number(winner.gstRatePercent),
+      currency: winner.currency,
+      channel: winner.channel,
+      appliedRule:
+        `${winner.channel}` +
+        `${winner.customerType ? `/${winner.customerType}` : ''}` +
+        ` from qty ${winner.minQuantity}, effective ${winner.effectiveFrom
+          .toISOString()
+          .slice(0, 10)}`,
+    };
+  }
+
+  /**
+   * resolve() for many products in ONE query (product-level price, quantity 1
+   * by default) - for listings, where a query per product made a 100-product
+   * page wait on hundreds of database round trips. A product with no rule is
+   * simply absent from the map (resolve() would throw for it).
+   */
+  async resolveMany(
+    productIds: string[],
+    params: { channel: SalesChannel; customerType?: CustomerType; quantity?: number; on?: Date },
+  ): Promise<Map<string, ResolvedPrice>> {
+    const out = new Map<string, ResolvedPrice>();
+    if (productIds.length === 0) return out;
+    const rows = await this.prisma.priceList.findMany({
+      where: {
+        productId: { in: [...new Set(productIds)] },
+        ...this.candidateWhere({ ...params, quantity: params.quantity ?? 1, on: params.on ?? new Date() }),
+      },
+    });
+    const byProduct = new Map<string, typeof rows>();
+    for (const r of rows) byProduct.set(r.productId, [...(byProduct.get(r.productId) ?? []), r]);
+    for (const [productId, candidates] of byProduct) out.set(productId, PricingService.toResolved(PricingService.winner(candidates)));
+    return out;
+  }
+
   async resolve(params: {
     productId: string;
     channel: SalesChannel;
@@ -154,25 +232,7 @@ export class PricingService {
     const on = params.on ?? new Date();
 
     const candidates = await this.prisma.priceList.findMany({
-      where: {
-        productId: params.productId,
-        // Null is a value here, not a wildcard. A caller that did not name a
-        // variant gets product-level rules only, so a 5kg rate can never be
-        // charged for a line that asked for the product itself.
-        variantId: params.variantId ?? null,
-        channel: params.channel,
-        isActive: true,
-        minQuantity: { lte: params.quantity },
-        effectiveFrom: { lte: on },
-        AND: [
-          // still in force on the date being priced
-          { OR: [{ effectiveTo: null }, { effectiveTo: { gt: on } }] },
-          // a rule for this customer type, or a channel-wide one
-          params.customerType
-            ? { OR: [{ customerType: params.customerType }, { customerType: null }] }
-            : { customerType: null },
-        ],
-      },
+      where: { productId: params.productId, ...this.candidateWhere({ ...params, on }) },
     });
 
     if (candidates.length === 0) {
@@ -187,26 +247,7 @@ export class PricingService {
       );
     }
 
-    const winner = candidates.sort((a, b) => {
-      const specificity = Number(b.customerType !== null) - Number(a.customerType !== null);
-      if (specificity !== 0) return specificity;
-      if (b.minQuantity !== a.minQuantity) return b.minQuantity - a.minQuantity;
-      return b.effectiveFrom.getTime() - a.effectiveFrom.getTime();
-    })[0];
-
-    return {
-      priceListId: winner.id,
-      unitPrice: Number(winner.unitPrice),
-      gstRatePercent: Number(winner.gstRatePercent),
-      currency: winner.currency,
-      channel: winner.channel,
-      appliedRule:
-        `${winner.channel}` +
-        `${winner.customerType ? `/${winner.customerType}` : ''}` +
-        ` from qty ${winner.minQuantity}, effective ${winner.effectiveFrom
-          .toISOString()
-          .slice(0, 10)}`,
-    };
+    return PricingService.toResolved(PricingService.winner(candidates));
   }
 
   /**

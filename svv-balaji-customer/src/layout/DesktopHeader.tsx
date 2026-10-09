@@ -30,9 +30,13 @@ import { useLoyalty } from '../loyalty/useLoyalty';
 
 import { formatInr } from '../utils/money';
 import { useUnreadNotifications } from '../notifications/useUnreadNotifications';
+import { LocationPicker } from '../location/LocationPicker';
+import { locationLine, useShopperLocation } from '../location/useShopperLocation';
 
 
 export function DesktopHeader() {
+  const shopperLocation = useShopperLocation();
+  const [pickingLocation, setPickingLocation] = useState(false);
   const cart = useCart();
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, isLoggedIn, initialising } = useCustomerAuth();
@@ -294,7 +298,13 @@ export function DesktopHeader() {
             {/* Location Pill */}
             <div
               className="header-location-pill"
+              role="button"
+              tabIndex={0}
+              onClick={() => setPickingLocation(true)}
+              onKeyDown={(e) => e.key === 'Enter' && setPickingLocation(true)}
+              title="Change location"
               style={{
+                cursor: 'pointer',
                 alignItems: 'center',
                 gap: 8,
                 padding: '6px 12px',
@@ -306,9 +316,12 @@ export function DesktopHeader() {
               <EnvironmentOutlined style={{ color: '#059669', fontSize: 15 }} />
               <div>
                 <span style={{ fontSize: 10, color: '#78716c', display: 'block', lineHeight: 1 }}>Delivering to</span>
-                <strong style={{ fontSize: 12, color: '#1c1917' }}>Central Hub, Sec 18</strong>
+                <strong style={{ fontSize: 12, color: shopperLocation ? '#1c1917' : '#ea580c' }}>
+                  {shopperLocation ? locationLine(shopperLocation) : 'Set location'} ▾
+                </strong>
               </div>
             </div>
+            <LocationPicker open={pickingLocation} onClose={() => setPickingLocation(false)} />
           </div>
 
           {/* Clean Omnibar Search */}

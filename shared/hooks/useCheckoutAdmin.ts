@@ -40,10 +40,15 @@ export function useFulfillmentAction<TVars>(fn: (v: TVars) => Promise<unknown>) 
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
+    // Returned, so the action stays pending (button spinning) until the order
+    // and its pick list on screen are re-read - otherwise the old step showed
+    // for a moment with its button live again and staff clicked twice.
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.orders.all });
-      void qc.invalidateQueries({ queryKey: ['pick-plan'] });
       void qc.invalidateQueries({ queryKey: queryKeys.loyalty.all });
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.orders.all }),
+        qc.invalidateQueries({ queryKey: ['pick-plan'] }),
+      ]);
     },
   });
 }

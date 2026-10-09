@@ -15,6 +15,8 @@ export interface FcmMessage {
   notificationId?: string;
   /** Extra string fields the receiving app reads (e.g. `kind: 'OFFER'` keeps the alert on screen). */
   extra?: Record<string, string>;
+  /** Drop the push if it cannot be delivered within this long (default 7 days). A delivery offer dies with its deadline. */
+  ttlSeconds?: number;
 }
 
 export interface FcmResult {
@@ -98,8 +100,8 @@ export class FcmService {
           tokens: chunk,
           data,
           // High urgency wakes a sleeping phone now rather than at its next batch window.
-          webpush: { headers: { Urgency: 'high', TTL: String(7 * 24 * 3600) } },
-          android: { priority: 'high' },
+          webpush: { headers: { Urgency: 'high', TTL: String(msg.ttlSeconds ?? 7 * 24 * 3600) } },
+          android: { priority: 'high', ...(msg.ttlSeconds ? { ttl: msg.ttlSeconds * 1000 } : {}) },
         });
         result.sent += res.successCount;
         result.failed += res.failureCount;

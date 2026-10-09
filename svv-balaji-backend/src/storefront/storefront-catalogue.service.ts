@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CustomerType, SalesChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PricingService } from '../pricing/pricing.service';
+import { PricingService, type ResolvedPrice } from '../pricing/pricing.service';
 
 /** Quantity breaks the retailer tier table is drawn from, when staff defined them. */
 export interface PriceTier {
@@ -56,6 +56,27 @@ export const inclusiveOf = (unitPrice: number, gstRatePercent: number) =>
  * deliberately thin: it exposes nothing beyond what a product page needs, and
  * only for products staff have marked `showOnStorefront`.
  */
+/** Per-product facts a card needs; prefetched in bulk for listings. */
+interface CardFacts {
+  price: { unitPrice: number; unitPriceInclGst: number; gstRatePercent: number; currency: string } | null;
+  availability: { available: number };
+  ratings: { average: number | null; count: number; breakdown: Record<'1' | '2' | '3' | '4' | '5', number> };
+}
+
+function summariseRatings(rows: Array<{ rating: number; _count: { _all: number } }>): CardFacts['ratings'] {
+  const breakdown: Record<'1' | '2' | '3' | '4' | '5', number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+  let count = 0;
+  let sum = 0;
+  for (const r of rows) {
+    const key = String(r.rating) as keyof typeof breakdown;
+    if (!(key in breakdown)) continue;
+    breakdown[key] = r._count._all;
+    count += r._count._all;
+    sum += r.rating * r._count._all;
+  }
+  return { average: count ? Math.round((sum / count) * 10) / 10 : null, count, breakdown };
+}
+
 @Injectable()
 export class StorefrontCatalogueService {
   constructor(
@@ -116,7 +137,7 @@ export class StorefrontCatalogueService {
       orderBy: { name: 'asc' },
     });
 
-    return Promise.all(products.map((p) => this.toCard(p, params)));
+    return this.cards(products, params);
   }
 
   /** Fetch specific list of products by IDs for custom homepage sections. */
@@ -139,7 +160,7 @@ export class StorefrontCatalogueService {
       .map((id) => productMap.get(id))
       .filter((p): p is NonNullable<typeof p> => p !== undefined);
 
-    return Promise.all(orderedProducts.map((p) => this.toCard(p, params)));
+    return this.cards(orderedProducts, params);
   }
 
   /**
@@ -199,12 +220,15 @@ export class StorefrontCatalogueService {
     },
     params: { channel: SalesChannel; customerType?: CustomerType },
     opts: { detailed?: boolean } = {},
+    pre?: CardFacts,
   ) {
-    const [price, availability, ratings] = await Promise.all([
-      this.resolvePriceQuietly(product.id, params),
-      this.availability(product.id),
-      this.ratingSummary(product.id),
-    ]);
+    const [price, availability, ratings] = pre
+      ? [pre.price, pre.availability, pre.ratings]
+      : await Promise.all([
+          this.resolvePriceQuietly(product.id, params),
+          this.availability(product.id),
+          this.ratingSummary(product.id),
+        ]);
 
     const card = {
       id: product.id,
@@ -289,6 +313,49 @@ export class StorefrontCatalogueService {
     };
   }
 
+  /**
+   * Listing cards for many products with THREE queries (prices, stock, ratings)
+   * instead of ~4 per product. Each query is a network round trip, and with the
+   * database in another region a 100-product page used to wait on hundreds of
+   * them. Same figures as toCard's per-product path.
+   */
+  private async cards(products: Array<Parameters<StorefrontCatalogueService['toCard']>[0]>, params: { channel: SalesChannel; customerType?: CustomerType }) {
+    if (products.length === 0) return [];
+    const ids = products.map((p) => p.id);
+    const [prices, stock, ratingRows] = await Promise.all([
+      this.pricing.resolveMany(ids, { channel: params.channel, customerType: params.customerType }).catch(() => new Map<string, ResolvedPrice>()),
+      this.prisma.finishedGoodsStock.findMany({
+        where: {
+          fgBatch: {
+            productId: { in: ids },
+            qaReleased: true,
+            holdStatus: 'ACTIVE',
+            OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }],
+          },
+        },
+        select: { quantity: true, reservedQuantity: true, fgBatch: { select: { productId: true } } },
+      }),
+      this.prisma.productReview.groupBy({ by: ['productId', 'rating'], where: { productId: { in: ids } }, _count: { _all: true } }),
+    ]);
+
+    const available = new Map<string, number>();
+    for (const r of stock) available.set(r.fgBatch.productId, (available.get(r.fgBatch.productId) ?? 0) + (r.quantity - r.reservedQuantity));
+    const ratingsOf = (productId: string) => summariseRatings(ratingRows.filter((r) => r.productId === productId));
+
+    return Promise.all(
+      products.map((p) => {
+        const resolved = prices.get(p.id);
+        return this.toCard(p, params, {}, {
+          price: resolved
+            ? { unitPrice: resolved.unitPrice, unitPriceInclGst: inclusiveOf(resolved.unitPrice, resolved.gstRatePercent), gstRatePercent: resolved.gstRatePercent, currency: resolved.currency }
+            : null,
+          availability: { available: Math.max(0, available.get(p.id) ?? 0) },
+          ratings: ratingsOf(p.id),
+        });
+      }),
+    );
+  }
+
   /** Average (1 decimal) and count of real customer ratings, plus how many gave each star. */
   private async ratingSummary(productId: string) {
     const rows = await this.prisma.productReview.groupBy({
@@ -296,17 +363,7 @@ export class StorefrontCatalogueService {
       where: { productId },
       _count: { _all: true },
     });
-    const breakdown: Record<'1' | '2' | '3' | '4' | '5', number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
-    let count = 0;
-    let sum = 0;
-    for (const r of rows) {
-      const key = String(r.rating) as keyof typeof breakdown;
-      if (!(key in breakdown)) continue;
-      breakdown[key] = r._count._all;
-      count += r._count._all;
-      sum += r.rating * r._count._all;
-    }
-    return { average: count ? Math.round((sum / count) * 10) / 10 : null, count, breakdown };
+    return summariseRatings(rows);
   }
 
   /**

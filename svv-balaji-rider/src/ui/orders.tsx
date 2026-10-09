@@ -109,8 +109,10 @@ export function OfferCard({ offer, onOpen, onAccept, onReject, busy }: { offer: 
           <p className="title ellipsis" style={{ margin: 0 }}>{itemsTitle(offer.items, offer.itemCount)}</p>
           <Countdown until={offer.expiresAt} />
         </div>
-        <div className="meta"><Pin size={15} /> <span className="ellipsis">{offer.dropArea}</span></div>
+        {offer.kind === 'RETURN_PICKUP' ? <div style={{ marginTop: 4 }}><span className="chip orange">↩ Return pickup</span></div> : null}
+        <div className="meta"><Pin size={15} /> <span className="ellipsis">{offer.kind === 'RETURN_PICKUP' ? `Collect from ${offer.dropArea}` : offer.dropArea}</span></div>
         <div className="meta"><Clock size={15} /> <span className="ellipsis">{date(offer.offeredAt)}{offer.cod > 0 ? ` · COD ${inr(offer.cod)}` : ''}</span></div>
+        {offer.estimatedEarning ? <div className="meta" style={{ color: 'var(--green)', fontWeight: 600 }}>You earn {inr(offer.estimatedEarning)}</div> : null}
         <div className="actions" onClick={(e) => e.stopPropagation()}>
           <button className="btn success small" onClick={onAccept} disabled={busy}>Accept</button>
           <button className="btn danger small" onClick={onReject} disabled={busy}>Reject</button>
@@ -153,9 +155,18 @@ export function TaskCard({ t }: { t: TaskSummary }) {
 /** The "order details" pop-up from the design, for a request that has not been accepted yet. */
 export function OfferModal({ offer, onClose, onAccept, onReject, busy, heading }: { offer: Offer | null; onClose: () => void; onAccept: () => void; onReject: () => void; busy: boolean; heading?: string }) {
   if (!offer) return null;
+  const isReturn = offer.kind === 'RETURN_PICKUP';
   return (
     <Modal open onClose={onClose}>
       {heading ? <div className="between" style={{ marginBottom: 10 }}><b style={{ fontSize: 17, color: 'var(--orange-dark)' }}>{heading}</b><button className="icon-btn" aria-label="Close" onClick={onClose}>×</button></div> : null}
+      {isReturn ? (
+        <div style={{ background: 'var(--orange-soft)', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+          <b style={{ color: 'var(--orange-dark)' }}>↩ Return pickup</b>
+          <div style={{ fontSize: 13, color: 'var(--ink)', marginTop: 2 }}>
+            Collect {offer.returnRequest?.type === 'EXCHANGE' ? 'an exchange item' : 'a returned item'} from the customer and bring it to the store. Ask the customer for their 4-digit pickup code.
+          </div>
+        </div>
+      ) : null}
       <div className="block row" style={{ alignItems: 'flex-start' }}>
         <ItemThumb items={offer.items} size={72} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -164,12 +175,12 @@ export function OfferModal({ offer, onClose, onAccept, onReject, busy, heading }
             <Countdown until={offer.expiresAt} />
           </div>
           <div className="between muted" style={{ fontSize: 13, marginTop: 4 }}>
-            <span>{offer.cod > 0 ? <>COD: <b style={{ color: 'var(--ink)' }}>{inr(offer.cod)}</b></> : 'Prepaid'}</span>
+            <span>{isReturn ? 'No cash to collect' : offer.cod > 0 ? <>COD: <b style={{ color: 'var(--ink)' }}>{inr(offer.cod)}</b></> : 'Prepaid'}</span>
             <span>Qty: <b style={{ color: 'var(--ink)' }}>{offer.itemCount}</b></span>
           </div>
           <div className="between muted" style={{ fontSize: 13, marginTop: 2 }}>
             <span className="ellipsis">
-              {offer.kind === 'RETURN_PICKUP' ? <span className="chip orange" style={{ marginRight: 6 }}>Return pickup</span> : offer.kind === 'REPLACEMENT_DELIVERY' ? <span className="chip orange" style={{ marginRight: 6 }}>Exchange</span> : null}
+              {offer.kind === 'REPLACEMENT_DELIVERY' ? <span className="chip orange" style={{ marginRight: 6 }}>Exchange</span> : null}
               #{offer.returnRequest?.requestNumber ?? offer.orderNumber ?? offer.taskNumber}
             </span>
             <span style={{ whiteSpace: 'nowrap' }}>{date(offer.offeredAt)}</span>
@@ -179,23 +190,48 @@ export function OfferModal({ offer, onClose, onAccept, onReject, busy, heading }
           </div>
         </div>
       </div>
-      <div className="block">
-        <div className="kv-title">Location</div>
-        <div className="meta"><Pin size={16} /> {offer.dropArea}</div>
-        <div className="kv-title">Pickup</div>
-        <div className="meta"><Box size={16} /> {offer.pickup.name}{offer.pickup.location ? `, ${offer.pickup.location}` : ''}</div>
-        <div className="kv-title">Contact Us</div>
-        <div className="muted" style={{ fontSize: 13 }}>Customer name and phone are shared once you accept.</div>
-        <div className="kv-title">Payment</div>
-        <div style={{ fontSize: 14, color: 'var(--ink)' }}>{offer.cod > 0 ? <>Cash On Delivery · <b>{inr(offer.cod)}</b></> : 'Prepaid - nothing to collect'}</div>
-        <div className="kv-title">Date & Time</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div><div className="muted" style={{ fontSize: 12 }}>Order Pickup Time</div><div className="meta" style={{ color: 'var(--ink)', fontSize: 14 }}><Clock size={16} /> Ready now</div></div>
-          <div><div className="muted" style={{ fontSize: 12 }}>Delivery Time</div><div className="meta" style={{ color: 'var(--ink)', fontSize: 14 }}><Clock size={16} /> {offer.promisedBy ? time(offer.promisedBy) : 'Today'}</div></div>
+      {offer.estimatedEarning ? (
+        <div className="between" style={{ background: 'var(--green-soft)', borderRadius: 12, padding: '10px 12px', margin: '10px 0' }}>
+          <span style={{ fontSize: 13, color: 'var(--ink)' }}>Your earning{isReturn ? ' for this pickup' : ''}</span>
+          <b style={{ fontSize: 18, color: '#168a55' }}>{inr(offer.estimatedEarning)}</b>
         </div>
+      ) : null}
+      <div className="block">
+        {isReturn ? (
+          <>
+            <div className="kv-title">Collect from (customer)</div>
+            <div className="meta"><Pin size={16} /> {offer.dropArea}</div>
+            <div className="kv-title">Bring to (store)</div>
+            <div className="meta"><Box size={16} /> {offer.pickup.name}{offer.pickup.location ? `, ${offer.pickup.location}` : ''}</div>
+            {offer.returnRequest?.reason ? (
+              <>
+                <div className="kv-title">Return reason</div>
+                <div style={{ fontSize: 14, color: 'var(--ink)' }}>{offer.returnRequest.reason}</div>
+              </>
+            ) : null}
+            <div className="kv-title">Contact Us</div>
+            <div className="muted" style={{ fontSize: 13 }}>Customer name and phone are shared once you accept.</div>
+          </>
+        ) : (
+          <>
+            <div className="kv-title">Location</div>
+            <div className="meta"><Pin size={16} /> {offer.dropArea}</div>
+            <div className="kv-title">Pickup</div>
+            <div className="meta"><Box size={16} /> {offer.pickup.name}{offer.pickup.location ? `, ${offer.pickup.location}` : ''}</div>
+            <div className="kv-title">Contact Us</div>
+            <div className="muted" style={{ fontSize: 13 }}>Customer name and phone are shared once you accept.</div>
+            <div className="kv-title">Payment</div>
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{offer.cod > 0 ? <>Cash On Delivery · <b>{inr(offer.cod)}</b></> : 'Prepaid - nothing to collect'}</div>
+            <div className="kv-title">Date & Time</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div><div className="muted" style={{ fontSize: 12 }}>Order Pickup Time</div><div className="meta" style={{ color: 'var(--ink)', fontSize: 14 }}><Clock size={16} /> Ready now</div></div>
+              <div><div className="muted" style={{ fontSize: 12 }}>Delivery Time</div><div className="meta" style={{ color: 'var(--ink)', fontSize: 14 }}><Clock size={16} /> {offer.promisedBy ? time(offer.promisedBy) : 'Today'}</div></div>
+            </div>
+          </>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-        <button className="btn success medium" onClick={onAccept} disabled={busy}>Confirm</button>
+        <button className="btn success medium" onClick={onAccept} disabled={busy}>{isReturn ? 'Accept pickup' : 'Confirm'}</button>
         <button className="btn danger medium" onClick={onReject} disabled={busy}>Cancel</button>
       </div>
     </Modal>

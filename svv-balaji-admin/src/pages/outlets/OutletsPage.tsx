@@ -29,6 +29,7 @@ import {
   Modal,
   Popconfirm,
   Row,
+  Select,
   Space,
   Statistic,
   Switch,
@@ -45,6 +46,7 @@ import type { PosOutlet, PosOutletInput, PosOutletInventoryRow } from '@shared/a
 import { useAuth } from '@shared/auth/useAuth';
 import { useCan } from '@shared/auth/useCan';
 import { BranchSelect } from '@shared/components/pickers';
+import { DISTRICTS_BY_STATE, INDIAN_STATES } from '@shared/utils/locations';
 import { useDeletePosOutlet, usePosOutlet, usePosOutlets, useSavePosOutlet, useSetPosOutletActive } from '@shared/hooks/usePos';
 import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
@@ -372,12 +374,29 @@ function OutletDetailDrawer({ id, onClose }: { id?: string; onClose: () => void 
   );
 }
 
+/**
+ * Store state drives CGST+SGST vs IGST, so it is saved under the GST name
+ * ("Delhi", not the pick-list's "Delhi (NCT)"). The list also lacks Ladakh and
+ * Andaman & Nicobar, which have GST codes of their own.
+ */
+const plainState = (s: string) => s.replace(/\s*\((UT|NCT)\)$/, '');
+const OUTLET_STATE_OPTIONS = [...INDIAN_STATES.map(plainState), 'Ladakh', 'Andaman and Nicobar Islands']
+  .sort((a, b) => a.localeCompare(b))
+  .map((s) => ({ value: s, label: s }));
+function districtsFor(state: string | undefined): string[] {
+  if (!state) return [];
+  const key = INDIAN_STATES.find((s) => plainState(s) === state || s === state);
+  return (key && DISTRICTS_BY_STATE[key]) || [];
+}
+
 function OutletFormModal({ outlet, onClose }: { outlet: PosOutlet | null; onClose: () => void }) {
   const { message } = AntApp.useApp();
   const { user } = useAuth();
   const save = useSavePosOutlet();
   const [form] = Form.useForm<PosOutletInput>();
   const isEdit = Boolean(outlet);
+  const selectedState = Form.useWatch('state', form);
+  const districtOptions = useMemo(() => districtsFor(selectedState).map((d) => ({ value: d, label: d })), [selectedState]);
 
   useEffect(() => {
     form.setFieldsValue(outlet ?? { posTerminalsCount: 1, defaultOpeningCash: 0, branchId: user?.branchId ?? undefined });
@@ -417,13 +436,35 @@ function OutletFormModal({ outlet, onClose }: { outlet: PosOutlet | null; onClos
           <Form.Item name="branchId" label="Branch" rules={[{ required: true, message: 'Choose the branch' }]}><BranchSelect /></Form.Item>
         ) : null}
         <Row gutter={16}>
-          <Col xs={24} sm={8}><Form.Item name="city" label="City" rules={[{ required: true, min: 2 }]}><Input /></Form.Item></Col>
-          <Col xs={24} sm={8}><Form.Item name="district" label="District"><Input /></Form.Item></Col>
           <Col xs={24} sm={8}>
-            <Form.Item name="state" label="State" rules={[{ required: true, min: 2 }]} extra="Decides CGST+SGST vs IGST on this store's invoices">
-              <Input placeholder="e.g. Maharashtra" />
+            <Form.Item name="state" label="State" rules={[{ required: true, message: 'Choose the state' }]} extra="Decides CGST+SGST vs IGST on this store's invoices">
+              <Select
+                showSearch
+                allowClear
+                placeholder="Search state"
+                optionFilterProp="label"
+                options={OUTLET_STATE_OPTIONS}
+                onChange={() => form.setFieldValue('district', undefined)}
+              />
             </Form.Item>
           </Col>
+          <Col xs={24} sm={8}>
+            <Form.Item name="district" label="District">
+              {selectedState && districtOptions.length === 0 ? (
+                <Input placeholder="Type the district" />
+              ) : (
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder={selectedState ? 'Search district' : 'Choose a state first'}
+                  disabled={!selectedState}
+                  optionFilterProp="label"
+                  options={districtOptions}
+                />
+              )}
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={8}><Form.Item name="city" label="City" rules={[{ required: true, min: 2 }]}><Input /></Form.Item></Col>
         </Row>
         <Row gutter={16}>
           <Col xs={24} sm={16}><Form.Item name="address" label="Address" rules={[{ required: true, min: 3 }]}><Input.TextArea rows={2} /></Form.Item></Col>

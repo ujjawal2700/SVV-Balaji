@@ -33,7 +33,8 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z&]+/g, ' ').trim();
 
 export function stateCodeFromName(name: string | null | undefined): string | null {
   if (!name) return null;
-  const n = norm(name);
+  // Pick-lists label union territories "Delhi (NCT)", "Chandigarh (UT)".
+  const n = norm(name.replace(/\((ut|nct)\)/i, ''));
   if (!n) return null;
   if (STATE_ALIASES[n]) return STATE_ALIASES[n];
   const hit = Object.entries(GST_STATES).find(([, v]) => norm(v) === n);

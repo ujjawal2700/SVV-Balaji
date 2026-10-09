@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, RawBodyRequest, Req, UnauthorizedException, UseGuards, UseInterceptors,
+  Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, RawBodyRequest, Req, UnauthorizedException, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
@@ -77,6 +77,7 @@ export class CouponsAdminController {
   @Get() @RequirePermission('coupons.view') list() { return this.coupons.list(); }
   @Post() @RequirePermission('coupons.manage') create(@Body() dto: CreateCouponDto) { return this.coupons.create(dto); }
   @Patch(':id') @RequirePermission('coupons.manage') update(@Param('id') id: string, @Body() dto: UpdateCouponDto) { return this.coupons.update(id, dto); }
+  @Delete(':id') @RequirePermission('coupons.manage') remove(@Param('id') id: string) { return this.coupons.remove(id); }
 }
 
 /** Staff actions on a placed order. Every one goes through SalesService.advance, which enforces the order of steps. */

@@ -2,10 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { QUERY_STATS, requestStatsMiddleware } from './common/request-stats';
 
 async function bootstrap() {
   // rawBody: payment webhooks are authenticated by an HMAC over the exact bytes received.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  if (QUERY_STATS) app.use(requestStatsMiddleware);
 
   app.useGlobalPipes(
     new ValidationPipe({

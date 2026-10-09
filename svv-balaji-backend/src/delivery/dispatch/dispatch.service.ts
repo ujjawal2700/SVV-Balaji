@@ -100,7 +100,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     await this.notifyMany([riderId], type, title, body, taskId);
   }
 
-  async notifyMany(riderIds: string[], type: string, title: string, body: string, taskId?: string) {
+  async notifyMany(riderIds: string[], type: string, title: string, body: string, taskId?: string, ttlSeconds?: number) {
     if (!riderIds.length) return;
     for (const riderId of riderIds) {
       const n = await this.prisma.riderNotification.create({ data: { riderId, type, title, body, taskId } });
@@ -113,6 +113,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       link: type === 'OFFER' ? '/' : taskId ? `/task/${taskId}` : '/notifications',
       tag: urgent && taskId ? `${type.toLowerCase()}-${taskId}` : `rider-${type.toLowerCase()}`,
       extra: { kind: type, ...(taskId ? { taskId } : {}) },
+      ttlSeconds,
     });
   }
 
@@ -270,9 +271,14 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   private taskFacts(task: DeliveryTask & { warehouse: { latitude: Prisma.Decimal | null; longitude: Prisma.Decimal | null } }, weightKg: number | null, tried: Iterable<string>): TaskFacts {
+    // A return pickup starts at the customer's door, so "nearest rider" means
+    // nearest to the customer; everything else starts at the outlet.
+    const fromCustomer = task.kind === 'RETURN_PICKUP' && task.dropLatitude !== null && task.dropLongitude !== null;
     return {
       warehouseId: task.warehouseId,
-      pickup: task.warehouse.latitude !== null && task.warehouse.longitude !== null ? { lat: Number(task.warehouse.latitude), lng: Number(task.warehouse.longitude) } : null,
+      pickup: fromCustomer
+        ? { lat: Number(task.dropLatitude), lng: Number(task.dropLongitude) }
+        : task.warehouse.latitude !== null && task.warehouse.longitude !== null ? { lat: Number(task.warehouse.latitude), lng: Number(task.warehouse.longitude) } : null,
       weightKg,
       triedRiderIds: new Set(tried),
     };
@@ -319,10 +325,21 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
         if (weightKg !== null) await tx.deliveryTask.update({ where: { id: taskId }, data: { weightKg } });
       }
 
-      const tried = await tx.deliveryOffer.findMany({ where: { taskId, status: { in: SAID_NO } }, select: { riderId: true } });
+      const tried = await tx.deliveryOffer.findMany({ where: { taskId, status: { in: SAID_NO } }, select: { riderId: true, status: true } });
       const facts = await this.riderFacts(tx, { warehouseId: task.warehouseId, status: RiderStatus.ACTIVE, availability: RiderAvailability.ONLINE });
       const ranked = rankRiders(facts, rules, this.taskFacts(task, weightKg, tried.map((t) => t.riderId)));
-      const eligible = ranked.filter((a) => a.eligible);
+      let eligible = ranked.filter((a) => a.eligible);
+      // Riders not yet asked always come first. When none are left, a rider who
+      // only MISSED the request (phone in a pocket, alert not heard) is asked
+      // again in the next round - one missed 45 s window must not send the order
+      // to staff while the outlet's only rider is online. A rider who REJECTED
+      // it is never asked again. The round limit still applies.
+      let again = false;
+      if (eligible.length === 0 && tried.some((t) => t.status === 'EXPIRED')) {
+        const rejected = tried.filter((t) => t.status === 'REJECTED').map((t) => t.riderId);
+        eligible = rankRiders(facts, rules, this.taskFacts(task, weightKg, rejected)).filter((a) => a.eligible);
+        again = eligible.length > 0;
+      }
 
       if (eligible.length === 0) return toStaff(tried.length ? `No rider accepted (${tried.length} asked)` : 'No available rider');
       if (!opts.ignoreRoundLimit && task.offerRound >= s.maxOfferRounds) return toStaff(`No rider accepted in ${task.offerRound} round${task.offerRound === 1 ? '' : 's'}`);
@@ -335,7 +352,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       for (const p of picks) offers.push(await tx.deliveryOffer.create({ data: { taskId, riderId: p.riderId, round, expiresAt } }));
       const updated = await tx.deliveryTask.update({ where: { id: taskId }, data: { status: 'OFFERED', offerRound: round, needsManualAssignment: false } });
       const who = picks.map((p) => `${byId.get(p.riderId)?.fullName ?? 'rider'}${p.km !== null ? ` (${p.km.toFixed(1)} km)` : ''}`).join(', ');
-      await this.log(taskId, 'OFFERED', { note: `Round ${round}: offered to ${who}` }, tx);
+      await this.log(taskId, 'OFFERED', { note: `Round ${round}: offered ${again ? 'again ' : ''}to ${who}` }, tx);
       return { manual: false as const, task: updated, offers, round };
     }, LONG_TX);
 
@@ -345,7 +362,13 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       return outcome;
     }
     for (const o of outcome.offers) this.events.publish({ kind: 'offer:new', riderId: o.riderId, offerId: o.id, taskId });
-    await this.notifyMany(outcome.offers.map((o) => o.riderId), 'OFFER', 'New delivery request', `Pickup ready - accept within ${s.offerTimeoutSeconds}s`, taskId);
+    const [title, body] =
+      outcome.task.kind === 'RETURN_PICKUP'
+        ? ['New return pickup', `Collect a return from a customer - accept within ${s.offerTimeoutSeconds}s`]
+        : outcome.task.kind === 'REPLACEMENT_DELIVERY'
+          ? ['New exchange delivery', `Replacement ready at the store - accept within ${s.offerTimeoutSeconds}s`]
+          : ['New delivery request', `Pickup ready - accept within ${s.offerTimeoutSeconds}s`];
+    await this.notifyMany(outcome.offers.map((o) => o.riderId), 'OFFER', title, body, taskId, s.offerTimeoutSeconds);
     this.changed(outcome.task);
     return outcome;
   }

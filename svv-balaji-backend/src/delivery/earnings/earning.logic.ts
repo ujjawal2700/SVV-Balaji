@@ -11,6 +11,9 @@
  *     compensation), so a zone can have its own rate card.
  *   - PEAK_HOUR, ZONE_INCENTIVE, WAITING_TIME: every applicable rule adds up.
  *   - DAILY_TARGET / WEEKLY_TARGET: one-off bonuses per target reached.
+ *   - RETURN_PICKUP_PAY: on a RETURN_PICKUP task it stands in for
+ *     BASE_PER_DELIVERY (zone rule beats all-zones rule, as for base pay).
+ *     With no such rule a return pickup is paid like a delivery.
  */
 
 export type RuleKind =
@@ -21,7 +24,10 @@ export type RuleKind =
   | 'DAILY_TARGET'
   | 'WEEKLY_TARGET'
   | 'WAITING_TIME'
-  | 'OUTCOME_COMPENSATION';
+  | 'OUTCOME_COMPENSATION'
+  | 'RETURN_PICKUP_PAY';
+
+export type TaskKind = 'ORDER_DELIVERY' | 'RETURN_PICKUP' | 'REPLACEMENT_DELIVERY';
 
 export type EarningType = 'BASE' | 'DISTANCE' | 'PEAK' | 'ZONE_INCENTIVE' | 'DAILY_BONUS' | 'WEEKLY_BONUS' | 'WAITING' | 'OUTCOME';
 
@@ -58,6 +64,8 @@ export interface TaskContext {
   taskId: string;
   riderId: string;
   zoneId: string | null;
+  /** Defaults to ORDER_DELIVERY. Decides which base-pay rule applies. */
+  kind?: TaskKind;
   /** 'DELIVERED' or the failure/cancellation outcome. */
   result: 'DELIVERED' | Outcome;
   distanceKm: number | null;
@@ -103,6 +111,7 @@ const positive = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && 
 export function validateConfig(kind: RuleKind, c: Record<string, unknown>, zoneId: string | null): string | null {
   switch (kind) {
     case 'BASE_PER_DELIVERY':
+    case 'RETURN_PICKUP_PAY':
       return positive(c.amount) ? null : 'amount must be a number >= 0';
     case 'DISTANCE_SLAB': {
       const slabs = c.slabs as Array<{ uptoKm: number | null; amount: number }> | undefined;
@@ -221,7 +230,9 @@ export function slabAmount(config: Record<string, unknown>, distanceKm: number |
 
 function deliveryParts(rules: Rule[], ctx: TaskContext): EarningLine[] {
   const out: EarningLine[] = [];
-  for (const r of mostSpecific(rules.filter((x) => x.kind === 'BASE_PER_DELIVERY'))) {
+  const returnPay = ctx.kind === 'RETURN_PICKUP' ? rules.filter((x) => x.kind === 'RETURN_PICKUP_PAY') : [];
+  const base = returnPay.length ? returnPay : rules.filter((x) => x.kind === 'BASE_PER_DELIVERY');
+  for (const r of mostSpecific(base)) {
     out.push({ type: 'BASE', amount: r2(num(r.config.amount)), ruleId: r.id, dedupeKey: `task:${ctx.taskId}:${r.id}`, detail: { rule: r.name } });
   }
   for (const r of mostSpecific(rules.filter((x) => x.kind === 'DISTANCE_SLAB'))) {
@@ -283,6 +294,16 @@ export function taskEarnings(allRules: Rule[], ctx: TaskContext): EarningLine[] 
     if (ctx.result.startsWith('FAILED_')) lines.push(...waiting(rules, ctx));
   }
   return lines.filter((l) => l.amount > 0);
+}
+
+/**
+ * What the rider will earn if they complete this task now - shown on the offer
+ * card before they accept. Same rules as taskEarnings for a delivered task,
+ * minus waiting (not known yet) and target bonuses (depend on their day).
+ */
+export function estimateEarning(allRules: Rule[], ctx: Omit<TaskContext, 'result' | 'waitPickupMinutes' | 'waitDropMinutes'>): number {
+  const lines = taskEarnings(allRules, { ...ctx, result: 'DELIVERED', waitPickupMinutes: null, waitDropMinutes: null });
+  return r2(lines.reduce((s, l) => s + l.amount, 0));
 }
 
 /**

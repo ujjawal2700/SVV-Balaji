@@ -106,6 +106,9 @@ export interface DeliveryTaskRow {
   warehouse: { id: string; name: string };
   zone: { id: string; name: string; code: string } | null;
   order: { id: string; orderNumber: string; status: string; paymentMode: string | null; paymentStatus: string; total: string } | null;
+  kind?: 'ORDER_DELIVERY' | 'RETURN_PICKUP' | 'REPLACEMENT_DELIVERY';
+  /** Set on return pickups / exchange deliveries - these trips carry no order of their own. */
+  returnRequest?: { id: string; requestNumber: string; type: 'RETURN' | 'EXCHANGE'; channel: 'B2C' | 'B2B' } | null;
 }
 
 export interface DeliveryTaskDetail extends DeliveryTaskRow {
@@ -181,7 +184,8 @@ export interface FailureReason {
 }
 
 export type EarningRuleKind =
-  | 'BASE_PER_DELIVERY' | 'DISTANCE_SLAB' | 'PEAK_HOUR' | 'ZONE_INCENTIVE' | 'DAILY_TARGET' | 'WEEKLY_TARGET' | 'WAITING_TIME' | 'OUTCOME_COMPENSATION';
+  | 'BASE_PER_DELIVERY' | 'DISTANCE_SLAB' | 'PEAK_HOUR' | 'ZONE_INCENTIVE' | 'DAILY_TARGET' | 'WEEKLY_TARGET' | 'WAITING_TIME' | 'OUTCOME_COMPENSATION'
+  | 'RETURN_PICKUP_PAY';
 
 export interface EarningRule {
   id: string;

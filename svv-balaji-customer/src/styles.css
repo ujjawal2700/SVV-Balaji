@@ -815,9 +815,9 @@ select {
 }
 
 .home-logo-box {
-  width: 40px;
-  height: 40px;
-  padding: 3px;
+  width: 64px;
+  height: 42px;
+  padding: 2px 4px;
   border-radius: 10px;
   background: #fafaf9;
   border: 1px solid #f1f5f9;
@@ -828,8 +828,8 @@ select {
 }
 
 .home-logo-img {
-  width: 32px;
-  height: 32px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
@@ -930,12 +930,8 @@ select {
     gap: 6px !important;
   }
   .home-logo-box {
-    width: 36px !important;
-    height: 36px !important;
-  }
-  .home-logo-img {
-    width: 28px !important;
-    height: 28px !important;
+    width: 56px !important;
+    height: 38px !important;
   }
   .home-carousel-slide {
     min-height: 105px !important;

@@ -27,6 +27,12 @@ export interface StaffAlert {
   permission: string;
   /** Branch-scoped work (orders): Super Admin plus that branch's staff only. */
   branchId?: string | null;
+  /**
+   * Notification tag. One per thing (e.g. `new_order-<orderId>`) so the system
+   * notification the open dashboard raises and the web push for the same order
+   * collapse into one. Default: unique per alert.
+   */
+  tag?: string;
 }
 
 /** What the admin socket and the browser push carry. */
@@ -87,7 +93,7 @@ export class StaffAlertsService implements OnModuleInit {
         title: alert.title,
         body: alert.body,
         link: alert.link,
-        tag: `${alert.type.toLowerCase()}-${Date.now()}`,
+        tag: alert.tag ?? `${alert.type.toLowerCase()}-${Date.now()}`,
       };
       this.gateway.alertUsers(ids, payload);
       await this.push.sendAlert(await this.push.subscriptionsFor(ids), payload);
@@ -107,6 +113,7 @@ export class StaffAlertsService implements OnModuleInit {
         link: `/${o.channel === 'B2B' ? 'b2b' : 'b2c'}-orders/${o.id}`,
         permission: 'orders.view',
         branchId: o.branchId,
+        tag: `new_order-${o.id}`,
       });
     } catch (error) {
       this.logger.warn(`New-order alert ${orderId} failed: ${error instanceof Error ? error.message : String(error)}`);

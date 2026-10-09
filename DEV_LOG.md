@@ -3810,3 +3810,156 @@ invalid pincode -> 400; repeat pincode answered from cache (7 ms). Screenshot of
 
 **Still fake, not touched:** the header "Delivering to Central Hub, Sec 18" (HomePage.tsx:221, DesktopHeader.tsx) is
 hard-coded text; the cart's pre-quote delivery estimate falls back to an invented "₹50 under ₹500" before an address is chosen.
+
+## 2026-10-09 — Home Sections product picker redesigned (Raunak, via agent)
+
+Admin → Homepage Sections drawer: the "Select Products to Display" multi-select dropdown is replaced by
+`svv-balaji-admin/src/pages/home-sections/ProductPicker.tsx` (a Form.Item control, same `productIds: string[]` value - no
+API change). It has a search box (name / SKU / brand / pack size), Main category and Sub-category filters (sub list narrows
+to the chosen main; derived from `product.category` + `category.parent`), "Select all shown" with indeterminate state,
+"Selected only" toggle, and a checkbox list with thumbnail, pack, SKU and category › sub-category. A tray on top shows the
+picked products numbered in selection order (that order is what's saved) with one-click remove / Clear all. Drawer widened
+600 → 760. Also removed unused imports in `HomeSectionsPage.tsx`. admin tsc + eslint clean (one pre-existing hook warning).
+
+## 2026-10-09 (later) — Homepage sections fully admin-managed; outlet State/District pickers (Raunak, via agent)
+
+**Homepage.** "Best of the Basics", the "Starting from ₹X" price strip and "Popular Products" were hard-coded in the
+customer `HomePage.tsx` and invisible in Admin → Homepage Sections. `HomeSection` now has `kind`
+(`PRODUCTS` hand-picked | `DAILY_STAPLES` | `TOP_PICKS` auto from the product flags | `PRICE_DEALS` tiles), `layout`
+(`SHELF` | `GRID`), `productLimit` and `tiles` (JSON). Migration `20261009100000_home_section_kinds` adds the columns and
+**inserts the three former blocks as rows** (positions 10/20/30, same copy). `GET /storefront/home-sections` now returns
+`kind`, `layout`, `tiles[]` (with `categorySlug` / `parentCategorySlug`) and drops empty sections; admin list previews
+products for auto kinds too. Customer HomePage renders only these sections (one `ManagedSection` renderer, old card
+markup kept). Admin drawer: section-type selector, card style, price-tile editor (`PriceTilesEditor.tsx`, live preview,
+category link, colour). Also fixed: section "View All" linked to `/products` (no such route) - removed; `ProductsPage`
+accepts `?sub=<slug>` so a tile can open a sub-category.
+
+**Deploy:** run `prisma migrate deploy` on the hosted DB and restart the API (the running dev API locked the Prisma
+engine DLL, so `prisma generate` wrote types but not the DLL - restart picks it up). Verified on throwaway DB
+`svv_homesec_e2e` + API on :3110: the three sections come back, PATCH with a sub-category tile resolves
+`/products/atta-flour?sub=chakki-atta`, bad colour → 400.
+
+**Outlets.** Register/Edit store: State and District are searchable dropdowns (district list follows the state; free
+text for states with no list). State saves the GST name ("Delhi", not "Delhi (NCT)") and adds Ladakh / Andaman.
+`stateCodeFromName` now also ignores a "(UT)"/"(NCT)" suffix (spec updated, 20/20).
+
+## 2026-10-09 (evening) — Return pickups broadcast like orders, with rider pay, safe scheduling and manual fallback (Raunak, via agent)
+
+- **Pay:** new earning rule kind `RETURN_PICKUP_PAY` (migration `20261009120000_return_pickup_pay`, `{ amount }`, zone rule beats
+  all-zones). On a RETURN_PICKUP task it replaces BASE_PER_DELIVERY; distance/peak/zone/waiting still add; no rule = paid like a
+  delivery. Admin → Delivery Settings → Earning rules. `earning.logic.ts` gains `TaskContext.kind` + `estimateEarning()` (spec +6).
+- **Offer card:** `GET /rider/offers` now returns `estimatedEarning` (all offers) and `returnRequest.reason`. Rider app offer card /
+  modal has a return-pickup layout (Collect from customer → Bring to store, no COD, pickup-code hint, "Your earning ₹X"). Push
+  title is "New return pickup" / "New exchange delivery".
+- **Dispatch:** RETURN_PICKUP ranks riders by distance to the *customer* (its first stop), still only the outlet's riders.
+- **Race / idempotency:** `schedulePickup` locks the return row (`FOR UPDATE`) for the whole booking, Shiprocket call included;
+  a repeat returns 200 with `alreadyScheduled: true` instead of a second trip / AWB.
+- **Admin:** Approve modal has "Schedule pickup now" switch. Return drawer shows the live trip (showing to N riders / round /
+  no rider accepted) with **Assign rider** (ranked, reuses Delivery Board `AssignModal`, now exported) and **Broadcast again**.
+  Delivery Board labels return trips "Return pickup · RET-…" (`tasks` / `task` include `returnRequest`).
+- Verified on throwaway DB `svv_return_e2e` + API :3110: `e2e-returns-flow.py` ALL PASSED; extra check: 6 concurrent
+  schedule-pickup → 1 trip + 5 replays; offer shows return pay + reason; reject → needs assignment → manual assign. jest
+  returns + delivery 103/103.
+- **Deploy:** `prisma migrate deploy` (this + 20261009100000_home_section_kinds), restart API.
+
+## 2026-10-09 (late) — Admin sidebar: GSTR-1 → Administration, Sales Analytics → Overview (Raunak, via agent)
+
+`navigation.tsx`: `/gst-returns` (GSTR-1) is now the first item under **Administration**; `/reports` (Sales Analytics) sits under
+**Overview**, right after Dashboard. The emptied "Reports & Analytics" group is removed. Permissions and the `commerce` zone tag
+are unchanged, so both still show only in the Customer & Retail zone, to roles that already had them.
+
+## 2026-10-09 (night) — Storefront header: readable logo, location instead of GST (Raunak, via agent)
+
+Customer app. The Desi Tokri logo is landscape (380×209) but was forced into a 32×32 box; `.home-logo-box/.home-logo-img`
+now give it a 64×42 landscape box. Retailer mobile header no longer shows GSTIN (it is on the profile); the second line is the
+shopper's location ("📍 Arera Colony, Bhopal ▾", or "Set your location"). New `src/location/` - `useShopperLocation`
+(per-device, localStorage, shared store) + `LocationPicker` (use current location → `/storefront/maps/reverse`; search →
+Places via our API; pick a saved address; or type area/city/pincode). A retailer with no location is asked once per visit.
+The hard-coded "Central Hub, Sec 18" in the consumer mobile header and the desktop header pill now use the same location.
+Display only - checkout still decides delivery from the chosen address.
+
+## 2026-10-09 (night) — Cart coupons created in Admin now actually exist (Raunak, via agent)
+
+**Bug:** Admin → Schemes & Offers → Customer Cart Coupons saved coupons in the admin's browser localStorage
+(`shared/api/coupons.ts`, key `svv_balaji_coupons_v1`, with 4 demo coupons). The server never had them, so the storefront's
+offers list (`GET /storefront/coupons`) and checkout's validation never found the code → "invalid or expired" for every
+customer and retailer. **Fix:** `shared/api/coupons.ts` now calls the real `/coupons` API (same function names, mapping
+PERCENTAGE↔PERCENT, discountValue↔value, targetAudience↔audience; the picked expiry date is valid to 23:59 IST that day).
+Backend: new `DELETE /coupons/:id` - refused (409) once the coupon has redemptions; switch it off instead.
+**Action:** coupons created before this fix lived only in one browser - re-create them in Admin.
+Verified on throwaway DB: admin-created coupon appears in the customer offers list; `validate` gives ₹50 off for B2C and
+B2B, enforces the minimum order and expires after its day; unused coupon deletes.
+
+## 2026-10-09 (night) — Order actions no longer invite double clicks (Raunak, via agent)
+
+Admin order screen: after Start packing / Verify batch / Assign rider / Ship / Confirm / Allocate / Pack / Dispatch, the
+button came back as soon as the server answered, but the order was only re-read in the background - so for a moment the page
+still showed the previous step (e.g. "1 of 1 batch still to scan" beside a ✓ Scanned row) with its button live, and staff
+clicked again. `shared/hooks/useCheckoutAdmin.ts` `useFulfillmentAction` and `shared/hooks/useSales.ts`
+`invalidateOrderWorld` now RETURN the order (+ pick list) refetch from onSuccess, so the mutation stays pending - button
+spinning/disabled - until the screen shows the new step. Other caches (customers, receivables, stock, loyalty) still refresh
+in the background. Server-side the transitions were already refused when out of order, so a repeat click never corrupted data.
+
+## 2026-10-09 (night) — Rider offers: a missed offer is offered again (Raunak, via agent)
+
+**Investigation (read-only on the live DB):** retailer order SO-20261009-001 (LOCAL, Corporate warehouse) WAS broadcast:
+offered to the only online rider (Raunak, 1.5 km) at 09:06:56, 45 s window, expired unanswered, and the task went straight to
+NEEDS_ASSIGNMENT ("No rider accepted (1 asked)") although maxOfferRounds = 5 - because a rider who let an offer EXPIRE was
+excluded exactly like one who REJECTED. The rider's phone (Pixel 10) is registered for push; FCM is sent high-priority.
+**Fix (`dispatch.service.ts`):** riders not yet asked still go first; when none are left, riders who only *missed* it are
+offered it again next round (log: "Round N: offered again to …"), up to maxOfferRounds; REJECTED riders are never re-asked.
+Offer pushes now carry TTL = offerTimeoutSeconds (`FcmMessage.ttlSeconds`), so a phone coming online late is not rung for a
+dead offer. Verified: `e2e-broadcast-dispatch-flow.py` steps 1-11 unchanged + new step 12 (all miss round 1 → round 2
+re-offers → accept → ASSIGNED), 73 PASS on throwaway DB `svv_dispatch_e2e`; jest delivery 85/85.
+**Check on the hosted API:** push needs `FIREBASE_SERVICE_ACCOUNT_JSON` in Render's env (the local
+`firebase-service-account.json` is gitignored, so it is not deployed).
+
+## 2026-10-09 (night) — Rider accept window 60 s (Raunak, via agent)
+
+`DeliverySettings.offerTimeoutSeconds` default 45 → 60. Migration `20261009140000_offer_timeout_60s` sets the column default
+and moves a setting still at 45 to 60 (a different value chosen by Super Admin is kept). Still editable in Admin → Delivery
+Settings → "Seconds riders have to accept" (10-600). Verified on throwaway DB; no schema drift.
+
+## 2026-10-09 (night) — Admin new-order chime + logo on the pop-up (Raunak, via agent)
+
+Admin panel: every new order (socket `orders:new`, and orders caught up after a reconnect) plays the client's chosen sound
+`svv-balaji-admin/public/sounds/new-order.mp3` (from Downloads, "universfield-new-notification-036") - once per 3 s, so a
+burst rings once - and the bottom-right pop-up now shows the SVV logo (`public/svv-balaji.png`). New `src/live/orderSound.ts`
+(audio unlocked on the first click/key press - browsers block sound before that; mute kept per browser). Top bar has a
+speaker toggle next to "Live" (turning it on plays a preview). Background/closed tab: the existing service-worker system
+notification already carries the logo; the OS plays its own notification sound there (web push cannot choose a file).
+
+## 2026-10-09 (night) — Admin new-order system notification even with the panel open (Raunak, via agent)
+
+The OS notification for a new order only came from web push, and `public/sw.js` deliberately hides it while an admin tab is
+focused - so with the panel open staff saw only the in-app pop-up. Now the open panel raises the system notification itself
+(`src/live/systemNotify.ts`, logo icon, requireInteraction, click opens the order), for live orders and catch-up orders from
+the last 10 min. Server push for NEW_ORDER now uses tag `new_order-<orderId>` (`StaffAlert.tag`), the same tag the panel uses,
+so the two collapse into one notification. "Turn on alerts" is now offered whenever the browser has not decided on
+notifications (it used to be hidden when VAPID push was unconfigured, leaving no way to grant permission).
+
+## 2026-10-09 (late night) — API speed: fewer database round trips (Raunak, via agent)
+
+**Diagnosis.** The dev API runs on the PC but `DATABASE_URL` is Render Postgres in **Singapore**: measured **~266 ms per query**
+round trip. Endpoints running many queries in sequence/waves took seconds (home-sections 4.3 s on the live setup). Code itself
+is fast (same endpoints 2-180 ms against a local DB). The Render DB also refused a connection once during testing.
+
+**Changes (backend only, no API/response change):**
+- `prisma/schema.prisma`: `previewFeatures = ["relationJoins"]` - include / nested select load in the same SQL via joins, not
+  one extra query per relation. Affects every endpoint. Run `npx prisma generate` after pulling.
+- `pricing.service.ts`: `resolveMany()` - one query for many products' prices; shares `candidateWhere` / `winner` /
+  `toResolved` with `resolve()` so the rule is identical.
+- `storefront-catalogue.service.ts`: listings (catalogue, search, home sections) build cards with 3 batched queries (prices,
+  stock, ratings) instead of ~4 per product. Product detail page unchanged.
+- `earnings.service.ts`: pay rules for the offer-card estimate cached 30 s (cleared on any rule edit); crediting reads fresh.
+- `common/request-stats.ts` + `PrismaService`: opt-in profiler - `PRISMA_QUERY_STATS=1` logs `METHOD path status ms Nq` per
+  request (off by default, zero cost).
+
+**Measured** (old build from HEAD vs new, same local DB behind a +266 ms proxy, 67 products, median of 3): 20 rider/admin/
+customer screens 55.8 s → 18.5 s (3×). Catalogue 7.7 s → 0.9-2.3 s, admin order detail 5.9 s → 0.3 s, order list 3.7 s →
+0.6 s, rider dashboard 5.4 s → 2.3 s, rider tasks 2.3 s → 0.9 s. Responses diffed on 38 endpoints: identical. Verified:
+`e2e-returns-flow.py` 79/79, `e2e-broadcast-dispatch-flow.py` (+ step 12) 73/73 on fresh DBs; jest 823/824 (only the known
+pre-existing storefront-auth "pending retailer" failure).
+
+**Biggest remaining lever (not code):** run the API in the same region as the DB (Render Singapore) - then each query is
+~1 ms and every screen is near-instant. For local dev, use a local Postgres instead of the hosted one.

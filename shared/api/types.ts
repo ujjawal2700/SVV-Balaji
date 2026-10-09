@@ -3216,14 +3216,40 @@ export interface HomeSectionProductRef {
   category?: { name: string } | null;
 }
 
+/**
+ * What fills a homepage section. The two auto kinds follow the product-level
+ * "Daily staple" / "Top pick" flags set in the product form.
+ */
+export type HomeSectionKind = 'PRODUCTS' | 'DAILY_STAPLES' | 'TOP_PICKS' | 'PRICE_DEALS';
+/** SHELF = compact cards (scroll on mobile, 6 across on desktop); GRID = large cards (2 / 4 across). */
+export type HomeSectionLayout = 'SHELF' | 'GRID';
+export type PriceTileColor = 'purple' | 'orange' | 'green' | 'blue' | 'red' | 'teal';
+
+/** One "Starting from ₹X" tile of a PRICE_DEALS section. */
+export interface HomePriceTile {
+  label: string;
+  price: number;
+  subtitle: string;
+  emoji?: string;
+  color: PriceTileColor;
+  /** Category the tile opens; null opens the full catalogue. */
+  categoryId?: string | null;
+}
+
 export interface HomeSection {
   id: string;
   title: string;
   subtitle: string | null;
+  kind: HomeSectionKind;
+  layout: HomeSectionLayout;
   targetAudience: BannerAudience;
   displayOrder: number;
   isActive: boolean;
   productIds: string[];
+  /** Max products an auto kind shows. */
+  productLimit: number;
+  tiles: HomePriceTile[];
+  /** What the section currently shows - resolved from the flags for auto kinds. */
   products?: HomeSectionProductRef[];
   createdAt: string;
   updatedAt: string;
@@ -3232,10 +3258,14 @@ export interface HomeSection {
 export interface CreateHomeSectionInput {
   title: string;
   subtitle?: string;
+  kind?: HomeSectionKind;
+  layout?: HomeSectionLayout;
   targetAudience?: BannerAudience;
   displayOrder?: number;
   isActive?: boolean;
   productIds?: string[];
+  productLimit?: number;
+  tiles?: HomePriceTile[];
 }
 
 export type UpdateHomeSectionInput = Partial<CreateHomeSectionInput>;
@@ -3244,7 +3274,14 @@ export interface StorefrontHomeSection {
   id: string;
   title: string;
   subtitle: string | null;
+  kind: HomeSectionKind;
+  layout: HomeSectionLayout;
   displayOrder: number;
   targetAudience: BannerAudience;
   products: StorefrontProductCard[];
+  /**
+   * PRICE_DEALS only. `categorySlug` is null when the tile opens the full
+   * catalogue; `parentCategorySlug` is set when it is a sub-category.
+   */
+  tiles: Array<HomePriceTile & { categorySlug: string | null; parentCategorySlug: string | null }>;
 }

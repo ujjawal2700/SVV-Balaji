@@ -56,6 +56,8 @@ export interface ReturnRef {
 
 export interface Offer {
   offerId: string;
+  /** What completing it pays under the current pay rules (before waiting pay / target bonuses); null = no rule pays. */
+  estimatedEarning?: number | null;
   kind?: TaskKind;
   returnRequest?: ReturnRef | null;
   /** Deadline on THIS phone's clock (rebased from the server's secondsLeft - see onPhoneClock). */

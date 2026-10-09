@@ -4,7 +4,7 @@ import { DeliveryTask, EarningRuleKind, Prisma, RiderEarningType } from '@prisma
 import { Type } from 'class-transformer';
 import { IsBoolean, IsDateString, IsEnum, IsNumber, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
-import { localParts, targetBonuses, taskEarnings, validateConfig, weekKey, type Outcome, type Rule } from './earning.logic';
+import { estimateEarning, localParts, targetBonuses, taskEarnings, validateConfig, weekKey, type Outcome, type Rule } from './earning.logic';
 
 export class EarningRuleDto {
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(80) name!: string;
@@ -55,6 +55,7 @@ export class EarningsService {
 
   async createRule(dto: EarningRuleDto, userId: string) {
     await this.check(dto);
+    this.estimateRules = null;
     return this.prisma.riderEarningRule.create({
       data: {
         name: dto.name, kind: dto.kind, isActive: dto.isActive ?? true, zoneId: dto.zoneId ?? null,
@@ -70,6 +71,7 @@ export class EarningsService {
     if (!current) throw new NotFoundException('Rule not found');
     if (dto.kind && dto.kind !== current.kind) throw new BadRequestException('The kind of a rule cannot change; create a new rule');
     await this.check(dto, current);
+    this.estimateRules = null;
     return this.prisma.riderEarningRule.update({
       where: { id },
       data: {
@@ -85,6 +87,7 @@ export class EarningsService {
 
   /** Rules that already paid something are switched off, never deleted (lines keep their rule). */
   async removeRule(id: string) {
+    this.estimateRules = null;
     const used = await this.prisma.riderEarning.count({ where: { ruleId: id } });
     if (used) {
       await this.prisma.riderEarningRule.update({ where: { id }, data: { isActive: false } });
@@ -94,9 +97,40 @@ export class EarningsService {
     return { deleted: true, deactivated: false };
   }
 
+  /**
+   * Rules for the offer-card ESTIMATE only, kept for 30 s - every offers list and rider dashboard
+   * reads them, and they change rarely. Any rule edit on this instance clears it at once. Crediting
+   * (real pay) always reads fresh rules.
+   */
+  private estimateRules: { at: number; rules: Rule[] } | null = null;
+  private async rulesForEstimate(): Promise<Rule[]> {
+    if (this.estimateRules && Date.now() - this.estimateRules.at < 30_000) return this.estimateRules.rules;
+    const rules = await this.activeRules();
+    this.estimateRules = { at: Date.now(), rules };
+    return rules;
+  }
+
   private async activeRules(): Promise<Rule[]> {
     const rows = await this.prisma.riderEarningRule.findMany({ where: { isActive: true } });
     return rows.map((r) => ({ id: r.id, name: r.name, kind: r.kind, zoneId: r.zoneId, validFrom: r.validFrom, validTo: r.validTo, config: (r.config ?? {}) as Record<string, unknown> }));
+  }
+
+  /**
+   * What each task would pay if completed now, for the rider's offer card.
+   * One rules read for the whole batch; null when no rule pays anything.
+   */
+  async estimate(tasks: Array<{ id: string; kind: DeliveryTask['kind']; zoneId: string | null; distanceKm: Prisma.Decimal | number | null }>, riderId: string) {
+    const rules = await this.rulesForEstimate();
+    const at = new Date();
+    return new Map(
+      tasks.map((t) => {
+        const amount = estimateEarning(rules, {
+          taskId: t.id, riderId, zoneId: t.zoneId, kind: t.kind, at, timeZone: TIMEZONE,
+          distanceKm: t.distanceKm === null ? null : Number(t.distanceKm),
+        });
+        return [t.id, amount > 0 ? amount : null] as const;
+      }),
+    );
   }
 
   // ---------------------------------------------------------------- crediting
@@ -119,6 +153,7 @@ export class EarningsService {
       taskId: task.id,
       riderId: task.riderId,
       zoneId: task.zoneId,
+      kind: task.kind,
       result,
       distanceKm: task.distanceKm === null ? null : Number(task.distanceKm),
       at,
