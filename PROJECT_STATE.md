@@ -1,7 +1,7 @@
 # SVV Balaji — Project State
 
-**Last updated:** 8 October 2026 · **Updated by:** Raunak (via agent)
-**Programme week:** 9 of 18 (Week 1 commenced 4 Aug 2026)
+**Last updated:** 10 October 2026 · **Updated by:** Raunak (via agent)
+**Programme week:** 10 of 18 (Week 1 commenced 4 Aug 2026)
 
 > This is the living status of the project. Anyone starting work — human or agent — reads this
 > first. Keep it current; a stale state file is worse than none.
@@ -16,7 +16,9 @@
 
 ## 0. Since 16 August — what changed, most recent first
 
-**8 Oct (latest) — Missing / fake features built.** Sales Analytics (`/reports`), Earnings & Financial MIS and the commerce dashboard now run on real data (new `src/reports`); customer screens lost their mock data; **GST credit notes** (automatic for refunded returns and late POS refunds, manual from Tax Invoices) and **GSTR-1** preparation (`/gst-returns`, JSON for the offline tool); **rider payouts** with optional COD cash set-off (`/riders/payouts`, rider app shows paid / unpaid - its fake "Withdraw" is gone); **close undelivered orders** (stock back to its batches, prepaid to Refund Wallet, invoice reversed); **live rider location** on the customer's tracking page. **Deploy:** 3 migrations (`20261008120000_credit_notes`, `20261008140000_rider_payouts`, `20261008160000_undelivered_refund`) + generate + API restart + admin, customer (`npm install`, adds leaflet) and rider apps. Still blocked: real GSP / e-way bill (A-11), franchise (future scope), in-app chat (provider), FRD34 cost reports (client). See `DEV_LOG.md` 2026-10-08.
+**10 Oct (latest) — Five client decisions implemented.** (1) **No retailer credit:** retailers pay online or COD like consumers; credit terms/limits refused by the API, every account moved to PREPAID, credit-note refunds no longer a choice; Receivables screen, credit drawers/fields and the storefront "Mandi Ledger & Credit" page removed (backend receivables code kept dormant for old orders). (2) **Production cost** = raw (auto: consumed qty x purchase rate, overridable) + labour + machine + loss + other lines, per run; **Production Cost** report. (3) **Machine utilisation** = new machine list + runs (start/completion stamps -> run hours, % of hours/day); **Machines** screen. (4) **Quick-delivery by weight:** riders enter how many kg they can carry (sign-up + profile); offers skip a rider when task + what they hold exceeds it; Super Admin "Pay per kg carried" rule on top of base pay. (5) **Refunds/affiliate payouts:** customer chooses wallet / UPI / bank; wallet refunds now pay instantly, UPI/bank wait for Super Admin to pay from own account and record the reference, which the customer sees (affiliate payouts already worked this way). Also fixed: close-undelivered returned 500 since `relationJoins` (9 Oct). **Deploy:** 3 migrations (`20261010100000_no_retailer_credit` - data: moves every customer to PREPAID; `20261010110000_production_cost_machines`; `20261010120000_rider_carry_weight`) + generate + API restart + all four apps. See `DEV_LOG.md` 2026-10-10.
+
+**8 Oct — Missing / fake features built.** Sales Analytics (`/reports`), Earnings & Financial MIS and the commerce dashboard now run on real data (new `src/reports`); customer screens lost their mock data; **GST credit notes** (automatic for refunded returns and late POS refunds, manual from Tax Invoices) and **GSTR-1** preparation (`/gst-returns`, JSON for the offline tool); **rider payouts** with optional COD cash set-off (`/riders/payouts`, rider app shows paid / unpaid - its fake "Withdraw" is gone); **close undelivered orders** (stock back to its batches, prepaid to Refund Wallet, invoice reversed); **live rider location** on the customer's tracking page. **Deploy:** 3 migrations (`20261008120000_credit_notes`, `20261008140000_rider_payouts`, `20261008160000_undelivered_refund`) + generate + API restart + admin, customer (`npm install`, adds leaflet) and rider apps. Still blocked: real GSP / e-way bill (A-11), franchise (future scope), in-app chat (provider), FRD34 cost reports (client). See `DEV_LOG.md` 2026-10-08.
 
 **7 Oct — Coin & Points Ledger.** Super Admin page `/loyalty/ledger`: every loyalty point and referral coin given, used, taken back, expired or adjusted by staff, across all customers, with totals, filters and CSV export. Read-only API `GET /loyalty/ledger` (+ `/export`). See `DEV_LOG.md` 2026-10-07.
 
@@ -313,6 +315,11 @@ are now answered** — only cloud storage (Decision 3) is still outstanding.
 | 2 | GST e-invoicing | **Approved — integrate via a GST Suvidha Provider** | 11 Aug 2026 | ✅ WS4.4 unblocked |
 | 3 | Cloud storage provider | *No answer yet* | — | 🟡 **Unblocked in practice** — interim Cloudinary account in use since 14 Aug; the decision is now about ownership and permanence, not capability |
 | 4 | Multigrain recipe engine | **Confirmed in scope** | 14 Aug 2026 | ✅ Gate removed, blend ratio now enforced at production time |
+| — | Retailer credit | **None - retailers pay online or COD like customers** | 10 Oct 2026 | ✅ Built 10 Oct; supersedes the credit-period question (FRD34 gaps §3) |
+| — | Production cost (FRD34 gaps §1) | **Raw + labour + machine + loss + other** | 10 Oct 2026 | ✅ Built 10 Oct |
+| — | Machine utilisation (FRD34 gaps §2) | **Machine list + runs** | 10 Oct 2026 | ✅ Built 10 Oct |
+| — | Quick-delivery assignment | **By weight: rider states kg they can carry; Super Admin sets pay per kg** | 10 Oct 2026 | ✅ Built 10 Oct |
+| — | Refunds & affiliate payouts | **Customer picks wallet / UPI / bank; Super Admin pays from own account, marks paid; customer sees it** | 10 Oct 2026 | ✅ Built 10 Oct (wallet = instant) |
 | — | Farmer training channel | **No farmer app — executive visits the farm, trains, logs manually in the portal** | 11 Aug 2026 | ✅ Scope confirmed, no change needed |
 
 ### Decision 1 — B2B + B2C with per-channel pricing

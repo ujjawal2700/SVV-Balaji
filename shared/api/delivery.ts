@@ -59,6 +59,8 @@ export interface RiderRow {
   lastLatitude: string | null;
   lastLongitude: string | null;
   maxActiveTasks: number;
+  /** Kg the rider says they can carry at once (decimal string); null = not set. */
+  maxCarryKg?: string | number | null;
   createdAt: string;
   reviewedAt: string | null;
   rejectionReason: string | null;
@@ -185,7 +187,7 @@ export interface FailureReason {
 
 export type EarningRuleKind =
   | 'BASE_PER_DELIVERY' | 'DISTANCE_SLAB' | 'PEAK_HOUR' | 'ZONE_INCENTIVE' | 'DAILY_TARGET' | 'WEEKLY_TARGET' | 'WAITING_TIME' | 'OUTCOME_COMPENSATION'
-  | 'RETURN_PICKUP_PAY';
+  | 'RETURN_PICKUP_PAY' | 'PER_KG';
 
 export interface EarningRule {
   id: string;
@@ -244,7 +246,7 @@ export interface RiderCashReport {
 
 /** Earning line types as the rider app and reports name them. */
 export const EARNING_TYPE_LABEL: Record<string, string> = {
-  BASE: 'Base pay', DISTANCE: 'Distance', PEAK: 'Peak hour', ZONE_INCENTIVE: 'Zone incentive', DAILY_BONUS: 'Daily target',
+  BASE: 'Base pay', DISTANCE: 'Distance', WEIGHT: 'Weight', PEAK: 'Peak hour', ZONE_INCENTIVE: 'Zone incentive', DAILY_BONUS: 'Daily target',
   WEEKLY_BONUS: 'Weekly target', WAITING: 'Waiting time', OUTCOME: 'Cancel / failed compensation', ADJUSTMENT: 'Adjustment',
 };
 
@@ -340,7 +342,7 @@ export const deliveryApi = {
   rejectRider: (id: string, reason: string) => d(api.post(`/riders/${id}/reject`, { reason })),
   suspendRider: (id: string, reason: string) => d(api.post(`/riders/${id}/suspend`, { reason })),
   reactivateRider: (id: string) => d(api.post(`/riders/${id}/reactivate`)),
-  updateRider: (id: string, b: { warehouseId?: string; maxActiveTasks?: number; vehicleType?: string; vehicleNumber?: string; city?: string }) => d(api.patch(`/riders/${id}`, b)),
+  updateRider: (id: string, b: { warehouseId?: string; maxActiveTasks?: number; maxCarryKg?: number; vehicleType?: string; vehicleNumber?: string; city?: string }) => d(api.patch(`/riders/${id}`, b)),
   riderCash: (id: string) => d<{ balance: number; entries: Array<{ id: string; type: string; amount: number; reference: string | null; note: string | null; createdAt: string; recordedBy: { fullName: string } | null }> }>(api.get(`/riders/${id}/cash`)),
   deposit: (id: string, b: { amount: number; reference?: string; note?: string }) => d(api.post(`/riders/${id}/cash/deposits`, b)),
   riderEarnings: (id: string, q: { from?: string; to?: string } = {}) => d<RiderEarnings>(api.get(`/riders/${id}/earnings`, { params: pruneEmpty(q) })),

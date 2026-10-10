@@ -88,13 +88,13 @@ export class CreateCustomerDto {
   @IsString()
   pincode?: string;
 
-  @ApiPropertyOptional({ description: 'B2B only. Orders that would breach it are refused.' })
+  @ApiPropertyOptional({ deprecated: true, description: 'Credit is not offered (10 Oct 2026). Any value above 0 is refused.' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   creditLimit?: number;
 
-  @ApiPropertyOptional({ enum: PaymentTerms, default: PaymentTerms.PREPAID })
+  @ApiPropertyOptional({ enum: PaymentTerms, default: PaymentTerms.PREPAID, deprecated: true, description: 'Only PREPAID is accepted - credit is not offered (10 Oct 2026).' })
   @IsOptional()
   @IsEnum(PaymentTerms)
   paymentTerms?: PaymentTerms;

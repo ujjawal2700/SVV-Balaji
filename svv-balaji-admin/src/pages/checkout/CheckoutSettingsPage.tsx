@@ -110,27 +110,6 @@ export function CheckoutSettingsPage() {
             <Col xs={12} sm={8}><Field label="Delivery OTP digits">{num('deliveryOtpDigits', { min: 4, max: 6 })}</Field></Col>
           </Row>
 
-          <Typography.Title level={5}>5. B2B credit</Typography.Title>
-          <Row gutter={[24, 16]} style={{ marginBottom: 28 }}>
-            <Col xs={24} sm={12}>
-              <Field
-                label="Credit period counts from"
-                hint="When a Net 7/15/30/45 bill falls due. Not yet confirmed by the client — dispatch is the recommendation (the day the retailer receives the goods)."
-              >
-                <Select
-                  style={{ width: '100%' }}
-                  value={d.creditPeriodStart}
-                  disabled={!canManage}
-                  onChange={(v) => set('creditPeriodStart', v)}
-                  options={[
-                    { value: 'DISPATCH', label: 'Dispatch date (recommended)' },
-                    { value: 'ORDER_DATE', label: 'Order date' },
-                  ]}
-                />
-              </Field>
-            </Col>
-          </Row>
-
           {canManage ? <Button type="primary" size="large" icon={<CarOutlined />} loading={update.isPending} disabled={!dirty} onClick={() => void save()}>Save Changes</Button> : <Typography.Text type="secondary">View only — Super Admin can change these.</Typography.Text>}
         </div>
       )}

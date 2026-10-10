@@ -12,7 +12,7 @@ End-to-end check of order-item Returns & Exchanges against a RUNNING API
   C  Shiprocket RETURN: reverse AWB, courier status kept separately, deductions on a
      change-of-mind return, manual UPI refund needs a reference; failed pickup -> rebook -> cancel
   D  Shiprocket EXCHANGE: replacement RTO -> back in stock -> converted to a refund
-  E  B2B retailer: separate queue, credit-note refund reduces what is owed
+  E  B2B retailer: separate queue, no credit - COD order, bank refund paid by Super Admin, reference shown
   F  QC reject, not-delivered and cancelled orders refused
 
 Stock is made through the real chain (farmer -> raw batch -> production -> QA release),
@@ -362,7 +362,9 @@ s, bad = call("POST", f"/returns/customers/{RA_ID}/qc", {"decision": "ACCEPT", "
 check(s == 400, "good + damaged must equal the returned quantity")
 d = must("POST", f"/returns/customers/{RA_ID}/qc", {"decision": "ACCEPT", "goodQuantity": 1, "damagedQuantity": 1, "notes": "one pouch torn"})
 after = stock_row(WH_O, FG_ATTA_O)
-check(d["status"] == "REFUND_INITIATED", "QC accepted -> REFUND_INITIATED")
+# Client decision 10 Oct 2026: a wallet refund is paid the moment it is due.
+d = must("GET", f"/returns/customers/{RA_ID}")
+check(d["status"] == "COMPLETED" and d["refund"]["method"] == "WALLET", "QC accepted -> wallet refund paid automatically (COMPLETED)", d["status"])
 check(after["quantity"] == before["quantity"] + 1 and after.get("damagedQuantity", 0) == before.get("damagedQuantity", 0) + 1,
       "stock: +1 sellable, +1 damaged on the SAME batch the order shipped", {"before": before, "after": after})
 check(sorted((x["disposition"], x["fgBatchNumber"]) for x in d["stock"]) == [("DAMAGED", FG_ATTA_O["fgBatchNumber"]), ("GOOD", FG_ATTA_O["fgBatchNumber"])],
@@ -374,8 +376,6 @@ tr = must("GET", f"/trace/{FG_ATTA_O['fgBatchNumber']}")
 check(farmer["id"] in json.dumps(tr) or farmer["fullName"] in json.dumps(tr), "the returned pack's batch still resolves to the farmer", str(tr)[:300])
 
 step("A6. Refund to the rupee Refund Wallet; then spend it at checkout; cancel gives it back")
-d = must("POST", f"/returns/customers/{RA_ID}/refund", {"refundMethod": "WALLET"})
-check(d["status"] == "COMPLETED" and d["refund"]["method"] == "WALLET", "refund completed to the wallet")
 s, bad = call("POST", f"/returns/customers/{RA_ID}/refund", {"refundMethod": "WALLET"})
 check(s == 409, "a refund can never be paid twice")
 w = must("GET", "/storefront/wallet/refund", tok=C1["tok"])
@@ -534,13 +534,13 @@ c_after = stock_row(WH_C, FG_ATTA_C)
 check(d["status"] == "REPLACEMENT_PROCESSING" and c_after["quantity"] == c_before["quantity"] and c_after["reservedQuantity"] == c_before["reservedQuantity"],
       "undelivered replacement back in stock and still reserved", {"before": c_before, "after": c_after})
 d = must("POST", f"/returns/customers/{EXD_ID}/convert-to-refund", {"reason": "Customer prefers a refund"})
-check(d["status"] == "REFUND_INITIATED" and d["money"]["refundAmount"] == EXD["itemValue"], "converted: full paid value to refund, reservation released", d["money"])
+# The exchange was raised with the wallet as refund method, so converting it pays at once (10 Oct 2026).
+check(d["status"] == "COMPLETED" and d["money"]["refundAmount"] == EXD["itemValue"] and d["refund"]["method"] == "WALLET",
+      "converted: full paid value refunded to the wallet straight away", (d["status"], d["money"]))
 check(stock_row(WH_C, FG_ATTA_C)["reservedQuantity"] == c_before["reservedQuantity"] - 1, "replacement reservation released")
-d = must("POST", f"/returns/customers/{EXD_ID}/refund", {"refundMethod": "WALLET"})
-check(d["status"] == "COMPLETED", "refunded to wallet")
 
 # ===================================================================== E. B2B retailer
-step("E. Retailer: separate queue, credit order refunded by credit note")
+step("E. Retailer: separate queue, no credit - COD order, bank refund paid by Super Admin")
 rph = f"8{STAMP[-6:]}777"
 gstin = f"23ABCDE{STAMP[-4:]}F1Z5"
 call("POST", "/storefront/auth/otp/request", {"phone": rph}, auth=False)
@@ -553,28 +553,36 @@ if pend:
     _, bs = call("POST", "/storefront/auth/otp/verify", {"phone": rph, "code": "123456", "audience": "RETAILER"}, auth=False)
     RT = {"tok": bs["accessToken"]}
     RT["id"] = must("GET", "/storefront/auth/me", tok=RT["tok"])["customer"]["id"]
-    must("PATCH", f"/customers/{RT['id']}", {"paymentTerms": "CREDIT_30", "creditLimit": 100000})
+    s, bad = call("PATCH", f"/customers/{RT['id']}", {"paymentTerms": "CREDIT_30", "creditLimit": 100000})
+    check(s == 400, "a retailer cannot be put on credit (client decision 10 Oct 2026)", bad)
     must("PATCH", "/return-settings/B2B", {"returnEnabled": True, "qcRequired": False})
     RA_B = add_address(RT, FAR_LL, city="Indore")  # far: courier path (local retailers route LOCAL, see e2e-retailer-routing-flow.py)
-    OB = place(RT, RA_B, [(ATTA, 12)], mode="CREDIT")
+    s, bad = call("POST", "/storefront/checkout/sessions", {"addressId": RA_B, "items": [{"productId": ATTA["id"], "quantity": 12}], "paymentMode": "CREDIT"}, tok=RT["tok"])
+    check(s == 400, "a retailer cannot check out on credit", bad)
+    qb = must("POST", "/storefront/checkout/quote", {"addressId": RA_B, "items": [{"productId": ATTA["id"], "quantity": 12}]}, tok=RT["tok"])
+    check(set(qb["payment"]["allowedModes"]) == {"ONLINE", "COD"}, "retailer pays like a customer: online or COD", qb["payment"])
+    OB = place(RT, RA_B, [(ATTA, 12)], mode="COD")
     deliver_courier(OB)
     ITB = item_of(OB, ATTA)
     el = must("GET", f"/storefront/returns/orders/{OB['number']}/eligibility", tok=RT["tok"])
-    check(el["policy"]["refundMethods"] == ["CREDIT_NOTE"], "unpaid credit bill: refunds settle by credit note only", el["policy"]["refundMethods"])
+    check("CREDIT_NOTE" not in el["policy"]["refundMethods"] and "BANK" in el["policy"]["refundMethods"], "retailer chooses wallet / UPI / bank", el["policy"]["refundMethods"])
     RB = must("POST", "/storefront/returns", {"orderNumber": OB["number"], "orderItemId": ITB["id"], "type": "RETURN", "quantity": 2, "reasonId": REASONS["WRONG_ITEM"]["id"],
-                                             "mediaUrls": ["https://example.test/w.jpg"]}, tok=RT["tok"])
+                                             "mediaUrls": ["https://example.test/w.jpg"], "refundMethod": "BANK", "accountName": "Ret Traders",
+                                             "accountNumber": "123456789012", "ifsc": "SBIN0001234", "bankName": "SBI"}, tok=RT["tok"])
     s, _ = call("GET", f"/returns/customers?search={RB['requestNumber']}")
     check(s == 200 and not must("GET", f"/returns/customers?search={RB['requestNumber']}")["rows"], "retailer request not in the customer queue")
     RB_ID = must("GET", f"/returns/retailers?search={RB['requestNumber']}")["rows"][0]["id"]
     d = must("POST", f"/returns/retailers/{RB_ID}/approve", {})
     webhook(d["shipments"][0]["awb"], "PICKED UP"); webhook(d["shipments"][0]["awb"], "DELIVERED")
     d = must("GET", f"/returns/retailers/{RB_ID}")
-    check(d["status"] == "REFUND_INITIATED" and d["qc"]["decision"] == "ACCEPT", "QC switched off for retailers: receipt = passed inspection", (d["status"], d["qc"]))
-    paid_before = float(must("GET", f"/orders/{OB['id']}")["amountPaid"])
-    d = must("POST", f"/returns/retailers/{RB_ID}/refund", {})
-    ob = must("GET", f"/orders/{OB['id']}")
-    check(d["status"] == "COMPLETED" and abs(float(ob["amountPaid"]) - paid_before - RB["refundAmount"]) < 0.01,
-          "credit note applied to the bill through Receivables (owed amount down by the refund)", {"amountPaid": ob["amountPaid"], "refund": RB["refundAmount"]})
+    check(d["status"] == "REFUND_INITIATED" and d["qc"]["decision"] == "ACCEPT" and d["refund"]["accountNumber"] == "123456789012",
+          "bank refund waits for Super Admin, with the retailer's bank details shown", (d["status"], d["refund"]))
+    s, bad = call("POST", f"/returns/retailers/{RB_ID}/refund", {})
+    check(s == 400, "paying a bank refund needs the transfer reference (UTR)", bad)
+    d = must("POST", f"/returns/retailers/{RB_ID}/refund", {"reference": f"UTR{STAMP}"})
+    check(d["status"] == "COMPLETED" and d["refund"]["reference"] == f"UTR{STAMP}", "Super Admin marks it paid with the UTR")
+    mine = must("GET", f"/storefront/returns/{RB['requestNumber']}", tok=RT["tok"])
+    check(mine["refund"]["reference"] == f"UTR{STAMP}" and mine["refund"]["refundedAt"], "the retailer sees it paid, with the reference", mine["refund"])
 else:
     check(False, "could not create the retailer account", reg)
 

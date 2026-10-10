@@ -17,6 +17,8 @@ import {
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { machinesApi } from '@shared/api/machines';
 import { apiErrorMessage } from '../../api/client';
 import type { CreateProductionBatchInput, ProductionBatch } from '../../api/types';
 import { BranchSelect, WarehouseSelect } from '../../components/pickers';
@@ -59,6 +61,12 @@ export function ProductionBatchFormModal({ open, onClose }: ProductionBatchFormM
   const createBatch = useCreateProductionBatch();
 
   const recipeId = Form.useWatch('recipeId', form);
+  const branchId = Form.useWatch('branchId', form);
+  const machines = useQuery({
+    queryKey: ['machines', 'active', branchId],
+    queryFn: () => machinesApi.list({ branchId, activeOnly: true }),
+    enabled: open && !!branchId,
+  });
   const warehouseId = Form.useWatch('warehouseId', form);
   const plannedQuantity = Form.useWatch('plannedQuantity', form);
   const consumptions = Form.useWatch('consumptions', form);
@@ -321,14 +329,32 @@ export function ProductionBatchFormModal({ open, onClose }: ProductionBatchFormM
         </Divider>
 
         <Row gutter={16}>
-          <Col xs={12} md={6}>
-            <Form.Item name="machineName" label="Machine">
-              <Input placeholder="Optional" />
-            </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
-            <Form.Item name="machineNumber" label="Machine no.">
-              <Input placeholder="Optional" />
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="machineId"
+              label="Machine"
+              extra={
+                branchId && machines.isSuccess && machines.data.length === 0
+                  ? 'No machines for this branch yet - add them under Production > Machines.'
+                  : 'Run hours on this machine count towards its utilisation.'
+              }
+            >
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder={branchId ? 'Pick a machine' : 'Choose the branch first'}
+                disabled={!branchId}
+                loading={machines.isLoading}
+                options={(machines.data ?? []).map((m) => ({
+                  value: m.id,
+                  label: `${m.code} · ${m.name}${m.machineNumber ? ` (${m.machineNumber})` : ''}`,
+                }))}
+                onChange={(id) => {
+                  const m = machines.data?.find((x) => x.id === id);
+                  if (m?.productionLine) form.setFieldValue('productionLine', m.productionLine);
+                }}
+              />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>

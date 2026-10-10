@@ -3963,3 +3963,58 @@ pre-existing storefront-auth "pending retailer" failure).
 
 **Biggest remaining lever (not code):** run the API in the same region as the DB (Render Singapore) - then each query is
 ~1 ms and every screen is near-instant. For local dev, use a local Postgres instead of the hosted one.
+
+## 2026-10-10 — Client decisions: no retailer credit, production cost, machine utilisation, delivery by weight, manual refunds (Raunak, via agent)
+
+**Client answers (via Raunak, 10 Oct):** retailers get no credit (online or COD like customers); production cost = raw +
+labour + machine + loss + other; machine utilisation = machine list + runs; quick-delivery assignment by weight (rider
+states kg, Super Admin sets pay per kg); refunds and affiliate payouts paid by Super Admin from their own account and marked
+here, customer sees it. Follow-ups chosen by Raunak: refund method stays the customer's choice (wallet = instant), per-kg
+pay is on top of base pay, raw cost is automatic from purchase rate, receivables UI removed entirely.
+
+**Backend (API contract changes - read before building against these):**
+- **Credit:** `POST/PATCH /customers` refuse `creditLimit` > 0 and any `paymentTerms` other than PREPAID (both deprecated in
+  Swagger). Staff and storefront orders are always PREPAID; checkout `allowedModes` for B2B = ONLINE + COD (COD rules as B2C),
+  never CREDIT. `PATCH /return-settings/:channel` refuses CREDIT_NOTE; B2B default is wallet/UPI/bank. Migration
+  `20261010100000_no_retailer_credit` moves **every** customer to PREPAID / no limit and strips CREDIT_NOTE from return
+  settings. Old credit orders keep their terms; `src/receivables` and `/storefront/credit` are left in place (dormant).
+- **Machines** (`src/production/machines.*`, perms `machines.view` / `machines.manage`): `GET/POST /machines`,
+  `PATCH/DELETE /machines/:id` (delete only with no runs), `GET /machines/utilisation?from&to&branchId` (IST range).
+  `POST /production-batches` takes `machineId` (active, same branch) and copies name/number/line onto the run.
+  `ProductionBatch.startedAt` (create IN_PROGRESS or `/start`) and `completedAt` (`/complete`) are new; older runs have none
+  (no backfill - counted as runs, hours "not captured").
+- **Production cost** (perms `production.cost.view` / `.edit`): `GET/PUT /production-batches/:id/cost`,
+  `GET /production-cost/report`. Raw = sum(quantityUsed x collection/supplier-transport `purchaseRate`); a batch with no rate
+  is listed in `missingRate`. `rawMaterialCost: null` on PUT = back to automatic. Per-unit cost refreshes on completion.
+  Material lost in process is already inside raw cost; "loss" is an entered amount on top. Not allowed on PLANNED/CANCELLED.
+- **Rider weight:** `Rider.maxCarryKg` (signup, `PATCH /rider/me`, admin `PATCH /riders/:id`). Ranking adds skip reason
+  `CARRY_LIMIT` when held tasks' weight + this task > maxCarryKg (unknown weights count 0; null = no limit; vehicle-type limit
+  still applies). Manual staff assignment is NOT blocked (staff override, as before). New earning rule kind `PER_KG`
+  `{ ratePerKg, freeKg?, maxAmount? }` -> earning type `WEIGHT`; weight is computed at credit time if the task never had it.
+  Task weight helper moved to `src/delivery/dispatch/task-weight.ts`.
+- **Refunds:** a return whose customer chose WALLET is completed automatically the moment it reaches REFUND_INITIATED (QC
+  pass, lost in transit, exchange converted). UPI/BANK still wait for staff to pay and record the reference. Undelivered
+  prepaid orders still go to the Refund Wallet automatically (no customer choice there - ask client if that should change).
+- **Bug fixed (pre-existing):** `POST /orders/:id/close-undelivered` returned 500 since `relationJoins` (9 Oct): a relation
+  filter inside a nested include (`creditAllocations: { where: { receipt: {...} } }`) makes Prisma 5.19 query a missing
+  column. Moved to its own query. **Other nested-include relation filters may have the same problem** - worth a grep.
+
+**Admin:** new Production > **Machines** (utilisation + list) and **Production Cost** screens; machine picker on the new-run
+form; cost sheet + run times in the run drawer; "Pay per kg carried" pay rule; "Can carry (kg)" on rider dispatch settings.
+Removed: Receivables nav/route/pages, credit drawer and credit tabs (customer list/detail/360/retailer detail), credit fields
+on the customer form, B2B credit setting on Checkout Settings, receivables tiles on Commerce dashboard and Finance MIS.
+**Customer app:** retailer credit chips/cards/ledger removed (header, home, profile, footer, `/wallet` -> redirects to
+`/orders`), checkout credit message removed, affiliate "automatic payouts" copy corrected. **Rider app:** kg capacity on
+sign-up (required) and profile.
+
+**Verified:** jest 839/840 (only the known pending-retailer test); new `e2e-client-decisions-flow.py` 32/32 incl. FG ->
+machine-booked PB -> RM -> farmer trace; `e2e-recall` 0 failed, `e2e-receivables` (now sets legacy credit directly),
+`e2e-rider`, `e2e-returns` (sections D/E rewritten: wallet auto-refund; retailer COD order -> bank refund -> UTR shown),
+`e2e-rider-payouts`, `e2e-broadcast-dispatch`, `e2e-loyalty`, `e2e-undelivered` (needs GST settings filled first),
+`e2e-reports` all pass on fresh throwaway DBs; migrated DB diffs empty against the schema. `e2e-pos` / `e2e-credit-notes`
+not run (need data from other scripts; untouched code). tsc + `vite build` for admin, customer, rider, field.
+**Not click-tested in a browser.**
+
+**Deploy:** `prisma migrate deploy` (3 migrations above - the first rewrites customer payment terms) + generate + API restart
++ rebuild admin, customer, rider. Then Super Admin: add machines, add a "Pay per kg carried" rule if wanted; riders should
+enter their carry kg (until they do, only vehicle limits apply).

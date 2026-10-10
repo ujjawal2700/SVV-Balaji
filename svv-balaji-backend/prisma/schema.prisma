@@ -9,7 +9,7 @@
 // NOT included here so the schema doesn't get ahead of the build plan.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   // Load relations (include / nested select) in the SAME SQL query via joins instead of one extra
   // query per relation. Each query is a network round trip, so this cuts most endpoints' latency
   // when the API and the database are not side by side.
@@ -348,6 +348,7 @@ model Branch {
 
   // Phase 3
   productionBatches ProductionBatch[]
+  machines          Machine[]
 
   // Phase 4
   customers Customer[]
@@ -1299,11 +1300,36 @@ model ProductionBatch {
   productionDate DateTime
   status         ProductionStatus @default(PLANNED)
 
-  // FRD 20.6 machine allocation
+  // FRD 20.6 machine allocation. machineName/Number/productionLine are a
+  // snapshot of the Machine (or free text on runs that predate the master).
+  machineId      String?
+  machine        Machine? @relation(fields: [machineId], references: [id])
   machineName    String?
   machineNumber  String?
   operatorName   String?
   productionLine String?
+
+  /// Machine run time: stamped when the run goes IN_PROGRESS and when it is
+  /// completed. Run hours = completedAt - startedAt (machine utilisation).
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // --- Production cost (client decision 10 Oct 2026) ------------------------
+  // raw + labour + machine + loss + other. Null until the cost is recorded.
+  /// Consumed quantity x purchase rate of each raw batch, unless overridden.
+  rawMaterialCost           Decimal?  @db.Decimal(14, 2)
+  rawMaterialCostOverridden Boolean   @default(false)
+  labourCost                Decimal?  @db.Decimal(14, 2)
+  machineCost               Decimal?  @db.Decimal(14, 2)
+  /// Entered amount. Material lost in process is already inside rawMaterialCost.
+  lossCost                  Decimal?  @db.Decimal(14, 2)
+  /// Anything else: [{ "label": "Packaging", "amount": 120 }, ...]
+  otherCosts                Json      @default("[]")
+  totalCost                 Decimal?  @db.Decimal(14, 2)
+  /// totalCost / actualQuantity, once output is known.
+  costPerUnit               Decimal?  @db.Decimal(14, 4)
+  costRecordedAt            DateTime?
+  costRecordedById          String?
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
@@ -1332,7 +1358,36 @@ model ProductionBatch {
 
   @@index([status])
   @@index([branchId])
+  @@index([machineId, startedAt])
   @@map("production_batches")
+}
+
+/// Machine master (client decision 10 Oct 2026): machine list + runs gives
+/// machine utilisation - runs, run hours and output per machine.
+model Machine {
+  id              String   @id @default(uuid())
+  /// MCH-001, issued on creation.
+  code            String   @unique
+  name            String
+  /// The plate / asset number on the machine itself.
+  machineNumber   String?
+  productionLine  String?
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  /// Output per hour at rated speed, in the product's unit. Optional.
+  capacityPerHour Decimal? @db.Decimal(12, 2)
+  /// Hours a day the machine is meant to run; utilisation % = run hours / (this x days).
+  hoursPerDay     Decimal  @default(8) @db.Decimal(4, 1)
+  isActive        Boolean  @default(true)
+  notes           String?
+
+  productionBatches ProductionBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, isActive])
+  @@map("machines")
 }
 
 /// FRD 20.5 - the traceability link across the processing step.
@@ -4080,6 +4135,10 @@ model Rider {
   warehouse      Warehouse? @relation(fields: [warehouseId], references: [id])
   /// How many tasks the rider may hold at once (batching); 1 = one at a time.
   maxActiveTasks Int        @default(1)
+  /// Heaviest load (kg) the rider says they can carry at once - entered by the
+  /// rider. Offers skip a rider when the task plus what they already hold would
+  /// exceed it. Null = not set (only the vehicle-type limit applies).
+  maxCarryKg     Decimal?   @db.Decimal(6, 2)
 
   availability          RiderAvailability @default(OFFLINE)
   availabilityChangedAt DateTime?
@@ -4592,6 +4651,8 @@ enum EarningRuleKind {
   /// Flat amount per completed return pickup. Replaces BASE_PER_DELIVERY for
   /// RETURN_PICKUP tasks; distance / peak / zone / waiting rules still add.
   RETURN_PICKUP_PAY
+  /// Per kg carried, on top of base pay: (weight - freeKg) x ratePerKg, optional cap.
+  PER_KG
 }
 
 /// Super Admin-configured rider pay rules. `config` shape depends on `kind`
@@ -4618,6 +4679,7 @@ model RiderEarningRule {
 enum RiderEarningType {
   BASE
   DISTANCE
+  WEIGHT
   PEAK
   ZONE_INCENTIVE
   DAILY_BONUS
@@ -4630,26 +4692,26 @@ enum RiderEarningType {
 /// What a rider has earned, line by line. Never recomputed in place: each line
 /// carries a snapshot of the rule that produced it.
 model RiderEarning {
-  id           String            @id @default(uuid())
-  riderId      String
-  rider        Rider             @relation(fields: [riderId], references: [id])
-  type         RiderEarningType
-  amount       Decimal           @db.Decimal(10, 2)
-  taskId       String?
-  task         DeliveryTask?     @relation(fields: [taskId], references: [id])
-  ruleId       String?
-  rule         RiderEarningRule? @relation(fields: [ruleId], references: [id])
+  id        String            @id @default(uuid())
+  riderId   String
+  rider     Rider             @relation(fields: [riderId], references: [id])
+  type      RiderEarningType
+  amount    Decimal           @db.Decimal(10, 2)
+  taskId    String?
+  task      DeliveryTask?     @relation(fields: [taskId], references: [id])
+  ruleId    String?
+  rule      RiderEarningRule? @relation(fields: [ruleId], references: [id])
   /// Makes crediting idempotent: task:<id>:<rule>, bonus:<rider>:<rule>:<period>:<target>, ...
-  dedupeKey    String?           @unique
+  dedupeKey String?           @unique
 
   /// Set once the line has been paid out. A line belongs to at most one live
   /// payout; voiding the payout releases it for the next one.
-  payoutId String?
-  payout   RiderPayout? @relation(fields: [payoutId], references: [id])
+  payoutId     String?
+  payout       RiderPayout? @relation(fields: [payoutId], references: [id])
   detail       Json?
   note         String?
   recordedById String?
-  earnedAt     DateTime          @default(now())
+  earnedAt     DateTime     @default(now())
 
   @@index([riderId, earnedAt])
   @@index([payoutId])
@@ -4700,10 +4762,10 @@ model RiderPayout {
   recordedById String
   recordedBy   User   @relation("RiderPayoutRecordedBy", fields: [recordedById], references: [id])
 
-  voidedAt     DateTime?
-  voidReason   String?
-  voidedById   String?
-  voidedBy     User?     @relation("RiderPayoutVoidedBy", fields: [voidedById], references: [id])
+  voidedAt   DateTime?
+  voidReason String?
+  voidedById String?
+  voidedBy   User?     @relation("RiderPayoutVoidedBy", fields: [voidedById], references: [id])
 
   earnings RiderEarning[]
 
@@ -5034,7 +5096,7 @@ model InvoiceLine {
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   creditNoteLines CreditNoteLine[]
-  lineNo    Int
+  lineNo          Int
 
   /// Null on the delivery-charge line.
   productId   String?

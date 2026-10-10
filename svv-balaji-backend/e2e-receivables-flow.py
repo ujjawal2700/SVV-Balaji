@@ -101,9 +101,12 @@ try:
     phone = f"8{STAMP[-6:]}777"
     cust = must("POST", "/customers", {
         "channel": "B2B", "type": "RETAILER", "name": f"E2E Credit Store {STAMP}", "phone": phone,
-        "gstin": gstin, "billingAddress": "1 Test Road, Hubli", "paymentTerms": "CREDIT_15", "creditLimit": 100000,
+        "gstin": gstin, "billingAddress": "1 Test Road, Hubli",
     }, tok=admin)
     customer_id = cust["id"]
+    # No credit can be granted through the API since 10 Oct 2026; this script
+    # covers retailers still carrying credit from before, so set it directly.
+    node(f"await p.customer.update({{where:{{id:'{customer_id}'}},data:{{paymentTerms:'CREDIT_15',creditLimit:100000}}}}); return 1")
     wh = node("return (await p.warehouse.findFirst({select:{id:true}})).id")
 
     def order(tag, total, status, order_ago, dispatched_ago=None, paid=None):

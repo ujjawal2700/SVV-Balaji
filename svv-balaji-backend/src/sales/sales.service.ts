@@ -152,8 +152,9 @@ export class SalesService {
     const taxTotal = round2(priced.reduce((s, l) => s + l.lineTax, 0));
     const total = round2(subtotal + taxTotal);
 
-    const paymentTerms =
-      customer.channel === SalesChannel.B2C ? PaymentTerms.PREPAID : customer.paymentTerms;
+    // No credit since 10 Oct 2026 - every new order is prepaid (online or COD).
+    // Older credit orders keep their terms; Receivables still reads them.
+    const paymentTerms = PaymentTerms.PREPAID;
 
     return this.prisma.$transaction(async (tx) => {
       /**
@@ -1226,9 +1227,11 @@ export class SalesService {
         allocations: { where: { releasedAt: null } },
         shipment: { select: { status: true } },
         deliveryTasks: { where: { kind: 'ORDER_DELIVERY' }, orderBy: { createdAt: 'desc' }, select: { status: true, taskNumber: true } },
-        creditAllocations: { where: { receipt: { voidedAt: null } }, select: { id: true } },
       },
     });
+    // Its own query: with the relationJoins preview feature, a relation filter
+    // inside a nested include generates SQL against a missing column (Prisma 5.19).
+    const liveCreditReceipts = await this.prisma.creditReceiptAllocation.count({ where: { orderId: id, receipt: { voidedAt: null } } });
     if (!order) throw new NotFoundException('Order not found');
     if (order.status !== OrderStatus.DISPATCHED) {
       throw new BadRequestException(`Only a dispatched order can be closed as undelivered; ${order.orderNumber} is ${order.status}`);
@@ -1250,7 +1253,7 @@ export class SalesService {
           : 'Confirm the goods are back in hand to close this order as undelivered.',
       );
     }
-    if (order.creditAllocations.length > 0) {
+    if (liveCreditReceipts > 0) {
       throw new BadRequestException(
         `${order.orderNumber} has payments recorded against it under Receivables. Void those receipts first, so the money is not left on a closed order.`,
       );

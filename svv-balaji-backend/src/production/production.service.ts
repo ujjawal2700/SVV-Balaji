@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { scopedBranchId } from '../common/branch-scope';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SequenceService } from '../common/sequence.service';
+import { ProductionCostService } from './production-cost.service';
 import {
   CompleteProductionDto,
   CreateCleaningGradingDto,
@@ -39,7 +40,21 @@ export class ProductionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequence: SequenceService,
+    private readonly cost: ProductionCostService,
   ) {}
+
+  /**
+   * The machine a run is booked on, checked and turned into the snapshot the
+   * run carries. Undefined machineId = nothing to resolve (free-text fields or none).
+   */
+  private async machineFields(machineId: string | undefined, branchId: string) {
+    if (!machineId) return {};
+    const m = await this.prisma.machine.findUnique({ where: { id: machineId } });
+    if (!m) throw new BadRequestException('Machine not found');
+    if (!m.isActive) throw new BadRequestException(`${m.code} (${m.name}) is inactive - pick another machine`);
+    if (m.branchId !== branchId) throw new BadRequestException(`${m.code} (${m.name}) belongs to another branch`);
+    return { machineId: m.id, machineName: m.name, machineNumber: m.machineNumber ?? m.code, productionLine: m.productionLine ?? undefined };
+  }
 
   // --- Cleaning & Grading (FRD Section 18) ---------------------------------
 
@@ -283,6 +298,7 @@ export class ProductionService {
     }
 
     const productionDate = new Date(dto.productionDate);
+    const machine = await this.machineFields(dto.machineId, dto.branchId);
 
     return this.prisma.$transaction(async (tx) => {
       const productionBatchNumber = await this.sequence.next(tx, 'PB', productionDate);
@@ -313,10 +329,12 @@ export class ProductionService {
           unit: recipe.unit,
           productionDate,
           status: planOnly ? ProductionStatus.PLANNED : ProductionStatus.IN_PROGRESS,
+          startedAt: planOnly ? null : new Date(),
           machineName: dto.machineName,
           machineNumber: dto.machineNumber,
           operatorName: dto.operatorName,
           productionLine: dto.productionLine,
+          ...machine,
           branchId: dto.branchId,
           warehouseId: dto.warehouseId,
           createdById,
@@ -511,7 +529,7 @@ export class ProductionService {
       );
     }
 
-    return this.prisma.productionBatch.update({
+    const completed = await this.prisma.productionBatch.update({
       where: { id },
       data: {
         actualQuantity: dto.actualQuantity,
@@ -520,9 +538,13 @@ export class ProductionService {
         byProductName: dto.byProductName,
         byProductRevenue: dto.byProductRevenue,
         status: ProductionStatus.COMPLETED,
+        completedAt: new Date(),
       },
       include: { consumptions: true },
     });
+    // Output is known now: per-unit cost follows (no-op until a cost is recorded).
+    await this.cost.refreshAfterCompletion(id);
+    return completed;
   }
 
   /**
@@ -603,7 +625,7 @@ export class ProductionService {
 
       return tx.productionBatch.update({
         where: { id },
-        data: { status: ProductionStatus.IN_PROGRESS },
+        data: { status: ProductionStatus.IN_PROGRESS, startedAt: new Date() },
         include: { consumptions: true },
       });
     });
@@ -689,6 +711,7 @@ export class ProductionService {
       include: {
         product: { select: { id: true, name: true, sku: true } },
         recipe: { select: { recipeCode: true, version: true } },
+        machine: { select: { id: true, code: true, name: true } },
         _count: { select: { consumptions: true, finishedGoodsBatches: true } },
       },
     }));
@@ -701,6 +724,7 @@ export class ProductionService {
         product: true,
         recipe: { include: { ingredients: true } },
         branch: { select: { id: true, name: true } },
+        machine: { select: { id: true, code: true, name: true, machineNumber: true } },
         createdBy: { select: { id: true, fullName: true } },
         consumptions: {
           include: {
@@ -738,6 +762,7 @@ export class ProductionService {
       );
     }
 
+    const machine = dto.machineId ? await this.machineFields(dto.machineId, production.branchId) : {};
     return this.prisma.productionBatch.update({
       where: { id },
       data: {
@@ -745,6 +770,7 @@ export class ProductionService {
         machineNumber: dto.machineNumber,
         operatorName: dto.operatorName,
         productionLine: dto.productionLine,
+        ...machine,
         plannedQuantity: dto.plannedQuantity,
         productionDate: dto.productionDate ? new Date(dto.productionDate) : undefined,
       },

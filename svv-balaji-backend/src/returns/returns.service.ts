@@ -757,6 +757,7 @@ export class ReturnsService implements OnModuleInit {
     }, { timeout: 20_000 });
     const after = dto.decision === QcDecision.REJECT ? S.QC_FAILED : req.type === ReturnRequestType.RETURN ? S.REFUND_INITIATED : S.REPLACEMENT_PROCESSING;
     await this.notify(req, after, actor, dto.decision === QcDecision.REJECT ? dto.notes : undefined);
+    if (after === S.REFUND_INITIATED) await this.payWalletRefundNow(req.id);
   }
 
   /**
@@ -793,10 +794,30 @@ export class ReturnsService implements OnModuleInit {
       }
     });
     await this.notify(req, req.status, actor);
+    if (req.type === ReturnRequestType.RETURN) await this.payWalletRefundNow(id);
     return this.staffView(await this.load(id));
   }
 
   // ================================================================ refund
+
+  /**
+   * Client decision 10 Oct 2026: the customer picks wallet, UPI or bank. A
+   * wallet refund is paid the moment it is due - no one has to act on it.
+   * UPI / bank refunds wait in the queue for Super Admin to pay from their own
+   * account and record the reference (completeRefund). Best-effort: if this
+   * fails the request simply stays in "refund initiated" for staff.
+   */
+  private async payWalletRefundNow(id: string) {
+    try {
+      const req = await this.prisma.returnRequest.findUnique({ where: { id }, select: { status: true, refundMethod: true, channel: true } });
+      if (!req || req.status !== S.REFUND_INITIATED || req.refundMethod !== RefundMethod.WALLET) return;
+      await this.completeRefund(req.channel, id, { note: 'Paid to Refund Wallet automatically (customer chose the wallet)' } as CompleteRefundDto, {
+        kind: 'SYSTEM', id: await this.systemUserId(),
+      });
+    } catch (e) {
+      this.logger.warn(`Automatic wallet refund for return ${id} failed - left for staff: ${(e as Error).message}`);
+    }
+  }
 
   async completeRefund(channel: SalesChannel, id: string, dto: CompleteRefundDto, actor: Actor) {
     const req = await this.forChannel(channel, id);
@@ -1144,6 +1165,7 @@ export class ReturnsService implements OnModuleInit {
       await this.move(tx, req, S.REFUND_INITIATED, actor, { type: 'CONVERTED_TO_REFUND', note: reason });
     });
     await this.notify(req, S.REFUND_INITIATED, actor, 'exchange converted to a refund');
+    await this.payWalletRefundNow(id);
     return this.staffView(await this.load(id));
   }
 

@@ -20,6 +20,8 @@ export interface Rider {
   availability: 'ONLINE' | 'OFFLINE';
   warehouse: { id: string; name: string } | null;
   maxActiveTasks?: number;
+  /** Heaviest load (kg) the rider can carry at once; deliveries over what is left are not offered. */
+  maxCarryKg?: number | null;
   rejectionReason: string | null;
   /** Documents, PCC and security deposit cleared - may go online and get orders. */
   verified?: boolean;
@@ -227,7 +229,7 @@ const onPhoneClock = (offers: Offer[]): Offer[] =>
   offers.map((o) => (typeof o.secondsLeft === 'number' ? { ...o, expiresAt: new Date(Date.now() + o.secondsLeft * 1000).toISOString() } : o));
 
 export const riderApi = {
-  signup: (body: { fullName: string; phone: string; email?: string; password: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string }) =>
+  signup: (body: { fullName: string; phone: string; email?: string; password: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string; maxCarryKg?: number }) =>
     d<OtpSent>(api.post('/rider/auth/signup', body)),
   verify: (phone: string, code: string) => d<Session>(api.post('/rider/auth/verify', { phone, code })),
   resend: (phone: string) => d<OtpSent>(api.post('/rider/auth/resend', { phone })),
@@ -236,7 +238,7 @@ export const riderApi = {
   reset: (phone: string, code: string, newPassword: string) => d(api.post('/rider/auth/reset-password', { phone, code, newPassword })),
   logout: () => d(api.post('/rider/auth/logout')),
   me: () => d<Rider>(api.get('/rider/me')),
-  updateProfile: (body: { fullName?: string; email?: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string }) =>
+  updateProfile: (body: { fullName?: string; email?: string; city?: string; vehicleType?: VehicleType; vehicleNumber?: string; maxCarryKg?: number }) =>
     d<Rider>(api.patch('/rider/me', body)),
   uploadDocument: (file: File, kind: 'document' | 'photo') => {
     const f = new FormData();

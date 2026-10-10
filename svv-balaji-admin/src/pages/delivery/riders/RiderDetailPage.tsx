@@ -148,13 +148,13 @@ function Settings({ r }: { r: RiderDetail }) {
   const canManage = useCan('RIDERS_MANAGE');
   const [form] = Form.useForm();
   const { message } = AntApp.useApp();
-  const save = useDeliveryMutation((v: { warehouseId?: string; maxActiveTasks?: number; vehicleType?: string; vehicleNumber?: string; city?: string }) => deliveryApi.updateRider(r.id, v));
+  const save = useDeliveryMutation((v: { warehouseId?: string; maxActiveTasks?: number; maxCarryKg?: number; vehicleType?: string; vehicleNumber?: string; city?: string }) => deliveryApi.updateRider(r.id, v));
   const editable = canManage;
   return (
     <Card size="small" title="Dispatch settings" className="page-card"
       extra={editable ? <Button type="primary" size="small" loading={save.isPending} onClick={() => form.submit()}>Save</Button> : null}>
       <Form form={form} layout="vertical" disabled={!editable} key={r.id}
-        initialValues={{ warehouseId: r.warehouse?.id, maxActiveTasks: r.maxActiveTasks, vehicleType: r.vehicleType ?? undefined, vehicleNumber: r.vehicleNumber ?? '', city: r.city ?? '' }}
+        initialValues={{ warehouseId: r.warehouse?.id, maxActiveTasks: r.maxActiveTasks, maxCarryKg: r.maxCarryKg == null ? undefined : Number(r.maxCarryKg), vehicleType: r.vehicleType ?? undefined, vehicleNumber: r.vehicleNumber ?? '', city: r.city ?? '' }}
         onFinish={(v) => save.mutate(v, { onSuccess: () => message.success('Dispatch settings saved'), onError: (e) => message.error(apiErrorMessage(e)) })}>
         <Row gutter={12}>
           <Col span={16}>
@@ -164,6 +164,11 @@ function Settings({ r }: { r: RiderDetail }) {
           </Col>
           <Col span={8}>
             <Form.Item name="maxActiveTasks" label="Deliveries at once"><InputNumber min={1} max={5} style={{ width: '100%' }} /></Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="maxCarryKg" label="Can carry (kg)" extra={r.maxCarryKg == null ? 'Not set by the rider yet - no weight limit' : 'Entered by the rider'}>
+              <InputNumber min={1} max={500} step={1} addonAfter="kg" style={{ width: '100%' }} />
+            </Form.Item>
           </Col>
           <Col span={8}>
             <Form.Item name="vehicleType" label="Vehicle"><Select options={Object.entries(VEHICLE_LABEL).map(([value, label]) => ({ value, label }))} /></Form.Item>

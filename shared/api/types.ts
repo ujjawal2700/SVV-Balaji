@@ -2018,10 +2018,17 @@ export interface ProductionBatch {
   productionDate: string;
   status: ProductionStatus;
 
+  machineId?: string | null;
+  machine?: { id: string; code: string; name: string; machineNumber?: string | null } | null;
   machineName: string | null;
   machineNumber: string | null;
   operatorName: string | null;
   productionLine: string | null;
+  /** Machine run time; null on runs before 10 Oct 2026. */
+  startedAt?: string | null;
+  completedAt?: string | null;
+  totalCost?: string | null;
+  costPerUnit?: string | null;
 
   branchId: string;
   branch?: BranchRef;
@@ -2121,6 +2128,8 @@ export interface CreateProductionBatchInput {
   productionDate: string;
   plannedQuantity: number;
   consumptions: Array<{ rawMaterialBatchId: string; quantityUsed: number }>;
+  /** From the machine list; the run copies its name / number / line. */
+  machineId?: string;
   machineName?: string;
   machineNumber?: string;
   operatorName?: string;

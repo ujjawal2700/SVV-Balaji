@@ -43,10 +43,8 @@ export class ReturnSettingsService implements OnModuleInit {
       where: { channel },
       create: {
         channel,
-        // Retailers settle on account: a credit note is the natural default for them.
-        ...(channel === SalesChannel.B2B
-          ? { allowedRefundMethods: [RefundMethod.CREDIT_NOTE, RefundMethod.WALLET, RefundMethod.BANK], defaultRefundMethod: RefundMethod.CREDIT_NOTE }
-          : {}),
+        // No credit since 10 Oct 2026, so retailers get the same wallet / UPI /
+        // bank choice as consumers (the schema defaults).
       },
       update: {},
     });
@@ -66,8 +64,9 @@ export class ReturnSettingsService implements OnModuleInit {
     const def = dto.defaultRefundMethod ?? current.defaultRefundMethod;
     if (allowed.length === 0) throw new BadRequestException('Allow at least one refund method');
     if (!allowed.includes(def)) throw new BadRequestException('The default refund method must be one of the allowed ones');
-    if (channel === SalesChannel.B2C && allowed.includes(RefundMethod.CREDIT_NOTE)) {
-      throw new BadRequestException('Credit notes apply to B2B credit accounts only');
+    if (allowed.includes(RefundMethod.CREDIT_NOTE) || def === RefundMethod.CREDIT_NOTE) {
+      // An unpaid legacy credit order still settles by credit note (refundMethodsFor); it is never a choice.
+      throw new BadRequestException('Credit is not offered - refunds go to the wallet, UPI or bank');
     }
     const min = dto.minMediaCount ?? current.minMediaCount;
     const max = dto.maxMediaCount ?? current.maxMediaCount;

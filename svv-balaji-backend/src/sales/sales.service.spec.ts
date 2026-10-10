@@ -439,24 +439,12 @@ describe('SalesService', () => {
     });
   });
 
-  describe('credit control', () => {
-    it('refuses an order that would breach the credit limit', async () => {
+  describe('no credit (client decision 10 Oct 2026)', () => {
+    it('places an order for a retailer still carrying credit terms as prepaid, with no limit check', async () => {
       prisma.order.findMany.mockResolvedValueOnce([{ total: 95000 }]);
 
-      await expect(placeOrder('cust-credit', 100)).rejects.toThrow(/credit limit/);
-    });
-
-    it('allows an order that fits within the remaining headroom', async () => {
-      prisma.order.findMany.mockResolvedValueOnce([{ total: 10000 }]);
-
-      const order: any = await placeOrder('cust-credit', 10);
-      expect(order.total).toBe(1890);
-    });
-
-    it('refuses credit terms with no limit recorded rather than treating it as unlimited', async () => {
-      customers['cust-credit'].creditLimit = null;
-
-      await expect(placeOrder('cust-credit')).rejects.toThrow(/no credit limit/);
+      const order: any = await placeOrder('cust-credit', 100);
+      expect(order.paymentTerms).toBe('PREPAID');
     });
   });
 

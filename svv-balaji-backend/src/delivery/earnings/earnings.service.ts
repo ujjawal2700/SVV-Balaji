@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { taskWeight } from '../dispatch/task-weight';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DeliveryTask, EarningRuleKind, Prisma, RiderEarningType } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -119,7 +120,7 @@ export class EarningsService {
    * What each task would pay if completed now, for the rider's offer card.
    * One rules read for the whole batch; null when no rule pays anything.
    */
-  async estimate(tasks: Array<{ id: string; kind: DeliveryTask['kind']; zoneId: string | null; distanceKm: Prisma.Decimal | number | null }>, riderId: string) {
+  async estimate(tasks: Array<{ id: string; kind: DeliveryTask['kind']; zoneId: string | null; distanceKm: Prisma.Decimal | number | null; weightKg?: Prisma.Decimal | number | null }>, riderId: string) {
     const rules = await this.rulesForEstimate();
     const at = new Date();
     return new Map(
@@ -127,6 +128,7 @@ export class EarningsService {
         const amount = estimateEarning(rules, {
           taskId: t.id, riderId, zoneId: t.zoneId, kind: t.kind, at, timeZone: TIMEZONE,
           distanceKm: t.distanceKm === null ? null : Number(t.distanceKm),
+          weightKg: t.weightKg === null || t.weightKg === undefined ? null : Number(t.weightKg),
         });
         return [t.id, amount > 0 ? amount : null] as const;
       }),
@@ -149,6 +151,12 @@ export class EarningsService {
     if (!task.riderId) return [];
     const at = task.deliveredAt ?? task.failedAt ?? task.cancelledAt ?? new Date();
     const rules = await this.activeRules();
+    // Manually assigned tasks may never have had their weight worked out.
+    let weightKg = task.weightKg === null ? null : Number(task.weightKg);
+    if (weightKg === null && rules.some((r) => r.kind === 'PER_KG')) {
+      weightKg = await taskWeight(this.prisma, task).catch(() => null);
+      if (weightKg !== null) await this.prisma.deliveryTask.update({ where: { id: task.id }, data: { weightKg } }).catch(() => undefined);
+    }
     const lines = taskEarnings(rules, {
       taskId: task.id,
       riderId: task.riderId,
@@ -156,6 +164,7 @@ export class EarningsService {
       kind: task.kind,
       result,
       distanceKm: task.distanceKm === null ? null : Number(task.distanceKm),
+      weightKg,
       at,
       timeZone: TIMEZONE,
       waitPickupMinutes: EarningsService.minutesBetween(task.arrivedPickupAt, task.pickedUpAt, task.arrivedPickupVerified),

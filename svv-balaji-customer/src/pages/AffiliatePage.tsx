@@ -361,8 +361,8 @@ function PendingReviewAnimated({ affiliate }: { affiliate: AffiliateProfile }) {
               4
             </div>
             <div>
-              <div style={{ fontWeight: 600, color: '#334155', fontSize: 14 }}>4. Automatic Monthly Payouts</div>
-              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>Earn commissions on each delivered order with automatic payouts deposited directly to your chosen method.</div>
+              <div style={{ fontWeight: 600, color: '#334155', fontSize: 14 }}>4. Monthly Payouts</div>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 2 }}>Earn commission on each delivered order. Each month SVV Balaji pays it to your UPI or bank account and the payment reference appears under Payouts here.</div>
             </div>
           </div>
         </div>

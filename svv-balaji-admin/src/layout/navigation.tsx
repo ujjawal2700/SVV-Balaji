@@ -428,6 +428,30 @@ export const NAV_SECTIONS: NavSection[] = [
         zone: 'supply',
       },
       {
+        key: 'machines',
+        path: '/machines',
+        label: 'Machines',
+        permission: 'MACHINES_VIEW',
+        description:
+          'Machine list production runs are booked on, and utilisation per machine: runs, run ' +
+          'hours (start to completion), output and % of the hours it is meant to run.',
+        endpoints: ['GET /machines', 'GET /machines/utilisation', 'POST /machines', 'PATCH /machines/:id'],
+        workstream: 'WS2.4',
+        zone: 'supply',
+      },
+      {
+        key: 'production-cost',
+        path: '/production-cost',
+        label: 'Production Cost',
+        permission: 'PRODUCTION_COST_VIEW',
+        description:
+          'Cost of each completed run - raw material (from the rate paid), labour, machine, loss ' +
+          'and other - with totals and average cost per unit by product.',
+        endpoints: ['GET /production-cost/report', 'GET /production-batches/:id/cost', 'PUT /production-batches/:id/cost'],
+        workstream: 'WS2.4',
+        zone: 'supply',
+      },
+      {
         key: 'quality-inspections',
         path: '/quality-inspections',
         label: 'Quality Inspections',
@@ -805,16 +829,6 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'CUSTOMER_ACCOUNT_VIEW',
         description: 'Self-service Kirana/Retailer registrations awaiting Super Admin approval, GSTIN compliance audit, and address verification.',
         endpoints: [],
-        workstream: 'WS2.5',
-        zone: 'commerce',
-      },
-      {
-        key: 'receivables',
-        path: '/receivables',
-        label: 'Receivables & Credit',
-        permission: 'RECEIVABLES_VIEW',
-        description: 'What B2B customers owe on credit, due dates, overdue ageing, payments received and statements of account.',
-        endpoints: ['GET /receivables', 'GET /receivables/customers/:id', 'POST /receivables/customers/:id/receipts', 'POST /receivables/receipts/:id/void'],
         workstream: 'WS2.5',
         zone: 'commerce',
       },

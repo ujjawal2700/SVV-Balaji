@@ -4,7 +4,8 @@ import { AuthGuard, PassportStrategy } from '@nestjs/passport';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Rider, RiderOtpPurpose, RiderStatus, VehicleType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { createHash, randomUUID } from 'node:crypto';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -94,6 +95,7 @@ export class RiderSignupDto {
   @ApiPropertyOptional({ enum: VehicleType }) @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) @Matches(/^[A-Z0-9\s-]{5,15}$/i, { message: 'Enter a valid vehicle number' }) vehicleNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) licenceNumber?: string;
+  @ApiPropertyOptional({ description: 'Heaviest load (kg) you can carry at once - deliveries heavier than what is left are not offered to you', example: 15 }) @IsOptional() @Type(() => Number) @IsNumber() @Min(1) @Max(500) maxCarryKg?: number;
   @ApiPropertyOptional({ description: 'Licence / ID photo URL from POST /rider/uploads/signup' })
   @IsOptional() @IsString() @MaxLength(500) documentUrl?: string;
 }
@@ -197,6 +199,7 @@ export class RiderAuthService {
       vehicleNumber: dto.vehicleNumber?.trim().toUpperCase() || null,
       licenceNumber: dto.licenceNumber?.trim().toUpperCase() || null,
       documentUrl: dto.documentUrl ?? null,
+      maxCarryKg: dto.maxCarryKg ?? null,
     };
     // An unverified earlier attempt with the same phone is simply replaced.
     const rider = existing
@@ -344,6 +347,7 @@ export class RiderAuthService {
       availability: r.availability,
       warehouse: r.warehouse ?? null,
       maxActiveTasks: r.maxActiveTasks ?? 1,
+      maxCarryKg: r.maxCarryKg === null || r.maxCarryKg === undefined ? null : Number(r.maxCarryKg),
       rejectionReason: r.status === RiderStatus.REJECTED ? r.rejectionReason : null,
       /** Documents, PCC and deposit cleared - may go online / get orders. */
       verified: r.isVerified && (!r.verifiedUntil || r.verifiedUntil > new Date()),

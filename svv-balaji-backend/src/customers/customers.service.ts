@@ -120,8 +120,8 @@ export class CustomersService {
           district: dto.district,
           state: dto.state,
           pincode: dto.pincode,
-          creditLimit: dto.creditLimit,
-          paymentTerms: dto.paymentTerms ?? PaymentTerms.PREPAID,
+          creditLimit: null,
+          paymentTerms: PaymentTerms.PREPAID,
           branchId: dto.branchId,
           assignedToId: dto.assignedToId,
           status: dto.status ?? CustomerStatus.ACTIVE,
@@ -168,6 +168,15 @@ export class CustomersService {
     channel: SalesChannel,
     isCreate: boolean,
   ) {
+    // Client decision 10 Oct 2026: no credit for anyone. Retailers pay online
+    // or cash on delivery exactly like consumers, so every account is PREPAID.
+    if (dto.creditLimit) {
+      throw new BadRequestException('Credit is not offered - retailers pay online or cash on delivery');
+    }
+    if (dto.paymentTerms && dto.paymentTerms !== PaymentTerms.PREPAID) {
+      throw new BadRequestException('Credit terms are not offered - payment terms must be PREPAID');
+    }
+
     if (channel === SalesChannel.B2B) {
       if (dto.type && !B2B_TYPES.includes(dto.type)) {
         throw new BadRequestException(
@@ -196,12 +205,6 @@ export class CustomersService {
         throw new BadRequestException(
           'A B2C consumer does not carry a GSTIN. Register them as B2B if they are a business.',
         );
-      }
-      if (dto.creditLimit) {
-        throw new BadRequestException('Credit limits apply to B2B customers only');
-      }
-      if (dto.paymentTerms && dto.paymentTerms !== PaymentTerms.PREPAID) {
-        throw new BadRequestException('Consumers pay up front - B2C payment terms must be PREPAID');
       }
       if (dto.assignedToId) {
         throw new BadRequestException('A sales executive is assigned to B2B accounts only');
@@ -323,8 +326,6 @@ export class CustomersService {
         district: dto.district,
         state: dto.state,
         pincode: dto.pincode,
-        creditLimit: dto.creditLimit,
-        paymentTerms: dto.paymentTerms,
         branchId: dto.branchId,
         assignedToId: dto.assignedToId,
       },

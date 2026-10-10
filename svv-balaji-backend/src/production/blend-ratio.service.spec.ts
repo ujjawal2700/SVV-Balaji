@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { ProductionType } from '@prisma/client';
+import { ProductionCostService } from './production-cost.service';
 import { ProductionService } from './production.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SequenceService } from '../common/sequence.service';
@@ -107,6 +108,7 @@ describe('ProductionService - blend ratio enforcement', () => {
     service = new ProductionService(
       prisma as unknown as PrismaService,
       sequence as unknown as SequenceService,
+      { refreshAfterCompletion: jest.fn() } as unknown as ProductionCostService,
     );
   });
 

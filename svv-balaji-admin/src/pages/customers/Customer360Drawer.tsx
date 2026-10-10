@@ -33,7 +33,6 @@ import {
 } from 'antd';
 import { useMemo } from 'react';
 import type { Customer } from '../../api/types';
-import { useCustomerCredit } from '@shared/hooks/useCustomers';
 import { EM_DASH, formatCurrency } from '../../utils/format';
 
 const { Text, Title, Paragraph } = Typography;
@@ -50,8 +49,6 @@ export function Customer360Drawer({
   const { message } = AntApp.useApp();
   const isB2B = customer?.channel === 'B2B';
 
-  const creditQuery = useCustomerCredit(customer?.id, isB2B);
-  const creditData = creditQuery.data;
 
   // Mock customer orders history for CRM display
   const mockOrders = useMemo(() => {
@@ -313,7 +310,7 @@ export function Customer360Drawer({
               ? [
                   {
                     key: 'credit',
-                    label: 'B2B Credit & Tax',
+                    label: 'GST & Tax',
                     children: (
                       <Space direction="vertical" size={16} style={{ width: '100%' }}>
                         <Descriptions title="GST & Billing Tax Info" bordered size="small" column={1}>
@@ -327,42 +324,7 @@ export function Customer360Drawer({
                               EM_DASH
                             )}
                           </Descriptions.Item>
-                          <Descriptions.Item label="Payment Terms">
-                            <Tag color="blue">{customer.paymentTerms}</Tag>
-                          </Descriptions.Item>
                         </Descriptions>
-
-                        <Card size="small" title="B2B Credit Facility Headroom">
-                          {creditData ? (
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              <Row gutter={16}>
-                                <Col span={8}>
-                                  <Statistic title="Credit Limit" value={creditData.creditLimit ?? 0} prefix="₹" />
-                                </Col>
-                                <Col span={8}>
-                                  <Statistic title="Outstanding" value={creditData.outstanding ?? 0} prefix="₹" valueStyle={{ color: '#cf1322' }} />
-                                </Col>
-                                <Col span={8}>
-                                  <Statistic title="Available Credit" value={creditData.availableCredit ?? 0} prefix="₹" valueStyle={{ color: '#389e0d' }} />
-                                </Col>
-                              </Row>
-
-                              {creditData.creditLimit ? (
-                                <div style={{ marginTop: 12 }}>
-                                  <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Credit Utilization Rate
-                                  </Text>
-                                  <Progress
-                                    percent={Math.min(100, Math.round(((creditData.outstanding ?? 0) / creditData.creditLimit) * 100))}
-                                    status={((creditData.outstanding ?? 0) / creditData.creditLimit) > 0.9 ? 'exception' : 'active'}
-                                  />
-                                </div>
-                              ) : null}
-                            </Space>
-                          ) : (
-                            <Text type="secondary">Prepaid account only. No active credit limit set.</Text>
-                          )}
-                        </Card>
                       </Space>
                     ),
                   },

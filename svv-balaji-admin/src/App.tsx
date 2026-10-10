@@ -89,9 +89,6 @@ const GstSettingsPage = lazy(() =>
 const CustomerReturnsPage = lazy(() => import('./pages/returns/ReturnsQueuePage').then((m) => ({ default: m.CustomerReturnsPage })));
 const RetailerReturnsPage = lazy(() => import('./pages/returns/ReturnsQueuePage').then((m) => ({ default: m.RetailerReturnsPage })));
 const ReturnSettingsPage = lazy(() => import('./pages/returns/ReturnSettingsPage').then((m) => ({ default: m.ReturnSettingsPage })));
-const ReceivablesPage = lazy(() =>
-  import('./pages/receivables/ReceivablesPage').then((m) => ({ default: m.ReceivablesPage })),
-);
 const SeedStockLedgerPage = lazy(() =>
   import('./pages/seed-stock/SeedStockLedgerPage').then((m) => ({ default: m.SeedStockLedgerPage })),
 );
@@ -179,6 +176,10 @@ const ProductionBatchesPage = lazy(() =>
   import('./pages/production/ProductionBatchesPage').then((m) => ({
     default: m.ProductionBatchesPage,
   })),
+);
+const MachinesPage = lazy(() => import('./pages/production/MachinesPage').then((m) => ({ default: m.MachinesPage })));
+const ProductionCostReportPage = lazy(() =>
+  import('./pages/production/ProductionCostReportPage').then((m) => ({ default: m.ProductionCostReportPage })),
 );
 const YieldTrackingPage = lazy(() =>
   import('./pages/production/YieldTrackingPage').then((m) => ({
@@ -341,7 +342,6 @@ const SCREENS: Record<string, ReactElement> = {
   '/agreements': <AgreementsPage />,
   '/seed-distribution': <SeedDistributionPage />,
   '/seed-stock': <SeedStockPage />,
-  '/receivables': <ReceivablesPage />,
   '/returns/customers': <CustomerReturnsPage />,
   '/returns/retailers': <RetailerReturnsPage />,
   '/settings/returns': <ReturnSettingsPage />,
@@ -379,6 +379,8 @@ const SCREENS: Record<string, ReactElement> = {
   '/quality-inspections': <QualityInspectionsPage />,
   '/finished-goods': <FinishedGoodsPage />,
   '/yield-tracking': <YieldTrackingPage />,
+  '/machines': <MachinesPage />,
+  '/production-cost': <ProductionCostReportPage />,
   // Zone 4 — Sales & Distribution (FRD Sections 24-28)
   '/productlists': <ProductListsPage />,
   '/banners': <BannersPage />,

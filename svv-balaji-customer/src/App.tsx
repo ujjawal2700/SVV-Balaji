@@ -56,7 +56,6 @@ const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ de
 const ReturnRequestPage = lazy(() => import('./pages/ReturnRequestPage').then((m) => ({ default: m.ReturnRequestPage })));
 const ReturnsPage = lazy(() => import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnsPage })));
 const ReturnDetailPage = lazy(() => import('./pages/ReturnsPage').then((m) => ({ default: m.ReturnDetailPage })));
-const WalletPage = lazy(() => import('./pages/WalletPage').then((m) => ({ default: m.WalletPage })));
 const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage').then((m) => ({ default: m.LoyaltyPage })));
 const ReferralPage = lazy(() =>
   import('./pages/ReferralPage').then((m) => ({ default: m.ReferralPage })),
@@ -160,7 +159,8 @@ export function App() {
           <Route path="addresses" element={<AddressesPage />} />
           <Route path="wishlist" element={<WishlistPage />} />
           <Route path="notifications" element={<RequireAccount><NotificationsPage /></RequireAccount>} />
-          <Route path="wallet" element={<WalletPage />} />
+          {/* Retailer credit ledger retired 10 Oct 2026 (no credit) - old links land on orders. */}
+          <Route path="wallet" element={<Navigate to="/orders" replace />} />
           <Route path="loyalty" element={<LoyaltyPage />} />
 
           {/*

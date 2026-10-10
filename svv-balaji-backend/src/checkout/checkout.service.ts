@@ -375,20 +375,11 @@ export class CheckoutService {
     let codUnavailableReason: string | null = null;
     let creditUnavailableReason: string | null = null;
 
-    if (customer.channel === SalesChannel.B2C) {
-      if (!s.codEnabled) codUnavailableReason = 'Cash on delivery is not available';
-      else if (s.codMaxAmount !== null && total > s.codMaxAmount) codUnavailableReason = `Cash on delivery is available up to ₹${s.codMaxAmount}`;
-      else allowedModes.push(PaymentMode.COD);
-    } else if (customer.paymentTerms === PaymentTerms.PREPAID) {
-      creditUnavailableReason = 'Your account is on prepaid terms';
-    } else {
-      try {
-        await this.sales.assertWithinCreditLimit(customer.id, total);
-        allowedModes.push(PaymentMode.CREDIT);
-      } catch (e) {
-        creditUnavailableReason = e instanceof HttpException ? this.messageOf(e) : 'Credit is not available for this order';
-      }
-    }
+    // Retailers pay exactly like consumers since 10 Oct 2026: online or COD, never credit.
+    if (!s.codEnabled) codUnavailableReason = 'Cash on delivery is not available';
+    else if (s.codMaxAmount !== null && total > s.codMaxAmount) codUnavailableReason = `Cash on delivery is available up to ₹${s.codMaxAmount}`;
+    else allowedModes.push(PaymentMode.COD);
+    if (customer.channel === SalesChannel.B2B) creditUnavailableReason = 'Credit is not offered - pay online or cash on delivery';
     const defaultMode = allowedModes.includes(PaymentMode.CREDIT) ? PaymentMode.CREDIT : PaymentMode.ONLINE;
     return { allowedModes, defaultMode, codUnavailableReason, creditUnavailableReason };
   }
@@ -712,7 +703,7 @@ export class CheckoutService {
         // ONLINE is paid by now (gateway verified, or fully covered by the Refund Wallet).
         paymentStatus: online ? PaymentStatus.PAID : PaymentStatus.PENDING,
         refundWalletPaidInr: t.refundWalletApplied ?? 0,
-        paymentTerms: quote.channel === SalesChannel.B2C ? PaymentTerms.PREPAID : customer.paymentTerms,
+        paymentTerms: PaymentTerms.PREPAID,
         gatewayOrderId: session.gatewayOrderId,
         gatewayPaymentId: paymentId,
         fulfillmentMethod: quote.fulfillment.method,

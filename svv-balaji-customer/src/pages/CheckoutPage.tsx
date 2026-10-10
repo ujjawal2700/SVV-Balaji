@@ -716,11 +716,6 @@ export function CheckoutPage() {
                       ℹ️ {quote.payment.codUnavailableReason}
                     </Typography.Text>
                   ) : null}
-                  {quote.payment.creditUnavailableReason && quote.channel === 'B2B' ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8, color: '#94a3b8' }}>
-                      ℹ️ {quote.payment.creditUnavailableReason}
-                    </Typography.Text>
-                  ) : null}
                 </Card>
               ) : null}
             </div>

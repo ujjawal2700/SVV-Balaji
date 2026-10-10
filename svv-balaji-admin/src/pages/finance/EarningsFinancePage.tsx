@@ -6,7 +6,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiErrorMessage } from '@shared/api/client';
-import { reportsApi, type AgeingBucket, type FinanceChannel, type FinanceReport, type ReportQuery } from '@shared/api/reports';
+import { reportsApi, type FinanceChannel, type FinanceReport, type ReportQuery } from '@shared/api/reports';
 import { useAuth } from '@shared/auth/useAuth';
 import { BranchSelect } from '@shared/components/pickers';
 import { PageHeader } from '@shared/components/PageHeader';
@@ -15,14 +15,6 @@ import { Kpi, RANGE_PRESETS } from '../reports/SalesAnalyticsPage';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
-
-const AGEING_LABEL: Record<AgeingBucket, string> = {
-  NOT_DUE: 'Not yet due',
-  D1_30: '1-30 days overdue',
-  D31_60: '31-60 days',
-  D61_90: '61-90 days',
-  D90_PLUS: 'Over 90 days',
-};
 
 const REFUND_LABEL: Record<string, string> = {
   WALLET: 'Refund wallet',
@@ -101,14 +93,6 @@ function FinanceBody({ d }: { d: FinanceReport }) {
     { title: 'Refunded', dataIndex: 'refunds', align: 'right', render: inr },
     { title: 'Avg order', dataIndex: 'avgOrderValue', align: 'right', render: inr },
   ];
-  const debtorColumns: ColumnsType<FinanceReport['receivables']['topDebtors'][number]> = [
-    { title: 'Retailer', key: 'name', render: (_, r) => <Space direction="vertical" size={0}><Link to={`/b2b-customers/${r.customerId}`}>{r.name}</Link><Text type="secondary" style={{ fontSize: 12 }}>{r.customerCode} · {r.phone}</Text></Space> },
-    { title: 'Terms', dataIndex: 'paymentTerms', render: (v: string) => v.replace('CREDIT_', '') + (v === 'PREPAID' ? '' : ' days') },
-    { title: 'Outstanding', dataIndex: 'outstanding', align: 'right', render: inr },
-    { title: 'Overdue', dataIndex: 'overdue', align: 'right', render: (v: number) => (v > 0 ? <Text type="danger">{inr(v)}</Text> : '—') },
-    { title: 'Oldest overdue', dataIndex: 'oldestOverdueDays', align: 'right', render: (v: number) => (v ? `${v} days` : '—') },
-    { title: 'Credit limit', dataIndex: 'creditLimit', align: 'right', render: (v: number | null) => (v === null ? 'No limit' : inr(v)) },
-  ];
   const recentColumns: ColumnsType<FinanceReport['recentCollections'][number]> = [
     { title: 'When', dataIndex: 'at', render: (v: string) => dayjs(v).format('D MMM YYYY, HH:mm') },
     { title: 'Source', dataIndex: 'source', render: (v: string, r) => <Space size={4}><Tag>{v}</Tag><Text type="secondary" style={{ fontSize: 12 }}>{r.mode}</Text></Space> },
@@ -126,7 +110,7 @@ function FinanceBody({ d }: { d: FinanceReport }) {
         <Col xs={12} md={8} xl={4}><Kpi label="Money received" value={inr(d.collections.total)} hint="Cash basis, all sources" /></Col>
         <Col xs={12} md={8} xl={4}><Kpi label="Unpaid from this range" value={inr(t.outstanding)} hint="Billed in range, not yet paid" /></Col>
         <Col xs={12} md={8} xl={4}><Kpi label="Refunded" value={inr(t.refunds)} hint={`Net revenue ${inr(t.netRevenue)}`} /></Col>
-        <Col xs={12} md={8} xl={4}><Kpi label="B2B overdue (today)" value={inr(d.receivables.overdue)} hint={`of ${inr(d.receivables.outstanding)} owed`} /></Col>
+        <Col xs={12} md={8} xl={4}><Kpi label="Rider pay earned" value={inr(d.payables.riderEarnings)} hint="In this range" /></Col>
       </Row>
 
       <Card style={{ borderRadius: 12 }} title="By channel">
@@ -259,28 +243,8 @@ function FinanceBody({ d }: { d: FinanceReport }) {
         </Col>
       </Row>
 
-      <Card
-        style={{ borderRadius: 12 }}
-        title="B2B receivables as of today"
-        extra={<Link to="/receivables">Receivables & Credit</Link>}
-      >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Space wrap>
-            {(Object.keys(AGEING_LABEL) as AgeingBucket[]).map((b) => (
-              <Tag key={b} color={b === 'NOT_DUE' ? 'default' : b === 'D1_30' ? 'gold' : 'red'}>
-                {AGEING_LABEL[b]}: {inr(d.receivables.ageing[b])}
-              </Tag>
-            ))}
-          </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {d.receivables.debtors} retailers owe money. Credit period runs from the{' '}
-            {d.receivables.creditPeriodStart === 'DISPATCH' ? 'dispatch date' : 'order date'}.
-          </Text>
-          <Table size="small" rowKey="customerId" columns={debtorColumns} dataSource={d.receivables.topDebtors} pagination={false} scroll={{ x: 760 }} locale={{ emptyText: 'Nobody owes anything' }} />
-        </Space>
-      </Card>
 
-      <Card style={{ borderRadius: 12 }} title="Latest money received" extra={<Text type="secondary" style={{ fontSize: 12 }}>Online, COD and credit receipts; last 50 in the range</Text>}>
+      <Card style={{ borderRadius: 12 }} title="Latest money received" extra={<Text type="secondary" style={{ fontSize: 12 }}>Online and COD receipts; last 50 in the range</Text>}>
         <Table size="small" rowKey={(r) => `${r.source}-${r.id}`} columns={recentColumns} dataSource={d.recentCollections} pagination={{ pageSize: 10 }} scroll={{ x: 820 }} locale={{ emptyText: 'Nothing received in this range' }} />
       </Card>
     </>

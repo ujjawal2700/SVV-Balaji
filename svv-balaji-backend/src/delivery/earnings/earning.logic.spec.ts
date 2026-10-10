@@ -169,3 +169,38 @@ describe('rider earning rules', () => {
     expect(inWindows(late, new Date('2026-09-25T17:00:00Z'), 'Asia/Kolkata')).toBe(false); // Fri 22:30
   });
 });
+
+describe('PER_KG weight pay (client decision 10 Oct 2026)', () => {
+  const base = rule({ id: 'base', kind: 'BASE_PER_DELIVERY', config: { amount: 30 } });
+  const perKg = rule({ id: 'kg', kind: 'PER_KG', config: { ratePerKg: 2, freeKg: 5 } });
+
+  it('validates rate, free kg and cap', () => {
+    expect(validateConfig('PER_KG', { ratePerKg: 2, freeKg: 5, maxAmount: 50 }, null)).toBeNull();
+    expect(validateConfig('PER_KG', { ratePerKg: -1 }, null)).toMatch(/ratePerKg/);
+    expect(validateConfig('PER_KG', { ratePerKg: 1, freeKg: -2 }, null)).toMatch(/freeKg/);
+  });
+
+  it('pays the kg above the free allowance on top of base pay', () => {
+    const lines = taskEarnings([base, perKg], ctx({ weightKg: 12.5 }));
+    expect(lines.find((l) => l.type === 'WEIGHT')!.amount).toBe(15); // (12.5 - 5) x 2
+    expect(total(lines)).toBe(45);
+  });
+
+  it('pays nothing for weight within the allowance, or when the weight is unknown', () => {
+    expect(taskEarnings([base, perKg], ctx({ weightKg: 4 })).some((l) => l.type === 'WEIGHT')).toBe(false);
+    expect(taskEarnings([base, perKg], ctx({ weightKg: null })).some((l) => l.type === 'WEIGHT')).toBe(false);
+  });
+
+  it('respects the cap, and a zone rule replaces the all-zones rate', () => {
+    const capped = rule({ id: 'cap', kind: 'PER_KG', config: { ratePerKg: 10, maxAmount: 40 } });
+    expect(taskEarnings([capped], ctx({ weightKg: 20 }))[0].amount).toBe(40);
+    const zoned = rule({ id: 'zkg', kind: 'PER_KG', zoneId: 'zA', config: { ratePerKg: 3 } });
+    const lines = taskEarnings([perKg, zoned], ctx({ weightKg: 10 })).filter((l) => l.type === 'WEIGHT');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].amount).toBe(30);
+  });
+
+  it('shows on the offer estimate', () => {
+    expect(estimateEarning([base, perKg], { taskId: 't', riderId: 'r', zoneId: null, distanceKm: 1, at: EVENING, timeZone: 'Asia/Kolkata', weightKg: 10 })).toBe(40);
+  });
+});

@@ -126,12 +126,16 @@ describe('CustomersService', () => {
       );
     });
 
-    it('accepts credit terms and a limit', async () => {
-      const created = await service.create(
-        b2bDto({ paymentTerms: 'CREDIT_30', creditLimit: 500000 }),
-      );
-      expect(created.paymentTerms).toBe('CREDIT_30');
-      expect(created.creditLimit).toBe(500000);
+    // Client decision 10 Oct 2026: retailers pay online or COD - no credit.
+    it('refuses credit terms and a credit limit', async () => {
+      await expect(service.create(b2bDto({ paymentTerms: 'CREDIT_30' }))).rejects.toThrow(/not offered/);
+      await expect(service.create(b2bDto({ creditLimit: 500000 }))).rejects.toThrow(/not offered/);
+    });
+
+    it('creates every retailer as prepaid with no limit', async () => {
+      const created = await service.create(b2bDto({}));
+      expect(created.paymentTerms).toBe('PREPAID');
+      expect(created.creditLimit).toBeNull();
     });
   });
 
@@ -184,9 +188,9 @@ describe('CustomersService', () => {
 
   describe('credit position', () => {
     it('reports exposure and headroom against the limit', async () => {
-      const created = await service.create(
-        b2bDto({ paymentTerms: 'CREDIT_30', creditLimit: 100000 }),
-      );
+      // A retailer still carrying credit from before 10 Oct 2026.
+      const created = await service.create(b2bDto({}));
+      Object.assign(customers.find((c) => c.id === created.id), { paymentTerms: 'CREDIT_30', creditLimit: 100000 });
       prisma.order.findMany.mockResolvedValueOnce([
         { orderNumber: 'SO-20260811-001', total: 30000, amountPaid: 0, orderDate: new Date(), paymentStatus: 'PENDING' },
         // Part-paid through Receivables: only the unpaid 15000 is still owed.
@@ -202,9 +206,9 @@ describe('CustomersService', () => {
     });
 
     it('flags a customer already over their limit', async () => {
-      const created = await service.create(
-        b2bDto({ paymentTerms: 'CREDIT_30', creditLimit: 50000 }),
-      );
+      // A retailer still carrying credit from before 10 Oct 2026.
+      const created = await service.create(b2bDto({}));
+      Object.assign(customers.find((c) => c.id === created.id), { paymentTerms: 'CREDIT_30', creditLimit: 50000 });
       prisma.order.findMany.mockResolvedValueOnce([
         { orderNumber: 'SO-1', total: 80000, amountPaid: 0, orderDate: new Date(), paymentStatus: 'PENDING' },
       ]);

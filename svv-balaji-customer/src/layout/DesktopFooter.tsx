@@ -222,8 +222,8 @@ export function DesktopFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/wallet" style={{ color: '#a8a29e', textDecoration: 'none' }} className="nav-link-hover">
-                  Retailer Ledger &amp; Credit
+                <Link to="/returns" style={{ color: '#a8a29e', textDecoration: 'none' }} className="nav-link-hover">
+                  Returns &amp; Refunds
                 </Link>
               </li>
               <li>

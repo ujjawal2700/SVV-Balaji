@@ -24,6 +24,10 @@ const KIND: Record<EarningRuleKind, { label: string; help: string }> = {
     label: 'Return pickup pay',
     help: 'Flat amount for collecting a customer return and bringing it to the store. Used instead of base pay on return pickups (distance, peak, zone and waiting rules still add). Shown to riders on the offer card. With no rule, a return pickup pays like a delivery.',
   },
+  PER_KG: {
+    label: 'Pay per kg carried',
+    help: 'Added on top of base pay: (order weight - free kg) x rate per kg, optionally capped. Weight comes from the pack weight of each product; an order with a product missing its weight earns nothing here. Shown to riders on the offer card.',
+  },
 };
 const OUTCOMES: Record<string, string> = {
   CANCELLED_AFTER_ASSIGNMENT: 'Cancelled after the rider accepted', CANCELLED_AT_PICKUP: 'Cancelled with the rider at the store',
@@ -37,6 +41,7 @@ function describe(r: EarningRule): string {
   switch (r.kind) {
     case 'BASE_PER_DELIVERY': return `₹${c.amount}`;
     case 'RETURN_PICKUP_PAY': return `₹${c.amount} per return pickup`;
+    case 'PER_KG': return `₹${c.ratePerKg}/kg${c.freeKg ? ` above ${c.freeKg} kg` : ''}${c.maxAmount != null ? ` (max ₹${c.maxAmount})` : ''}`;
     case 'DISTANCE_SLAB': return (c.slabs as any[]).map((s, i, a) => `${i ? a[i - 1].uptoKm : 0}${s.uptoKm === null ? '+' : `-${s.uptoKm}`} km ₹${s.amount}`).join(' · ');
     case 'PEAK_HOUR': return `₹${c.amount} · ${(c.windows as any[]).map((w) => `${w.days?.length ? w.days.map((d: number) => DAYS[d]).join('/') : 'daily'} ${w.start}-${w.end}`).join(', ')}`;
     case 'ZONE_INCENTIVE': return `₹${c.amount}${c.windows?.length ? ` at set times` : ''}`;
@@ -114,6 +119,7 @@ type RuleForm = {
   windows?: Array<{ days: number[]; time: [Dayjs, Dayjs] }>; targets?: Array<{ deliveries: number; bonus: number }>;
   at?: 'PICKUP' | 'DROP' | 'BOTH'; freeMinutes?: number; perMinute?: number; maxAmount?: number | null;
   outcome?: string; mode?: 'FIXED' | 'PERCENT_OF_DELIVERY'; value?: number;
+  ratePerKg?: number; freeKg?: number;
 };
 
 function toForm(r: EarningRule | null): Partial<RuleForm> {
@@ -124,6 +130,7 @@ function toForm(r: EarningRule | null): Partial<RuleForm> {
     amount: c.amount, slabs: c.slabs, unknownDistanceAmount: c.unknownDistanceAmount,
     windows: (c.windows ?? []).map((w: any) => ({ days: w.days ?? [], time: [dayjs(w.start, 'HH:mm'), dayjs(w.end, 'HH:mm')] })),
     targets: c.targets, at: c.at, freeMinutes: c.freeMinutes, perMinute: c.perMinute, maxAmount: c.maxAmount, outcome: c.outcome, mode: c.mode, value: c.value,
+    ratePerKg: c.ratePerKg, freeKg: c.freeKg,
   };
 }
 
@@ -139,6 +146,7 @@ function toConfig(v: RuleForm): Record<string, unknown> {
     case 'WEEKLY_TARGET': return { targets: v.targets };
     case 'WAITING_TIME': return { at: v.at, freeMinutes: v.freeMinutes, perMinute: v.perMinute, ...(v.maxAmount != null ? { maxAmount: v.maxAmount } : {}) };
     case 'OUTCOME_COMPENSATION': return { outcome: v.outcome, mode: v.mode, value: v.value };
+    case 'PER_KG': return { ratePerKg: v.ratePerKg, freeKg: v.freeKg ?? 0, ...(v.maxAmount != null ? { maxAmount: v.maxAmount } : {}) };
   }
 }
 
@@ -198,6 +206,14 @@ function RuleModal({ rule, onClose }: { rule: EarningRule | null; onClose: () =>
         {kind === 'BASE_PER_DELIVERY' || kind === 'PEAK_HOUR' || kind === 'ZONE_INCENTIVE' || kind === 'RETURN_PICKUP_PAY'
           ? money('amount', kind === 'BASE_PER_DELIVERY' ? 'Amount per delivery' : kind === 'RETURN_PICKUP_PAY' ? 'Amount per return pickup' : 'Extra per delivery')
           : null}
+
+        {kind === 'PER_KG' ? (
+          <Row gutter={12}>
+            <Col span={8}><Form.Item name="ratePerKg" label="Rate per kg" rules={[{ required: true }]}><InputNumber min={0} step={0.5} prefix="₹" style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={8}><Form.Item name="freeKg" label="Free kg (not paid)" extra="0 = every kg is paid"><InputNumber min={0} step={0.5} addonAfter="kg" style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={8}>{money('maxAmount', 'Cap per delivery (optional)', false)}</Col>
+          </Row>
+        ) : null}
 
         {kind === 'DISTANCE_SLAB' ? (
           <>

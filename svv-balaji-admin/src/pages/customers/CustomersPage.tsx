@@ -40,7 +40,6 @@ import { Can } from '../../components/Can';
 import { PageHeader } from '../../components/PageHeader';
 import { useCustomers, useSetCustomerStatus } from '@shared/hooks/useCustomers';
 import { EM_DASH } from '../../utils/format';
-import { CustomerCreditDrawer } from './CustomerCreditDrawer';
 import { CustomerFormModal } from './CustomerFormModal';
 
 const { Text } = Typography;
@@ -72,7 +71,6 @@ export function CustomersPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const [creditOf, setCreditOf] = useState<Customer | null>(null);
 
   const customersQuery = useCustomers(query);
   const setStatusMutation = useSetCustomerStatus();
@@ -256,16 +254,6 @@ export function CustomersPage() {
                   label: 'Edit Customer',
                   onClick: () => openEdit(customer),
                 },
-                ...(customer.channel === 'B2B'
-                  ? [
-                      {
-                        key: 'credit',
-                        icon: <CreditCardOutlined />,
-                        label: 'Manage B2B Credit',
-                        onClick: () => setCreditOf(customer),
-                      },
-                    ]
-                  : []),
                 { type: 'divider' as const },
                 ...STATUS_ACTIONS[customer.status].map((action) => ({
                   key: action.next,
@@ -401,7 +389,6 @@ export function CustomersPage() {
 
         {/* Form & Credit Modals */}
         <CustomerFormModal open={formOpen} customer={editing} onClose={closeForm} />
-        <CustomerCreditDrawer customer={creditOf} onClose={() => setCreditOf(null)} />
       </Space>
     </div>
   );

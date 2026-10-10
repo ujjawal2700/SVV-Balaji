@@ -23,6 +23,7 @@ export class UpdateRiderDto {
   @ApiPropertyOptional({ enum: VehicleType }) @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) vehicleNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) city?: string;
+  @ApiPropertyOptional({ description: 'Kg the rider can carry at once (normally entered by the rider)' }) @IsOptional() @Type(() => Number) @IsNumber() @Min(1) @Max(500) maxCarryKg?: number;
 }
 
 export class ReasonDto {
@@ -55,7 +56,7 @@ export class AvailabilityDto {
 const RIDER_LIST_SELECT = {
   id: true, code: true, fullName: true, phone: true, email: true, status: true, city: true, vehicleType: true, vehicleNumber: true,
   licenceNumber: true, documentUrl: true, photoUrl: true, availability: true, availabilityChangedAt: true, lastLocationAt: true,
-  lastLatitude: true, lastLongitude: true, maxActiveTasks: true, createdAt: true, reviewedAt: true, rejectionReason: true,
+  lastLatitude: true, lastLongitude: true, maxActiveTasks: true, maxCarryKg: true, createdAt: true, reviewedAt: true, rejectionReason: true,
   isVerified: true, verifiedUntil: true,
   warehouse: { select: { id: true, name: true } },
 } satisfies Prisma.RiderSelect;

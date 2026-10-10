@@ -43,7 +43,7 @@ export interface RetailerUserProfile {
   walletBalance: number;
   creditLimit: number;
   creditUsed: number;
-  /** PREPAID or CREDIT_7..CREDIT_45 - see hooks/useRetailerCredit. */
+  /** Always PREPAID since 10 Oct 2026 (no credit for retailers). */
   paymentTerms: string;
   /** This account's own shareable refer-a-friend code. Undefined until the account has a Customer row. */
   referralCode?: string;

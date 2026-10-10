@@ -1,8 +1,8 @@
-import { Alert, App as AntApp, Col, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
+import { App as AntApp, Col, Form, Input, Modal, Row, Select } from 'antd';
 import { useEffect } from 'react';
 import { apiErrorMessage } from '@shared/api/client';
 import type { CreateCustomerInput, Customer, SalesChannel } from '@shared/api/types';
-import { CUSTOMER_TYPES, PAYMENT_TERMS, SALES_CHANNELS } from '@shared/api/types';
+import { CUSTOMER_TYPES, SALES_CHANNELS } from '@shared/api/types';
 import { useCan } from '@shared/auth/useCan';
 import { BranchSelect } from '@shared/components/pickers';
 import { useCreateCustomer, useUpdateCustomer } from '@shared/hooks/useCustomers';
@@ -18,14 +18,6 @@ const TYPES_BY_CHANNEL: Record<SalesChannel, readonly string[]> = {
 const CHANNEL_LABELS: Record<SalesChannel, string> = {
   B2B: 'B2B — distributors, retailers, institutions',
   B2C: 'B2C — individual consumers',
-};
-
-const TERM_LABELS: Record<string, string> = {
-  PREPAID: 'Prepaid — payment before dispatch',
-  CREDIT_7: 'Credit — 7 days',
-  CREDIT_15: 'Credit — 15 days',
-  CREDIT_30: 'Credit — 30 days',
-  CREDIT_45: 'Credit — 45 days',
 };
 
 interface CustomerFormModalProps {
@@ -96,8 +88,6 @@ export function CustomerFormModal({ open, customer, onClose, forceChannel }: Cus
         district: customer.district ?? undefined,
         state: customer.state ?? undefined,
         pincode: customer.pincode ?? undefined,
-        creditLimit: customer.creditLimit ? Number(customer.creditLimit) : undefined,
-        paymentTerms: customer.paymentTerms,
         branchId: customer.branchId ?? undefined,
         assignedToId: customer.assignedToId ?? undefined,
       });
@@ -120,9 +110,8 @@ export function CustomerFormModal({ open, customer, onClose, forceChannel }: Cus
     form.setFieldsValue({
       type: next === 'B2C' ? 'CONSUMER' : undefined,
       gstin: undefined,
-      creditLimit: undefined,
       assignedToId: undefined,
-      paymentTerms: next === 'B2C' ? 'PREPAID' : 'PREPAID',
+      paymentTerms: 'PREPAID',
     });
   };
 
@@ -361,39 +350,6 @@ export function CustomerFormModal({ open, customer, onClose, forceChannel }: Cus
           </Col>
         </Row>
 
-        {isB2B ? (
-          <>
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              message="Credit terms"
-              description="The limit is checked when an order is confirmed, against everything unpaid. Leave it blank to keep the account strictly prepaid."
-            />
-            <Row gutter={16}>
-              <Col xs={24} md={12}>
-                <Form.Item name="creditLimit" label="Credit limit (₹)">
-                  <InputNumber
-                    min={0}
-                    step={1000}
-                    style={{ width: '100%' }}
-                    placeholder="No limit — prepaid only"
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="paymentTerms" label="Payment terms">
-                  <Select
-                    options={PAYMENT_TERMS.map((value) => ({
-                      value,
-                      label: TERM_LABELS[value] ?? value,
-                    }))}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-          </>
-        ) : null}
 
         <Row gutter={16}>
           <Col xs={24} md={12}>

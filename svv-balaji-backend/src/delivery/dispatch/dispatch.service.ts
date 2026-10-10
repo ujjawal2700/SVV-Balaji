@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { taskWeight } from './task-weight';
 import {
   DeliveryOffer,
   DeliveryOfferStatus,
@@ -215,7 +216,7 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       where,
       select: {
         id: true, code: true, fullName: true, phone: true, status: true, availability: true, availabilityChangedAt: true, warehouseId: true,
-        vehicleType: true, vehicleNumber: true, maxActiveTasks: true, lastSeenAt: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true,
+        vehicleType: true, vehicleNumber: true, maxActiveTasks: true, maxCarryKg: true, lastSeenAt: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true,
         isVerified: true, verifiedUntil: true,
         warehouse: { select: { id: true, name: true } },
         _count: {
@@ -229,10 +230,12 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     });
     const ids = riders.map((r) => r.id);
     if (!ids.length) return [];
-    const [cash, lastTask] = await Promise.all([
+    const [cash, lastTask, held] = await Promise.all([
       client.riderCashEntry.groupBy({ by: ['riderId'], where: { riderId: { in: ids } }, _sum: { amount: true } }),
       client.deliveryTask.groupBy({ by: ['riderId'], where: { riderId: { in: ids } }, _max: { assignedAt: true } }),
+      client.deliveryTask.groupBy({ by: ['riderId'], where: { riderId: { in: ids }, status: { in: HELD_STATUSES } }, _sum: { weightKg: true } }),
     ]);
+    const heldKgBy = new Map(held.map((g) => [g.riderId!, Number(g._sum.weightKg ?? 0)]));
     const cashBy = new Map(cash.map((g) => [g.riderId, Number(g._sum.amount ?? 0)]));
     const lastBy = new Map(lastTask.map((g) => [g.riderId!, g._max.assignedAt]));
     return riders.map(({ _count, isVerified, verifiedUntil, ...r }) => ({
@@ -240,6 +243,8 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
       verified: isVerifiedNow({ isVerified, verifiedUntil }, now),
       lastLatitude: r.lastLatitude === null ? null : Number(r.lastLatitude),
       lastLongitude: r.lastLongitude === null ? null : Number(r.lastLongitude),
+      maxCarryKg: r.maxCarryKg === null ? null : Number(r.maxCarryKg),
+      heldWeightKg: heldKgBy.get(r.id) ?? 0,
       heldTasks: _count.tasks,
       pendingOffers: _count.offers,
       hasLiveSession: _count.sessions > 0,
@@ -248,26 +253,9 @@ export class DispatchService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  /**
-   * Goods weight for a task from product pack weights (frozen once known).
-   * Null when any item has no recorded weight - then no vehicle limit applies.
-   */
-  private async taskWeight(client: Prisma.TransactionClient | PrismaService, task: Pick<DeliveryTask, 'orderId' | 'returnRequestId' | 'kind'>): Promise<number | null> {
-    if (task.orderId) {
-      const items = await client.orderItem.findMany({ where: { orderId: task.orderId }, select: { quantity: true, product: { select: { packWeightKg: true } } } });
-      if (!items.length || items.some((i) => i.product.packWeightKg === null)) return null;
-      return items.reduce((sum, i) => sum + i.quantity * Number(i.product.packWeightKg), 0);
-    }
-    if (task.returnRequestId) {
-      const r = await client.returnRequest.findUnique({
-        where: { id: task.returnRequestId },
-        select: { quantity: true, orderItem: { select: { product: { select: { packWeightKg: true } } } }, replacementProduct: { select: { packWeightKg: true } } },
-      });
-      if (!r) return null;
-      const w = task.kind === 'REPLACEMENT_DELIVERY' && r.replacementProduct ? r.replacementProduct.packWeightKg : r.orderItem.product.packWeightKg;
-      return w === null ? null : r.quantity * Number(w);
-    }
-    return null;
+  /** Goods weight for a task (see task-weight.ts). */
+  private taskWeight(client: Prisma.TransactionClient | PrismaService, task: Pick<DeliveryTask, 'orderId' | 'returnRequestId' | 'kind'>): Promise<number | null> {
+    return taskWeight(client, task);
   }
 
   private taskFacts(task: DeliveryTask & { warehouse: { latitude: Prisma.Decimal | null; longitude: Prisma.Decimal | null } }, weightKg: number | null, tried: Iterable<string>): TaskFacts {

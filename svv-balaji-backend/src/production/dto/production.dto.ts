@@ -159,6 +159,15 @@ export class CreateProductionBatchDto {
   @Type(() => ConsumptionDto)
   consumptions: ConsumptionDto[];
 
+  @ApiPropertyOptional({
+    description:
+      'Machine from the machine list (GET /machines). Its name, number and line are copied onto ' +
+      'the run; machineName / machineNumber below are only for runs without one.',
+  })
+  @IsOptional()
+  @IsString()
+  machineId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -176,7 +176,6 @@ step("7. Orders: one dispatched, one allocated-only")
 cust = must("POST", "/customers", {
     "channel": "B2B", "type": "DISTRIBUTOR", "name": f"E2E Distributors {STAMP}", "phone": f"97{STAMP[-8:]}",
     "gstin": f"29ABCDE{STAMP[-4:]}F1Z5", "billingAddress": "12 Market Road", "branchId": BR,
-    "paymentTerms": "CREDIT_30", "creditLimit": 500000,
 })
 must("POST", "/price-lists", {
     "productId": product["id"], "channel": "B2B", "customerType": "DISTRIBUTOR", "unitPrice": 180,

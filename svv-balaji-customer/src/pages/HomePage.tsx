@@ -31,7 +31,6 @@ import { useCart } from '../cart/useCart';
 import { toShelfProduct, useCatalogueProducts, type ShelfProduct } from '../hooks/useCatalogue';
 import type { StorefrontHomeSection } from '@shared/api/types';
 import { useCategoryTree } from '../hooks/useCategoryTree';
-import { useRetailerCredit } from '../hooks/useRetailerCredit';
 // Order history is still mock (no storefront order backend yet). Only its
 // "what and how much was last ordered" survives - names, prices and images are
 // re-read from the live catalogue below, so an admin edit reaches this shelf too.
@@ -87,7 +86,6 @@ export function HomePage() {
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, isLoggedIn } = useCustomerAuth();
   const unreadNotifications = useUnreadNotifications();
-  const credit = useRetailerCredit();
   const isRetailer = role === 'RETAILER';
   const [traceInput, setTraceInput] = useState('');
   const shopperLocation = useShopperLocation();
@@ -518,15 +516,9 @@ export function HomePage() {
                       <CreditCardOutlined style={{ color: '#38bdf8', fontSize: 20 }} />
                     </div>
 
-                    <div style={{ display: 'flex', gap: 24, marginTop: 6 }}>
-                      <div>
-                        <span style={{ fontSize: 11, color: '#cbd5e1', display: 'block' }}>Credit Limit</span>
-                        <strong style={{ fontSize: 16, color: '#34d399' }}>{credit.hasCredit ? formatInr(credit.limit) : 'Not set'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ fontSize: 11, color: '#cbd5e1', display: 'block' }}>Outstanding</span>
-                        <strong style={{ fontSize: 16, color: '#f87171' }}>{formatInr(credit.used)}</strong>
-                      </div>
+                    <div style={{ marginTop: 6 }}>
+                      <span style={{ fontSize: 11, color: '#cbd5e1', display: 'block' }}>Payment</span>
+                      <strong style={{ fontSize: 15, color: '#34d399' }}>Pay online or cash on delivery</strong>
                     </div>
                   </div>
 
@@ -540,9 +532,9 @@ export function HomePage() {
                     </Button>
                     <Button
                       style={{ background: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8 }}
-                      onClick={() => navigate('/wallet')}
+                      onClick={() => navigate('/loyalty')}
                     >
-                      Ledger
+                      Rewards
                     </Button>
                   </div>
                 </div>
@@ -571,7 +563,7 @@ export function HomePage() {
                       Buy Wholesale / Direct Mill Supply
                     </Typography.Title>
                     <Typography.Text style={{ color: '#fed7aa', fontSize: 12, display: 'block', lineHeight: 1.4 }}>
-                      Wholesale tier pricing on bulk packs, and credit terms for your store once your account is approved.
+                      Wholesale tier pricing on bulk packs for your store once your account is approved.
                     </Typography.Text>
                   </div>
 
@@ -1033,38 +1025,15 @@ export function HomePage() {
               <Button
                 type="primary"
                 style={{ background: '#059669', borderColor: '#059669', fontWeight: 600, borderRadius: 8 }}
-                onClick={() => navigate('/wallet')}
+                onClick={() => navigate('/orders')}
               >
-                View Full Ledger &amp; Statements &rarr;
+                View Orders &amp; Invoices &rarr;
               </Button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, background: '#ffffff', padding: '16px 20px', borderRadius: 12, border: '1px solid #dcfce7' }}>
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                  Credit Limit
-                </Typography.Text>
-                <Typography.Text strong style={{ fontSize: 18, color: '#059669' }}>
-                  {credit.hasCredit ? formatInr(credit.limit) : 'Not set'}
-                </Typography.Text>
-              </div>
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                  Current Outstanding Balance
-                </Typography.Text>
-                <Typography.Text strong style={{ fontSize: 18, color: '#dc2626' }}>
-                  {formatInr(credit.used)}
-                </Typography.Text>
-              </div>
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-                  Payment Terms
-                </Typography.Text>
-                <Typography.Text strong style={{ fontSize: 18, color: '#1e3a8a' }}>
-                  {credit.termsLabel}
-                </Typography.Text>
-              </div>
-            </div>
+            <Typography.Text style={{ fontSize: 13, color: '#166534' }}>
+              Orders are paid online or by cash on delivery.
+            </Typography.Text>
           </div>
         ) : (
           <div
@@ -1088,7 +1057,7 @@ export function HomePage() {
                 Own a Grocery Store or Supermarket?
               </Typography.Title>
               <Typography.Text style={{ fontSize: 13, color: '#c2410c' }}>
-                Get direct mill supply at wholesale tier prices, with credit terms set for your store once it is approved.
+                Get direct mill supply at wholesale tier prices once your store is approved.
               </Typography.Text>
             </div>
             <Button

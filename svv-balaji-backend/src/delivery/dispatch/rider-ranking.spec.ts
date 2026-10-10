@@ -123,3 +123,20 @@ describe('vehicleLimits', () => {
     expect(vehicleLimits([1])).toEqual({});
   });
 });
+
+describe('carry limit - the kg a rider says they can carry (client decision 10 Oct 2026)', () => {
+  it('skips a rider when this task plus what they hold exceeds their limit', () => {
+    expect(reasons(rider('a', { maxCarryKg: 10, heldWeightKg: 6, maxActiveTasks: 3, heldTasks: 1 }), rules(), task({ weightKg: 5 }))).toEqual(['CARRY_LIMIT']);
+  });
+
+  it('offers it when it fits exactly, when no limit is set, or when the weight is unknown', () => {
+    expect(reasons(rider('a', { maxCarryKg: 10, heldWeightKg: 5, maxActiveTasks: 3, heldTasks: 1 }), rules(), task({ weightKg: 5 }))).toEqual([]);
+    expect(reasons(rider('a', { maxCarryKg: null }), rules(), task({ weightKg: 50 }))).toEqual([]);
+    expect(reasons(rider('a', { maxCarryKg: 2 }), rules(), task({ weightKg: null }))).toEqual([]);
+  });
+
+  it('only the riders who can carry it are ranked', () => {
+    const ranked = rankRiders([rider('small', { maxCarryKg: 5 }), rider('big', { maxCarryKg: 25 })], rules(), task({ weightKg: 12 }), NOW);
+    expect(ranked.filter((x) => x.eligible).map((x) => x.riderId)).toEqual(['big']);
+  });
+});

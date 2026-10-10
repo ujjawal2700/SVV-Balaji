@@ -967,6 +967,38 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         description: 'Only while the run has consumed nothing and produced nothing.',
         defaultRoles: [],
       },
+      {
+        key: 'production.cost.view',
+        label: 'View production cost',
+        description: 'Cost sheet of a run (raw, labour, machine, loss, other) and the production cost report.',
+        defaultRoles: [PROD, BM],
+      },
+      {
+        key: 'production.cost.edit',
+        label: 'Record production cost',
+        description: 'Enter labour, machine, loss and other costs of a run; override the raw material cost.',
+        defaultRoles: [PROD],
+      },
+    ],
+  },
+  {
+    key: 'machines',
+    label: 'Machines',
+    path: '/machines',
+    viewKey: 'machines.view',
+    permissions: [
+      {
+        key: 'machines.view',
+        label: 'View machines and utilisation',
+        description: 'Machine list, and runs / run hours / output per machine.',
+        defaultRoles: [PROD, BM],
+      },
+      {
+        key: 'machines.manage',
+        label: 'Add and edit machines',
+        description: 'Maintain the machine list production runs are booked against.',
+        defaultRoles: [PROD],
+      },
     ],
   },
   {

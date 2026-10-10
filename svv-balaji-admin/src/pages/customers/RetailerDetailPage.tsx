@@ -45,9 +45,6 @@ import {
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { CreditAccountPanel } from '../receivables/CreditAccountPanel';
-import { PAYMENT_TERMS_LABEL } from '@shared/api/receivables';
-import type { PaymentTerms } from '@shared/api/types';
 import { apiErrorMessage } from '../../api/client';
 import type { CustomerStatus } from '../../api/types';
 import { Can } from '../../components/Can';
@@ -58,7 +55,6 @@ import {
 } from '@shared/hooks/useCustomerAccounts';
 import {
   useCustomer,
-  useCustomerCredit,
   useCustomerReviews,
   useCustomerSupportTickets,
   useCustomerWallet,
@@ -67,7 +63,6 @@ import {
 } from '@shared/hooks/useCustomers';
 import { useOrders } from '@shared/hooks/useSales';
 import { EM_DASH, formatCurrency, formatDateTime } from '../../utils/format';
-import { CustomerCreditDrawer } from './CustomerCreditDrawer';
 import { CustomerFormModal } from './CustomerFormModal';
 import { InfoRow, StatCard } from './detailPageParts';
 
@@ -94,7 +89,6 @@ export function RetailerDetailPage() {
   const { message, modal } = AntApp.useApp();
 
   const [formOpen, setFormOpen] = useState(false);
-  const [creditOpen, setCreditOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -114,8 +108,6 @@ export function RetailerDetailPage() {
   // Target Customer ID for related sub-queries
   const targetCustId = customer?.id || account?.customerId || undefined;
 
-  const creditQuery = useCustomerCredit(targetCustId, true);
-  const creditData = creditQuery.data;
 
   const walletQuery = useCustomerWallet(targetCustId);
   const walletData = walletQuery.data;
@@ -248,9 +240,6 @@ export function RetailerDetailPage() {
   const status = account?.status || customer?.status || 'PENDING_APPROVAL';
   const customerCode = customer?.customerCode || account?.customer?.customerCode || null;
 
-  const limit = creditData?.creditLimit ?? (customer?.creditLimit ? Number(customer.creditLimit) : null);
-  const outstanding = creditData?.outstanding ?? 0;
-  const utilization = limit ? Math.min(100, Math.round((outstanding / limit) * 100)) : null;
   const memberSince = customer?.createdAt ? dayjs(customer.createdAt).format('MMM YYYY').toUpperCase() : null;
 
   return (
@@ -345,9 +334,6 @@ export function RetailerDetailPage() {
                 )}
                 {customer && (
                   <>
-                    <Button icon={<CreditCardOutlined />} onClick={() => setCreditOpen(true)} style={{ borderRadius: 8 }}>
-                      Manage Credit
-                    </Button>
                     <Can do="CUSTOMER_EDIT">
                       <Button icon={<EditOutlined />} onClick={() => setFormOpen(true)} style={{ borderRadius: 8 }}>
                         Edit Profile
@@ -404,17 +390,9 @@ export function RetailerDetailPage() {
             <Col xs={12} sm={6}>
               <StatCard
                 icon={<CreditCardOutlined style={{ fontSize: 18 }} />}
-                tone="red"
-                label="OUTSTANDING CREDIT"
-                value={formatCurrency(outstanding)}
-              />
-            </Col>
-            <Col xs={12} sm={6}>
-              <StatCard
-                icon={<CreditCardOutlined style={{ fontSize: 18 }} />}
                 tone="blue"
-                label="AVAILABLE CREDIT"
-                value={creditData?.availableCredit != null ? formatCurrency(creditData.availableCredit) : 'No Limit Set'}
+                label="PAYS BY"
+                value="Online / COD"
               />
             </Col>
           </Row>
@@ -692,7 +670,7 @@ export function RetailerDetailPage() {
                 label: (
                   <Space size={6}>
                     <CreditCardOutlined />
-                    <span>CREDIT &amp; TAX</span>
+                    <span>GST &amp; TAX</span>
                   </Space>
                 ),
                 children: (
@@ -708,16 +686,10 @@ export function RetailerDetailPage() {
                           EM_DASH
                         )}
                       </Descriptions.Item>
-                      <Descriptions.Item label="Payment Terms">
-                        <Tag color="blue">{PAYMENT_TERMS_LABEL[(customer?.paymentTerms || 'PREPAID') as PaymentTerms]}</Tag>
+                      <Descriptions.Item label="Payment">
+                        <Tag color="blue">Online or cash on delivery - no credit</Tag>
                       </Descriptions.Item>
                     </Descriptions>
-
-                    {targetCustId ? (
-                      <CreditAccountPanel customerId={targetCustId} />
-                    ) : (
-                      <Text type="secondary">Credit terms apply once the retailer is approved.</Text>
-                    )}
                   </Space>
                 ),
               },
@@ -980,7 +952,6 @@ export function RetailerDetailPage() {
       </Space>
 
       {formOpen && customer && <CustomerFormModal open={formOpen} customer={customer} onClose={() => setFormOpen(false)} />}
-      <CustomerCreditDrawer customer={creditOpen && customer ? customer : null} onClose={() => setCreditOpen(false)} />
     </div>
   );
 }

@@ -154,7 +154,7 @@ const VEHICLES: Array<{ value: VehicleType; label: string }> = [
 export function SignUp() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [f, setF] = useState({ fullName: '', phone: '', email: '', city: '', vehicleType: 'MOTORCYCLE' as VehicleType, vehicleNumber: '', password: '' });
+  const [f, setF] = useState({ fullName: '', phone: '', email: '', city: '', vehicleType: 'MOTORCYCLE' as VehicleType, vehicleNumber: '', maxCarryKg: '', password: '' });
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,6 +245,14 @@ export function SignUp() {
       return;
     }
 
+    const carryKg = Number(f.maxCarryKg);
+    if (!f.maxCarryKg.trim() || !Number.isFinite(carryKg) || carryKg < 1 || carryKg > 500) {
+      const msg = 'Enter how many kg you can carry at once (1 to 500)';
+      setError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
     if (!f.password) {
       const msg = 'Please enter a password';
       setError(msg);
@@ -275,6 +283,7 @@ export function SignUp() {
         city: cleanCity || undefined,
         vehicleType: f.vehicleType,
         vehicleNumber: cleanVehNum || undefined,
+        maxCarryKg: carryKg,
       });
       toast('Verification code sent to your mobile number', 'success');
       navigate('/verify', { state: { phone: cleanPhone, purpose: 'signup', devCode: r.devCode } });
@@ -347,6 +356,14 @@ export function SignUp() {
             />
           </Field>
         </div>
+        <Field label="How much can you carry? (kg)" required hint="You will only be offered orders you can carry with what you already have">
+          <TextInput
+            value={f.maxCarryKg}
+            onChange={(e) => setF((x) => ({ ...x, maxCarryKg: e.target.value.replace(/[^\d.]/g, '').slice(0, 5) }))}
+            placeholder="e.g. 20"
+            inputMode="decimal"
+          />
+        </Field>
         <Field label="Password" required hint="We'll send a verification code to your mobile number">
           <PasswordInput
             value={f.password}

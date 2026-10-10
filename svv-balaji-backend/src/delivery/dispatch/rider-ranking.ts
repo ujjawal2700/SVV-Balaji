@@ -18,6 +18,7 @@ export type SkipReason =
   | 'AT_CAPACITY' // tasks in hand + open offers already at their limit
   | 'CASH_LIMIT' // holding too much COD cash
   | 'VEHICLE' // vehicle cannot carry the order weight
+  | 'CARRY_LIMIT' // this task + what they already hold exceeds the kg they said they can carry
   | 'NO_LOCATION' // a distance limit is set and their position is unknown/stale
   | 'TOO_FAR'; // beyond the distance limit from the pickup
 
@@ -32,6 +33,7 @@ export const SKIP_LABEL: Record<SkipReason, string> = {
   AT_CAPACITY: 'At order limit',
   CASH_LIMIT: 'Cash limit reached',
   VEHICLE: 'Vehicle cannot carry this weight',
+  CARRY_LIMIT: 'Over their carry limit (kg)',
   NO_LOCATION: 'Location unknown',
   TOO_FAR: 'Too far from pickup',
 };
@@ -50,6 +52,10 @@ export interface RiderFacts {
   /** Open offers for OTHER tasks - each could become a held task. */
   pendingOffers: number;
   cashInHand: number;
+  /** Kg the rider says they can carry at once; null/undefined = not set. */
+  maxCarryKg?: number | null;
+  /** Kg of the tasks they already hold (tasks of unknown weight count 0). */
+  heldWeightKg?: number;
   hasLiveSession: boolean;
   lastSeenAt: Date | null;
   lastLatitude: number | null;
@@ -127,6 +133,9 @@ export function assessRider(r: RiderFacts, rules: RankingRules, task: TaskFacts 
     if (task.triedRiderIds.has(r.id)) reasons.push('ALREADY_ASKED');
     const limit = rules.vehicleMaxKg[r.vehicleType ?? 'OTHER'];
     if (task.weightKg !== null && limit !== undefined && task.weightKg > limit) reasons.push('VEHICLE');
+    if (task.weightKg !== null && r.maxCarryKg !== null && r.maxCarryKg !== undefined && (r.heldWeightKg ?? 0) + task.weightKg > r.maxCarryKg + 1e-9) {
+      reasons.push('CARRY_LIMIT');
+    }
     if (fresh && task.pickup) km = distanceKm({ lat: r.lastLatitude!, lng: r.lastLongitude! }, task.pickup);
     if (rules.maxPickupDistanceKm !== null && task.pickup) {
       if (km === null) reasons.push('NO_LOCATION');

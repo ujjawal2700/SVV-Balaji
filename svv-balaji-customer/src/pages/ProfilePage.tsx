@@ -26,14 +26,12 @@ import { Avatar, Badge, Breadcrumb, Button, Card, Divider, Modal, Switch, Tabs, 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
-import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { useLoyalty } from '../loyalty/useLoyalty';
 import { useAccountStats } from '../hooks/useAccountStats';
 
 export function ProfilePage() {
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout } = useCustomerAuth();
-  const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const stats = useAccountStats();
   const [whatsappAlerts, setWhatsappAlerts] = useState(true);
@@ -207,15 +205,6 @@ export function ProfilePage() {
           label: 'Returns & Refund Wallet',
           subtitle: 'Return or exchange items, track refunds',
           route: '/returns',
-        },
-        {
-          key: 'wallet',
-          icon: <WalletOutlined />,
-          iconBg: '#f0fdf4',
-          iconColor: '#16a34a',
-          label: 'B2B Wallet Balance',
-          subtitle: `₹${0} Balance available`,
-          route: '/wallet',
         },
         {
           key: 'schemes',
@@ -484,20 +473,6 @@ export function ProfilePage() {
                   </Typography.Text>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Orders</Typography.Text>
                 </div>
-                <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{(retailerProfile?.creditUsed || 0).toLocaleString('en-IN')}
-                  </Typography.Text>
-                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Outstanding</Typography.Text>
-                </div>
-                <div style={{ width: 1, background: 'rgba(255,255,255,0.25)' }} />
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <Typography.Text strong style={{ color: '#fff', fontSize: 18, display: 'block' }}>
-                    ₹{credit.available.toLocaleString('en-IN')}
-                  </Typography.Text>
-                  <Typography.Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11 }}>Available credit</Typography.Text>
-                </div>
               </>
             ) : (
               <>
@@ -559,7 +534,7 @@ export function ProfilePage() {
               </div>
 
               <Typography.Text style={{ color: '#7c2d12', fontSize: 12, display: 'block', marginBottom: 12, lineHeight: 1.4 }}>
-                Register your business for bulk case rates and wholesale tier pricing. Credit terms are set for your store after approval.
+                Register your business for bulk case rates and wholesale tier pricing.
               </Typography.Text>
 
               <Button
@@ -720,7 +695,7 @@ export function ProfilePage() {
               </Typography.Title>
               <Typography.Text style={{ color: '#64748b', fontSize: 13 }}>
                 {isRetailer
-                  ? 'Manage your store profile, verified GSTIN billing credentials, credit limits, and alerts.'
+                  ? 'Manage your store profile, verified GSTIN billing credentials and alerts.'
                   : 'Manage your personal delivery addresses, saved wishlist, and consumer order receipts.'}
               </Typography.Text>
             </div>
@@ -874,7 +849,7 @@ export function ProfilePage() {
                     🏪 Own a Grocery Store?
                   </Typography.Text>
                   <Typography.Text style={{ color: '#c2410c', fontSize: 12, display: 'block', marginBottom: 14 }}>
-                    Upgrade to a B2B Partner Account for wholesale mandi bulk pricing, with credit terms after approval.
+                    Upgrade to a B2B Partner Account for wholesale mandi bulk pricing.
                   </Typography.Text>
                   <Button
                     type="primary"
@@ -932,13 +907,13 @@ export function ProfilePage() {
 
                     <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
                       <Typography.Text type="secondary" style={{ fontSize: 11, fontWeight: 600, display: 'block' }}>
-                        AVAILABLE CREDIT
+                        PAYMENT
                       </Typography.Text>
-                      <Typography.Text strong style={{ fontSize: 18, color: '#0f172a', display: 'block', marginTop: 2 }}>
-                        ₹{credit.available.toLocaleString('en-IN')}
+                      <Typography.Text strong style={{ fontSize: 16, color: '#0f172a', display: 'block', marginTop: 2 }}>
+                        Online or COD
                       </Typography.Text>
                       <Typography.Text style={{ fontSize: 11, color: '#64748b' }}>
-                        {credit.hasCredit ? `Limit ₹${credit.limit.toLocaleString('en-IN')} · ${credit.termsLabel}` : 'No credit limit set yet'}
+                        Pay when you order, or cash on delivery
                       </Typography.Text>
                     </div>
                   </>

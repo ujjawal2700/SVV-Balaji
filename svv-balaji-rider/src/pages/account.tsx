@@ -36,7 +36,7 @@ export function History() {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  BASE: 'Base pay', DISTANCE: 'Distance', PEAK: 'Peak-hour incentive', ZONE_INCENTIVE: 'Zone incentive', DAILY_BONUS: 'Daily target bonus',
+  BASE: 'Base pay', DISTANCE: 'Distance', WEIGHT: 'Weight pay', PEAK: 'Peak-hour incentive', ZONE_INCENTIVE: 'Zone incentive', DAILY_BONUS: 'Daily target bonus',
   WEEKLY_BONUS: 'Weekly target bonus', WAITING: 'Waiting time', OUTCOME: 'Cancelled / failed trip pay', ADJUSTMENT: 'Adjustment',
 };
 
@@ -664,6 +664,7 @@ export function Profile() {
   const [city, setCity] = useState(rider?.city ?? '');
   const [vehicleType, setVehicleType] = useState<VehicleType>(rider?.vehicleType ?? 'MOTORCYCLE');
   const [vehicleNumber, setVehicleNumber] = useState(rider?.vehicleNumber ?? '');
+  const [maxCarryKg, setMaxCarryKg] = useState(rider?.maxCarryKg != null ? String(rider.maxCarryKg) : '');
 
   if (!rider) return null;
 
@@ -699,6 +700,12 @@ export function Profile() {
       return;
     }
 
+    const carryKg = Number(maxCarryKg);
+    if (maxCarryKg.trim() && (!Number.isFinite(carryKg) || carryKg < 1 || carryKg > 500)) {
+      toast('Carrying capacity must be between 1 and 500 kg', 'error');
+      return;
+    }
+
     setSaving(true);
     try {
       await riderApi.updateProfile({
@@ -707,6 +714,7 @@ export function Profile() {
         city: cleanCity || undefined,
         vehicleType,
         vehicleNumber: vehicleNumber.trim().toUpperCase() || undefined,
+        ...(maxCarryKg.trim() ? { maxCarryKg: carryKg } : {}),
       });
       await reload();
       void qc.invalidateQueries();
@@ -725,6 +733,7 @@ export function Profile() {
     ['Email', rider.email || '—', <User size={18} key="e" />],
     ['Store', rider.warehouse?.name ?? 'Not assigned', <Store size={18} key="s" />],
     ['Deliveries at once', rider.maxActiveTasks ?? 1, <Box size={18} key="d" />],
+    ['Can carry', rider.maxCarryKg != null ? `${rider.maxCarryKg} kg` : 'Not set', <Box size={18} key="w" />],
     ['City', rider.city || '—', <User size={18} key="c" />],
     ['Vehicle', [rider.vehicleType?.replace('_', ' ').toLowerCase(), rider.vehicleNumber].filter(Boolean).join(' · ') || '—', <Truck size={18} key="t" />],
   ];
@@ -772,6 +781,7 @@ export function Profile() {
                 setCity(rider.city ?? '');
                 setVehicleType(rider.vehicleType ?? 'MOTORCYCLE');
                 setVehicleNumber(rider.vehicleNumber ?? '');
+                setMaxCarryKg(rider.maxCarryKg != null ? String(rider.maxCarryKg) : '');
                 setEditing(true);
               }}>
                 Edit details
@@ -820,6 +830,12 @@ export function Profile() {
             <div className="field" style={{ marginTop: 12 }}>
               <label>Vehicle Number</label>
               <input className="inp" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="e.g. MP09AB1234" />
+            </div>
+
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>How much can you carry? (kg)</label>
+              <input className="inp" inputMode="decimal" value={maxCarryKg} onChange={(e) => setMaxCarryKg(e.target.value.replace(/[^\d.]/g, '').slice(0, 5))} placeholder="e.g. 20" />
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Orders heavier than what you have room for are not offered to you.</div>
             </div>
 
             <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>

@@ -61,7 +61,7 @@ export function CommerceDashboard({ renderMetricCard }: { renderMetricCard: Metr
           {renderMetricCard('Orders to fulfil', d.toFulfil.total, <InboxOutlined />, '#faad14', '#d48806')}
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          {renderMetricCard('B2B overdue', compact(d.receivables.overdue), <WalletOutlined />, '#f5222d', '#cf1322')}
+          {renderMetricCard('Open returns', d.openReturns, <WalletOutlined />, '#f5222d', '#cf1322')}
         </Col>
       </Row>
 
@@ -145,7 +145,6 @@ export function CommerceDashboard({ renderMetricCard }: { renderMetricCard: Metr
               {go('Retailer registrations', '/b2b-accounts', <Tag color={d.pendingRetailerApprovals ? 'gold' : 'default'}>{d.pendingRetailerApprovals}</Tag>)}
               {go('Support tickets', '/support-tickets', <Tag icon={<CustomerServiceOutlined />} color={d.openSupportTickets ? 'red' : 'default'}>{d.openSupportTickets}</Tag>)}
               {go('Returns & exchanges', '/returns/customers', <Tag icon={<RollbackOutlined />} color={d.openReturns ? 'orange' : 'default'}>{d.openReturns}</Tag>)}
-              {go('Receivables & credit', '/receivables', <Typography.Text type="secondary">{compact(d.receivables.outstanding)}</Typography.Text>)}
               {go('Sales analytics', '/reports')}
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {monthLabel} so far: B2B {d.month.b2b.orders} orders ({inr(d.month.b2b.revenue)}), B2C {d.month.b2c.orders} orders ({inr(d.month.b2c.revenue)}), store counters {d.month.pos.sales} sales ({inr(d.month.pos.revenue)}).

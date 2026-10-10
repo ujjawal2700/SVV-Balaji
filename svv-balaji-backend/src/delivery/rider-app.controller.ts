@@ -1,7 +1,8 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsArray, IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { VehicleType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService, type UploadedFileLike } from '../uploads/storage.service';
@@ -37,6 +38,7 @@ export class UpdateRiderProfileDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) @Matches(/^[a-zA-Z\s.'-]+$/, { message: 'City should only contain letters' }) city?: string;
   @ApiPropertyOptional({ enum: VehicleType }) @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20) @Matches(/^[A-Z0-9\s-]{5,15}$/i, { message: 'Enter a valid vehicle number' }) vehicleNumber?: string;
+  @ApiPropertyOptional({ description: 'Heaviest load (kg) you can carry at once - deliveries heavier than what is left are not offered to you', example: 15 }) @IsOptional() @Type(() => Number) @IsNumber() @Min(1) @Max(500) maxCarryKg?: number;
 }
 
 const IMAGE = /^image\/(jpeg|png|webp|heic|heif)$/;
@@ -129,7 +131,7 @@ export class RiderAppController {
   @Patch('me')
   @UseGuards(RiderJwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update personal profile details (fullName, email, city, vehicleType, vehicleNumber)' })
+  @ApiOperation({ summary: 'Update personal profile details (fullName, email, city, vehicleType, vehicleNumber, maxCarryKg)' })
   async updateProfile(@CurrentRider() r: RiderJwtPayload, @Body() dto: UpdateRiderProfileDto) {
     if (dto.email) {
       const email = dto.email.trim().toLowerCase();
@@ -144,6 +146,7 @@ export class RiderAppController {
         ...(dto.city !== undefined ? { city: dto.city ? dto.city.trim() : null } : {}),
         ...(dto.vehicleType !== undefined ? { vehicleType: dto.vehicleType } : {}),
         ...(dto.vehicleNumber !== undefined ? { vehicleNumber: dto.vehicleNumber ? dto.vehicleNumber.trim().toUpperCase() : null } : {}),
+        ...(dto.maxCarryKg !== undefined ? { maxCarryKg: dto.maxCarryKg } : {}),
       },
       include: { warehouse: { select: { id: true, name: true } } },
     });

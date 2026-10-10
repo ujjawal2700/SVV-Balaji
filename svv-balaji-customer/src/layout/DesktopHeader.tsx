@@ -24,7 +24,6 @@ import { Badge, Button, Dropdown, Input, type MenuProps, Tag, Typography, Skelet
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth } from '../auth/CustomerAuthContext';
-import { useRetailerCredit } from '../hooks/useRetailerCredit';
 import { useCart } from '../cart/useCart';
 import { useLoyalty } from '../loyalty/useLoyalty';
 
@@ -40,7 +39,6 @@ export function DesktopHeader() {
   const cart = useCart();
   const navigate = useNavigate();
   const { role, customerProfile, retailerProfile, logout, isLoggedIn, initialising } = useCustomerAuth();
-  const credit = useRetailerCredit();
   const loyalty = useLoyalty();
   const unreadNotifications = useUnreadNotifications();
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,24 +68,6 @@ export function DesktopHeader() {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             GST: {retailerProfile?.gstin || '—'}
           </Typography.Text>
-          <div
-            style={{
-              marginTop: 8,
-              padding: '8px 10px',
-              background: '#f0fdf4',
-              borderRadius: 8,
-              border: '1px solid #bbf7d0',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <span style={{ color: '#166534' }}>Credit Limit:</span>
-              <strong style={{ color: '#166534' }}>{credit.hasCredit ? formatInr(credit.limit) : 'Not set'}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 4 }}>
-              <span style={{ color: '#991b1b' }}>Outstanding:</span>
-              <strong style={{ color: '#dc2626' }}>{formatInr(credit.used)}</strong>
-            </div>
-          </div>
           <Tag color="gold" style={{ margin: '8px 0 0', fontSize: 11 }}>
             {loyalty.points.toLocaleString('en-IN')} loyalty pts
           </Tag>
@@ -99,11 +79,6 @@ export function DesktopHeader() {
       key: 'orders',
       icon: <TruckOutlined style={{ color: '#2563eb' }} />,
       label: <Link to="/orders">Wholesale Orders &amp; Tracking</Link>,
-    },
-    {
-      key: 'wallet',
-      icon: <CreditCardOutlined style={{ color: '#059669' }} />,
-      label: <Link to="/wallet">Mandi Ledger &amp; Credit</Link>,
     },
     {
       key: 'loyalty',

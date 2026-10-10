@@ -14,6 +14,8 @@
  *   - RETURN_PICKUP_PAY: on a RETURN_PICKUP task it stands in for
  *     BASE_PER_DELIVERY (zone rule beats all-zones rule, as for base pay).
  *     With no such rule a return pickup is paid like a delivery.
+ *   - PER_KG: on top of base pay, (weight - freeKg) x ratePerKg, optionally
+ *     capped. Zone rule beats all-zones rule. Unknown weight pays nothing.
  */
 
 export type RuleKind =
@@ -25,11 +27,12 @@ export type RuleKind =
   | 'WEEKLY_TARGET'
   | 'WAITING_TIME'
   | 'OUTCOME_COMPENSATION'
-  | 'RETURN_PICKUP_PAY';
+  | 'RETURN_PICKUP_PAY'
+  | 'PER_KG';
 
 export type TaskKind = 'ORDER_DELIVERY' | 'RETURN_PICKUP' | 'REPLACEMENT_DELIVERY';
 
-export type EarningType = 'BASE' | 'DISTANCE' | 'PEAK' | 'ZONE_INCENTIVE' | 'DAILY_BONUS' | 'WEEKLY_BONUS' | 'WAITING' | 'OUTCOME';
+export type EarningType = 'BASE' | 'DISTANCE' | 'WEIGHT' | 'PEAK' | 'ZONE_INCENTIVE' | 'DAILY_BONUS' | 'WEEKLY_BONUS' | 'WAITING' | 'OUTCOME';
 
 export const OUTCOMES = [
   'CANCELLED_AFTER_ASSIGNMENT',
@@ -69,6 +72,8 @@ export interface TaskContext {
   /** 'DELIVERED' or the failure/cancellation outcome. */
   result: 'DELIVERED' | Outcome;
   distanceKm: number | null;
+  /** What the task carries, in kg; null when a product has no pack weight. */
+  weightKg?: number | null;
   /** When the task ended (delivered / failed / cancelled). */
   at: Date;
   timeZone: string;
@@ -151,6 +156,10 @@ export function validateConfig(kind: RuleKind, c: Record<string, unknown>, zoneI
       if (!['PICKUP', 'DROP', 'BOTH'].includes(String(c.at))) return 'at must be PICKUP, DROP or BOTH';
       if (!positive(c.freeMinutes) || !positive(c.perMinute)) return 'freeMinutes and perMinute must be >= 0';
       return c.maxAmount === undefined || c.maxAmount === null || positive(c.maxAmount) ? null : 'maxAmount must be >= 0';
+    case 'PER_KG':
+      if (!positive(c.ratePerKg)) return 'ratePerKg must be a number >= 0';
+      if (c.freeKg !== undefined && c.freeKg !== null && !positive(c.freeKg)) return 'freeKg must be >= 0';
+      return c.maxAmount === undefined || c.maxAmount === null || positive(c.maxAmount) ? null : 'maxAmount must be >= 0';
     case 'OUTCOME_COMPENSATION':
       if (!OUTCOMES.includes(c.outcome as Outcome)) return `outcome must be one of ${OUTCOMES.join(', ')}`;
       if (!['FIXED', 'PERCENT_OF_DELIVERY'].includes(String(c.mode))) return 'mode must be FIXED or PERCENT_OF_DELIVERY';
@@ -228,6 +237,14 @@ export function slabAmount(config: Record<string, unknown>, distanceKm: number |
   return { amount: last.amount, slab: `${from}+ km` };
 }
 
+/** Weight pay: kg above the free allowance x rate, capped when a cap is set. */
+export function perKgAmount(config: Record<string, unknown>, weightKg: number): { amount: number; billableKg: number } {
+  const billableKg = r2(Math.max(weightKg - num(config.freeKg), 0));
+  let amount = billableKg * num(config.ratePerKg);
+  if (typeof config.maxAmount === 'number') amount = Math.min(amount, config.maxAmount);
+  return { amount: r2(amount), billableKg };
+}
+
 function deliveryParts(rules: Rule[], ctx: TaskContext): EarningLine[] {
   const out: EarningLine[] = [];
   const returnPay = ctx.kind === 'RETURN_PICKUP' ? rules.filter((x) => x.kind === 'RETURN_PICKUP_PAY') : [];
@@ -238,6 +255,13 @@ function deliveryParts(rules: Rule[], ctx: TaskContext): EarningLine[] {
   for (const r of mostSpecific(rules.filter((x) => x.kind === 'DISTANCE_SLAB'))) {
     const { amount, slab } = slabAmount(r.config, ctx.distanceKm);
     out.push({ type: 'DISTANCE', amount: r2(amount), ruleId: r.id, dedupeKey: `task:${ctx.taskId}:${r.id}`, detail: { rule: r.name, slab, distanceKm: ctx.distanceKm } });
+  }
+  const kg = ctx.weightKg ?? null;
+  if (kg !== null) {
+    for (const r of mostSpecific(rules.filter((x) => x.kind === 'PER_KG'))) {
+      const { amount, billableKg } = perKgAmount(r.config, kg);
+      out.push({ type: 'WEIGHT', amount, ruleId: r.id, dedupeKey: `task:${ctx.taskId}:${r.id}`, detail: { rule: r.name, weightKg: kg, billableKg, ratePerKg: num(r.config.ratePerKg) } });
+    }
   }
   return out;
 }

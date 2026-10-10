@@ -47,7 +47,8 @@ function PolicyForm({ channel, value, canManage }: { channel: ReturnChannel; val
 
   const productOptions = (products.data?.data ?? []).map((p: { id: string; name: string; sku: string }) => ({ value: p.id, label: `${p.name} (${p.sku})` }));
   const categoryOptions = (categories.data?.data ?? []).map((c) => ({ value: c.id, label: c.name }));
-  const methods: RefundMethod[] = channel === 'B2B' ? ['CREDIT_NOTE', 'WALLET', 'UPI', 'BANK'] : ['WALLET', 'UPI', 'BANK'];
+  // No credit since 10 Oct 2026: both channels choose between wallet, UPI and bank.
+  const methods: RefundMethod[] = ['WALLET', 'UPI', 'BANK'];
 
   const save = async () => {
     const v = await form.validateFields();

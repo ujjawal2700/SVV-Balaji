@@ -3,6 +3,16 @@ import { apiErrorMessage } from '../../api/client';
 import type { ProductionConsumption, QualityInspection } from '../../api/types';
 import { useProductionBatch } from '../../hooks/useProduction';
 import { EM_DASH, formatDate, formatQuantity } from '../../utils/format';
+import { ProductionCostCard } from './ProductionCostCard';
+
+const formatDateTime = (v: string) => new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function runTime(start?: string | null, end?: string | null) {
+  if (!start) return 'Not recorded (run predates run-time tracking)';
+  if (!end) return 'Still running';
+  const mins = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000);
+  return `${Math.floor(mins / 60)} h ${mins % 60} min`;
+}
 
 interface ProductionBatchDetailDrawerProps {
   batchId: string | null;
@@ -73,11 +83,18 @@ export function ProductionBatchDetailDrawer({
           </Descriptions>
 
           <Descriptions bordered column={2} size="small" title="Machine & operator">
-            <Descriptions.Item label="Machine">{data.machineName ?? EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Machine">
+              {data.machine ? `${data.machine.code} · ${data.machine.name}` : data.machineName ?? EM_DASH}
+            </Descriptions.Item>
             <Descriptions.Item label="Number">{data.machineNumber ?? EM_DASH}</Descriptions.Item>
             <Descriptions.Item label="Operator">{data.operatorName ?? EM_DASH}</Descriptions.Item>
             <Descriptions.Item label="Line">{data.productionLine ?? EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Started">{data.startedAt ? formatDateTime(data.startedAt) : EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Completed">{data.completedAt ? formatDateTime(data.completedAt) : EM_DASH}</Descriptions.Item>
+            <Descriptions.Item label="Run time" span={2}>{runTime(data.startedAt, data.completedAt)}</Descriptions.Item>
           </Descriptions>
+
+          <ProductionCostCard batchId={data.id} status={data.status} />
 
           <div>
             <Typography.Title level={5}>
