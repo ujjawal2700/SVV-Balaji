@@ -1449,3 +1449,11 @@ select {
 @media (min-width: 768px) {
   .pskel-banner, .pskel-banner .ant-skeleton-image { height: 300px !important; }
 }
+
+.order-product-item-link:hover {
+  background-color: #f1f5f9;
+}
+.order-product-item-link:hover .ant-typography strong,
+.order-product-item-link:hover span.ant-typography:first-of-type {
+  color: #15803d !important;
+}

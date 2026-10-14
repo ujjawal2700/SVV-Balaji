@@ -23,8 +23,9 @@ import {
   ShareAltOutlined,
   CameraOutlined,
   UploadOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
-import { Avatar, Badge, Breadcrumb, Button, Card, Divider, Modal, Switch, Tabs, Tag, Typography, message, Skeleton } from 'antd';
+import { Avatar, Badge, Breadcrumb, Button, Card, Divider, Input, Modal, Switch, Tabs, Tag, Typography, message, Skeleton } from 'antd';
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCustomerAuth, type UserRole } from '../auth/CustomerAuthContext';
@@ -33,7 +34,7 @@ import { useAccountStats } from '../hooks/useAccountStats';
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { role, customerProfile, retailerProfile, uploadProfilePhoto, removeProfilePhoto, logout } = useCustomerAuth();
+  const { role, customerProfile, retailerProfile, uploadProfilePhoto, removeProfilePhoto, updateProfileData, logout } = useCustomerAuth();
   const loyalty = useLoyalty();
   const stats = useAccountStats();
 
@@ -42,6 +43,12 @@ export function ProfilePage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editBusinessName, setEditBusinessName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const isRetailer = role === 'RETAILER';
   const isGuest = role === 'GUEST';
@@ -102,6 +109,45 @@ export function ProfilePage() {
         }
       },
     });
+  };
+
+  const handleOpenEditModal = () => {
+    if (isRetailer) {
+      setEditFullName(retailerProfile?.ownerName || '');
+      setEditBusinessName(retailerProfile?.storeName || '');
+      setEditEmail(retailerProfile?.email || '');
+    } else {
+      setEditFullName(customerProfile?.name || '');
+      setEditBusinessName('');
+      setEditEmail(customerProfile?.email || '');
+    }
+    setEditModalOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const trimmedName = editFullName.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      message.error('Please enter a valid full name (minimum 2 characters)');
+      return;
+    }
+    if (isRetailer && (!editBusinessName.trim() || editBusinessName.trim().length < 2)) {
+      message.error('Please enter a valid store / business name');
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      await updateProfileData({
+        fullName: trimmedName,
+        email: editEmail.trim() || undefined,
+        ...(isRetailer ? { businessName: editBusinessName.trim() } : {}),
+      });
+      message.success(isRetailer ? 'Store & proprietor details updated successfully!' : 'Profile updated successfully!');
+      setEditModalOpen(false);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || 'Failed to update profile details');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleLogout = () => {
@@ -484,12 +530,34 @@ export function ProfilePage() {
               )}
             </div>
 
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               {isRetailer ? (
                 <>
-                  <Typography.Text strong style={{ color: '#ffffff', fontSize: 18, display: 'block', lineHeight: 1.25 }}>
-                    {retailerProfile?.storeName || 'My Store'}
-                  </Typography.Text>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <Typography.Text strong style={{ color: '#ffffff', fontSize: 18, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {retailerProfile?.storeName || 'My Store'}
+                    </Typography.Text>
+                    <button
+                      onClick={handleOpenEditModal}
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: 12,
+                        color: '#fff',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        flexShrink: 0,
+                      }}
+                      title="Edit store and proprietor details"
+                    >
+                      <EditOutlined style={{ fontSize: 10 }} /> Edit
+                    </button>
+                  </div>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, display: 'block', marginTop: 2 }}>
                     Prop: {retailerProfile?.ownerName || '—'} • {retailerProfile?.phone || '—'}
                   </Typography.Text>
@@ -499,9 +567,31 @@ export function ProfilePage() {
                 </>
               ) : (
                 <>
-                  <Typography.Text strong style={{ color: '#ffffff', fontSize: 19, display: 'block', lineHeight: 1.25 }}>
-                    {customerProfile?.name || 'Customer'}
-                  </Typography.Text>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <Typography.Text strong style={{ color: '#ffffff', fontSize: 19, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {customerProfile?.name || 'Customer'}
+                    </Typography.Text>
+                    <button
+                      onClick={handleOpenEditModal}
+                      style={{
+                        background: 'rgba(255,255,255,0.22)',
+                        border: '1px solid rgba(255,255,255,0.35)',
+                        borderRadius: 12,
+                        color: '#fff',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        flexShrink: 0,
+                      }}
+                      title="Edit name and details"
+                    >
+                      <EditOutlined style={{ fontSize: 10 }} /> Edit
+                    </button>
+                  </div>
                   <Typography.Text style={{ color: 'rgba(255,255,255,0.95)', fontSize: 13, display: 'block', marginTop: 2 }}>
                     {customerProfile?.phone || '—'}
                   </Typography.Text>
@@ -879,14 +969,30 @@ export function ProfilePage() {
                   )}
                 </div>
 
-                <Button
-                  size="small"
-                  icon={<CameraOutlined />}
-                  onClick={() => setPhotoModalOpen(true)}
-                  style={{ marginBottom: 14, borderRadius: 8, fontSize: 12, borderColor: '#cbd5e1' }}
-                >
-                  {currentPhoto ? 'Change Photo' : 'Upload Photo'}
-                </Button>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 14 }}>
+                  <Button
+                    size="small"
+                    icon={<CameraOutlined />}
+                    onClick={() => setPhotoModalOpen(true)}
+                    style={{ borderRadius: 8, fontSize: 12, borderColor: '#cbd5e1' }}
+                  >
+                    {currentPhoto ? 'Change Photo' : 'Upload Photo'}
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={handleOpenEditModal}
+                    style={{
+                      borderRadius: 8,
+                      fontSize: 12,
+                      borderColor: isRetailer ? '#059669' : '#ea580c',
+                      color: isRetailer ? '#059669' : '#ea580c',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isRetailer ? 'Edit Business Info' : 'Edit Profile'}
+                  </Button>
+                </div>
 
                 <Typography.Title level={4} style={{ margin: '0 0 4px 0', color: '#0f172a', fontWeight: 700 }}>
                   {isRetailer
@@ -1349,6 +1455,118 @@ export function ProfilePage() {
             >
               Cancel
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Profile / Name Modal */}
+      <Modal
+        open={editModalOpen}
+        onCancel={() => {
+          if (!savingProfile) setEditModalOpen(false);
+        }}
+        footer={null}
+        centered
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16 }}>
+            <EditOutlined style={{ color: isRetailer ? '#059669' : '#ea580c' }} />
+            <span>{isRetailer ? 'Edit Store & Proprietor Details' : 'Edit Personal Profile'}</span>
+          </div>
+        }
+        width={460}
+      >
+        <div style={{ paddingTop: 12 }}>
+          <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 18 }}>
+            {isRetailer
+              ? 'Update your store name and proprietor name. These details appear on your wholesale invoices and account records.'
+              : 'Update your name and email address. These details appear on your order receipts and delivery summaries.'}
+          </Typography.Paragraph>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {isRetailer && (
+              <div>
+                <Typography.Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                  Store / Business Name <span style={{ color: '#ef4444' }}>*</span>
+                </Typography.Text>
+                <Input
+                  size="large"
+                  placeholder="e.g. Balaji Kirana Store"
+                  value={editBusinessName}
+                  onChange={(e) => setEditBusinessName(e.target.value)}
+                  maxLength={160}
+                  style={{ borderRadius: 8 }}
+                />
+              </div>
+            )}
+
+            <div>
+              <Typography.Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                {isRetailer ? 'Proprietor / Owner Full Name' : 'Full Name'} <span style={{ color: '#ef4444' }}>*</span>
+              </Typography.Text>
+              <Input
+                size="large"
+                placeholder={isRetailer ? 'e.g. Ramesh Patel' : 'e.g. Rahul Sharma'}
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                maxLength={120}
+                style={{ borderRadius: 8 }}
+              />
+            </div>
+
+            <div>
+              <Typography.Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                Email Address <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8' }}>(Optional)</span>
+              </Typography.Text>
+              <Input
+                size="large"
+                type="email"
+                placeholder="e.g. yourname@example.com"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                maxLength={120}
+                style={{ borderRadius: 8 }}
+              />
+            </div>
+
+            <div>
+              <Typography.Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                Registered Mobile Number
+              </Typography.Text>
+              <Input
+                size="large"
+                disabled
+                value={isRetailer ? retailerProfile?.phone : customerProfile?.phone}
+                style={{ borderRadius: 8, background: '#f8fafc', color: '#64748b' }}
+              />
+              <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                🔒 Mobile number is verified via OTP and cannot be edited directly.
+              </Typography.Text>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              <Button
+                style={{ flex: 1, height: 42, borderRadius: 8 }}
+                onClick={() => setEditModalOpen(false)}
+                disabled={savingProfile}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                loading={savingProfile}
+                onClick={handleSaveProfile}
+                style={{
+                  flex: 1,
+                  height: 42,
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  background: isRetailer ? '#059669' : '#ea580c',
+                  borderColor: isRetailer ? '#059669' : '#ea580c',
+                }}
+              >
+                Save Changes
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>

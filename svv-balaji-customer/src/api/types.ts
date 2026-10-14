@@ -98,6 +98,7 @@ export interface UpdateStorefrontProfilePayload {
   fullName?: string;
   email?: string;
   profilePhoto?: string | null;
+  businessName?: string;
 }
 
 export interface ReferralCheckResponse {

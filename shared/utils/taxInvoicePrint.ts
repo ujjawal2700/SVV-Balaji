@@ -152,6 +152,7 @@ export function taxInvoiceHtml(inv: Invoice, as: PrintAs = { badge: 'Tax Invoice
     </table>
 
     <div class="foot">
+      <div style="font-weight: 700; font-size: 13.5px; color: #065f46; margin-bottom: 5px;">Thank you for shopping with Desi Tokri! ❤️</div>
       ${footerNote ? `<div>${esc(footerNote)}</div>` : ''}
       <div>This is a computer-generated ${esc(as.badge.toLowerCase())} and does not require a signature.</div>
     </div>`;

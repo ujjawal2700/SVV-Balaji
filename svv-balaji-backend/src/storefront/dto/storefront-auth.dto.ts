@@ -208,6 +208,13 @@ export class UpdateStorefrontProfileDto {
   @ValidateIf((_, val) => val !== null)
   @IsString()
   profilePhoto?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  businessName?: string;
 }
 
 /** Staff-side filter when reviewing the retailer signup queue. */

@@ -8,6 +8,7 @@ import type {
   RegisterRetailerResponse,
   RequestOtpResponse,
   StorefrontAccountSummary,
+  UpdateStorefrontProfilePayload,
 } from '../api/types';
 import { isStorefrontSession } from '../api/types';
 
@@ -71,7 +72,7 @@ export interface CustomerAuthContextType {
   refreshProfile: () => Promise<void>;
   uploadProfilePhoto: (file: File) => Promise<string>;
   removeProfilePhoto: () => Promise<void>;
-  updateProfileData: (data: { fullName?: string; email?: string; profilePhoto?: string | null }) => Promise<void>;
+  updateProfileData: (data: UpdateStorefrontProfilePayload) => Promise<void>;
   /**
    * A pending retailer's registration status, applied to the profile: approval
    * loads the full account, rejection records the reason. Null when it could
@@ -288,7 +289,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   }, [applyAccount]);
 
   const updateProfileData = useCallback(
-    async (data: { fullName?: string; email?: string; profilePhoto?: string | null }): Promise<void> => {
+    async (data: UpdateStorefrontProfilePayload): Promise<void> => {
       const updated = await storefrontAuthApi.updateProfile(data);
       applyAccount(updated);
     },

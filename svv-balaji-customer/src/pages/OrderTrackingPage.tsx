@@ -4,6 +4,7 @@ import {
   CheckCircleFilled,
   CopyOutlined,
   CustomerServiceOutlined,
+  DownloadOutlined,
   FileTextOutlined,
   PhoneOutlined,
   RightOutlined,
@@ -19,7 +20,7 @@ import { LiveRiderMap } from '../components/LiveRiderMap';
 import type { SupportTicketCategory } from '../api/supportTickets';
 import { useCreateSupportTicket } from '../hooks/useSupportTickets';
 import { formatInr } from '../utils/money';
-import { printTaxInvoice } from '@shared/utils/taxInvoicePrint';
+import { downloadOrderInvoice } from '../utils/orderInvoice';
 import { getProgressSteps, progressIndex, progressSteps, statusColor, statusLabel } from './orderStatus';
 import { useReorder } from './useReorder';
 import { OrderReturnsCard } from '../components/OrderReturnsCard';
@@ -138,10 +139,16 @@ export function OrderTrackingPage() {
     if (!o) return;
     setInvoiceLoading(true);
     try {
-      const inv = await checkoutApi.invoice(o.orderNumber);
-      if (!printTaxInvoice(inv)) message.warning('Please allow pop-ups to view your invoice');
+      let inv = null;
+      try {
+        inv = await checkoutApi.invoice(o.orderNumber);
+      } catch {
+        // Fallback to order-derived invoice if formal tax invoice row is not issued yet
+      }
+      await downloadOrderInvoice(o, inv);
+      message.success('Invoice downloaded successfully');
     } catch {
-      message.info('Your invoice is being prepared - please check again in a few minutes');
+      message.error('Failed to download invoice. Please try again.');
     } finally {
       setInvoiceLoading(false);
     }
@@ -179,9 +186,14 @@ export function OrderTrackingPage() {
                 {o.fulfillment.method === 'LOCAL' ? 'Express local delivery' : 'Standard courier delivery'}
               </Detail>
               {shipped ? (
-                <Detail label="Tax invoice" last>
-                  <Button icon={<FileTextOutlined />} loading={invoiceLoading} onClick={() => void openInvoice()} style={{ borderRadius: 10 }}>
-                    Download GST invoice
+                <Detail label="Order invoice" last>
+                  <Button
+                    icon={<DownloadOutlined />}
+                    loading={invoiceLoading}
+                    onClick={() => void openInvoice()}
+                    style={{ borderRadius: 10, borderColor: '#10b981', color: '#047857', fontWeight: 500 }}
+                  >
+                    Download invoice
                   </Button>
                 </Detail>
               ) : null}
@@ -425,7 +437,22 @@ function ItemRow({ orderNumber, item, rateable, last }: { orderNumber: string; i
 
   return (
     <div style={{ padding: '12px 0', borderBottom: last ? 'none' : '1px solid #f1f5f9' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <Link
+        to={item.productId ? `/product-detail/${item.productId}` : '#'}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          textDecoration: 'none',
+          color: 'inherit',
+          padding: '6px 8px',
+          margin: '0 -8px',
+          borderRadius: 12,
+          transition: 'all 0.15s ease',
+        }}
+        className="order-product-item-link"
+        title="View product details"
+      >
         <img
           src={item.imageUrl || fallback}
           alt={item.name ?? ''}
@@ -445,13 +472,16 @@ function ItemRow({ orderNumber, item, rateable, last }: { orderNumber: string; i
             {item.unit ? `${item.unit} · ` : ''}Qty {item.quantity}
           </Typography.Text>
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{formatInr(price)}</div>
-          {mrp !== null && mrp > price ? (
-            <div style={{ fontSize: 11.5, color: '#94a3b8', textDecoration: 'line-through' }}>{formatInr(mrp)}</div>
-          ) : null}
+        <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{formatInr(price)}</div>
+            {mrp !== null && mrp > price ? (
+              <div style={{ fontSize: 11.5, color: '#94a3b8', textDecoration: 'line-through' }}>{formatInr(mrp)}</div>
+            ) : null}
+          </div>
+          <RightOutlined style={{ color: '#94a3b8', fontSize: 11 }} />
         </div>
-      </div>
+      </Link>
 
       {rateable ? (
         <div style={{ paddingLeft: 68, marginTop: 6 }}>

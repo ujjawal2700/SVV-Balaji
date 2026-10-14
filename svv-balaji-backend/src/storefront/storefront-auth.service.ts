@@ -694,10 +694,11 @@ export class StorefrontAuthService {
   }
 
   async updateProfile(accountId: string, dto: UpdateStorefrontProfileDto) {
-    const data: { fullName?: string; email?: string; profilePhoto?: string | null } = {};
+    const data: { fullName?: string; email?: string; profilePhoto?: string | null; businessName?: string } = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.profilePhoto !== undefined) data.profilePhoto = dto.profilePhoto;
+    if (dto.businessName !== undefined) data.businessName = dto.businessName;
 
     const account = await this.prisma.customerAccount.update({
       where: { id: accountId },
@@ -705,14 +706,24 @@ export class StorefrontAuthService {
       include: { customer: { select: { id: true, customerCode: true, status: true, referralCode: true, profilePhoto: true } } },
     });
 
-    if (account.customerId && (dto.fullName !== undefined || dto.email !== undefined || dto.profilePhoto !== undefined)) {
+    if (
+      account.customerId &&
+      (dto.fullName !== undefined || dto.email !== undefined || dto.profilePhoto !== undefined || dto.businessName !== undefined)
+    ) {
+      const customerUpdate: { name?: string; contactName?: string; email?: string; profilePhoto?: string | null } = {};
+      if (dto.email !== undefined) customerUpdate.email = dto.email;
+      if (dto.profilePhoto !== undefined) customerUpdate.profilePhoto = dto.profilePhoto;
+
+      if (account.channel === SalesChannel.B2B) {
+        if (dto.businessName !== undefined) customerUpdate.name = dto.businessName;
+        if (dto.fullName !== undefined) customerUpdate.contactName = dto.fullName;
+      } else {
+        if (dto.fullName !== undefined) customerUpdate.name = dto.fullName;
+      }
+
       await this.prisma.customer.update({
         where: { id: account.customerId },
-        data: {
-          ...(dto.fullName !== undefined ? { name: dto.fullName } : {}),
-          ...(dto.email !== undefined ? { email: dto.email } : {}),
-          ...(dto.profilePhoto !== undefined ? { profilePhoto: dto.profilePhoto } : {}),
-        },
+        data: customerUpdate,
       }).catch((err) => {
         this.logger.warn(`Could not sync profile update to Customer ${account.customerId}: ${String(err)}`);
       });

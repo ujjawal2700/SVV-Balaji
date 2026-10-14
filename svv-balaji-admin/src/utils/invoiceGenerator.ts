@@ -186,7 +186,7 @@ export function downloadOrderBill(order: ExtendedOrder | Order | any) {
     </div>
 
     <div class="footer">
-      <div>Thank you for choosing SVV Balaji! Direct Mandi to Customer Traceable Quality.</div>
+      <div style="font-weight: 700; font-size: 13px; color: #065f46; margin-bottom: 4px;">Thank you for shopping with Desi Tokri! ❤️</div>
       <div style="margin-top: 4px;">Order summary only — not a tax invoice. The GST invoice is issued when the order is dispatched.</div>
     </div>
   `;
